@@ -1,4 +1,5 @@
 import os
+import json
 
 import testinfra.utils.ansible_runner
 
@@ -17,4 +18,17 @@ def test_patroni(host):
     print(result.stdout)
     assert result.rc == 0, result.stderr
 
+    state_cmd = 'patronictl -c /var/lib/pgsql/patroni_test/postgresql1.yml list -f json'
+    state_result = host.run(state_cmd)
+    print(state_cmd.stdout)
+    assert state_result.rc == 0, result.stderr
 
+    state_json = json.loads(state_cmd.stdout)
+    assert state_json[0]['state'] == 'running', state_result[0]
+    assert state_json[1]['state'] == 'running', state_result[1]
+    assert state_json[2]['state'] == 'running', state_result[2]
+
+    curl_cmd = 'curl http://localhost:7000'
+    curl_result = host.run(curl_cmd)
+    print(curl_cmd.stdout)
+    assert curl_result.rc == 0, curl_result.stderr
