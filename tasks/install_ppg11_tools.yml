@@ -346,10 +346,10 @@
       update_cache: yes
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9"
 
-  - name: Install python3 module - patroni[etcd]
-    become: true
-    command: python3 -m pip install patroni[etcd]
-    when: ansible_os_family == "RedHat"
+  # - name: Install python3 module - patroni[etcd]
+  #   become: true
+  #   command: python3 -m pip install patroni[etcd]
+  #   when: ansible_os_family == "RedHat"
 
   - name: Install patroni debian
     apt:
