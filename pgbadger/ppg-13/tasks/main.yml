@@ -3,82 +3,52 @@
 - name: Configure repository
   include_tasks: ../../../../tasks/enable_repo.yml
 
-- name: Setup additional yum packages
-  yum:
+- name: install additional packages for running tests with apt
+  apt:
     name: "{{ packages }}"
     update_cache: yes
-    state: present
-  vars:
-    packages:
-      - yum-utils
-      - centos-release-scl
-
-- name: setup devtoolset-7-gcc
-  yum:
-    name: devtoolset-7-gcc*
-    update_cache: yes
-    enablerepo: centos-sclo-rh-testing
-    state: present
-
-- name: Percona Platform for PostgreSQL rpm packages for RHEL and additional tools
-  yum:
-    name: "{{ packages }}"
     state: latest
-    update_cache: yes
   vars:
     packages:
+    - libipc-run-perl
+    - libtext-csv-xs-perl
+  retries: 60
+  delay: 10
+  register: result
+  until: result is not failed
+
+- name: install Percona Platform for PostgreSQL Deb packages
+  apt:
+    name: "{{ packages }}"
+    update_cache: yes
+    state: latest
+  vars:
+    packages:
+    - percona-postgresql
+    - percona-postgresql-13
+    - percona-postgresql-all
+    - percona-postgresql-client
+    - percona-postgresql-client-13
     - percona-postgresql-client-common
     - percona-postgresql-common
+    - percona-postgresql-contrib
+    - percona-postgresql-plperl-13
+    - percona-postgresql-plpython3-13
+    - percona-postgresql-pltcl-13
+    - percona-postgresql-server-dev-13
     - percona-postgresql-server-dev-all
-    - percona-postgresql13
-    - percona-postgresql13-contrib
-    - percona-postgresql13-devel
-    - percona-postgresql13-libs
-    - percona-postgresql13-llvmjit
-    - percona-postgresql13-plperl
-    - percona-postgresql13-plpython3
-    - percona-postgresql13-pltcl
-    - percona-postgresql13-server
-    - percona-postgresql13-test
-    - openssl-devel
-    - llvm-toolset-7-clang
-    - llvm5.0
-    - llvm-toolset-7
-    - readline-devel
-    - gcc
-    - gcc-c++
-    - libevent-devel
-    - perl-Pod-Checker
-    - perl-devel
-    - perl-JSON-XS.x86_64
-    - perl-Text-CSV
 
-- name: Initialize Postgres RHEL
-  command: /usr/pgsql-13/bin/postgresql-13-setup initdb
-  environment:
-    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+- name: Install pgbadger Debian
+  apt:
+    name: percona-pgbadger
+    state: latest
+    update_cache: yes
 
-- shell: gcc --version
-  register: gcc
-
-- debug: var=gcc.stdout_lines
-
-- name: Enable gcc 7
-  shell: echo "source /opt/rh/devtoolset-7/enable" | sudo tee -a /etc/profile;
-
-- name: Set source
-  shell: source /opt/rh/devtoolset-7/enable;
-
-- name: Delete old gcc
-  shell: rm /usr/bin/gcc
-
-- name: Set symbol link
-  shell: ln -s /opt/rh/devtoolset-7/root/usr/bin/gcc /usr/bin/gcc
-
-- shell: gcc --version
-  register: gcc
-
-- debug: var=gcc.stdout_lines
+- name: Add user postgres to sudoers
+  user:
+    name: postgres
+    groups: sudo
+    append: yes
 
 - name: Clone pgbadger sources
   git:
@@ -94,18 +64,21 @@
   shell: perl Makefile.PL
   args:
     chdir: /tmp/pgbadger
+  become_user: postgres
 
 - name: Build pgbadger from sources
   make:
     chdir: "/tmp/pgbadger"
+  become_user: postgres
 
 - name: Install pgbadger from sources
   make:
     target: install
     chdir: "/tmp/pgbadger"
+  become: true
 
 - name: Restart Postgres RHEL
   service:
-    name: postgresql-13
+    name: postgresql
     state: restarted
   register: out

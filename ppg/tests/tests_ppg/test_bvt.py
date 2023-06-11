@@ -74,10 +74,10 @@ def extension_list(host):
 
 @pytest.fixture()
 def insert_data(host):
-    ds = host.system_info.distribution
+    dist = host.system_info.distribution
     print(host.run("find / -name pgbench").stdout)
     pgbench_bin = "pgbench"
-    if ds.lower() in ["redhat", "centos", "rhel", "ol"]:
+    if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
         pgbench_bin = f"/usr/pgsql-{pg_versions['version'].split('.')[0]}/bin/pgbench"
     with host.sudo("postgres"):
         pgbench = f"{pgbench_bin} -i -s 1"
@@ -96,8 +96,8 @@ def test_psql_client_version(host):
 @pytest.mark.upgrade
 @pytest.mark.parametrize("package", pg_versions['deb_packages'])
 def test_deb_package_is_installed(host, package):
-    ds = host.system_info.distribution
-    if ds.lower() in ["redhat", "centos", "rhel", "ol"]:
+    dist = host.system_info.distribution
+    if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
         pytest.skip("This test only for Debian based platforms")
     pkg = host.package(package)
     assert pkg.is_installed
@@ -108,8 +108,8 @@ def test_deb_package_is_installed(host, package):
 @pytest.mark.parametrize("package", RPM_PACKAGES)
 def test_rpm_package_is_installed(host, package):
     with host.sudo():
-        ds = host.system_info.distribution
-        if ds in ["debian", "ubuntu"]:
+        dist = host.system_info.distribution
+        if dist in ["debian", "ubuntu"]:
             pytest.skip("This test only for RHEL based platforms")
         if host.system_info.release == "7":
             pytest.skip("Only for RHEL8 tests")
@@ -130,8 +130,8 @@ def test_rpm_package_is_installed(host, package):
 @pytest.mark.parametrize("package", RPM7_PACKAGES)
 def test_rpm7_package_is_installed(host, package):
     with host.sudo():
-        ds = host.system_info.distribution
-        if ds in ["debian", "ubuntu"]:
+        dist = host.system_info.distribution
+        if dist in ["debian", "ubuntu"]:
             pytest.skip("This test only for RHEL based platforms")
         if host.system_info.release.startswith("8") or host.system_info.release.startswith("9"):
             pytest.skip("Only for centos7 tests")
@@ -145,9 +145,9 @@ def test_rpm7_package_is_installed(host, package):
 
 @pytest.mark.upgrade
 def test_postgresql_client_version(host):
-    ds = host.system_info.distribution
+    dist = host.system_info.distribution
     pkg = "percona-postgresql-{}".format(settings.MAJOR_VER)
-    if ds.lower() in ["redhat", "centos", "rhel", "ol"]:
+    if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
         pytest.skip("This test only for Debian based platforms")
     pkg = host.package(pkg)
     assert settings.MAJOR_VER in pkg.version
@@ -155,9 +155,9 @@ def test_postgresql_client_version(host):
 
 @pytest.mark.upgrade
 def test_postgresql_version(host):
-    ds = host.system_info.distribution
+    dist = host.system_info.distribution
     pkg = "percona-postgresql-client-{}".format(settings.MAJOR_VER)
-    if ds.lower() in ["redhat", "centos", "rhel", "ol"]:
+    if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
         pkg = "percona-postgresql{}".format(settings.MAJOR_VER)
     pkg = host.package(pkg)
     assert settings.MAJOR_VER in pkg.version, pkg.version
@@ -165,9 +165,9 @@ def test_postgresql_version(host):
 
 @pytest.mark.upgrade
 def test_postgresql_is_running_and_enabled(host):
-    ds = host.system_info.distribution
+    dist = host.system_info.distribution
     service_name = "postgresql"
-    if ds.lower() in ["redhat", "centos", "rhel", "ol"]:
+    if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
         service_name = f"postgresql-{settings.MAJOR_VER}"
     service = host.service(service_name)
     assert service.is_running
@@ -234,10 +234,19 @@ def test_insert_data(insert_data):
 @pytest.mark.upgrade
 @pytest.mark.parametrize("extension", EXTENSIONS)
 def test_extenstions_list(extension_list, host, extension):
-    ds = host.system_info.distribution
-    if ds.lower() in ["redhat", "centos", "rhel", "ol"]:
-        # if "python3" in extension:
-        #     pytest.skip("Skipping python3 extensions for Centos or RHEL")
+    dist = host.system_info.distribution
+    POSTGIS_DEB_EXTENSIONS = ['postgis_tiger_geocoder-3','postgis_sfcgal-3','postgis_raster-3','postgis_topology-3',
+        'address_standardizer_data_us','postgis_tiger_geocoder','postgis_raster','postgis_topology','postgis_sfcgal',
+        'address_standardizer-3','postgis-3','address_standardizer','postgis','address_standardizer_data_us-3']
+    POSTGIS_RHEL_EXTENSIONS = ['postgis_sfcgal','address_standardizer','postgis_tiger_geocoder','postgis',
+        'postgis_topology','postgis_raster','address_standardizer_data_us']
+    if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
+        if extension in POSTGIS_RHEL_EXTENSIONS:
+            pytest.skip("Skipping postgis extension " + extension + " for Centos or RHEL as it will fail on upgrade.")
+    if dist.lower() in ['debian', 'ubuntu']:
+        if extension in POSTGIS_DEB_EXTENSIONS:
+            pytest.skip("Skipping postgis extension " + extension + " for debian as it will fail on upgrade.")
+    if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
         if extension in [
             'plpythonu', "plpython2u", 'jsonb_plpython2u', 'ltree_plpython2u', 'jsonb_plpythonu',
             'ltree_plpythonu', 'hstore_plpythonu', 'hstore_plpython2u'] and settings.MAJOR_VER in ["13", "14", "15"]:
@@ -247,7 +256,7 @@ def test_extenstions_list(extension_list, host, extension):
             'ltree_plpythonu', 'hstore_plpythonu', 'hstore_plpython2u'] and settings.MAJOR_VER in ["12","11"] and \
             host.system_info.release.startswith("9"):
             pytest.skip("Skipping extension " + extension + " for OL 9 based ppg 12 & 11")
-    if ds.lower() in ['debian', 'ubuntu'] and os.getenv("VERSION") in SKIPPED_DEBIAN:
+    if dist.lower() in ['debian', 'ubuntu'] and os.getenv("VERSION") in SKIPPED_DEBIAN:
         if extension in ['plpythonu', "plpython2u", 'jsonb_plpython2u', 'ltree_plpython2u', 'jsonb_plpythonu',
                             'ltree_plpythonu', 'hstore_plpythonu', 'hstore_plpython2u']:
             pytest.skip("Skipping extension " + extension + " for DEB based in pg: " + os.getenv("VERSION"))
@@ -256,10 +265,11 @@ def test_extenstions_list(extension_list, host, extension):
 
 @pytest.mark.parametrize("extension", EXTENSIONS)
 def test_enable_extension(host, extension):
-    ds = host.system_info.distribution
-    if ds.lower() in ["redhat", "centos", "rhel", "ol"]:
-        # if "python3" in extension:
-        #     pytest.skip("Skipping python3 extensions for Centos or RHEL")
+    dist = host.system_info.distribution
+    if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
+        if extension in ['postgis_sfcgal','address_standardizer','postgis_tiger_geocoder','postgis',
+        'postgis_topology','postgis_raster','address_standardizer_data_us']:
+            pytest.skip("Skipping extension " + extension + " due to multiple dependencies. Already being checked in test_tools.py.")
         if extension in ['hstore_plpython3u','jsonb_plpython3u', 'ltree_plpython3u']:
             pytest.skip("Skipping " + extension + " extension for Centos or RHEL")
         if extension in [
@@ -274,13 +284,17 @@ def test_enable_extension(host, extension):
             host.system_info.release.startswith("9"):
             pytest.skip("Skipping extension " + extension + " for OL 9 based ppg 12 & 11")
 
-    if ds.lower() in ['debian', 'ubuntu'] and os.getenv("VERSION") in SKIPPED_DEBIAN:
+    if dist.lower() in ['debian', 'ubuntu'] and os.getenv("VERSION") in SKIPPED_DEBIAN:
         if extension in ['plpythonu', "plpython2u", 'jsonb_plpython2u', 'ltree_plpython2u', 'jsonb_plpythonu',
                          'ltree_plpythonu', 'hstore_plpythonu', 'hstore_plpython2u', 'hstore_plpython3u',
                          'jsonb_plpython3u', 'ltree_plpython3u']:
             pytest.skip("Skipping extension " + extension + " for DEB based in pg: " + os.getenv("VERSION"))
-    if ds.lower() in ['ubuntu'] and extension in ['hstore_plpython3u','jsonb_plpython3u', 'ltree_plpython3u']:
+    if dist.lower() in ['ubuntu'] and extension in ['hstore_plpython3u','jsonb_plpython3u', 'ltree_plpython3u']:
             pytest.skip("Skipping extension " + extension + " for Ubuntu based in pg: " + os.getenv("VERSION"))
+    if dist.lower() in ['debian', 'ubuntu'] and extension in ['postgis_tiger_geocoder-3','postgis_sfcgal-3','postgis_raster-3',
+        'postgis_topology-3','address_standardizer_data_us','postgis_tiger_geocoder','postgis_raster','postgis_topology',
+        'postgis_sfcgal','address_standardizer-3','postgis-3','address_standardizer','postgis','address_standardizer_data_us-3']:
+            pytest.skip("Skipping extension " + extension + " due to multiple dependencies. Already being checked in test_tools.py.")
     with host.sudo("postgres"):
         install_extension = host.run("psql -c 'CREATE EXTENSION \"{}\";'".format(extension))
         assert install_extension.rc == 0, install_extension.stderr
@@ -294,10 +308,11 @@ def test_enable_extension(host, extension):
 
 @pytest.mark.parametrize("extension", EXTENSIONS[::-1])
 def test_drop_extension(host, extension):
-    ds = host.system_info.distribution
-    if ds.lower() in ["redhat", "centos", "rhel", "ol"]:
-        # if "python3" in extension:
-        #     pytest.skip("Skipping python3 extensions for Centos or RHEL")
+    dist = host.system_info.distribution
+    if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
+        if extension in ['postgis_sfcgal','address_standardizer','postgis_tiger_geocoder','postgis',
+        'postgis_topology','postgis_raster','address_standardizer_data_us']:
+            pytest.skip("Skipping extension " + extension + " due to multiple dependencies. Already being checked in test_tools.py.")
         if extension in ['hstore_plpython3u','jsonb_plpython3u', 'ltree_plpython3u']:
             pytest.skip("Skipping " + extension + " extension for Centos or RHEL")
         if extension in [
@@ -312,13 +327,17 @@ def test_drop_extension(host, extension):
             host.system_info.release.startswith("9"):
             pytest.skip("Skipping extension " + extension + " for OL 9 based ppg 12 & 11")
 
-    if ds.lower() in ['debian', 'ubuntu'] and os.getenv("VERSION") in SKIPPED_DEBIAN:
+    if dist.lower() in ['debian', 'ubuntu'] and os.getenv("VERSION") in SKIPPED_DEBIAN:
         if extension in ['plpythonu', "plpython2u", 'jsonb_plpython2u', 'ltree_plpython2u', 'jsonb_plpythonu',
                          'ltree_plpythonu', 'hstore_plpythonu', 'hstore_plpython2u', 'hstore_plpython3u',
                          'jsonb_plpython3u', 'ltree_plpython3u']:
             pytest.skip("Skipping extension " + extension + " for DEB based in pg: " + os.getenv("VERSION"))
-    if ds.lower() in ['ubuntu'] and extension in ['hstore_plpython3u','jsonb_plpython3u', 'ltree_plpython3u']:
+    if dist.lower() in ['ubuntu'] and extension in ['hstore_plpython3u','jsonb_plpython3u', 'ltree_plpython3u']:
             pytest.skip("Skipping extension " + extension + " for Ubuntu based in pg: " + os.getenv("VERSION"))
+    if dist.lower() in ['debian', 'ubuntu'] and extension in ['postgis_tiger_geocoder-3','postgis_sfcgal-3','postgis_raster-3',
+        'postgis_topology-3','address_standardizer_data_us','postgis_tiger_geocoder','postgis_raster','postgis_topology',
+        'postgis_sfcgal','address_standardizer-3','postgis-3','address_standardizer','postgis','address_standardizer_data_us-3']:
+            pytest.skip("Skipping extension " + extension + " due to multiple dependencies. Already being checked in test_tools.py.")
     with host.sudo("postgres"):
         drop_extension = host.run("psql -c 'DROP EXTENSION \"{}\";'".format(extension))
         assert drop_extension.rc == 0, drop_extension.stderr
@@ -369,12 +388,12 @@ def test_rpm_files(file, host):
 @pytest.mark.parametrize("language", LANGUAGES)
 def test_language(host, language):
     dists = ['debian', 'ubuntu']
-    ds = host.system_info.distribution
+    dist = host.system_info.distribution
     with host.sudo("postgres"):
-        # if ds.lower() in ["redhat", "centos", "rhel", "ol"]:
+        # if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
         #     if "python3" in language:
         #         pytest.skip("Skipping python3 language for Centos or RHEL")
-        if ds.lower() in dists and language in ['plpythonu', "plpython2u"] or settings.MAJOR_VER in ["13", "14", "15"]:
+        if dist.lower() in dists and language in ['plpythonu', "plpython2u"] or settings.MAJOR_VER in ["13", "14", "15"]:
             pytest.skip("Skipping python2 extensions for DEB based in 12.* and all centos 13")
         if language in ['plpythonu', "plpython2u"] and settings.MAJOR_VER in ["12","11"] and host.system_info.release.startswith("9"):
             pytest.skip("Skipping python2 extensions for OL 9 based ppg 12 & 11")

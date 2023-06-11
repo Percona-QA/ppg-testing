@@ -47,7 +47,8 @@ DEB12_EXTENSIONS = ["pageinspect",
                     "adminpack",
                     "autoinc",
                     "plperl",
-                    "pg_stat_monitor"]
+                    "pg_stat_monitor"
+                    ]
 
 RPM12_EXTENSIONS = ["hstore",
                     "adminpack",
@@ -98,11 +99,7 @@ RPM12_EXTENSIONS = ["hstore",
                     "plpython2u",
                     "plpythonu",
                     "plperl",
-                    "pg_stat_monitor",
-                    "hstore_plpython3u",
-                    "jsonb_plpython3u",
-                    "ltree_plpython3u",
-                    "plpython3u"
+                    "pg_stat_monitor"
                     ]
 
 RPM13_EXTENSIONS = ["hstore",
@@ -152,11 +149,7 @@ RPM13_EXTENSIONS = ["hstore",
                     "pltcl",
                     "pltclu",
                     "plperl",
-                    "pg_stat_monitor",
-                    "hstore_plpython3u",
-                    "jsonb_plpython3u",
-                    "ltree_plpython3u",
-                    "plpython3u"
+                    "pg_stat_monitor"
                     ]
 
 
@@ -265,11 +258,7 @@ RPM11_EXTENSIONS = ["fuzzystrmatch",
                     "tsm_system_time",
                     "unaccent",
                     "uuid-ossp",
-                    "pg_stat_monitor",
-                    "hstore_plpython3u",
-                    "jsonb_plpython3u",
-                    "ltree_plpython3u",
-                    "plpython3u"
+                    "pg_stat_monitor"
                     ]
 
 

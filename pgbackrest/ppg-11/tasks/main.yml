@@ -79,8 +79,19 @@
     groups: sudo
     append: yes
 
-- name: Restart Postgres
+- name: Stop Postgres
   service:
     name: postgresql
-    state: restarted
-  register: out
+    state: stopped
+
+- name: Run pgbackrest regression
+  become_user: postgres
+  command: pgbackrest/test/test.pl --psql-bin=/usr/lib/postgresql/15/bin \
+    --no-valgrind --log-level-test-file=off --no-coverage-report \
+    --module=command --module=storage --vm-out --vm=none --no-coverage
+  args:
+    chdir: "/var/lib/postgresql"
+  register: results
+
+- debug:
+    var: results.stdout

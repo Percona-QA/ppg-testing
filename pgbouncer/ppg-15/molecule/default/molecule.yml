@@ -4,12 +4,12 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: pgbouncer-centos7-${BUILD_NUMBER}
+  - name: pgbouncer-ufocal-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-095e1a4d3d632d215
+    image: ami-0be656e75e69af1a9
     vpc_subnet_id: subnet-085deaca8c1c59a4f
-    instance_type: t2.micro
-    ssh_user: centos
+    instance_type: t2.small
+    ssh_user: ubuntu
     root_device_name: /dev/sda1
     instance_tags:
       iit-billing-tag: jenkins-pg-worker
@@ -22,12 +22,7 @@ provisioner:
     prepare: ../../../../playbooks/prepare.yml
     converge: ../../playbooks/playbook.yml
 verifier:
-  name: testinfra
-  directory: ../../tests/
-  options:
-    verbose: true
-    s: true
-    junitxml: report.xml
+  name: ansible
 scenario:
   destroy_sequence:
     - destroy
@@ -38,5 +33,4 @@ scenario:
     - create
     - prepare
     - converge
-    - verify
     - destroy

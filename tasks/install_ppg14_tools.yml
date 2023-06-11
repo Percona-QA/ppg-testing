@@ -306,6 +306,80 @@
     when: (ansible_os_family == "Debian" and pg_version_to_install is not defined) or
       (ansible_os_family == "Debian" and pg_version_to_install | string is version('14.7', '>=', strict=True))
 
+  - name: Install percona-postgis RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgis33
+      - percona-postgis33-client
+      #- percona-postgis33-client-debuginfo
+      - percona-postgis33-debuginfo
+      - percona-postgis33-devel
+      - percona-postgis33-docs
+      - percona-postgis33-gui
+      #- percona-postgis33-gui-debuginfo
+      - percona-postgis33-llvmjit
+      - percona-postgis33-utils
+    when: ansible_distribution_major_version == "7" and
+      ((ansible_os_family == "RedHat" and pg_version_to_install is not defined) or
+      (ansible_os_family == "RedHat" and pg_version_to_install | string is version('14.8', '>=', strict=True)))
+
+  - name: Enable llvm-toolset for RHEL8 to install PostGIS
+    become: true
+    command: dnf module enable llvm-toolset -y
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+
+  - name: Install percona-postgis RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgis33
+      - percona-postgis33-client
+      - percona-postgis33-client-debuginfo
+      - percona-postgis33-debuginfo
+      - percona-postgis33-devel
+      - percona-postgis33-docs
+      - percona-postgis33-gui
+      - percona-postgis33-gui-debuginfo
+      - percona-postgis33-llvmjit
+      - percona-postgis33-utils
+    when: (ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9") and
+      ((ansible_os_family == "RedHat" and pg_version_to_install is not defined) or
+      (ansible_os_family == "RedHat" and pg_version_to_install | string is version('14.8', '>=', strict=True)))
+
+  - name: Install percona-postgis Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-postgresql-14-postgis-3
+        - percona-postgresql-14-postgis-3-scripts
+        - percona-postgresql-postgis-scripts
+        - percona-postgresql-postgis
+        - percona-postgis
+    when: (ansible_os_family == "Debian" and pg_version_to_install is not defined) or
+      (ansible_os_family == "Debian" and pg_version_to_install | string is version('14.8', '>=', strict=True))
+
+  - name: Install percona-postgis libsfcgal1 on Ubuntu-18
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - libsfcgal1
+    when: (ansible_os_family == "Debian" and pg_version_to_install is not defined) or
+      (ansible_os_family == "Debian" and pg_version_to_install | string is version('14.8', '>=', strict=True)) and
+      ansible_distribution_major_version == "18"
+
   - name: Install percona-wal2json14 RHEL
     yum:
       name: percona-wal2json14

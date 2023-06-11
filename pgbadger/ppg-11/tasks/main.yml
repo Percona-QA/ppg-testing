@@ -3,73 +3,52 @@
 - name: Configure repository
   include_tasks: ../../../../tasks/enable_repo.yml
 
-- name: Setup additional yum packages
-  yum:
+- name: install additional packages for running tests with apt
+  apt:
     name: "{{ packages }}"
     update_cache: yes
-    state: present
-  vars:
-    packages:
-      - yum-utils
-      - centos-release-scl
-
-- name: setup devtoolset-7-gcc
-  yum:
-    name: devtoolset-7-gcc*
-    update_cache: yes
-    enablerepo: centos-sclo-rh-testing
-    state: present
-
-- name: Percona Platform for PostgreSQL rpm packages for RHEL and additional tools
-  yum:
-    name: "{{ packages }}"
     state: latest
-    update_cache: yes
   vars:
     packages:
+    - libipc-run-perl
+    - libtext-csv-xs-perl
+  retries: 60
+  delay: 10
+  register: result
+  until: result is not failed
+
+- name: install Percona Platform for PostgreSQL Deb packages
+  apt:
+    name: "{{ packages }}"
+    update_cache: yes
+    state: latest
+  vars:
+    packages:
+    - percona-postgresql
+    - percona-postgresql-11
+    - percona-postgresql-all
+    - percona-postgresql-client
+    - percona-postgresql-client-11
     - percona-postgresql-client-common
     - percona-postgresql-common
+    - percona-postgresql-contrib
+    - percona-postgresql-plperl-11
+    - percona-postgresql-plpython3-11
+    - percona-postgresql-pltcl-11
+    - percona-postgresql-server-dev-11
     - percona-postgresql-server-dev-all
-    - percona-postgresql11
-    - percona-postgresql11-contrib
-    - percona-postgresql11-devel
-    - percona-postgresql11-libs
-    - percona-postgresql11-llvmjit
-    - percona-postgresql11-plperl
-    - percona-postgresql11-plpython3
-    - percona-postgresql11-pltcl
-    - percona-postgresql11-server
-    - percona-postgresql11-test
-    - openssl-devel
-    - llvm-toolset-7-clang
-    - llvm5.0
-    - llvm-toolset-7
-    - readline-devel
-    - gcc
-    - gcc-c++
-    - libevent-devel
-    - perl-Pod-Checker
-    - perl-devel
-    - perl-JSON-XS.x86_64
-    - perl-Text-CSV
-    - perl-Text-CSV_XS
 
-- name: Initialize Postgres RHEL
-  command: /usr/pgsql-11/bin/postgresql-11-setup initdb
-  environment:
-    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+- name: Install pgbadger Debian
+  apt:
+    name: percona-pgbadger
+    state: latest
+    update_cache: yes
 
-- name: Enable gcc 7
-  shell: echo "source /opt/rh/devtoolset-7/enable" | sudo tee -a /etc/profile;
-
-- name: Set source
-  shell: source /opt/rh/devtoolset-7/enable;
-
-- name: Delete old gcc
-  shell: rm /usr/bin/gcc
-
-- name: Set symbol link
-  shell: ln -s /opt/rh/devtoolset-7/root/usr/bin/gcc /usr/bin/gcc
+- name: Add user postgres to sudoers
+  user:
+    name: postgres
+    groups: sudo
+    append: yes
 
 - name: Clone pgbadger sources
   git:
@@ -85,17 +64,21 @@
   shell: perl Makefile.PL
   args:
     chdir: /tmp/pgbadger
+  become_user: postgres
 
 - name: Build pgbadger from sources
   make:
     chdir: "/tmp/pgbadger"
+  become_user: postgres
 
 - name: Install pgbadger from sources
   make:
     target: install
     chdir: "/tmp/pgbadger"
+  become: true
 
 - name: Restart Postgres RHEL
   service:
-    name: postgresql-11
+    name: postgresql
     state: restarted
+  register: out

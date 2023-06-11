@@ -1,0 +1,154 @@
+---
+  - name: Configure repository
+    include_tasks: ../../../../tasks/enable_repo.yml
+
+  - name: setup epel release
+    yum:
+      name: epel-release
+      update_cache: yes
+      state: present
+    when: ansible_os_family == "RedHat"
+
+  - name: Enable ol9_codeready_builder on oracle linux 9
+    become: true
+    command: dnf config-manager --set-enabled ol9_codeready_builder
+
+  - name: install Percona Platform for PostgreSQL rpm packages
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgresql-client-common
+      - percona-postgresql-common
+      - percona-postgresql14
+      - percona-postgresql14-contrib
+      - percona-postgresql14-libs
+      - percona-postgresql14-server
+
+  - name: install Percona Platform for PostGis rpm packages
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgis33
+      - percona-postgis33-client
+      - percona-postgis33-client-debuginfo
+      - percona-postgis33-debuginfo
+      - percona-postgis33-devel
+      - percona-postgis33-docs
+      - percona-postgis33-gui
+      - percona-postgis33-gui-debuginfo
+      - percona-postgis33-llvmjit
+      - percona-postgis33-utils
+
+  - name: Initialize Postgres RHEL
+    become: true
+    command: /usr/pgsql-14/bin/postgresql-14-setup initdb
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+  - name: Start Postgres RHEL
+    service:
+      name: postgresql-14
+      state: started
+      enabled: yes
+
+  - name: Select available extensions
+    become_user: postgres
+    command: psql -c "SELECT name, default_version,installed_version FROM pg_available_extensions WHERE name LIKE 'postgis%' or name LIKE 'address%';"
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CREATE EXTENSION postgis
+    become_user: postgres
+    command: psql -c "CREATE EXTENSION postgis;"
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CREATE EXTENSION postgis_raster
+    become_user: postgres
+    command: psql -c "CREATE EXTENSION postgis_raster;"
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CREATE EXTENSION postgis_sfcgal
+    become_user: postgres
+    command: psql -c "CREATE EXTENSION postgis_sfcgal;"
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CREATE EXTENSION fuzzystrmatch
+    become_user: postgres
+    command: psql -c "CREATE EXTENSION fuzzystrmatch; "
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CREATE EXTENSION address_standardizer
+    become_user: postgres
+    command: psql -c "CREATE EXTENSION address_standardizer;"
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CREATE EXTENSION address_standardizer_data_us
+    become_user: postgres
+    command: psql -c "CREATE EXTENSION address_standardizer_data_us;"
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CREATE EXTENSION postgis_tiger_geocoder
+    become_user: postgres
+    command: psql -c "CREATE EXTENSION postgis_tiger_geocoder;"
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CREATE EXTENSION postgis_topology
+    become_user: postgres
+    command: psql -c "CREATE EXTENSION postgis_topology;"
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Display ppg version
+    become_user: postgres
+    shell: psql -c "select version()"
+    register: results
+
+  - debug:
+        var: results.stdout
+
+  - name: Select available extensions
+    become_user: postgres
+    command: psql -c "SELECT name, default_version,installed_version FROM pg_available_extensions WHERE name LIKE 'postgis%' or name LIKE 'address%';"
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Select available extensions
+    become_user: postgres
+    command: psql -c "SELECT PostGIS_Full_Version();"
+    register: results
+
+  - debug:
+      var: results.stdout

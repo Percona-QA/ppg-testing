@@ -8,7 +8,7 @@ testinfra_hosts = testinfra.utils.ansible_runner.AnsibleRunner(
 
 
 def test_pgbadger(host):
-    with host.sudo():
+    with host.sudo("postgres"):
         result = host.run('cd /tmp/pgbadger && prove')
         print(result.stdout)
         if result.rc != 0:

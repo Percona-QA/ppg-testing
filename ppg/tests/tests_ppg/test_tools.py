@@ -29,7 +29,7 @@ def load_data(host):
 
 @pytest.fixture()
 def pgaudit(host):
-    ds = host.system_info.distribution
+    dist = host.system_info.distribution
     with host.sudo("postgres"):
         # enable_library = "psql -c \'ALTER SYSTEM SET shared_preload_libraries=\'pgaudit\'\';"
         # result = host.check_output(enable_library)
@@ -53,9 +53,9 @@ def pgaudit(host):
         assert result.rc == 0
         assert result.stdout.strip("\n") == "CREATE TABLE"
         log_file = "/var/log/postgresql/postgresql-{}-main.log".format(settings.MAJOR_VER)
-        if ds.lower() in ["debian", "ubuntu"]:
+        if dist.lower() in ["debian", "ubuntu"]:
             log_file = "/var/log/postgresql/postgresql-{}-main.log".format(settings.MAJOR_VER)
-        elif ds.lower() in ["redhat", "centos", "ol", "rhel"]:
+        elif dist.lower() in ["redhat", "centos", "ol", "rhel"]:
             log_files = "ls /var/lib/pgsql/{}/data/log/".format(settings.MAJOR_VER)
             file_name = host.check_output(log_files).strip("\n")
             log_file = "".join(["/var/lib/pgsql/{}/data/log/".format(settings.MAJOR_VER), file_name])
@@ -66,9 +66,9 @@ def pgaudit(host):
         drop_pgaudit = "psql -c 'DROP EXTENSION pgaudit;'"
         result = host.check_output(drop_pgaudit)
         assert result.strip("\n") == "DROP EXTENSION"
-    if ds.lower() in ["debian", "ubuntu"]:
+    if dist.lower() in ["debian", "ubuntu"]:
         cmd = "sudo systemctl restart postgresql"
-    elif ds.lower() in ["redhat", "centos", "ol", "rhel"]:
+    elif dist.lower() in ["redhat", "centos", "ol", "rhel"]:
         cmd = "sudo systemctl restart postgresql-{}".format(MAJOR_VER)
     result = host.run(cmd)
     assert result.rc == 0
@@ -391,7 +391,161 @@ def test_pg_stat_monitor_package_version(host):
         pg_stat = host.package(f"percona-pg-stat-monitor{MAJOR_VER}")
     else:
         pg_stat = host.package(f"percona-pg_stat_monitor{MAJOR_VER}")
-    assert pg_versions['pg_stat_monitor'] in pg_stat.version
+    assert pg_versions['PGSM_package_version'] in pg_stat.version
+
+
+def test_pg_stat_monitor_extension_version(host):
+    with host.sudo("postgres"):
+        result = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_stat_monitor;'")
+        assert result.rc == 0, result.stderr
+        result = host.run("psql -c 'SELECT pg_stat_monitor_version();' | awk 'NR==3{print $1}'")
+        assert result.rc == 0, result.stderr
+        assert result.stdout.strip("\n") == pg_versions['PGSM_version']
+
+
+def test_postgis_package_version(host):
+    ppg_version=float(pg_versions['version'])
+
+    if (pg_versions['version'].startswith("15") and ppg_version <= 15.2) or \
+    (pg_versions['version'].startswith("14") and ppg_version <= 14.7) or \
+    (pg_versions['version'].startswith("13") and ppg_version <= 13.10) or \
+    (pg_versions['version'].startswith("12") and ppg_version <= 12.14) or \
+    (pg_versions['version'].startswith("11") and ppg_version <= 11.19):
+        pytest.skip("Postgis not available on " + pg_versions['version'])
+
+    dist = host.system_info.distribution
+    if dist.lower() in ["ubuntu", "debian"]:
+        postgis = host.package(f"percona-postgresql-{MAJOR_VER}-postgis-3")
+        assert pg_versions['postgis_package_version'] in postgis.version
+        postgis = host.package(f"percona-postgresql-{MAJOR_VER}-postgis-3-scripts")
+        assert pg_versions['postgis_package_version'] in postgis.version
+        postgis = host.package("percona-postgresql-postgis-scripts")
+        assert pg_versions['postgis_package_version'] in postgis.version
+        postgis = host.package("percona-postgresql-postgis")
+        assert pg_versions['postgis_package_version'] in postgis.version
+    else:
+        postgis = host.package("percona-postgis33")
+        assert pg_versions['postgis_package_version'] in postgis.version
+        postgis = host.package("percona-postgis33-client")
+        assert pg_versions['postgis_package_version'] in postgis.version
+        postgis = host.package("percona-postgis33-debuginfo")
+        assert pg_versions['postgis_package_version'] in postgis.version
+        postgis = host.package("percona-postgis33-devel")
+        assert pg_versions['postgis_package_version'] in postgis.version
+        postgis = host.package("percona-postgis33-docs")
+        assert pg_versions['postgis_package_version'] in postgis.version
+        postgis = host.package("percona-postgis33-gui")
+        assert pg_versions['postgis_package_version'] in postgis.version
+        postgis = host.package("percona-postgis33-llvmjit")
+        assert pg_versions['postgis_package_version'] in postgis.version
+        postgis = host.package("percona-postgis33-utils")
+        assert pg_versions['postgis_package_version'] in postgis.version
+        if host.system_info.release.startswith("8") or host.system_info.release.startswith("9"):
+            postgis = host.package("percona-postgis33-client-debuginfo")
+            assert pg_versions['postgis_package_version'] in postgis.version
+            postgis = host.package("percona-postgis33-gui-debuginfo")
+            assert pg_versions['postgis_package_version'] in postgis.version
+
+
+@pytest.fixture()
+def installed_extensions_list(host):
+    with host.sudo("postgres"):
+        result = host.check_output("psql -c 'SELECT * FROM pg_available_extensions;' | awk 'NR>=3{print $1}'")
+        result = result.split()
+        return result
+
+
+def test_postgis_extenstions_list(installed_extensions_list, host):
+    ppg_version=float(pg_versions['version'])
+
+    if (pg_versions['version'].startswith("15") and ppg_version <= 15.2) or \
+    (pg_versions['version'].startswith("14") and ppg_version <= 14.7) or \
+    (pg_versions['version'].startswith("13") and ppg_version <= 13.10) or \
+    (pg_versions['version'].startswith("12") and ppg_version <= 12.14) or \
+    (pg_versions['version'].startswith("11") and ppg_version <= 11.19):
+        pytest.skip("Postgis not available on " + pg_versions['version'])
+
+    dist = host.system_info.distribution
+    POSTGIS_DEB_EXTENSIONS = ['postgis_tiger_geocoder-3','postgis_sfcgal-3','postgis_raster-3','postgis_topology-3',
+        'address_standardizer_data_us','postgis_tiger_geocoder','postgis_raster','postgis_topology','postgis_sfcgal',
+        'address_standardizer-3','postgis-3','address_standardizer','postgis','address_standardizer_data_us-3']
+    POSTGIS_RHEL_EXTENSIONS = ['postgis_sfcgal','address_standardizer','postgis_tiger_geocoder','postgis',
+        'postgis_topology','postgis_raster','address_standardizer_data_us']
+    if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
+        for extension in POSTGIS_RHEL_EXTENSIONS:
+            print(extension)
+            assert extension in installed_extensions_list
+    if dist.lower() in ['debian', 'ubuntu']:
+        for extension in POSTGIS_DEB_EXTENSIONS:
+            print(extension)
+            assert extension in installed_extensions_list
+
+
+def test_postgis_extensions_create_drop(host):
+    ppg_version=float(pg_versions['version'])
+
+    if (pg_versions['version'].startswith("15") and ppg_version <= 15.2) or \
+    (pg_versions['version'].startswith("14") and ppg_version <= 14.7) or \
+    (pg_versions['version'].startswith("13") and ppg_version <= 13.10) or \
+    (pg_versions['version'].startswith("12") and ppg_version <= 12.14) or \
+    (pg_versions['version'].startswith("11") and ppg_version <= 11.19):
+        pytest.skip("Postgis not available on " + pg_versions['version'])
+
+    with host.sudo("postgres"):
+        # result = host.run("psql -c 'SET pgaudit.log = 'none';'")
+        # assert result.rc == 0, result.stderr
+        result = host.run("psql -c \"SET pgaudit.log = 'none'; CREATE EXTENSION IF NOT EXISTS postgis; SET pgaudit.log = 'all';\"")
+        assert result.rc == 0, result.stderr
+        result = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS postgis_raster;'")
+        assert result.rc == 0, result.stderr
+        result = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS postgis_sfcgal;'")
+        assert result.rc == 0, result.stderr
+        result = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;'")
+        assert result.rc == 0, result.stderr
+        result = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS address_standardizer;'")
+        assert result.rc == 0, result.stderr
+        result = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS address_standardizer_data_us;'")
+        assert result.rc == 0, result.stderr
+        result = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS postgis_tiger_geocoder;'")
+        assert result.rc == 0, result.stderr
+        result = host.run("psql -c 'DROP EXTENSION address_standardizer CASCADE;'")
+        assert result.rc == 0, result.stderr
+        result = host.run("psql -c 'DROP EXTENSION address_standardizer_data_us CASCADE;'")
+        assert result.rc == 0, result.stderr
+        result = host.run("psql -c 'DROP EXTENSION postgis_tiger_geocoder CASCADE;'")
+        assert result.rc == 0, result.stderr
+        result = host.run("psql -c 'DROP EXTENSION fuzzystrmatch CASCADE;'")
+        assert result.rc == 0, result.stderr
+        result = host.run("psql -c 'DROP EXTENSION postgis_raster CASCADE;'")
+        assert result.rc == 0, result.stderr
+        result = host.run("psql -c 'DROP EXTENSION postgis_sfcgal CASCADE;'")
+        assert result.rc == 0, result.stderr
+        result = host.run("psql -c 'DROP EXTENSION postgis CASCADE;'")
+        assert result.rc == 0, result.stderr
+        # result = host.run("psql -c 'SET pgaudit.log = 'all';'")
+        # assert result.rc == 0, result.stderr
+
+
+def test_postgis_extension_version(host):
+    ppg_version=float(pg_versions['version'])
+
+    if (pg_versions['version'].startswith("15") and ppg_version <= 15.2) or \
+    (pg_versions['version'].startswith("14") and ppg_version <= 14.7) or \
+    (pg_versions['version'].startswith("13") and ppg_version <= 13.10) or \
+    (pg_versions['version'].startswith("12") and ppg_version <= 12.14) or \
+    (pg_versions['version'].startswith("11") and ppg_version <= 11.19):
+        pytest.skip("Postgis not available on " + pg_versions['version'])
+
+    with host.sudo("postgres"):
+        # result = host.run("psql -c 'SET pgaudit.log = 'none';'")
+        # assert result.rc == 0, result.stderr
+        result = host.run("psql -c \"SET pgaudit.log = 'none'; CREATE EXTENSION IF NOT EXISTS postgis; SET pgaudit.log = 'all';\"")
+        assert result.rc == 0, result.stderr
+        result = host.run("psql -c \"SELECT installed_version FROM pg_available_extensions WHERE name LIKE 'postgis';\" | awk 'NR==3{print $1}'")
+        assert result.rc == 0, result.stderr
+        assert result.stdout.strip("\n") == pg_versions['postgis_version']
+        # result = host.run("psql -c 'SET pgaudit.log = 'all';'")
+        # assert result.rc == 0, result.stderr
 
 
 @pytest.mark.parametrize("package", ['pgbadger', 'pgbouncer', 'haproxy'])
@@ -430,8 +584,8 @@ def test_binary_version(host, binary):
 
 
 def test_etcd(host):
-    ds = host.system_info.distribution
-    if ds.lower() in ["redhat", "centos", "ol", "rhel"]:
+    dist = host.system_info.distribution
+    if dist.lower() in ["redhat", "centos", "ol", "rhel"]:
         if "8" in host.system_info.release:
             etcd_package = host.package("etcd")
             assert etcd_package.is_installed
@@ -441,8 +595,8 @@ def test_etcd(host):
 
 
 def test_python_etcd(host):
-    ds = host.system_info.distribution
-    if ds.lower() in ["redhat", "centos", "ol", "rhel"]:
+    dist = host.system_info.distribution
+    if dist.lower() in ["redhat", "centos", "ol", "rhel"]:
         if "8" in host.system_info.release:
             package = host.package("python3-etcd")
             assert package.is_installed

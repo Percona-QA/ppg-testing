@@ -71,14 +71,6 @@
     repo: "{{ lookup('env', 'COMPONENT_REPO') }}"
     version: "{{ lookup('env', 'COMPONENT_VERSION') }}"
 
-- name: Create /tmp/pgbackrest directory
-  file:
-    path: /tmp/pgbackrest
-    state: directory
-    owner: root
-    group: root
-    mode: '0700'
-
 - name: Add user postgres to sudoers
   user:
     name: postgres
@@ -89,3 +81,15 @@
   service:
     name: postgresql
     state: stopped
+
+- name: Run pgbackrest regression
+  become_user: postgres
+  command: pgbackrest/test/test.pl --psql-bin=/usr/lib/postgresql/15/bin \
+    --no-valgrind --log-level-test-file=off --no-coverage-report \
+    --module=command --module=storage --vm-out --vm=none --no-coverage
+  args:
+    chdir: "/var/lib/postgresql"
+  register: results
+
+- debug:
+    var: results.stdout
