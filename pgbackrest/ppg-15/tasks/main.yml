@@ -77,7 +77,6 @@
     state: directory
     owner: root
     group: root
-    mode: '0700'
 
 - name: Add user postgres to sudoers
   user:
