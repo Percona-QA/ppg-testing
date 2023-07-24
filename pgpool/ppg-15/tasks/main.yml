@@ -27,6 +27,59 @@
       - percona-postgresql15-libs
       - percona-postgresql15-server
 
+  - name: install prerequisites for building pgpool from source
+    when: ansible_os_family == "Debian"
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgresql-server-dev-all
+      - build-essential
+      - libpq-dev
+      - libpostgresql-jdbc-java
+      - memcached
+      - percona-pgpool2
+
+  - getent:
+      database: passwd
+      key: postgres
+      split: ":"
+
+  - set_fact: pg_home="{{ getent_passwd.postgres[4] }}"
+
+  - name: Git clone pgpool sources
+    become_user: postgres
+    git:
+      repo: "{{ repo }}"
+      version: "{{ version }}"
+      dest: "{{ pg_home }}/pgpool"
+    vars:
+      repo: "{{ lookup('env', 'COMPONENT_REPO') }}"
+      version: "{{ lookup('env', 'COMPONENT_VERSION') }}"
+
+  - name: configure pgpool
+    become_user: postgres
+    shell: |
+      ./configure --with-openssl
+      # make clean
+    args:
+      chdir: "{{ pg_home }}/pgpool"
+      creates: "{{ pg_home }}/pgpool/config.log"
+
+  - name: make pgpool
+    become_user: postgres
+    make:
+      chdir: "{{ pg_home }}/pgpool"
+
+  - name: Run the regression tests of pgpool - make check
+    become_user: postgres
+    shell: |
+      ./regress.sh -p /usr/lib/postgresql/{{ ver }}/bin
+    args:
+      chdir: "{{ pg_home }}/pgpool/src/test/regression"
+
   - name: initDB Postgres instance 1
     become_user: postgres
     command: /usr/pgsql-15/bin/initdb -D /tmp/data1
