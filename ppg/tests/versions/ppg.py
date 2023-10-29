@@ -1,4 +1,22 @@
-from .extensions import get_extensions_ppg11, get_extensions_ppg12, get_extensions_ppg13
+from .extensions import get_extensions_ppg11, get_extensions_ppg12, get_extensions_ppg13, get_docker_extensions
+
+DOCKER_RPM_PACKAGES_TEMPLATE = ["percona-postgresql{}",
+                             "percona-postgresql{}-contrib",
+                             "percona-postgresql-common",
+                             "percona-postgresql{}-libs",
+                             #"percona-postgresql{}-llvmjit",
+                             "percona-postgresql{}-server",
+                             "percona-postgresql-client-common",
+                             "percona-wal2json{}",
+                             "percona-pg_stat_monitor{}",
+                             "percona-pgaudit",
+                             "percona-pgaudit{}_set_user",
+                             "percona-pg_repack{}",
+                             ]
+
+DOCKER_RHEL_FILES_TEMPLATE = ["/data/db/postgresql.conf",
+                       "/data/db/pg_hba.conf",
+                       "/data/db/pg_ident.conf"]
 
 DISTROS = ['buster', 'stretch', 'bionic', 'focal', 'bullseye', 'jammy', 'bookworm']
 DEB116_PACKAGES_TEMPLATE = ["percona-postgresql-{}",
@@ -360,7 +378,10 @@ def get_pg16_versions(distros, packages, distro_type):
                                     'pg_isready', 'pg_receivewal', 'pg_recvlogical',
                                     'pg_restore', 'pg_verifybackup', 'psql',
                                     'reindexdb', 'vacuumdb'],
-                       "languages": LANGUAGES}
+                       "languages": LANGUAGES,
+                       "docker_rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "16"),
+                       "docker_rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "16"),
+                       "docker_extensions": get_docker_extensions(distro_type),}
 
     ppg_16_versions.update({"deb_pkg_ver": fill_package_versions(packages=packages,
                                                                  distros=distros)})

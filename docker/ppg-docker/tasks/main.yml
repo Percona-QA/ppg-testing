@@ -1,0 +1,146 @@
+---
+
+- name: Set Facts.
+  set_fact:
+    PPG_VERSION: "{{ lookup('env', 'VERSION') }}"
+    DOCKER_REPOSITORY: "{{ lookup('env', 'REPOSITORY') }}"
+    cacheable: true
+
+- debug:
+    msg: "Value of PPG_VERSION is : {{ PPG_VERSION }}"
+
+- name: Yum update
+  become: true
+  command: yum -y update
+  when: ansible_os_family == "RedHat"
+
+- name: Install yum-utils
+  become: true
+  command: yum install -y yum-utils
+  when: ansible_os_family == "RedHat"
+
+- name: Install docker RHEL
+  become: true
+  command: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+  when: ansible_os_family == "RedHat"
+
+- name: Yum update
+  become: true
+  command: yum -y update
+  when: ansible_os_family == "RedHat"
+
+- name: Install docker
+  become: true
+  command: yum install -y docker-ce docker-ce-cli containerd.io
+  when: ansible_os_family == "RedHat"
+
+- name: Start docker
+  become: true
+  service:
+    name: docker
+    state: started
+    enabled: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Install docker.io Deb
+  become: true
+  apt:
+    name: docker.io
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: Install python3-pip
+  become: true
+  apt:
+    name: python3-pip
+    state: latest
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: show docker version
+  command: docker -v
+  register: results
+  when: ansible_os_family == "Debian"
+
+- debug:
+    var: results.stdout
+
+- name: show docker binary location
+  command: which docker
+  register: results
+
+- debug:
+    var: results.stdout
+
+- name: Install python3-venv
+  become: true
+  apt:
+    name: python3-venv
+    state: latest
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: Install bash
+  become: true
+  apt:
+    name: bash
+    state: latest
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: Create /tmp/docker_test directory
+  file:
+    path: /tmp/docker_test
+    state: directory
+
+- name: Copy settings.py
+  copy:
+    src: settings.py
+    dest: /tmp/docker_test/settings.py
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Copy test_docker.py
+  copy:
+    src: test_docker.py
+    dest: /tmp/docker_test/test_docker.py
+    owner: root
+    group: root
+    mode: 0644
+
+- name: create python venv for testing
+  shell: python3 -m venv validation
+  args:
+    chdir: /tmp/docker_test
+  become: true
+
+- name: Install bash
+  become: true
+  apt:
+    name: bash
+    state: latest
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: Copy run.sh
+  copy:
+    src: run.sh
+    dest: /tmp/docker_test/run.sh
+    owner: root
+    group: root
+    mode: 0644
+  when: ansible_os_family == "Debian"
+
+- name: Create python venv and run docker testing
+  script: run.sh
+  args:
+    chdir: /tmp/docker_test
+  become: true
+  environment:
+    VERSION: "{{ PPG_VERSION }}"
+    DOCKER_REPOSITORY: "{{ DOCKER_REPOSITORY }}"
+  register: results
+
+- debug:
+    var: results.stdout

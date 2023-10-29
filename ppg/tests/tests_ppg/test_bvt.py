@@ -217,6 +217,11 @@ def test_postgres_client_version(host):
     assert settings.MAJOR_VER in result.strip("\n"), result.stdout
 
 
+@pytest.mark.upgrade
+def test_postgres_client_string(host):
+    assert host.check_output('psql -V') == f"psql (PostgreSQL) {pg_versions['version']} - Percona Distribution"
+
+
 def test_start_stop_postgresql(start_stop_postgresql):
     assert start_stop_postgresql.rc == 0, start_stop_postgresql.rc
     assert "active" in start_stop_postgresql.stdout, start_stop_postgresql.stdout
