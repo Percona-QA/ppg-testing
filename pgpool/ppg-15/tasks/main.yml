@@ -1,166 +1,166 @@
 ---
-  - name: Configure repository
-    include_tasks: ../../../../tasks/enable_repo.yml
+- name: Configure repository
+  include_tasks: ../../../../tasks/enable_repo.yml
 
-  - name: setup epel release
-    yum:
-      name: epel-release
-      update_cache: yes
-      state: present
-    when: ansible_os_family == "RedHat"
+- name: setup epel release
+  yum:
+    name: epel-release
+    update_cache: yes
+    state: present
+  when: ansible_os_family == "RedHat"
 
-  - name: Enable ol9_codeready_builder on oracle linux 9
-    become: true
-    command: dnf config-manager --set-enabled ol9_codeready_builder
+- name: Enable ol9_codeready_builder on oracle linux 9
+  become: true
+  command: dnf config-manager --set-enabled ol9_codeready_builder
 
-  - name: install Percona Platform for PostgreSQL rpm packages
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - percona-postgresql-client-common
-      - percona-postgresql-common
-      - percona-postgresql15
-      - percona-postgresql15-contrib
-      - percona-postgresql15-libs
-      - percona-postgresql15-server
+- name: install Percona Platform for PostgreSQL rpm packages
+  yum:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+    - percona-postgresql-client-common
+    - percona-postgresql-common
+    - percona-postgresql15
+    - percona-postgresql15-contrib
+    - percona-postgresql15-libs
+    - percona-postgresql15-server
 
-  - name: initDB Postgres instance 1
-    become_user: postgres
-    command: /usr/pgsql-15/bin/initdb -D /tmp/data1
+- name: initDB Postgres instance 1
+  become_user: postgres
+  command: /usr/pgsql-15/bin/initdb -D /tmp/data1
 
-  - name: initDB Postgres instance 2
-    become_user: postgres
-    command: /usr/pgsql-15/bin/initdb -D /tmp/data2
+- name: initDB Postgres instance 2
+  become_user: postgres
+  command: /usr/pgsql-15/bin/initdb -D /tmp/data2
 
-  - name: Change port of Postgres instance 2
-    lineinfile:
-      path: /tmp/data2/postgresql.conf
-      line: port = 5233
+- name: Change port of Postgres instance 2
+  lineinfile:
+    path: /tmp/data2/postgresql.conf
+    line: port = 5233
 
-  - name: Copy pg_hba.conf Server 1
-    copy:
-      src: pg_hba.conf
-      dest: /tmp/data1/pg_hba.conf
-      owner: postgres
-      group: postgres
-      mode: 0600
+- name: Copy pg_hba.conf Server 1
+  copy:
+    src: pg_hba.conf
+    dest: /tmp/data1/pg_hba.conf
+    owner: postgres
+    group: postgres
+    mode: 0600
 
-  - name: Copy pg_hba.conf Server 2
-    copy:
-      src: pg_hba.conf
-      dest: /tmp/data2/pg_hba.conf
-      owner: postgres
-      group: postgres
-      mode: 0600
+- name: Copy pg_hba.conf Server 2
+  copy:
+    src: pg_hba.conf
+    dest: /tmp/data2/pg_hba.conf
+    owner: postgres
+    group: postgres
+    mode: 0600
 
-  - name: Install percona-pgpool RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-        - percona-pgpool-II-pg15
-        - percona-pgpool-II-pg15-extensions
+- name: Install percona-pgpool RHEL
+  yum:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+      - percona-pgpool-II-pg15
+      - percona-pgpool-II-pg15-extensions
 
-  - name: Copy pgpool.conf
-    copy:
-      src: pgpool.conf
-      dest: /etc/pgpool-II/pgpool.conf
-      owner: postgres
-      group: postgres
-      mode: 0600
+- name: Copy pgpool.conf
+  copy:
+    src: pgpool.conf
+    dest: /etc/pgpool-II/pgpool.conf
+    owner: postgres
+    group: postgres
+    mode: 0600
 
-  - name: Directory listing
-    command: ls -la /etc/pgpool-II/
-    ignore_errors: true
-    register: results
+- name: Directory listing
+  command: ls -la /etc/pgpool-II/
+  ignore_errors: true
+  register: results
 
-  - debug:
+- debug:
+    var: results.stdout
+
+- name: Delete failover files
+  command: rm -f /etc/pgpool-II/*fail*
+  ignore_errors: true
+  register: results
+
+- debug:
+    var: results.stdout
+
+- name: Start server 1
+  become_user: postgres
+  command: /usr/pgsql-15/bin/pg_ctl -D /tmp/data1 -l logfile-data1 start
+
+- name: Start server 2
+  become_user: postgres
+  command: /usr/pgsql-15/bin/pg_ctl -D /tmp/data2 -l logfile-data2 start
+
+- name: Create User monitor
+  become_user: postgres
+  command: psql -c "CREATE USER monitor WITH ENCRYPTED PASSWORD 'Monitor@321';"
+  register: results
+
+- debug:
+    var: results.stdout
+
+- name: Create User appuser
+  become_user: postgres
+  command: psql -c "CREATE USER appuser WITH  ENCRYPTED PASSWORD 'Appuser@321';"
+  register: results
+
+- debug:
+    var: results.stdout
+
+- name: Create database monitor
+  become_user: postgres
+  command: psql -c "create database monitor;"
+  register: results
+
+- debug:
+    var: results.stdout
+
+- name: Display ppg version
+  become_user: postgres
+  shell: psql -c "select version()"
+  register: results
+
+- debug:
       var: results.stdout
 
-  - name: Delete failover files
-    command: rm -f /etc/pgpool-II/*fail*
-    ignore_errors: true
-    register: results
+- name: Start pgpool service
+  service:
+    name: pgpool
+    state: started
+    enabled: yes
 
-  - debug:
-      var: results.stdout
+- name: Pause for 1 minutes
+  ansible.builtin.pause:
+    minutes: 1
 
-  - name: Start server 1
-    become_user: postgres
-    command: /usr/pgsql-15/bin/pg_ctl -D /tmp/data1 -l logfile-data1 start
+- name: select datname from pg_database
+  become_user: postgres
+  command: psql -h 127.0.0.1 -U appuser -p 9999 postgres  -c "select datname from pg_database"
+  ignore_errors: true
+  register: results
 
-  - name: Start server 2
-    become_user: postgres
-    command: /usr/pgsql-15/bin/pg_ctl -D /tmp/data2 -l logfile-data2 start
+- debug:
+    var: results.stdout
 
-  - name: Create User monitor
-    become_user: postgres
-    command: psql -c "CREATE USER monitor WITH ENCRYPTED PASSWORD 'Monitor@321';"
-    register: results
+- name: show pool_nodes
+  become_user: postgres
+  command: psql -h 127.0.0.1 -Uappuser -p 9999 postgres  -c "show pool_nodes"
+  register: results
 
-  - debug:
-      var: results.stdout
+- debug:
+    var: results.stdout
 
-  - name: Create User appuser
-    become_user: postgres
-    command: psql -c "CREATE USER appuser WITH  ENCRYPTED PASSWORD 'Appuser@321';"
-    register: results
+- name: show pool_version
+  become_user: postgres
+  command: psql -h 127.0.0.1 -Uappuser -p 9999 postgres  -c "show pool_version"
+  register: results
 
-  - debug:
-      var: results.stdout
-
-  - name: Create database monitor
-    become_user: postgres
-    command: psql -c "create database monitor;"
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: Display ppg version
-    become_user: postgres
-    shell: psql -c "select version()"
-    register: results
-
-  - debug:
-        var: results.stdout
-
-  - name: Start pgpool service
-    service:
-      name: pgpool
-      state: started
-      enabled: yes
-
-  - name: Pause for 1 minutes
-    ansible.builtin.pause:
-      minutes: 1
-
-  - name: select datname from pg_database
-    become_user: postgres
-    command: psql -h 127.0.0.1 -U appuser -p 9999 postgres  -c "select datname from pg_database"
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: show pool_nodes
-    become_user: postgres
-    command: psql -h 127.0.0.1 -Uappuser -p 9999 postgres  -c "show pool_nodes"
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: show pool_version
-    become_user: postgres
-    command: psql -h 127.0.0.1 -Uappuser -p 9999 postgres  -c "show pool_version"
-    register: results
-
-  - debug:
-      var: results.stdout
+- debug:
+    var: results.stdout

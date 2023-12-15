@@ -57,6 +57,71 @@
       state: started
       enabled: yes
 
+  - name: install prerequisites for building postgis from source
+    when: ansible_os_family == "Debian"
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgresql-server-dev-all
+      - build-essential
+      - autoconf
+      - libtool
+      - libpq-dev
+      - libgeos++-dev
+      - libgeos-c1v5
+      - libgeos-dev
+      - libgeos-doc
+      - libgeos3.10.2
+      - libproj-dev
+      - protobuf-c-compiler
+      - libprotobuf-c-dev
+      - libgdal-dev
+      - libxml2-utils
+      - llvm-11
+      - libcunit1
+      - xsltproc
+
+  - getent:
+      database: passwd
+      key: postgres
+      split: ":"
+
+  - set_fact: pg_home="{{ getent_passwd.postgres[4] }}"
+
+  - name: Git clone PostGis sources
+    become_user: postgres
+    git:
+      repo: "{{ repo }}"
+      version: "{{ version }}"
+      dest: "{{ pg_home }}/postgis"
+    vars:
+      repo: "{{ lookup('env', 'COMPONENT_REPO') }}"
+      version: "{{ lookup('env', 'COMPONENT_VERSION') }}"
+
+  - name: configure postgis
+    become_user: postgres
+    shell: |
+      sh autogen.sh
+      ./configure
+      make clean
+    args:
+      chdir: "{{ pg_home }}/postgis"
+      creates: "{{ pg_home }}/postgis/config.log"
+
+  - name: make postgis
+    become_user: postgres
+    make:
+      chdir: "{{ pg_home }}/postgis"
+
+  - name: Run the regression tests of postgis - make check
+    become_user: postgres
+    make:
+      chdir: "{{ pg_home }}/postgis"
+      target: check
+
   - name: Select available extensions
     become_user: postgres
     command: psql -c "SELECT name, default_version,installed_version FROM pg_available_extensions WHERE name LIKE 'postgis%' or name LIKE 'address%';"
