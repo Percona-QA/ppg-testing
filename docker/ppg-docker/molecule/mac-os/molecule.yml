@@ -1,0 +1,34 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: ec2
+platforms:
+  - name: macOS-${BUILD_NUMBER}-${JOB_NAME}
+    region: eu-central-1
+    image: ami-05fb9c31e4bfce69e
+    vpc_subnet_id: subnet-085deaca8c1c59a4f
+    instance_type: mac2-m2.metal
+    ssh_user: ec2-user
+    root_device_name: /dev/sda1
+    instance_tags:
+      iit-billing-tag: jenkins-pg-worker
+provisioner:
+  name: ansible
+  log: True
+  playbooks:
+    create: ../../../../playbooks/create.yml
+    destroy: ../../../../playbooks/destroy.yml
+    prepare: ../../../../playbooks/prepare.yml
+    converge: ../../playbooks/playbook.yml
+verifier:
+  name: ansible
+scenario:
+  destroy_sequence:
+    - destroy
+  test_sequence:
+    - destroy
+    - create
+    - prepare
+    - converge
+    - destroy
