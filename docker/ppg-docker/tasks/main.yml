@@ -10,7 +10,7 @@
     TAG: >-
       {{
         VERSION if ansible_architecture == 'x86_64' and not VERSION|regex_search('multi')
-        else '{{VERSION}}-arm64' if ansible_architecture == 'aarch64' and not VERSION|regex_search('multi')
+        else VERSION|string + '-arm64' if ansible_architecture == 'aarch64' and not VERSION|regex_search('multi')
         else VERSION
       }}
   when: "ansible_architecture == 'x86_64' or ansible_architecture == 'aarch64'"
