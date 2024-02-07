@@ -1,22 +1,41 @@
 ---
-
 - name: Set Facts.
   set_fact:
-    PPG_VERSION: "{{ lookup('env', 'VERSION') }}"
     DOCKER_REPOSITORY: "{{ lookup('env', 'REPOSITORY') }}"
-    TAG: "{{ lookup('env', 'VERSION') }}"
+    VERSION: "{{ lookup('env', 'VERSION')}}"
     cacheable: true
 
-- name: Set Facts.
+# - name: Set Facts.
+#   set_fact:
+#     PPG_VERSION: "{{ PPG_VERSION }}"
+#     DOCKER_REPOSITORY: "{{ lookup('env', 'REPOSITORY') }}"
+#     TAG: "{{ PPG_VERSION }}-arm64"
+#     cacheable: true
+#   when: ansible_distribution == 'MacOSX'
+
+- name: Assign TAG based on architecture and version
   set_fact:
-    PPG_VERSION: "{{ PPG_VERSION }}"
-    DOCKER_REPOSITORY: "{{ lookup('env', 'REPOSITORY') }}"
-    TAG: "{{ PPG_VERSION }}-arm64"
-    cacheable: true
-  when: ansible_distribution == 'MacOSX'
+    TAG: >-
+      {{
+        VERSION if ansible_architecture == 'x86_64' and not VERSION|regex_search('multi')
+        else '{{VERSION}}-arm64' if ansible_architecture == 'aarch64' and not VERSION|regex_search('multi')
+        else VERSION
+      }}
+  when: "ansible_architecture == 'x86_64' or ansible_architecture == 'aarch64'"
 
-- debug:
-    msg: "Value of PPG_VERSION is : {{ PPG_VERSION }}"
+- name: Extract version from input string
+  set_fact:
+    PPG_VERSION: "{{ VERSION | regex_replace('(\\d+\\.\\d+).*', '\\1') }}"
+  when: "VERSION | regex_search('multi')"
+
+- name: Set PPG_VERSION directly if version does not contain 'multi'
+  set_fact:
+    PPG_VERSION: "{{ VERSION }}"
+  when: VERSION is not search('multi')
+
+- name: Print PPG_VERSION and TAG
+  debug:
+    msg: "PPG_VERSION: {{ PPG_VERSION }}, TAG: {{ TAG }}"
 
 - name: Yum update
   become: true

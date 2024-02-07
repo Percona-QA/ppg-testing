@@ -9,6 +9,7 @@ import time
 MAJOR_VER = os.getenv('VERSION').split('.')[0]
 MAJOR_MINOR_VER = os.getenv('VERSION')
 DOCKER_REPO = os.getenv('DOCKER_REPOSITORY')
+IMG_TAG = os.getenv('TAG')
 
 pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER)
 
@@ -28,7 +29,7 @@ def host(request):
     docker_id = subprocess.check_output(
         ['docker', 'run', '--name', f'PG{MAJOR_VER}', '-e', 'POSTGRES_PASSWORD=secret',
         '-e', 'PERCONA_TELEMETRY_URL=https://check-dev.percona.com/v1/telemetry/GenericReport',
-        '-d', f'{DOCKER_REPO}/percona-distribution-postgresql:{MAJOR_MINOR_VER}']).decode().strip()
+        '-d', f'{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG}']).decode().strip()
 
     # return a testinfra connection to the container
     yield testinfra.get_host("docker://" + docker_id)
