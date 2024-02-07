@@ -182,6 +182,7 @@
   environment:
     VERSION: "{{ PPG_VERSION }}"
     DOCKER_REPOSITORY: "{{ DOCKER_REPOSITORY }}"
+    TAG: "{{ TAG }}"
   register: results
 
 - debug:
