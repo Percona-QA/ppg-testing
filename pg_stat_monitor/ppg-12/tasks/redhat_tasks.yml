@@ -1,0 +1,215 @@
+---
+  - name: setup epel release
+    yum:
+      name: epel-release
+      update_cache: yes
+      state: present
+    when: ansible_os_family == "RedHat"
+
+  - name: Setup additional yum packages
+    yum:
+      name: "{{ packages }}"
+      update_cache: yes
+      state: present
+    vars:
+      packages:
+        - yum-utils
+        - centos-release-scl
+    when: ansible_distribution_major_version == "7"
+
+  - name: setup devtoolset-7-gcc
+    yum:
+      name: devtoolset-7-gcc*
+      update_cache: yes
+      enablerepo: centos-sclo-rh-testing
+      state: present
+    when: ansible_distribution_major_version == "7"
+
+  - name: Clean dnf RHEL8
+    become: true
+    command: dnf clean all -y
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+
+  - name: Enable ol8_codeready_builder on oracle linux 8
+    become: true
+    command: dnf config-manager --set-enabled ol8_codeready_builder
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+
+  - name: Enable ol9_codeready_builder on oracle linux 9
+    become: true
+    command: dnf config-manager --set-enabled ol9_codeready_builder
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9"    
+
+  - name: Disable dnf module for RHEL8
+    become: true
+    command: dnf module disable postgresql -y
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+
+  - name: Install perl-CPAN and perl-App-cpanminus on Red Hat
+    become: yes
+    yum:
+      name: "{{ item }}"
+      state: present
+    loop:
+      - perl-CPAN
+      - perl-App-cpanminus
+      - perl-IPC-Run
+
+  - name: Install perl module Text::Trim
+    become: true
+    command: cpanm Text::Trim
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_os_family == "RedHat"
+
+  - name: install Percona Platform for PostgreSQL rpm packages for RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgresql-client-common
+      - percona-postgresql-common
+      - percona-postgresql-server-dev-all
+      - percona-postgresql12
+      - percona-postgresql12-contrib
+      - percona-postgresql12-devel
+      - percona-postgresql12-libs
+      - percona-postgresql12-plperl
+      - percona-postgresql12-plpython3
+      - percona-postgresql12-pltcl
+      - percona-postgresql12-server
+      - percona-postgresql12-test
+    when: ansible_os_family == "RedHat"
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Percona Platform for PostgreSQL rpm packages for RHEL and additional tools
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+      enablerepo: rpmfusion-*
+    vars:
+      packages:
+      - openssl-devel
+      - llvm-toolset-7-clang
+      - llvm5.0
+      - llvm-toolset-7
+      - readline-devel
+      - gcc
+      - gcc-c++
+    when: ansible_distribution_major_version == "7"
+
+  - name: Initialize Postgres RHEL
+    become: true
+    command: /usr/pgsql-12/bin/postgresql-12-setup initdb
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+  - name: Install Development tools
+    become: true
+    command: yum -y groupinstall "Development tools"
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version != "7"
+
+  - name: Enable llvm-toolset dnf module for RHEL8
+    become: true
+    command: dnf module enable llvm-toolset -y
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+
+  - name: Install llvm-toolset
+    become: true
+    command: yum install -y llvm-toolset
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version != "7"
+
+  - shell: gcc --version
+    register: gcc
+    when: ansible_distribution_major_version == "7"
+
+  - debug: var=gcc.stdout_lines
+    when: ansible_distribution_major_version == "7"
+
+  - name: Enable gcc 7
+    shell: echo "source /opt/rh/devtoolset-7/enable" | sudo tee -a /etc/profile;
+    when: ansible_distribution_major_version == "7"
+
+  - name: Set source
+    shell: source /opt/rh/devtoolset-7/enable;
+    when: ansible_distribution_major_version == "7"
+
+  - name: Delete old gcc
+    shell: rm /usr/bin/gcc
+    when: ansible_distribution_major_version == "7"
+
+  - name: Set symbol link
+    shell: ln -s /opt/rh/devtoolset-7/root/usr/bin/gcc /usr/bin/gcc
+    when: ansible_distribution_major_version == "7"
+
+  - shell: gcc --version
+    register: gcc
+    when: ansible_distribution_major_version == "7"
+
+  - debug: var=gcc.stdout_lines
+    when: ansible_distribution_major_version == "7"
+
+  - name: Clone pg_stat_monitor sources
+    git:
+      repo: "{{ repo }}"
+      version: "{{ version }}"
+      dest: /tmp/pg_stat_monitor
+    vars:
+      repo: "{{ lookup('env', 'PGSM_REPO') }}"
+      version: "{{ lookup('env', 'PGSM_BRANCH') }}"
+    become_user: postgres
+
+  - name: Remove 024_check_timings test case (delete file)
+    ansible.builtin.file:
+      path: /tmp/pg_stat_monitor/t/024_check_timings.pl
+      state: absent
+
+  - name: Build pg_stat_monitor from sources
+    make:
+      chdir: "/tmp/pg_stat_monitor"
+      params:
+        USE_PGXS: 1
+
+  - name: Install pg_stat_monitor from sources
+    make:
+      target: install
+      chdir: "/tmp/pg_stat_monitor"
+      params:
+        USE_PGXS: 1
+    when: not use_package_install
+
+  - name: Install pg-stat-monitor RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pg_stat_monitor12
+        - percona-pg_stat_monitor12-debuginfo
+    when: use_package_install
+
+  - name: Add extensions to postgresql.conf for RHEL
+    lineinfile:
+      path: /var/lib/pgsql/12/data/postgresql.conf
+      line: shared_preload_libraries = 'pg_stat_monitor'
+
+  - name: Restart Postgres RHEL
+    service:
+      name: postgresql-12
+      state: restarted
+    register: out
+
+  - name: Start Postgres RHEL
+    service:
+      name: postgresql-12
+      state: started
+      enabled: yes

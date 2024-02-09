@@ -1,142 +1,18 @@
 ---
+  - name: Set Facts
+    set_fact:
+      use_package_install: "{{ lookup('env', 'PGSM_PACKAGE_INSTALL') }}"
+      cacheable: true
 
   - name: Configure repository
     include_tasks: ../../../../tasks/enable_repo.yml
 
-  - name: setup epel release
-    yum:
-      name: epel-release
-      update_cache: yes
-      state: present
-    when: ansible_os_family == "RedHat"
+  - name: Include Redhat tasks file 
+    include_tasks: 
+      file: "redhat_tasks.yml"
+    when: ansible_os_family == 'RedHat'
 
-  - name: Clean dnf RHEL8
-    become: true
-    command: dnf clean all -y
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
-
-  - name: Enable ol8_codeready_builder on oracle linux 8
-    become: true
-    command: dnf config-manager --set-enabled ol8_codeready_builder
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
-
-  - name: Disable dnf module for RHEL8
-    become: true
-    command: dnf module disable postgresql -y
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
-
-  - name: Install CPAN
-    become: true
-    command: yum -y install perl-CPAN
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    when: ansible_os_family == "RedHat"
-
-  - name: Install perl-App-cpanminus
-    become: true
-    command: yum -y install perl-App-cpanminus
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    when: ansible_os_family == "RedHat"
-
-  - name: Install install perl-IPC-Run
-    become: true
-    command: yum -y install perl-IPC-Run
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    when: ansible_os_family == "RedHat"
-
-  - name: Install perl module Text::Trim
-    become: true
-    command: cpanm Text::Trim
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    when: ansible_os_family == "RedHat"
-
-  - name: install Percona Platform for PostgreSQL rpm packages for RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - percona-postgresql-client-common
-      - percona-postgresql-common
-      - percona-postgresql-server-dev-all
-      - percona-postgresql16
-      - percona-postgresql16-contrib
-      - percona-postgresql16-devel
-      - percona-postgresql16-libs
-      - percona-postgresql16-plperl
-      - percona-postgresql16-plpython3
-      - percona-postgresql16-pltcl
-      - percona-postgresql16-server
-      - percona-postgresql16-test
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
-    environment:
-      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
-
-  - name: Initialize Postgres RHEL
-    become: true
-    command: /usr/pgsql-16/bin/postgresql-16-setup initdb
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
-  - name: Install Development tools
-    become: true
-    command: yum -y groupinstall "Development tools"
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    when: ansible_os_family == "RedHat"
-
-  - name: Enable llvm-toolset dnf module for RHEL8
-    become: true
-    command: dnf module enable llvm-toolset -y
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
-
-  - name: Install llvm-toolset
-    become: true
-    command: yum install -y llvm-toolset
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    when: ansible_os_family == "RedHat"
-
-  - name: Clone pg_stat_monitor sources
-    git:
-      repo: "{{ repo }}"
-      version: "{{ version }}"
-      dest: /tmp/pg_stat_monitor
-    vars:
-      repo: "{{ lookup('env', 'COMPONENT_REPO') }}"
-      version: "{{ lookup('env', 'COMPONENT_VERSION') }}"
-    become_user: postgres
-
-  - name: Build pg_stat_monitor from sources
-    make:
-      chdir: "/tmp/pg_stat_monitor"
-      params:
-        USE_PGXS: 1
-
-  - name: Install pg_stat_monitor from sources
-    make:
-      target: install
-      chdir: "/tmp/pg_stat_monitor"
-      params:
-        USE_PGXS: 1
-
-  - name: Add extensions to postgresql.conf for RHEL
-    lineinfile:
-      path: /var/lib/pgsql/16/data/postgresql.conf
-      line: shared_preload_libraries = 'pg_stat_monitor'
-
-  - name: Restart Postgres RHEL
-    service:
-      name: postgresql-16
-      state: restarted
-    register: out
-
-  - name: Start Postgres RHEL
-    service:
-      name: postgresql-16
-      state: started
-      enabled: yes
+  - name: Include Debian tasks file 
+    include_tasks: 
+      file: "debian_tasks.yml"
+    when: ansible_os_family == 'Debian'

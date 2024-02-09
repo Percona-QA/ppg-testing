@@ -1,0 +1,43 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: ec2
+platforms:
+  - name: pgstatmon-debian10-${BUILD_NUMBER}
+    region: eu-central-1
+    image: ami-0d8e1b631d66a4b37
+    vpc_subnet_id: subnet-085deaca8c1c59a4f
+    instance_type: t2.xlarge
+    ssh_user: admin
+    root_device_name: /dev/xvda
+    instance_tags:
+      iit-billing-tag: jenkins-pg-worker
+provisioner:
+  name: ansible
+  log: True
+  playbooks:
+    create: ../../../../playbooks/create.yml
+    destroy: ../../../../playbooks/destroy.yml
+    prepare: ../../../../playbooks/prepare.yml
+    converge: ../../playbooks/playbook.yml
+    verify: ../../playbooks/verify.yml
+verifier:
+  name: testinfra
+  directory: ../../../tests/
+  options:
+    verbose: true
+    s: true
+    junitxml: report.xml
+scenario:
+  destroy_sequence:
+    - destroy
+  cleanup_sequence:
+    - cleanup
+  test_sequence:
+    - destroy
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy

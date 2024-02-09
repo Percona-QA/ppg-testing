@@ -1,0 +1,114 @@
+---
+  - name: Install perl-CPAN and perl-App-cpanminus on Debian
+    apt:
+      name: "{{ packages }}"
+      update_cache: yes
+      state: latest
+    vars:
+      packages:
+        - libreadline6-dev
+        - systemtap-sdt-dev
+        - zlib1g-dev
+        - libssl-dev
+        - libpam0g-dev
+        - python3-dev
+        - bison
+        - flex
+        - libipc-run-perl
+        - wget
+        - libtext-trim-perl
+
+  # - name: Install perl module IPC::RUN
+  #   become: true
+  #   command: yes | sudo /usr/bin/perl -MCPAN -e 'install IPC::RUN'
+  #            yes | sudo /usr/bin/perl -MCPAN -e 'install IPC::RUN'
+
+  # - name: Install perl module Text::Trim
+  #   become: true
+  #   command: yes | sudo /usr/bin/perl -MCPAN -e 'install Text::Trim'
+
+  - name: install Percona Platform for PostgreSQL deb packages
+    apt:
+      name: "{{ packages }}"
+      update_cache: yes
+      state: latest
+    vars:
+      postgres_version: 15
+      packages:
+      - percona-postgresql
+      - percona-postgresql-{{ postgres_version }}
+      - percona-postgresql-all
+      - percona-postgresql-client
+      - percona-postgresql-client-{{ postgres_version }}
+      - percona-postgresql-common
+      - percona-postgresql-contrib
+      - percona-postgresql-doc
+      - percona-postgresql-doc-{{ postgres_version }}
+      - percona-postgresql-plperl-{{ postgres_version }}
+      - percona-postgresql-plpython3-{{ postgres_version }}
+      - percona-postgresql-pltcl-{{ postgres_version }}
+      - percona-postgresql-server-dev-{{ postgres_version }}
+      - percona-postgresql-server-dev-all
+      - percona-postgresql-{{ postgres_version }}-dbgsym
+      - percona-postgresql-client-{{ postgres_version }}-dbgsym
+      - percona-postgresql-plperl-{{ postgres_version }}-dbgsym
+      - percona-postgresql-plpython3-{{ postgres_version }}-dbgsym
+      - percona-postgresql-pltcl-{{ postgres_version }}-dbgsym
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Clone pg_stat_monitor sources
+    git:
+      repo: "{{ repo }}"
+      version: "{{ version }}"
+      dest: /tmp/pg_stat_monitor
+    vars:
+      repo: "{{ lookup('env', 'PGSM_REPO') }}"
+      version: "{{ lookup('env', 'PGSM_BRANCH') }}"
+    become_user: postgres
+
+  - name: Remove 024_check_timings test case (delete file)
+    ansible.builtin.file:
+      path: /tmp/pg_stat_monitor/t/024_check_timings.pl
+      state: absent
+
+  - name: Build pg_stat_monitor from sources
+    make:
+      chdir: "/tmp/pg_stat_monitor"
+      params:
+        USE_PGXS: 1
+
+  - name: Install pg_stat_monitor from sources
+    make:
+      target: install
+      chdir: "/tmp/pg_stat_monitor"
+      params:
+        USE_PGXS: 1
+    when: not use_package_install
+
+  - name: Install pg-stat-monitor debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pg-stat-monitor15
+        - percona-pg-stat-monitor15-dbgsym
+    when: use_package_install
+
+  - name: Add extensions to postgresql.conf for Debian
+    lineinfile:
+      path: /etc/postgresql/15/main/postgresql.conf
+      line: shared_preload_libraries = 'pg_stat_monitor'
+
+  - name: Stop postgresql service for Debian based
+    service:
+      name: postgresql
+      state: stopped
+
+  - name: Start postgresql service for Debian based
+    service:
+      name: postgresql
+      state: started
+      enabled: true

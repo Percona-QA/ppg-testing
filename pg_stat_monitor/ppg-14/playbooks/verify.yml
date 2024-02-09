@@ -1,4 +1,9 @@
 ---
+
+- hosts: all
+  environment:
+    PG_TEST_PORT_DIR: /tmp/pg_stat_monitor
+
 - name: Run pg_stat_monitor tests
   hosts: all
   become: true
