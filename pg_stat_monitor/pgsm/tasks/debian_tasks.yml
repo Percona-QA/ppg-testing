@@ -51,11 +51,11 @@
   - name: Clone pg_stat_monitor sources
     git:
       repo: "{{ repo }}"
-      version: "{{ version }}"
+      version: "{{ pgsm_branch }}"
       dest: /tmp/pg_stat_monitor
     vars:
       repo: "{{ lookup('env', 'PGSM_REPO') }}"
-      version: "{{ lookup('env', 'PGSM_BRANCH') }}"
+      pgsm_branch: "{{ lookup('env', 'PGSM_BRANCH') }}"
     become_user: postgres
 
   - name: Remove 024_check_timings test case (delete file)
