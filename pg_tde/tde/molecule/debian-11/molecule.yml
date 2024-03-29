@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pgtde-debian11-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-0205842c2a2738b72
+    image: ami-015b9c679c522ac80
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t2.xlarge
     ssh_user: admin
@@ -23,12 +23,7 @@ provisioner:
     converge: ../../playbooks/playbook.yml
     verify: ../../playbooks/verify.yml
 verifier:
-  name: testinfra
-  directory: ../../../tests/
-  options:
-    verbose: true
-    s: true
-    junitxml: report.xml
+  name: ansible
 scenario:
   name: debian-11
   destroy_sequence:

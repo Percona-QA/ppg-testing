@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: debian10-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
-    image: ami-0d8e1b631d66a4b37
+    image: ami-0bd19acf45825e6e8
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t2.small
     ssh_user: admin

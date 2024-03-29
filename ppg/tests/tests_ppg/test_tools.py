@@ -638,14 +638,14 @@ def test_binary_version(host, binary):
 
 
 def test_etcd(host):
-    dist = host.system_info.distribution
-    if dist.lower() in ["redhat", "centos", "ol", "rhel"]:
-        if "8" in host.system_info.release:
-            etcd_package = host.package("etcd")
-            assert etcd_package.is_installed
-            service = host.service("etcd")
-            assert service.is_running
-            assert service.is_enabled
+    # dist = host.system_info.distribution
+    # if dist.lower() in ["redhat", "centos", "ol", "rhel"]:
+    #     if "8" in host.system_info.release:
+    etcd_package = host.package("etcd")
+    assert etcd_package.is_installed
+    service = host.service("etcd")
+    assert service.is_running
+    assert service.is_enabled
 
 
 def test_python_etcd(host):
@@ -668,6 +668,18 @@ def test_haproxy_version(host):
     with host.sudo("postgres"):
         version = host.run("haproxy -v")
         assert pg_versions["haproxy"]['version'] in version.stdout.strip("\n"), version.stdout
+
+
+def test_etcd_package_version(host):
+    etcd = host.package(f"etcd")
+    assert etcd.is_installed
+    assert pg_versions["etcd"]['version'] in etcd.version, etcd.version
+
+
+def test_etcd_binary_version(host):
+    result = host.run(f"etcd --version 2>&1 | grep etcd | cut -d' ' -f3")
+    assert result.rc == 0, result.stderr
+    assert pg_versions["etcd"]['version'] in result.stdout.strip("\n"), result.stdout
 
 
 def test_pgpool_package_version(host):

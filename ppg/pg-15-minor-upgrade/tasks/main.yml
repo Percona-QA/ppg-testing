@@ -18,6 +18,12 @@
    ansible_distribution_major_version == "12" and
    pg_version_to_install | string is version('15.3', '<=', strict=True)
 
+- name: End play on Ubuntu 24
+  meta: end_play
+  when: ansible_distribution == "Ubuntu" and
+   ansible_distribution_major_version == "24" and
+   pg_version_to_install | string is version('15.6', '<=', strict=True)
+
 - name: Setup initial (old) repository
   command: percona-release enable {{ pg_version }} {{ repo }}
   vars:
@@ -88,6 +94,8 @@
       - percona-postgresql-plperl-15-dbgsym
       - percona-postgresql-plpython3-15-dbgsym
       - percona-postgresql-pltcl-15-dbgsym
+      - postgresql-client-common
+      - postgresql-common
   when: ansible_os_family == "Debian"
   environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"

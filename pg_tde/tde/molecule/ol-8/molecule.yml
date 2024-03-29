@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pgtde-ol8-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-065e2293a3df4c870
+    image: ami-0f18276190490b6e3
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t2.xlarge
     ssh_user: ec2-user
@@ -23,12 +23,7 @@ provisioner:
     converge: ../../playbooks/playbook.yml
     verify: ../../playbooks/verify.yml
 verifier:
-  name: testinfra
-  directory: ../../../tests/
-  options:
-    verbose: true
-    s: true
-    junitxml: report.xml
+  name: ansible
 scenario:
   destroy_sequence:
     - destroy

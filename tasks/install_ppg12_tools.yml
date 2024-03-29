@@ -545,7 +545,8 @@
         - etcd
         - percona-haproxy
     when: (ansible_distribution == "Ubuntu") or
-      (ansible_os_family == "Debian" and ansible_lsb.major_release|int <= 11)
+      (ansible_os_family == "Debian" and ansible_lsb.major_release|int <= 11) or
+      (ansible_os_family == "Debian" and pg_version_to_install | string is version('12.19', '>=', strict=True))
 
   - name: Install patroni related packages Debian 12
     apt:
@@ -557,7 +558,8 @@
         - etcd-server
         - etcd-client
         - percona-haproxy
-    when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int == 12)
+    when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int == 12) and
+      pg_version_to_install | string is version('12.18', '<=', strict=True)
 
   - name: Create /etc/patroni directory
     file:
@@ -633,21 +635,6 @@
       group: postgres
       mode: 0644
     when: ansible_os_family == "RedHat"
-
-  - name: Find all of the patroni files inside /var/lib/postgresql/patroni_test directory
-    find:
-      paths: "/var/lib/postgresql/patroni_test/"
-      patterns: "*.yml"
-    register: ymls
-    when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int == 12)
-
-  - name: replace 'etcd' to 'etcd3' in /var/lib/postgresql/patroni_test/*.yml files
-    replace:
-      path: "{{ item.path }}"
-      regexp: 'etcd'
-      replace: 'etcd3'
-    with_items: "{{ ymls.files }}"
-    when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int == 12)
 
   - name: Copy patroni0 service file Debian
     copy:

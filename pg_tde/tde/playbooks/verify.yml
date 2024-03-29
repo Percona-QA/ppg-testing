@@ -6,33 +6,33 @@
 
 - name: Run pgtde tests
   hosts: all
-  become: true
-  become_method: sudo
-  become_user: postgres
   gather_facts: true
   tasks:
     - name: Test pg_tde
-      make:
-        target: installcheck
-        chdir: "/tmp/pg_tde"
-        params:
-          USE_PGXS: 1
-      ignore_errors: yes
+      shell: |
+          TV=$(mktemp)
+          { exec >$TV; vault server -dev; } &
+          sleep 10
+          export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
+          echo "Root token: $ROOT_TOKEN"
+          sudo -u postgres bash -c "export ROOT_TOKEN=$ROOT_TOKEN && make installcheck USE_PGXS=1"
+      args:
+          chdir: "/tmp/pg_tde"
       register: installcheck
 
     - debug: var=installcheck.stdout_lines
 
-    - shell: cat /tmp/pg_tde/regression.diffs
-      register: cat
+    # - shell: cat /tmp/pg_tde/regression.diffs
+    #   register: cat
 
-    - name: Display tests diff
-      debug: var=cat.stdout_lines
-      when: installcheck.rc != 0
-      become: true
-      become_method: sudo
-      become_user: root
+    # - name: Display tests diff
+    #   debug: var=cat.stdout_lines
+    #   when: installcheck.rc != 0
+    #   become: true
+    #   become_method: sudo
+    #   become_user: root
 
-    - name: Fail tests on error
-      fail:
-        msg: Tests failed
-      when: installcheck.rc != 0
+    # - name: Fail tests on error
+    #   fail:
+    #     msg: Tests failed
+    #   when: installcheck.rc != 0

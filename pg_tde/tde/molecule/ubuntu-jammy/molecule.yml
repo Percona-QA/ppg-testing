@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pgtde-ujammy-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-04aa66cdfe687d427
+    image: ami-0c027353d00750a02
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t2.xlarge
     ssh_user: ubuntu
@@ -23,12 +23,7 @@ provisioner:
     converge: ../../playbooks/playbook.yml
     verify: ../../playbooks/verify.yml
 verifier:
-  name: testinfra
-  directory: ../../../tests/
-  options:
-    verbose: true
-    s: true
-    junitxml: report.xml
+  name: ansible
 scenario:
   destroy_sequence:
     - destroy

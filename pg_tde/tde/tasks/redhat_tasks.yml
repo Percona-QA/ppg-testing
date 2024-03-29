@@ -1,4 +1,11 @@
 ---
+  - name: Setting facts so that they will be persisted in the fact cache
+    ansible.builtin.set_fact:
+      postgis_rhel_package_name_prefix: "percona-postgis33_{{ major_version }}"
+
+  - debug:
+      msg: "Value of postgis_rhel_package_name_prefix is : {{ postgis_rhel_package_name_prefix }}"
+
   - name: setup epel release
     yum:
       name: epel-release
@@ -20,6 +27,11 @@
     command: dnf config-manager --set-enabled ol9_codeready_builder
     when: ansible_distribution_major_version == "9"
 
+  - name: Disable dnf module for RHEL8
+    become: true
+    command: dnf module disable postgresql -y
+    when: ansible_distribution_major_version == "8"
+
   - name: Install pre-packages on Redhat
     yum:
       name: "{{ packages }}"
@@ -34,10 +46,97 @@
         - libcurl-devel
         - openssl-devel
         - perl-IPC-Run
+        - perl-App-cpanminus
+        - perl-CPAN
 
-  - name: Disable dnf module for RHEL8
+  - name: Install cpanm CGI::Session
     become: true
-    command: dnf module disable postgresql -y
+    command: cpanm CGI::Session
+
+  - name: Install HTTP::Server::Simple::CGI
+    become: true
+    command: cpanm HTTP::Server::Simple::CGI
+
+  - name: Install Development tools
+    become: true
+    command: yum -y groupinstall "Development tools"
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+  - name: LLVM Version
+    command: llvm-config --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Enable llvm-toolset dnf module for RHEL8
+    become: true
+    command: dnf module enable llvm-toolset -y
+    when: ansible_distribution_major_version == "8"
+
+  - name: Install llvm-toolset
+    become: true
+    command: yum install -y llvm-toolset clang-devel clang
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_distribution_major_version == "8"
+
+  - name: Install clang clang-devel on RHEL 9
+    become: true
+    command: yum install -y clang-devel clang
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_distribution_major_version == "9"
+
+  - name: LLVM Version
+    command: llvm-config --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: install Percona Platform for PostgreSQL rpm packages for RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-postgresql-client-common
+      - percona-postgresql-common
+      - percona-postgresql-server-dev-all
+      - percona-postgresql{{ postgres_version }}
+      - percona-postgresql{{ postgres_version }}-contrib
+      - percona-postgresql{{ postgres_version }}-devel
+      - percona-postgresql{{ postgres_version }}-libs
+      - percona-postgresql{{ postgres_version }}-plperl
+      - percona-postgresql{{ postgres_version }}-plpython3
+      - percona-postgresql{{ postgres_version }}-pltcl
+      - percona-postgresql{{ postgres_version }}-server
+      - percona-postgresql{{ postgres_version }}-test
+      - percona-postgresql{{ postgres_version }}-llvmjit
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
     when: ansible_distribution_major_version == "8"
 
   - name: install Percona Platform for PostgreSQL rpm packages for RHEL
@@ -62,6 +161,7 @@
       - percona-postgresql{{ postgres_version }}-test
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+    when: ansible_distribution_major_version == "9"
 
   - name: Initialize Postgres RHEL
     become: true
@@ -69,24 +169,86 @@
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-  - name: Install Development tools
-    become: true
-    command: yum -y groupinstall "Development tools"
+  - name: Install pgaudit RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-pgaudit{{ postgres_version }}
     environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    when: ansible_distribution_major_version != "7"
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-  - name: Enable llvm-toolset dnf module for RHEL8
-    become: true
-    command: dnf module enable llvm-toolset -y
-    when: ansible_distribution_major_version == "8"
-
-  - name: Install llvm-toolset
-    become: true
-    command: yum install -y llvm-toolset
+  - name: Install set_user RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-pgaudit{{ postgres_version }}_set_user
     environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    when: ansible_distribution_major_version != "7"
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install pgrepack RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-pg_repack{{ postgres_version }}
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install percona-postgis RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - "{{postgis_rhel_package_name_prefix}}"
+      - "{{postgis_rhel_package_name_prefix}}-client"
+      - "{{postgis_rhel_package_name_prefix}}-client-debuginfo"
+      - "{{postgis_rhel_package_name_prefix}}-debuginfo"
+      - "{{postgis_rhel_package_name_prefix}}-devel"
+      - "{{postgis_rhel_package_name_prefix}}-docs"
+      - "{{postgis_rhel_package_name_prefix}}-gui"
+      - "{{postgis_rhel_package_name_prefix}}-gui-debuginfo"
+      - "{{postgis_rhel_package_name_prefix}}-llvmjit"
+      - "{{postgis_rhel_package_name_prefix}}-utils"
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install pg-stat-monitor RHEL RPM Package
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pg_stat_monitor{{ major_version }}
+        - percona-pg_stat_monitor{{ major_version }}-debuginfo
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: yum install -y yum-utils
+    become: true
+    command: yum install -y yum-utils
+
+  - name: yum-config-manager hashicorp repo
+    become: true
+    command: yum-config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
+
+  - name: yum -y install vault
+    become: true
+    command: yum -y install vault
 
   - name: Clone pg_tde sources
     git:
@@ -124,19 +286,13 @@
       update_cache: yes
     vars:
       packages:
-        - percona-pg_tde{ major_version }}
+        - percona-pg_tde_{{ major_version }}
     when: use_package_install
 
   - name: Add extensions to postgresql.conf for RHEL
     lineinfile:
       path: /var/lib/pgsql/{{ major_version }}/data/postgresql.conf
       line: shared_preload_libraries = 'pg_tde'
-
-  - name: Restart Postgres RHEL
-    service:
-      name: postgresql-{{ major_version }}
-      state: restarted
-    register: out
 
   - name: Start Postgres RHEL
     service:

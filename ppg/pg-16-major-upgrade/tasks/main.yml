@@ -27,6 +27,12 @@
    ansible_distribution_major_version == "12" and
    pg_version_to_install | string is version('15.3', '<=', strict=True)
 
+- name: End play on Ubuntu 24
+  meta: end_play
+  when: ansible_distribution == "Ubuntu" and
+   ansible_distribution_major_version == "24" and
+   pg_version_to_install | string is version('15.6', '<=', strict=True)
+
 - name: Setup initial (old) repository
   command: percona-release enable {{ pg_version }} {{ repo }}
   vars:
@@ -97,6 +103,8 @@
       - percona-postgresql-plperl-16-dbgsym
       - percona-postgresql-plpython3-16-dbgsym
       - percona-postgresql-pltcl-16-dbgsym
+      - postgresql-client-common
+      - postgresql-common
   when: ansible_os_family == "Debian"
   environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
@@ -139,6 +147,11 @@
   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "7"
   environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+- name: Disable llvm-toolset dnf module for RHEL8
+  become: true
+  command: dnf module disable llvm-toolset -y
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
 - name: install Percona Platform for PostgreSQL rpm packages for RHEL
   yum:
