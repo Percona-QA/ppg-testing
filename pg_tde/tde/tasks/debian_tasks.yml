@@ -96,7 +96,7 @@
       update_cache: yes
     vars:
       packages:
-        - percona-pgtde{{ major_version }}
+        - percona-postgresql-{{ major_version }}-pg-tde
     when: use_package_install
 
   - name: Add extensions to postgresql.conf for Debian
