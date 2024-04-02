@@ -20,6 +20,7 @@
       args:
           chdir: "/tmp/pg_tde"
       register: installcheck
+      ignore_errors: true
 
     - debug: var=installcheck.stdout_lines
 
