@@ -123,8 +123,9 @@
       async: 7200
       poll: 0
 
-    - debug:
-      msg: "Server Info : {{ server.results }}"
+    - name: Print Server info
+      debug:
+        msg: "Server Info : {{ server.results }}"
 
     - name: Wait for instance(s) creation to complete
       async_status:
@@ -135,8 +136,9 @@
       with_items: "{{ server.results }}"
 
     # Mandatory configuration for Molecule to function.
-    - debug:
-      msg: "ec2_jobs Info : {{ ec2_jobs.results }}"
+    - name: ec2_job info
+      debug:
+        msg: "ec2_jobs Info : {{ ec2_jobs.results }}"
 
     - name: Populate instance config dict
       set_fact:
