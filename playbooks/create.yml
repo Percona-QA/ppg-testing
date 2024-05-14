@@ -111,9 +111,10 @@
         region: "{{ item.region|default(default_region) }}"
         volumes:
           - device_name: "{{ item.root_device_name }}"
-            volume_type: gp2
-            volume_size: 30
-            delete_on_termination: true
+            ebs:
+              volume_type: gp2
+              volume_size: 30
+              delete_on_termination: true
       with_items: "{{ molecule_yml.platforms }}"
       register: server
       loop: "{{ molecule_yml.platforms }}"
