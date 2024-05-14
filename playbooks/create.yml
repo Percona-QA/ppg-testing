@@ -113,6 +113,7 @@
             volume_type: gp2
             volume_size: 30
             delete_on_termination: true
+      with_items: "{{ molecule_yml.platforms }}"
       register: server
       loop: "{{ molecule_yml.platforms }}"
       loop_control:
