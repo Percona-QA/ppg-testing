@@ -12,6 +12,7 @@ from .versions.haproxy import haproxy
 from .versions.set_user import set_user
 from .versions.wal2json import wal2json
 from .versions.pg_gather import pg_gather
+from .versions.etcd import etcd
 
 MAJOR_VER = os.getenv("VERSION").split(".")[0].split("ppg-")[1]
 # if "11" in os.getenv("VERSION"):
