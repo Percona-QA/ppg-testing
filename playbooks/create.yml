@@ -140,6 +140,49 @@
       debug:
         msg: "ec2_jobs Info : {{ ec2_jobs.results }}"
 
+    - name: Display 1
+      debug:
+        msg:
+          'instance': "{{ item.tags[0].Name }}"
+      with_items: "{{ ec2_jobs.results }}"
+      ignore_errors: true
+
+    - name: Display 2
+      debug:
+        msg:
+          'address': "{{ item.public_ip_address }}"
+      with_items: "{{ ec2_jobs.results }}"
+      ignore_errors: true
+
+    - name: Display 3
+      debug:
+        msg:
+          'user': "{{ item[0].tags.ssh_user }}"
+      with_items: "{{ ec2_jobs.results }}"
+      ignore_errors: true
+
+    - name: Display 4
+      debug:
+        msg:
+          'port': "{{ ssh_port }}"
+          'identity_file': "{{ keypair_path }}-{{ item.tagged_instances[0].region }}",
+      with_items: "{{ ec2_jobs.results }}"
+      ignore_errors: true
+
+    - name: Display 5
+      debug:
+        msg:
+          'instance_id': "{{ item.instance_id }}"
+      with_items: "{{ ec2_jobs.results }}"
+      ignore_errors: true
+
+    - name: Display 6
+      debug:
+        msg:
+          'region': "{{ item.region }}"
+      with_items: "{{ ec2_jobs.results }}"
+      ignore_errors: true
+
     - name: Populate instance config dict
       set_fact:
         instance_conf_dict: {
