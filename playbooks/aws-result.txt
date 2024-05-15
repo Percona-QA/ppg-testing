@@ -1,0 +1,350 @@
+{
+    "msg":"ec2_jobs Info : 
+    [
+        {
+            'started': 1,
+            'finished': 1,
+            'stdout': '',
+            'stderr': '',
+            'stdout_lines': [],
+            'stderr_lines': [],
+            'ansible_job_id': 'j315079253657.14353',
+            'results_file': '/home/ec2-user/.ansible_async/j315079253657.14353',
+            'changed': True,
+            'instance_ids': ['i-079f35bd0b03165c5'],
+            'instances': 
+            [
+                {
+                    'ami_launch_index': 0,
+                    'image_id': 'ami-01e444924a2233b07',
+                    'instance_id': 'i-079f35bd0b03165c5',
+                    'instance_type': 't2.small',
+                    'key_name': 'molecule-pkg-tests',
+                    'launch_time': '2024-05-15T01:00:34+00:00',
+                    'monitoring': 
+                    {
+                        'state': 'disabled'
+                    },
+                    'placement': 
+                    {
+                        'availability_zone': 'eu-central-1b',
+                        'group_name': '',
+                        'tenancy': 'default'
+                    },
+                    'private_dns_name': 'ip-10-177-1-104.eu-central-1.compute.internal',
+                    'private_ip_address': '10.177.1.104',
+                    'product_codes': [],
+                    'public_dns_name': 'ec2-35-157-253-82.eu-central-1.compute.amazonaws.com',
+                    'public_ip_address': '35.157.253.82',
+                    'state': 
+                    {
+                        'code': 0,
+                        'name': 'pending'
+                    },
+                    'state_transition_reason': '',
+                    'subnet_id': 'subnet-085deaca8c1c59a4f',
+                    'vpc_id': 'vpc-0d456cd60edc86e31',
+                    'architecture': 'x86_64',
+                    'block_device_mappings': 
+                    [
+                        {
+                            'device_name': '/dev/sda1',
+                            'ebs': 
+                                {
+                                    'attach_time': '2024-05-15T01:00:34+00:00',
+                                    'delete_on_termination': True,
+                                    'status': 'attaching',
+                                    'volume_id': 'vol-0f24e1730bfbff0a3'
+                                }
+                        }
+                    ],
+                    'client_token': 'da40a5664def48448c20cb3a0656e4f5',
+                    'ebs_optimized': False,
+                    'ena_support': True,
+                    'hypervisor': 'xen',
+                    'network_interfaces': 
+                    [
+                        {
+                            'association': 
+                                {
+                                    'ip_owner_id': 'amazon',
+                                    'public_dns_name': 'ec2-35-157-253-82.eu-central-1.compute.amazonaws.com',
+                                    'public_ip': '35.157.253.82'
+                                },
+                            'attachment': 
+                                {
+                                    'attach_time': '2024-05-15T01:00:34+00:00',
+                                    'attachment_id': 'eni-attach-07ce492059ba3582a',
+                                    'delete_on_termination': True,
+                                    'device_index': 0,
+                                    'status': 'attaching',
+                                    'network_card_index': 0
+                                },
+                            'description': '',
+                            'groups': 
+                            [
+                                {
+                                    'group_name': 'molecule-vpc-0d456cd60edc86e31',
+                                    'group_id': 'sg-003c33c02e88784ce'
+                                }
+                            ],
+                            'ipv6_addresses': [],
+                            'mac_address': '06:c8:4f:c5:ab:a9',
+                            'network_interface_id': 'eni-0ddd52c9bd893d1cf',
+                            'owner_id': '119175775298',
+                            'private_dns_name': 'ip-10-177-1-104.eu-central-1.compute.internal',
+                            'private_ip_address': '10.177.1.104',
+                            'private_ip_addresses': 
+                            [
+                                {
+                                    'association': 
+                                    {
+                                        'ip_owner_id': 'amazon',
+                                        'public_dns_name': 'ec2-35-157-253-82.eu-central-1.compute.amazonaws.com',
+                                        'public_ip': '35.157.253.82'
+                                    },
+                                    'primary': True,
+                                    'private_dns_name': 'ip-10-177-1-104.eu-central-1.compute.internal',
+                                    'private_ip_address': '10.177.1.104'
+                                }
+                            ],
+                            'source_dest_check': True,
+                            'status': 'in-use',
+                            'subnet_id': 'subnet-085deaca8c1c59a4f',
+                            'vpc_id': 'vpc-0d456cd60edc86e31',
+                            'interface_type': 'interface'
+                        }
+                    ],
+                    'root_device_name': '/dev/sda1',
+                    'root_device_type': 'ebs',
+                    'security_groups': 
+                    [
+                        {
+                            'group_name': 'molecule-vpc-0d456cd60edc86e31',
+                            'group_id': 'sg-003c33c02e88784ce'
+                        }
+                    ],
+                    'source_dest_check': True,
+                    'tags': 
+                    {
+                        'iit-billing-tag': 'jenkins-pg-worker',
+                        'ssh_user': 'ubuntu',
+                        'Name': 'unoble-448-ppg'
+                    },
+                        'virtualization_type': 'hvm',
+                        'cpu_options': 
+                    {
+                        'core_count': 1,
+                        'threads_per_core': 1
+                    },
+                    'capacity_reservation_specification': 
+                    {
+                        'capacity_reservation_preference': 'open'
+                    },
+                    'hibernation_options': 
+                    {
+                        'configured': False
+                    },
+                    'metadata_options': 
+                    {
+                        'state': 'pending',
+                        'http_tokens': 'required',
+                        'http_put_response_hop_limit': 2,
+                        'http_endpoint': 'enabled',
+                        'http_protocol_ipv6': 'disabled',
+                        'instance_metadata_tags': 'disabled'
+                    },
+                    'enclave_options': 
+                    {
+                        'enabled': False
+                    },
+                    'boot_mode': 'uefi-preferred',
+                    'platform_details': 'Linux/UNIX',
+                    'usage_operation': 'RunInstances',
+                    'usage_operation_update_time': '2024-05-15T01:00:34+00:00',
+                    'private_dns_name_options': 
+                    {
+                        'hostname_type': 'ip-name',
+                        'enable_resource_name_dns_a_record': False,
+                        'enable_resource_name_dns_aaaa_record': False
+                    },
+                    'maintenance_options': 
+                    {
+                        'auto_recovery': 'default'
+                    },
+                    'current_instance_boot_mode': 'legacy-bios'
+                }
+            ],
+            'spec': 
+            {
+                'ClientToken': 'da40a5664def48448c20cb3a0656e4f5',
+                'MaxCount': 1,
+                'MinCount': 1,
+                'ImageId': 'ami-01e444924a2233b07',
+                'KeyName': 'molecule-pkg-tests',
+                'NetworkInterfaces': 
+                [
+                    {
+                        'DeviceIndex': 0,
+                        'AssociatePublicIpAddress': True,
+                        'SubnetId': 'subnet-085deaca8c1c59a4f',
+                        'Groups': 
+                        [
+                            'sg-003c33c02e88784ce'
+                        ]
+                    }
+                ],
+                'BlockDeviceMappings': 
+                [
+                    {
+                        'DeviceName': '/dev/sda1',
+                        'Ebs': 
+                        {
+                            'VolumeType': 'gp2',
+                            'VolumeSize': 30,
+                            'DeleteOnTermination': True
+                        }
+                    }
+                ],
+                'TagSpecifications': 
+                [
+                    {
+                        'ResourceType': 'volume',
+                        'Tags': 
+                            [
+                                {
+                                    'Key': 'iit-billing-tag',
+                                    'Value': 'jenkins-pg-worker'
+                                },
+                                {
+                                    'Key': 'Name',
+                                    'Value': 'unoble-448-ppg'
+                                },
+                                {
+                                    'Key': 'ssh_user',
+                                    'Value': 'ubuntu'
+                                }
+                            ]
+                        },
+                        {
+                        'ResourceType': 'instance',
+                        'Tags': 
+                        [
+                            {
+                                'Key': 'iit-billing-tag',
+                                'Value': 'jenkins-pg-worker'
+                            },
+                            {
+                                'Key': 'Name',
+                                'Value': 'unoble-448-ppg'
+                            },
+                            {
+                                'Key': 'ssh_user',
+                                'Value': 'ubuntu'
+                            }
+                        ]
+                    }
+                ],
+                'InstanceType': 't2.small'
+            },
+            'invocation': 
+            {
+                'module_args': 
+                {
+                    'key_name': 'molecule-pkg-tests',
+                    'image_id': 'ami-01e444924a2233b07',
+                    'instance_type': 't2.small',
+                    'vpc_subnet_id': 'subnet-085deaca8c1c59a4f',
+                    'security_group': 'molecule-vpc-0d456cd60edc86e31',
+                    'tags': 
+                    {
+                        'iit-billing-tag': 'jenkins-pg-worker',
+                        'Name': 'unoble-448-ppg',
+                        'ssh_user': 'ubuntu'
+                    },
+                    'wait': True,
+                    'network': 
+                    {
+                        'assign_public_ip': True
+                    },
+                    'exact_count': 1,
+                    'region': 'eu-central-1',
+                    'volumes': 
+                    [
+                        {
+                            'device_name': '/dev/sda1',
+                            'ebs': 
+                            {
+                                'volume_type': 'gp2',
+                                'volume_size': 30,
+                                'delete_on_termination': True
+                            }
+                        }
+                    ],
+                    'access_key': ****,
+                    'secret_key': 'VALUE_SPECIFIED_IN_NO_LOG_PARAMETER',
+                    'validate_certs': True,
+                    'debug_botocore_endpoint_logs': False,
+                    'state': 'present',
+                    'wait_timeout': 600,
+                    'security_groups': [],
+                    'purge_tags': True,
+                    'hibernation_options': False,
+                    'instance_ids': [],
+                    'session_token': None,
+                    'profile': None,
+                    'endpoint_url': None,
+                    'aws_ca_bundle': None,
+                    'aws_config': None,
+                    'count': None,
+                    'image': None,
+                    'user_data': None,
+                    'aap_callback': None,
+                    'ebs_optimized': None,
+                    'availability_zone': None,
+                    'iam_instance_profile': None,
+                    'name': None,
+                    'filters': None,
+                    'launch_template': None,
+                    'cpu_credit_specification': None,
+                    'cpu_options': None,
+                    'tenancy': None,
+                    'placement_group': None,
+                    'instance_initiated_shutdown_behavior': None,
+                    'termination_protection': None,
+                    'detailed_monitoring': None,
+                    'metadata_options': None
+                }
+            },
+            'failed': False,
+            'attempts': 2,
+            'item': 
+            {
+                'failed': 0,
+                'started': 1,
+                'finished': 0,
+                'ansible_job_id': 'j315079253657.14353',
+                'results_file': '/home/ec2-user/.ansible_async/j315079253657.14353',
+                'changed': True,
+                'item': 
+                {
+                    'image': 'ami-01e444924a2233b07',
+                    'instance_tags': 
+                    {
+                        'iit-billing-tag': 'jenkins-pg-worker'
+                    },
+                    'instance_type': 't2.small',
+                    'name': 'unoble-448-ppg',
+                    'region': 'eu-central-1',
+                    'root_device_name': '/dev/sda1',
+                    'ssh_user': 'ubuntu',
+                    'vpc_subnet_id': 'subnet-085deaca8c1c59a4f'
+                },
+                'ansible_loop_var': 'item',
+                'index': 0,
+                'ansible_index_var': 'index'
+            },
+            'ansible_loop_var': 'item'
+        }
+    ]"
+}
