@@ -143,7 +143,7 @@
     - name: Populate instance config dict
       set_fact:
         instance_conf_dict: {
-          'instance': "{{ item.item.Name }}",
+          'instance': "{{ item.item.name }}",
           'address': "{{ item.public_ip_address }}",
           'user': "{{ item.tags.ssh_user }}",
           'port': "{{ ssh_port }}",
