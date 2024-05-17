@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pgstatmon-ufocal-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-0be656e75e69af1a9
+    image: ami-07fd6b7604806e876
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t2.xlarge
     ssh_user: ubuntu
