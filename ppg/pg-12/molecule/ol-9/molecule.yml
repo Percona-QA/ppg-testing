@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: ol9-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
-    image: ami-09829909ee4ff0f3b
+    image: ami-08b280891de0645a1
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t2.small
     ssh_user: ec2-user
