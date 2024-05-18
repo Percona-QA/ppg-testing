@@ -45,7 +45,7 @@ pgaudit = {
     "13.15": {"version": "1.5.2"},
     "14.12": {"version": "1.6.2"},
     "15.7": {"version": "1.7.0"},
-    "16.3": {"version": "16"},
+    "16.3": {"version": "16.0"},
 }
 
 pg_stat_monitor = {
