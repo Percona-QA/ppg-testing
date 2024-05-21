@@ -35,11 +35,6 @@
     command: dnf module disable postgresql -y
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
-  - name: Disable llvm-toolset dnf module for RHEL8
-    become: true
-    command: dnf module disable llvm-toolset -y
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
-
   - name: install Percona Platform for PostgreSQL deb packages
     apt:
       name: "{{ packages }}"

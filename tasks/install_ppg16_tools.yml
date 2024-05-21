@@ -326,11 +326,6 @@
       - "{{postgis_rhel_package_name_prefix}}-utils"
     when: ansible_distribution_major_version == "7"
 
-  - name: Enable llvm-toolset for RHEL8 to install PostGIS
-    become: true
-    command: dnf module enable llvm-toolset -y
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
-
   - name: Install percona-postgis RHEL
     yum:
       name: "{{ packages }}"
