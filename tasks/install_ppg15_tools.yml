@@ -511,20 +511,7 @@
       packages:
         - etcd
         - percona-haproxy
-    when: (ansible_distribution == "Ubuntu") or
-      (ansible_os_family == "Debian" and ansible_lsb.major_release|int <= 11)
-
-  - name: Install patroni related packages Debian 12
-    apt:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-        - etcd-server
-        - etcd-client
-        - percona-haproxy
-    when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int == 12)
+    when: (ansible_distribution == "Ubuntu" or ansible_os_family == "Debian")
 
   - name: Create /etc/patroni directory
     file:
