@@ -16,7 +16,7 @@ LANGUAGES = pg_versions['languages']
 DEB_FILES = pg_versions['deb_files']
 SKIPPED_DEBIAN = ["ppg-11.8", "ppg-11.9", "ppg-11.10", "ppg-11.12", "ppg-11.17", 'ppg-12.2',
                   'ppg-12.3', "ppg-12.4", "ppg-12.5", "ppg-12.6", "ppg-12.7", "ppg-12.12", "ppg-12.13",
-                  "ppg-12.14", "ppg-12.15", "ppg-12.16", "ppg-12.17", "ppg-12.18",
+                  "ppg-12.14", "ppg-12.15", "ppg-12.16", "ppg-12.17", "ppg-12.18", "ppg-12.19",
                   "ppg-13.0", "ppg-13.1",
                   "ppg-15.0", "ppg-15.1"]
 BINARIES = pg_versions['binaries']
