@@ -20,6 +20,12 @@
    ansible_distribution_major_version == "12" and
    pg_version_to_install | string is version('12.15', '<=', strict=True)
 
+- name: End play on Ubuntu 24
+  meta: end_play
+  when: ansible_distribution == "Ubuntu" and
+   ansible_distribution_major_version == "24" and
+   pg_version_to_install | string is version('12.18', '<=', strict=True)
+
 - name: Setup initial (old) repository
   command: percona-release enable {{ pg_version }} {{ repo }}
   vars:
