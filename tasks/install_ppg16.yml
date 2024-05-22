@@ -66,6 +66,8 @@
       - percona-postgresql-plperl-16-dbgsym
       - percona-postgresql-plpython3-16-dbgsym
       - percona-postgresql-pltcl-16-dbgsym
+      - postgresql-client-common
+      - postgresql-common
     when: ansible_os_family == "Debian"
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
