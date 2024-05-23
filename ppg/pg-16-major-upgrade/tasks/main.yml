@@ -148,6 +148,11 @@
   environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
+- name: Disable llvm-toolset dnf module for RHEL8
+  become: true
+  command: dnf module disable llvm-toolset -y
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+
 - name: install Percona Platform for PostgreSQL rpm packages for RHEL
   yum:
     name: "{{ packages }}"
