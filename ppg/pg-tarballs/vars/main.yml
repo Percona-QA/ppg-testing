@@ -1,0 +1,9 @@
+---
+  server_version: 16.3 #"{{server_version}}"
+  major_version: 16 #"{{major_version}}"
+  tarball_name: "percona-postgresql-{{server_version}}-ssl1.1-linux-x86_64"
+  tarball_url:  "https://downloads.percona.com/downloads/TESTING/pg_tarballs-{{server_version}}/{{tarball_name}}.tar.gz"
+  dest_dir: "/opt/{{tarball_name}}"
+  data_dir: /tmp/data{{major_version}}
+  server_port: 7444
+  ssl_version: "v1"
