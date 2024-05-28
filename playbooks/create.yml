@@ -29,7 +29,7 @@
 
   tasks:
     - name: Check subnet
-      ec2_vpc_subnet_info:
+      amazon.aws.ec2_vpc_subnet_info:
         region: "{{ item.region|default(default_region) }}"
         filters:
           subnet-id: "{{ item.vpc_subnet_id }}"
@@ -42,7 +42,7 @@
       with_items: "{{ subnet_facts.results }}"
 
     - name: Create security group
-      ec2_group:
+      amazon.aws.ec2_security_group:
         name: "{{ security_group_name_prefix }}-{{ subnet_dict[item.vpc_subnet_id] }}"
         description: "{{ security_group_description }}"
         rules: "{{ security_group_rules }}"
@@ -85,13 +85,13 @@
 #      register: ami_facts
 
     - name: Create molecule instance(s)
-      ec2:
+      amazon.aws.ec2_instance:
         key_name: "{{ keypair_name }}"
-        image: "{{ item.image }}"
+        image_id: "{{ item.image }}"
         instance_type: "{{ item.instance_type }}"
         vpc_subnet_id: "{{ item.vpc_subnet_id }}"
-        group: "{{ security_group_name_prefix }}-{{ subnet_dict[item.vpc_subnet_id] }}"
-        instance_tags: "{{
+        security_group: "{{ security_group_name_prefix }}-{{ subnet_dict[item.vpc_subnet_id] }}"
+        tags: "{{
             item.instance_tags | combine({
               'Name': item.name,
               'ssh_user': item.ssh_user|default(ssh_user)
@@ -101,24 +101,31 @@
                 'Name': item.name,
                 'ssh_user': item.ssh_user|default(ssh_user)
             }
-        }}"
+          }}"
         wait: true
-        assign_public_ip: true
+        network:
+          assign_public_ip: true
         exact_count: 1
-        count_tag:
-          Name: "{{ item.name }}"
+        # tags:
+        #   Name: "{{ item.name }}"
         region: "{{ item.region|default(default_region) }}"
         volumes:
           - device_name: "{{ item.root_device_name }}"
-            volume_type: gp2
-            volume_size: 30
-            delete_on_termination: true
+            ebs:
+              volume_type: gp2
+              volume_size: 30
+              delete_on_termination: true
+      #with_items: "{{ molecule_yml.platforms }}"
       register: server
       loop: "{{ molecule_yml.platforms }}"
       loop_control:
         index_var: index
       async: 7200
       poll: 0
+
+    - name: Print Server info
+      debug:
+        msg: "Server Info : {{ server.results }}"
 
     - name: Wait for instance(s) creation to complete
       async_status:
@@ -129,17 +136,62 @@
       with_items: "{{ server.results }}"
 
     # Mandatory configuration for Molecule to function.
+    - name: ec2_job info
+      debug:
+        msg: "ec2_jobs Info : {{ ec2_jobs.results }}"
+
+    - name: Display 1
+      debug:
+        msg:
+          'instance': "{{ item.instances[0].tags.Name }}"
+      with_items: "{{ ec2_jobs.results }}"
+      ignore_errors: true
+
+    - name: Display 2
+      debug:
+        msg:
+          'address': "{{ item.instances[0].public_ip_address }}"
+      with_items: "{{ ec2_jobs.results }}"
+      ignore_errors: true
+
+    - name: Display 3
+      debug:
+        msg:
+          'user': "{{ item.instances[0].tags.ssh_user }}"
+      with_items: "{{ ec2_jobs.results }}"
+      ignore_errors: true
+
+    - name: Display 4
+      debug:
+        msg:
+          'port': "{{ ssh_port }}"
+      with_items: "{{ ec2_jobs.results }}"
+      ignore_errors: true
+
+    - name: Display 5
+      debug:
+        msg:
+          'instance_id': "{{ item.instances[0].instance_id }}"
+      with_items: "{{ ec2_jobs.results }}"
+      ignore_errors: true
+
+    - name: Display 6
+      debug:
+        msg:
+          'region': "{{ item.invocation.module_args.region }}"
+      with_items: "{{ ec2_jobs.results }}"
+      ignore_errors: true
 
     - name: Populate instance config dict
       set_fact:
         instance_conf_dict: {
-          'instance': "{{ item.tagged_instances[0].tags.Name }}",
-          'address': "{{ item.tagged_instances[0].public_ip }}",
-          'user': "{{ item.tagged_instances[0].tags.ssh_user }}",
+          'instance': "{{ item.instances[0].tags.Name }}",
+          'address': "{{ item.instances[0].public_ip_address }}",
+          'user': "{{ item.instances[0].tags.ssh_user }}",
           'port': "{{ ssh_port }}",
-          'identity_file': "{{ keypair_path }}-{{ item.tagged_instances[0].region }}",
-          'instance_id': "{{ item.tagged_instances[0].id }}",
-          'region': "{{ item.tagged_instances[0].region }}",
+          'identity_file': "{{ keypair_path }}-{{ item.invocation.module_args.region }}",
+          'instance_id': "{{ item.instances[0].instance_id }}",
+          'region': "{{ item.invocation.module_args.region }}",
         }
       with_items: "{{ ec2_jobs.results }}"
       register: instance_config_dict
