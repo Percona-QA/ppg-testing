@@ -15,46 +15,46 @@
     etcd_version: 3.5.13
 
 - name: Add VERSION to /etc/environment
+  become: true
   ansible.builtin.lineinfile:
     path: /etc/environment
     line: "VERSION={{ VERSION }}"
     create: yes
-    become: true
 
 - name: Add data_dir to /etc/environment
+  become: true
   ansible.builtin.lineinfile:
     path: /etc/environment
     line: "data_dir={{ data_dir }}"
     create: yes
-    become: true
 
 - name: Add user_name to /etc/environment
+  become: true
   ansible.builtin.lineinfile:
     path: /etc/environment
     line: "user_name={{ user_name }}"
     create: yes
-    become: true
 
 - name: Add database_name to /etc/environment
+  become: true
   ansible.builtin.lineinfile:
     path: /etc/environment
     line: "database_name={{ database_name }}"
     create: yes
-    become: true
 
 - name: Add server_port to /etc/environment
+  become: true
   ansible.builtin.lineinfile:
     path: /etc/environment
     line: "server_port={{ server_port }}"
     create: yes
-    become: true
 
 - name: Add major_version to /etc/environment
+  become: true
   ansible.builtin.lineinfile:
     path: /etc/environment
     line: "major_version={{ major_version }}"
     create: yes
-    become: true
 
 - name: install Percona Platform for PostgreSQL {{major_version}} packages
   include_tasks: ../../../../tasks/install_openssl_for_tarballs.yml
