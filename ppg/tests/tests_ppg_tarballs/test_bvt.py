@@ -14,12 +14,6 @@ PORT=os.getenv('server_port')
 MAJOR_VER = os.getenv('major_version')
 DATA_DIR= os.getenv('data_dir')
 
-
-MAJOR_VER = os.getenv('VERSION').split('.')[0]
-MAJOR_MINOR_VER = os.getenv('VERSION')
-DOCKER_REPO = os.getenv('DOCKER_REPOSITORY')
-IMG_TAG = os.getenv('TAG')
-
 testinfra_hosts = testinfra.utils.ansible_runner.AnsibleRunner(
    os.environ['MOLECULE_INVENTORY_FILE']).get_hosts('6faac20d53ad')
 
