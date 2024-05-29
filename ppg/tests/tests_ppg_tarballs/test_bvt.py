@@ -15,11 +15,8 @@ DATA_DIR = os.getenv('data_dir')
 PG_PATH = f"{INSTALL_PATH}/percona-postgresql{MAJOR_VER}"
 
 
-
 testinfra_hosts = testinfra.utils.ansible_runner.AnsibleRunner(
-   os.environ['MOLECULE_INVENTORY_FILE']).get_hosts('6faac20d53ad')
-
-os.environ['PATH'] = f"{PG_PATH}/bin:{INSTALL_PATH}/percona-pgbouncer/bin/:{INSTALL_PATH}/percona-haproxy/sbin:{INSTALL_PATH}/percona-patroni/bin:{INSTALL_PATH}/percona-pgbackrest/bin:{INSTALL_PATH}/percona-pgbadger:{INSTALL_PATH}/percona-pgpool-II/bin:" + os.environ['PATH']
+    os.environ['MOLECULE_INVENTORY_FILE']).get_hosts('all')
 
 deb_files = ["postgresql.conf",
                       "pg_hba.conf",
@@ -43,6 +40,8 @@ SKIPPED_DEBIAN = ["ppg-11.8", "ppg-11.9", "ppg-11.10", "ppg-11.12", "ppg-11.17",
                   "ppg-13.0", "ppg-13.1",
                   "ppg-15.0", "ppg-15.1"]
 BINARIES = pg_versions['binaries']
+
+os.environ['PATH'] = f"{PG_PATH}/bin:{INSTALL_PATH}/percona-pgbouncer/bin/:{INSTALL_PATH}/percona-haproxy/sbin:{INSTALL_PATH}/percona-patroni/bin:{INSTALL_PATH}/percona-pgbackrest/bin:{INSTALL_PATH}/percona-pgbadger:{INSTALL_PATH}/percona-pgpool-II/bin:" + os.environ['PATH']
 
 @pytest.fixture(scope='session')
 def get_server_bin_path(scope='session'):

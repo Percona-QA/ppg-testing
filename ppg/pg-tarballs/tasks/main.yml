@@ -3,6 +3,7 @@
   ansible.builtin.set_fact:
     server_version: "{{ lookup('env', 'SERVER_VERSION') }}"
     pg_version_to_install: "{{ server_version }}"
+    VERSION: "ppg-{{ server_version }}"
     major_version: "{{ server_version | string | regex_replace('([0-9]+)\\..*', '\\1') }}"
     tarball_url:  "{{ lookup('env', 'TARBALL_URL') }}"
     dest_dir: "/opt/pgdistro"
@@ -17,7 +18,7 @@
   include_tasks: ../../../../tasks/install_openssl_for_tarballs.yml
 
 - name: Gather groups information
-  become: yes
+  become: true
   command: getent group
   register: groups_info
 
@@ -37,7 +38,7 @@
   include_tasks: ../../../../tasks/install_ppg_tarballs.yml
 
 - name: Ensure data directory exists
-  become: yes
+  become: true
   ansible.builtin.file:
     path: "{{ data_dir }}"
     state: directory
@@ -50,14 +51,14 @@
     mode: '0755'
 
 - name: Initialize Postgres RHEL
-  become: yes
+  become: true
   command: "initdb -A trust -k {{data_dir}} "
   environment:
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
   become_user: postgres
 
 - name: Start Postgres Server
-  become: yes
+  become: true
   become_user: postgres
   command: "pg_ctl -D {{data_dir}} -l /tmp/data{{major_version}}.log start -o '-p {{server_port}}'"
   environment:
@@ -78,7 +79,7 @@
   when: ansible_os_family == "RedHat"
 
 - name: Create temporary directory for compilation
-  become: yes
+  become: true
   ansible.builtin.file:
     path: "/tmp/libpq_command_temp_dir"
     state: directory
