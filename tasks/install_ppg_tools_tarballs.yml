@@ -143,7 +143,7 @@
     ansible.builtin.wait_for:
       port: 2379
       host: localhost
-      timeout: 30
+      timeout: 60
 
   - name: Create /etc/patroni directory
     file:
