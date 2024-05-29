@@ -5,7 +5,6 @@
     openssl_is_version_3: false
     install_openssl_1: false
     openssl_is_version_1: false
-    #ssl_version: "{{ ssl_version }}"
 
 - name: Check tarball's SSL version
   debug:

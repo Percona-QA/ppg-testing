@@ -6,16 +6,21 @@ import testinfra.utils.ansible_runner
 from .. import settings
 
 INSTALL_FOLDER_NAME = "pgdistro"
-INSTALL_PATH=os.path.join("/opt", INSTALL_FOLDER_NAME)
-PG_PATH=os.path.join(INSTALL_PATH,"percona-postgresql")
-USERNAME=os.getenv('user_name')
-DBNAME=os.getenv('database_name')
-PORT=os.getenv('server_port')
+INSTALL_PATH = os.path.join("/opt", INSTALL_FOLDER_NAME)
+USERNAME = os.getenv('user_name')
+DBNAME = os.getenv('database_name')
+PORT = os.getenv('server_port')
 MAJOR_VER = os.getenv('major_version')
-DATA_DIR= os.getenv('data_dir')
+DATA_DIR = os.getenv('data_dir')
+
+PG_PATH = f"{INSTALL_PATH}/percona-postgresql{MAJOR_VER}"
+
+
 
 testinfra_hosts = testinfra.utils.ansible_runner.AnsibleRunner(
    os.environ['MOLECULE_INVENTORY_FILE']).get_hosts('6faac20d53ad')
+
+os.environ['PATH'] = f"{PG_PATH}/bin:{INSTALL_PATH}/percona-pgbouncer/bin/:{INSTALL_PATH}/percona-haproxy/sbin:{INSTALL_PATH}/percona-patroni/bin:{INSTALL_PATH}/percona-pgbackrest/bin:{INSTALL_PATH}/percona-pgbadger:{INSTALL_PATH}/percona-pgpool-II/bin:" + os.environ['PATH']
 
 deb_files = ["postgresql.conf",
                       "pg_hba.conf",
@@ -62,13 +67,13 @@ def getSqlCmd_with_param(get_psql_binary_path):
 @pytest.fixture()
 def start_stop_postgresql(host,get_server_bin_path):
     with host.sudo("postgres"):
-        cmd = os.path.join(get_server_bin_path, 'pg_ctl') +  " -D " + DATA_DIR + " stop"
+        cmd = f"pg_ctl -D {DATA_DIR} stop"
         result = host.run(cmd)
         assert result.rc == 0
-        cmd = os.path.join(get_server_bin_path, 'pg_ctl') +  " -D " + DATA_DIR + " start"
+        cmd = f"pg_ctl -D {DATA_DIR}  start"
         result = host.run(cmd)
         assert result.rc == 0
-        cmd = os.path.join(get_server_bin_path, 'pg_ctl') +  " -D " + DATA_DIR + " status"
+        cmd = f"pg_ctl -D {DATA_DIR} status"
         return host.run(cmd)
 
 
@@ -89,10 +94,10 @@ def postgresql_query_version(host,getSqlCmd_with_param):
 @pytest.fixture()
 def restart_postgresql(host,get_server_bin_path):
     with host.sudo("postgres"):
-        cmd = os.path.join(get_server_bin_path, 'pg_ctl') +  " -D " + DATA_DIR + " restart"
+        cmd = f"pg_ctl -D {DATA_DIR} restart"
         result = host.run(cmd)
         assert result.rc == 0
-        cmd = os.path.join(get_server_bin_path, 'pg_ctl') +  " -D " + DATA_DIR + " status"
+        cmd = f"pg_ctl -D {DATA_DIR} status"
         return host.run(cmd)
 
 
