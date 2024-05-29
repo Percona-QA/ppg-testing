@@ -4,12 +4,12 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: ol8-${BUILD_NUMBER}-${JOB_NAME}
+  - name: unoble-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
-    image: ami-0f18276190490b6e3
+    image: ami-01e444924a2233b07
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t2.small
-    ssh_user: ec2-user
+    ssh_user: ubuntu
     root_device_name: /dev/sda1
     instance_tags:
       iit-billing-tag: jenkins-pg-worker
@@ -20,7 +20,7 @@ provisioner:
     create: ../../../../playbooks/create.yml
     destroy: ../../../../playbooks/destroy.yml
     prepare: ../../../../playbooks/prepare.yml
-    cleanup: ../../playbooks/cleanup-rpm.yml
+    cleanup: ../../playbooks/cleanup-deb.yml
     converge: ../../playbooks/playbook.yml
 verifier:
   name: testinfra
