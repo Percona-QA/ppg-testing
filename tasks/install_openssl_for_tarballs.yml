@@ -1,0 +1,167 @@
+---
+- name: Initialize OpenSSL3 installation fact
+  set_fact:
+    openssl3_is_installed: false
+    openssl_is_version_3: false
+    install_openssl_1: false
+    openssl_is_version_1: false
+    #ssl_version: "{{ ssl_version }}"
+
+- name: Check tarball's SSL version
+  debug:
+    msg: "Tarball version is {{ssl_version}}"
+
+- name: Check if openssl binary exists
+  stat:
+    path: /usr/bin/openssl
+  register: openssl_check
+
+- name: Check if openssl3 binary exists
+  stat:
+    path: /usr/bin/openssl3
+  register: openssl3_check
+  when: ssl_version == "3"
+
+- name: Get OpenSSL version
+  command: openssl version
+  register: openssl_version
+  changed_when: false
+  when: openssl_check.stat.exists
+
+- name: Get OpenSSL3 version
+  command: openssl3 version
+  register: openssl3_version
+  changed_when: false
+  when: ssl_version == "3" and openssl3_check.stat.exists
+
+- name: Set fact if OpenSSL is version 3
+  set_fact:
+    openssl_is_version_3: "{{ 'OpenSSL 3' in openssl_version.stdout }}"
+  when: ssl_version == "3" and openssl_check.stat.exists
+
+- name: Set fact if OpenSSL3 is installed
+  set_fact:
+    openssl3_is_installed: true
+  when: ssl_version == "3" and openssl3_check.stat.exists
+
+- name: Check if OpenSSL 3 is already installed
+  debug:
+    msg: "OpenSSL version 3 is already installed."
+  when: ssl_version == "3" and ((openssl_check.stat.exists and openssl_is_version_3) or openssl3_is_installed)
+
+- name: Set fact if OpenSSL is version 1
+  set_fact:
+    openssl_is_version_1: "{{ 'OpenSSL 1' in openssl_version.stdout }}"
+  when: ssl_version == "1" and openssl_check.stat.exists
+
+- name: Set fact to indicate need to install OpenSSL 1
+  set_fact:
+    install_openssl_1: true
+  when: ssl_version == "1" and (not openssl_check.stat.exists or openssl3_is_installed or not openssl_is_version_1)
+
+- name: Install OpenSSL3 on Debian
+  block:
+    - name: Install dependencies
+      apt:
+        name: build-essential,zlib1g-dev,wget
+        state: present
+        update_cache: yes
+
+    - name: Download OpenSSL 3.2.1
+      get_url:
+        url: https://www.openssl.org/source/openssl-3.2.1.tar.gz
+        dest: /usr/local/src/openssl-3.2.1.tar.gz
+
+    - name: Extract OpenSSL
+      ansible.builtin.unarchive:
+        src: /usr/local/src/openssl-3.2.1.tar.gz
+        dest: /usr/local/src/
+        remote_src: yes
+
+    - name: Build and install OpenSSL
+      ansible.builtin.shell: |
+        cd /usr/local/src/openssl-3.2.1
+        ./config --prefix=/usr/local/ssl --openssldir=/usr/local/ssl shared zlib
+        make
+        make install
+      args:
+        executable: /bin/bash
+
+    - name: Create ld.so.conf.d configuration file for OpenSSL library path
+      ansible.builtin.lineinfile:
+        path: /etc/ld.so.conf.d/openssl-3.2.1.conf
+        line: /usr/local/ssl/lib64
+        create: yes
+
+    - name: Reload dynamic linker configuration
+      ansible.builtin.command: ldconfig
+      changed_when: false
+
+    - name: Create environment file for OpenSSL
+      ansible.builtin.blockinfile:
+        path: /etc/profile.d/openssl.sh
+        block: |
+          OPENSSL_PATH="/usr/local/ssl/bin"
+          export OPENSSL_PATH
+          PATH=$OPENSSL_PATH:$PATH
+          export PATH
+        create: yes
+        mode: '0755'
+
+    - name: Ensure the OpenSSL environment file is executable
+      file:
+        path: "/etc/profile.d/openssl.sh"
+        mode: "0755"
+
+    - name: Create symlink for OpenSSL
+      ansible.builtin.file:
+        src: "/usr/local/ssl/bin/openssl"
+        dest: "/usr/bin/openssl3"
+        state: link
+
+    - name: Reload the OpenSSL environment file for the current session
+      ansible.builtin.shell: . /etc/profile.d/openssl.sh
+      args:
+        executable: /bin/bash
+
+    - name: Verify the installation and version of OpenSSL
+      ansible.builtin.shell: . /etc/profile.d/openssl.sh && which openssl && openssl version -a
+      register: openssl_info
+      args:
+        executable: /bin/bash
+
+    - name: Display OpenSSL information
+      ansible.builtin.debug:
+        msg: "{{ openssl_info.stdout }}"
+  when: ssl_version == "3" and  (not openssl_is_version_3 and not openssl3_is_installed and ansible_os_family == "Debian" )
+
+- name: Install openssl3 on Redhat
+  block:
+    - name: Install EPEL release package
+      yum:
+        name: epel-release
+        state: present
+
+    - name: Install openssl3 on Rhel/Centos
+      yum:
+        name: openssl3
+        state: present
+      become: yes
+  when: ssl_version == "3" and (not openssl_is_version_3 and not openssl3_is_installed and ansible_os_family == "RedHat")
+
+- name: Install openssl 1
+  block:
+    - name: install Openssl on Debian
+      apt:
+        name: openssl
+        state: present
+      become: yes
+      when: ansible_os_family == "Debian"
+    
+    - name: Install Openssl on RedHat
+      yum:
+        name: openssl
+        state: present
+      become: yes
+      when: ansible_os_family == "RedHat"
+  when: ssl_version == "1" and install_openssl_1

@@ -12,7 +12,7 @@
 - name: install Percona Platform for PostgreSQL {{major_version}} packages
   include_tasks: ./install_openssl_for_tarballs.yml
   vars:
-    ssl_version: " {{ssl_version}}"
+    ssl_version:  "{{ssl_version}}"
 
 - name: Gather groups information
   become: yes
@@ -32,11 +32,11 @@
   when: groups_list is defined and ('wheel' in groups_list or 'sudo' in groups_list)
 
 - name: Install Percona Platform for PostgreSQL {{major_version}} packages
-  include_tasks: ./install_tarballs.yml
+  include_tasks: ./install_ppg_tarballs.yml
 
 - name: Initialize Postgres RHEL
   become: yes
-  command: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/initdb" -A trust -k {{data_dir}}
+  command: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/initdb -A trust -k {{data_dir}} "
   environment:
     PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
   become_user: postgres
@@ -44,7 +44,7 @@
 - name: Start Postgres Server
   become: yes
   become_user: postgres
-  command: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/pg_ctl" -D {{data_dir}} -l /tmp/data{{major_version}}.log start -o "-p {{server_port}}"
+  command: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/pg_ctl -D {{data_dir}} -l /tmp/data{{major_version}}.log start -o '-p {{server_port}}'"
   environment:
     PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
   when: ansible_os_family == "RedHat"

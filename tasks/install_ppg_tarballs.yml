@@ -1,0 +1,65 @@
+
+---
+  - name: setup epel release
+    yum:
+      name: epel-release
+      update_cache: yes
+      state: present
+    when: ansible_os_family == "RedHat"
+
+  - name: Install pre-packages
+    become: true
+    ignore_errors: True
+    package:
+      name: "{{ item }}"
+      update_cache: yes
+      state: latest
+    with_items:
+      - sudo
+      - vim
+      - tar
+      - wget
+      - curl
+
+  - name: Clean dnf oracle linux
+    become: true
+    command: dnf clean all -y
+    when: ansible_os_family == "RedHat" and
+      (ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9")
+
+  - name: Disable dnf postgresql for RHEL8
+    become: true
+    command: dnf module disable postgresql -y
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+
+
+  - name: Remove the tarball destination directory if it exists
+    become: yes
+    become_user: postgres
+    ansible.builtin.command:
+      cmd: rm -rf "{{ dest_dir }}"
+    when: dest_dir is defined and dest_dir != ''
+
+  - name: Ensure tarball destination directory exists
+    become: yes
+    become_user: postgres
+    ansible.builtin.file:
+      path: "{{ dest_dir }}"
+      state: directory
+
+  - name: Install Percona PG tarballs
+    unarchive:
+      src: "{{ tarball_url }}"
+      dest:  "{{dest_dir}}"
+      remote_src: true
+
+  - name: Copy Percona pl-languages to /opt
+    become: yes
+    copy:
+      src: "{{ dest_dir }}/{{ item }}"
+      dest: "/opt/{{ item }}"
+      remote_src: yes
+      with_items: 
+        - percona-python3
+        - percona-perl
+        - percona-tcl
