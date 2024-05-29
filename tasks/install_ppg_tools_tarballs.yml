@@ -239,10 +239,10 @@
       group: root
       mode: 0644
 
-  - name: Start haproxy
-    shell: haproxy -f  /etc/haproxy/haproxy.cfg -D
-    environment:
-      PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-haproxy/sbin"
+  # - name: Start haproxy
+  #   shell: haproxy -f  /etc/haproxy/haproxy.cfg -D
+  #   environment:
+  #     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-haproxy/sbin"
 
   - name: Remove dpkg package if present on RedHat
     yum:

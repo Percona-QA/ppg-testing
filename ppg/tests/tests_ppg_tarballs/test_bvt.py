@@ -10,9 +10,9 @@ INSTALL_PATH = os.path.join("/opt", INSTALL_FOLDER_NAME)
 USERNAME = os.getenv('user_name')
 DBNAME = os.getenv('database_name')
 PORT = os.getenv('server_port')
-MAJOR_VER = os.getenv('major_version')
+#MAJOR_VER = os.getenv('major_version')
 DATA_DIR = os.getenv('data_dir')
-PG_PATH = f"{INSTALL_PATH}/percona-postgresql{MAJOR_VER}"
+PG_PATH = f"{INSTALL_PATH}/percona-postgresql{settings.MAJOR_VER}"
 
 
 testinfra_hosts = testinfra.utils.ansible_runner.AnsibleRunner(
