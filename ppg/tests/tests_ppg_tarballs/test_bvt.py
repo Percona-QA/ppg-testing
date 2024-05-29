@@ -7,10 +7,10 @@ from .. import settings
 
 INSTALL_FOLDER_NAME = "pgdistro"
 INSTALL_PATH = os.path.join("/opt", INSTALL_FOLDER_NAME)
-USERNAME = os.getenv('user_name')
-DBNAME = os.getenv('database_name')
-PORT = os.getenv('server_port')
-DATA_DIR = os.getenv('data_dir')
+USERNAME = "postgres"
+DBNAME = "postgres"
+PORT = "5432"
+DATA_DIR = "/usr/local/pgsql/data"
 PG_PATH = f"{INSTALL_PATH}/percona-postgresql{settings.MAJOR_VER}"
 
 
@@ -54,11 +54,7 @@ def get_psql_binary_path(scope='session'):
 
 @pytest.fixture(scope='session')
 def getSqlCmd_with_param(get_psql_binary_path):
-    rcmd = ' '.join([get_psql_binary_path, 
-                    '-U', USERNAME, 
-                    '-p', PORT, 
-                    '-d', DBNAME]
-                    )
+    rcmd = ' '.join([get_psql_binary_path, f'-U {USERNAME} -p {PORT} -d {DBNAME}'])
     return rcmd
 
 @pytest.fixture()
