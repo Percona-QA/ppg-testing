@@ -17,6 +17,7 @@
     with_items:
       - sudo
       - vim
+      - zstd
       - tar
       - wget
       - curl
@@ -35,17 +36,22 @@
 
   - name: Remove the tarball destination directory if it exists
     become: yes
-    become_user: postgres
     ansible.builtin.command:
       cmd: rm -rf "{{ dest_dir }}"
     when: dest_dir is defined and dest_dir != ''
 
   - name: Ensure tarball destination directory exists
     become: yes
-    become_user: postgres
     ansible.builtin.file:
       path: "{{ dest_dir }}"
       state: directory
+
+  - name: Grant read/write permissions to 'postgres' user
+    ansible.builtin.file:
+      path: "{{ dest_dir }}"
+      owner: postgres
+      group: postgres
+      mode: '0755'
 
   - name: Install Percona PG tarballs
     unarchive:

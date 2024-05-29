@@ -9,7 +9,7 @@
 
 - name: Check tarball's SSL version
   debug:
-    msg: "Tarball version is {{ssl_version}}"
+    msg: "Tarball version is {{ ssl_version }}"
 
 - name: Check if openssl binary exists
   stat:
