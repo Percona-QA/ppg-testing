@@ -14,27 +14,47 @@
     ssl_version: "{{ lookup('env', 'SSL_VERSION') }}"
     etcd_version: 3.5.13
 
-- name: populate /etc/environment
-  lineinfile:
-    path: "/etc/environment"
-    state: present
-    regexp: "^{{ item.key }}="
-    line: "{{ item.key }}={{ item.value}}"
-  with_items: "{{ os_environment }}"
-  become: true
-  os_environment:
-    - key: VERSION
-      value : "{{ VERSION }}"
-    - key: data_dir
-      value : "{{ data_dir }}"
-    - key: user_name
-      value : "{{ user_name }}"
-    - key: database_name
-      value : "{{ database_name }}"
-    - key: server_port
-      value : "{{ server_port }}"
-    - key: major_version
-      value : "{{ major_version }}"
+- name: Add VERSION to /etc/environment
+  ansible.builtin.lineinfile:
+    path: /etc/environment
+    line: "VERSION={{ VERSION }}"
+    create: yes
+    become: true
+
+- name: Add data_dir to /etc/environment
+  ansible.builtin.lineinfile:
+    path: /etc/environment
+    line: "data_dir={{ data_dir }}"
+    create: yes
+    become: true
+
+- name: Add user_name to /etc/environment
+  ansible.builtin.lineinfile:
+    path: /etc/environment
+    line: "user_name={{ user_name }}"
+    create: yes
+    become: true
+
+- name: Add database_name to /etc/environment
+  ansible.builtin.lineinfile:
+    path: /etc/environment
+    line: "database_name={{ database_name }}"
+    create: yes
+    become: true
+
+- name: Add server_port to /etc/environment
+  ansible.builtin.lineinfile:
+    path: /etc/environment
+    line: "server_port={{ server_port }}"
+    create: yes
+    become: true
+
+- name: Add major_version to /etc/environment
+  ansible.builtin.lineinfile:
+    path: /etc/environment
+    line: "major_version={{ major_version }}"
+    create: yes
+    become: true
 
 - name: install Percona Platform for PostgreSQL {{major_version}} packages
   include_tasks: ../../../../tasks/install_openssl_for_tarballs.yml
