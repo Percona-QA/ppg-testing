@@ -115,57 +115,41 @@
     environment:
       PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
 
-  # - name: Start patroni
-  #   service:
-  #     name: patroni
-  #     state: started
-  #     enabled: yes
+  - name: Start patroni
+    service:
+      name: patroni
+      state: started
+      enabled: yes
 
+  - name: Ensure etcd destination directory exists
+    become: yes
+    ansible.builtin.file:
+      path: "{{ dest_dir }}/etcd"
+      state: directory
 
-  # etcd installation +++
-  # - name: Install etcd packages RHEL
-  #   yum:
-  #     name: "{{ packages }}"
-  #     state: latest
-  #     update_cache: yes
-  #   vars:
-  #     packages:
-  #     - etcd
-  #     - python3-etcd
-  #   when: ansible_os_family == "RedHat"
+  - name: Install etcd from tarballs.
+    unarchive:
+      src: "https://github.com/etcd-io/etcd/releases/download/v{{etcd_version}}/etcd-v{{etcd_version}}-linux-amd64.tar.gz"
+      dest:  "{{dest_dir}}/etcd"
+      remote_src: true
 
-  # - name: Restart etcd RHEL
-  #   service:
-  #     name: etcd
-  #     state: restarted
-  #     enabled: yes
-  #   when: ansible_os_family == "RedHat"
+  - name: Grep etcd version
+    become: yes
+    command: "{{dest_dir}}/etcd/etcd-v{{etcd_version}}-linux-amd64/etcd --version"
+    register: etcd_version
 
-  # - name: Install patroni related packages Debian
-  #   apt:
-  #     name: "{{ packages }}"
-  #     state: latest
-  #     update_cache: yes
-  #   vars:
-  #     packages:
-  #       - etcd
-  #   when: (ansible_distribution == "Ubuntu") or
-  #     (ansible_os_family == "Debian" and ansible_lsb.major_release|int <= 11) or
-  #     (ansible_os_family == "Debian" and pg_version_to_install | string is version('16.3', '>=', strict=True))
+  - name: Start local ETCD server in the background
+    ansible.builtin.command:
+      cmd: "{{dest_dir}}/etcd/etcd-v{{etcd_version}}-linux-amd64/etcd"
+    async: 120
+    poll: 0
+    register: etcd_server
 
-  # - name: Install patroni related packages Debian 12
-  #   apt:
-  #     name: "{{ packages }}"
-  #     state: latest
-  #     update_cache: yes
-  #   vars:
-  #     packages:
-  #       - etcd-server
-  #       - etcd-client
-  #   when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int == 12) and
-  #     pg_version_to_install | string is version('16.2', '<=', strict=True)
-
-  # etcd ++++++++++
+  - name: Wait for ETCD to start
+    ansible.builtin.wait_for:
+      port: 2379
+      host: localhost
+      timeout: 30
 
   - name: Create /etc/patroni directory
     file:
@@ -174,7 +158,7 @@
 
   - name: Create test patroni directory
     file:
-      path: /usr/local/pgsql/patroni_test/
+      path: /var/lib/pgsql/patroni_test/patroni_test/
       state: directory
       owner: postgres
       group: postgres
@@ -287,12 +271,6 @@
       mode: 0644
     when: ansible_os_family == "RedHat"
 
-  - name: Start etcd
-    service:
-      name: etcd
-      state: started
-      enabled: yes
-
   - name: Start patroni0
     service:
       name: patroni0
@@ -311,6 +289,13 @@
       state: started
       enabled: yes
 
+  - name: Create haproxy directory
+    file:
+      path: /etc/haproxy/
+      state: directory
+      owner: root
+      group: root
+
   - name: Copy haproxy.cfg
     copy:
       src: haproxy.cfg
@@ -321,21 +306,16 @@
 
   - name: Start haproxy
     shell: haproxy -f  /etc/haproxy/haproxy.cfg -D
+    environment:
+      PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-haproxy/sbin"
 
-  - name: Start pgpool service
-    service:
-      name: pgpool
-      state: started
-      enabled: yes
-    when: ansible_os_family == "RedHat"
-
-  # - name: Remove dpkg package if present on RedHat
-  #   yum:
-  #     name: dpkg
-  #     state: absent
-  #   ignore_errors: true
-  #   when: ansible_os_family == "RedHat" and
-  #     (ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9")
+  - name: Remove dpkg package if present on RedHat
+    yum:
+      name: dpkg
+      state: absent
+    ignore_errors: true
+    when: ansible_os_family == "RedHat" and
+      (ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9")
 
   - name: Pause for 1 minutes
     ansible.builtin.pause:
