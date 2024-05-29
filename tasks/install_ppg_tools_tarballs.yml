@@ -82,7 +82,7 @@
       path: "{{data_dir}}/postgresql.conf"
       block: |
         archive_mode = on
-        archive_command = 'pgbackrest --stanza=testing archive-push %p'
+        archive_command = '/opt/pgdistro/percona-pgbackrest/bin/pgbackrest --stanza=testing archive-push %p'
         max_wal_senders = 10
         wal_level = logical
 

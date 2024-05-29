@@ -3,7 +3,7 @@ import pytest
 
 import testinfra.utils.ansible_runner
 SERVER_VERSION = os.getenv('server_version')
-os.environ['VERSIONVERSION'] = f'ppg-{SERVER_VERSION}'
+os.environ['VERSION'] = f'ppg-{SERVER_VERSION}'
 from .. import settings
 
 INSTALL_FOLDER_NAME = "pgdistro"
