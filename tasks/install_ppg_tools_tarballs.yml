@@ -115,12 +115,6 @@
     environment:
       PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
 
-  - name: Start patroni
-    service:
-      name: patroni
-      state: started
-      enabled: yes
-
   - name: Ensure etcd destination directory exists
     become: yes
     ansible.builtin.file:
