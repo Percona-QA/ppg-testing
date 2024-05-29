@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: postgis-ol9-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-02952e732e6126584
+    image: ami-08b280891de0645a1
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t2.small
     ssh_user: ec2-user
