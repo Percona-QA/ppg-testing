@@ -12,7 +12,6 @@ DBNAME = os.getenv('database_name')
 PORT = os.getenv('server_port')
 MAJOR_VER = os.getenv('major_version')
 DATA_DIR = os.getenv('data_dir')
-
 PG_PATH = f"{INSTALL_PATH}/percona-postgresql{MAJOR_VER}"
 
 
