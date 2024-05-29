@@ -3,7 +3,7 @@
   ansible.builtin.set_fact:
     server_version: "{{ lookup('env', 'SERVER_VERSION') }}"
     pg_version_to_install: "{{ server_version }}"
-    major_version: "{{ server_version | string | split('.')[0] }}"
+    major_version: "{{ server_version | string | regex_replace('([0-9]+)\\..*', '\\1') }}"
     tarball_url:  "{{ lookup('env', 'TARBALL_URL') }}"
     dest_dir: "/opt/pgdistro"
     data_dir: "/usr/local/pgsql/data"
