@@ -65,7 +65,7 @@
       src: "{{ dest_dir }}/{{ item }}"
       dest: "/opt/{{ item }}"
       remote_src: yes
-      with_items: 
-        - percona-python3
-        - percona-perl
-        - percona-tcl
+    with_items: 
+      - percona-python3
+      - percona-perl
+      - percona-tcl

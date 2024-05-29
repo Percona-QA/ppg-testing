@@ -13,9 +13,7 @@
     ssl_version: "{{ lookup('env', 'SSL_VERSION') }}"
 
 - name: install Percona Platform for PostgreSQL {{major_version}} packages
-  include_tasks: ../../tasks/install_openssl_for_tarballs.yml
-  # vars:
-  #   ssl_version:  "{{ssl_version}}"
+  include_tasks: ../../../../tasks/install_openssl_for_tarballs.yml
 
 - name: Gather groups information
   become: yes
@@ -65,29 +63,29 @@
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
   when: ansible_os_family == "RedHat"
 
-- name: Install PPG tools
-  include_tasks: ../../../../tasks/install_ppg_tools_tarballs.yml
+# - name: Install PPG tools
+#   include_tasks: ../../tasks/install_ppg_tools_tarballs.yml
 
-- name: Install GCC Deb
-  apt:
-    name: gcc
-  when: ansible_os_family == "Debian"
+# - name: Install GCC Deb
+#   apt:
+#     name: gcc
+#   when: ansible_os_family == "Debian"
 
-- name: Install GCC RHEL
-  yum:
-    name: gcc
-  when: ansible_os_family == "RedHat"
+# - name: Install GCC RHEL
+#   yum:
+#     name: gcc
+#   when: ansible_os_family == "RedHat"
 
-- name: Create temporary directory for compilation
-  command: mkdir /tmp/libpq_command_temp_dir
+# - name: Create temporary directory for compilation
+#   command: mkdir /tmp/libpq_command_temp_dir
 
-- name: Copy libpq source file
-  copy:
-    src: ../../common/files/lib_version.c
-    dest: /tmp/libpq_command_temp_dir
+# - name: Copy libpq source file
+#   copy:
+#     src: ../../common/files/lib_version.c
+#     dest: /tmp/libpq_command_temp_dir
 
-- name: Delete dpkg-query for RHEL
-  yum:
-    name: dpkg
-    state: absent
-  when: ansible_os_family == "RedHat"
+# - name: Delete dpkg-query for RHEL
+#   yum:
+#     name: dpkg
+#     state: absent
+#   when: ansible_os_family == "RedHat"

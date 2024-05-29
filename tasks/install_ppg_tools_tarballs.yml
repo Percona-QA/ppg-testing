@@ -71,13 +71,13 @@
         archive_command = 'pgbackrest --stanza=testing archive-push %p'
         max_wal_senders = 10
         wal_level = logical
-    notify:
-      - Restart Postgres
 
-  # - name: Restart Postgres
-  #   command: "pg_ctl -D {{data_dir}} restart"
-  #   environment:
-  #     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+  - name: Restart Postgres
+    become: yes
+    become_user: postgres
+    command: "pg_ctl -D {{data_dir}} restart"
+    environment:
+      PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
 
   - name: Enable llvm-toolset for RHEL8 to install PostGIS
     become: true
@@ -96,7 +96,7 @@
 
   - name: Edit pg_hba.conf
     blockinfile:
-      path: "{{data_dir}}/pg_hba.conf
+      path: "{{data_dir}}/pg_hba.conf"
       create: yes
       owner: postgres
       block: |
@@ -106,9 +106,14 @@
         local   replication     all                                     trust
         host    replication     all             127.0.0.1/32            trust
         host    replication     all             ::1/128                 trust
-    when: ansible_os_family == "RedHat" or ansible_os_family == "Debian"
-    notify:
-      - Restart Postgres
+    when: (ansible_os_family == "RedHat") or (ansible_os_family == "Debian")
+
+  - name: Restart Postgres
+    become: yes
+    become_user: postgres
+    command: "pg_ctl -D {{data_dir}} restart"
+    environment:
+      PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
 
   # - name: Start patroni
   #   service:
@@ -118,47 +123,47 @@
 
 
   # etcd installation +++
-  - name: Install etcd packages RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - etcd
-      - python3-etcd
-    when: ansible_os_family == "RedHat"
+  # - name: Install etcd packages RHEL
+  #   yum:
+  #     name: "{{ packages }}"
+  #     state: latest
+  #     update_cache: yes
+  #   vars:
+  #     packages:
+  #     - etcd
+  #     - python3-etcd
+  #   when: ansible_os_family == "RedHat"
 
-  - name: Restart etcd RHEL
-    service:
-      name: etcd
-      state: restarted
-      enabled: yes
-    when: ansible_os_family == "RedHat"
+  # - name: Restart etcd RHEL
+  #   service:
+  #     name: etcd
+  #     state: restarted
+  #     enabled: yes
+  #   when: ansible_os_family == "RedHat"
 
-  - name: Install patroni related packages Debian
-    apt:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-        - etcd
-    when: (ansible_distribution == "Ubuntu") or
-      (ansible_os_family == "Debian" and ansible_lsb.major_release|int <= 11) or
-      (ansible_os_family == "Debian" and pg_version_to_install | string is version('16.3', '>=', strict=True))
+  # - name: Install patroni related packages Debian
+  #   apt:
+  #     name: "{{ packages }}"
+  #     state: latest
+  #     update_cache: yes
+  #   vars:
+  #     packages:
+  #       - etcd
+  #   when: (ansible_distribution == "Ubuntu") or
+  #     (ansible_os_family == "Debian" and ansible_lsb.major_release|int <= 11) or
+  #     (ansible_os_family == "Debian" and pg_version_to_install | string is version('16.3', '>=', strict=True))
 
-  - name: Install patroni related packages Debian 12
-    apt:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-        - etcd-server
-        - etcd-client
-    when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int == 12) and
-      pg_version_to_install | string is version('16.2', '<=', strict=True)
+  # - name: Install patroni related packages Debian 12
+  #   apt:
+  #     name: "{{ packages }}"
+  #     state: latest
+  #     update_cache: yes
+  #   vars:
+  #     packages:
+  #       - etcd-server
+  #       - etcd-client
+  #   when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int == 12) and
+  #     pg_version_to_install | string is version('16.2', '<=', strict=True)
 
   # etcd ++++++++++
 
@@ -336,8 +341,3 @@
     ansible.builtin.pause:
       minutes: 1
 
-  handlers:
-    - name: Restart Postgres
-      command: "pg_ctl -D {{ data_dir }} restart"
-      environment:
-        PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{ dest_dir }}/percona-postgresql{{ major_version }}/bin"
