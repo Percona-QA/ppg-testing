@@ -1,0 +1,343 @@
+---
+  - name: Setting facts so that they will be persisted in the fact cache
+    ansible.builtin.set_fact:
+      pgaudit_rhel_package_name: "percona-pgaudit"
+      postgis_rhel_package_name_prefix: "percona-postgis33"
+
+  - name: Setting facts so that they will be persisted in the fact cache
+    ansible.builtin.set_fact:
+      pgaudit_rhel_package_name: "percona-pgaudit{{major_version}}"
+      postgis_rhel_package_name_prefix: "percona-postgis33_{{major_version}}"
+    when: (pg_version_to_install | string is version('16.1', '>=', strict=True))
+
+  - debug:
+      msg: "Value of pgaudit_rhel_package_name is : {{ pgaudit_rhel_package_name }}"
+
+  - debug:
+      msg: "Value of postgis_rhel_package_name_prefix is : {{ postgis_rhel_package_name_prefix }}"
+
+  - name: Install additional tools for pgbackrest test Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+    vars:
+      packages:
+        - libxml-checker-perl
+        - libyaml-perl
+        - texlive-latex-base
+        - texlive-latex-extra
+        - texlive-fonts-recommended
+        - lcov
+        - rsync
+        - zlib1g-dev
+        - libssl-dev
+        - libxml2-dev
+        - libpq-dev
+        - pkg-config
+        - valgrind
+        - liblz4-dev
+        - liblz4-tool
+        - zstd
+        - libzstd-dev
+        - bzip2
+        - libbz2-dev
+#        - libsharyanto-string-util-perl
+        - libipc-run-perl
+        - libtext-csv-xs-perl
+    when: ansible_os_family == "Debian"
+
+  - name: Create pgbackrest directory
+    file:
+      path: /etc/pgbackrest/
+      state: directory
+
+  - name: Create pgbackrest configuration
+    blockinfile:
+      path: /etc/pgbackrest/pgbackrest.conf
+      create: yes
+      block: |
+        [global]
+        repo1-path=/var/lib/pgbackrest
+
+        [testing]
+        pg1-path="{{data_dir}}"
+        pg1-port="{{server_port}}"
+
+  - name: Configure backup config
+    blockinfile:
+      path: "{{data_dir}}/postgresql.conf"
+      block: |
+        archive_mode = on
+        archive_command = 'pgbackrest --stanza=testing archive-push %p'
+        max_wal_senders = 10
+        wal_level = logical
+    notify:
+      - Restart Postgres
+
+  # - name: Restart Postgres
+  #   command: "pg_ctl -D {{data_dir}} restart"
+  #   environment:
+  #     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+
+  - name: Enable llvm-toolset for RHEL8 to install PostGIS
+    become: true
+    command: dnf module enable llvm-toolset -y
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+
+  - name: Add extensions to postgresql.conf
+    lineinfile:
+      path: "{{data_dir}}/postgresql.conf"
+      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
+
+  - name: Remove pg_hba.conf
+    file:
+      path: "{{data_dir}}/pg_hba.conf"
+      state: absent
+
+  - name: Edit pg_hba.conf
+    blockinfile:
+      path: "{{data_dir}}/pg_hba.conf
+      create: yes
+      owner: postgres
+      block: |
+        local   all             all                                     trust
+        host    all             all             127.0.0.1/32            trust
+        host    all             all             ::1/128                 trust
+        local   replication     all                                     trust
+        host    replication     all             127.0.0.1/32            trust
+        host    replication     all             ::1/128                 trust
+    when: ansible_os_family == "RedHat" or ansible_os_family == "Debian"
+    notify:
+      - Restart Postgres
+
+  # - name: Start patroni
+  #   service:
+  #     name: patroni
+  #     state: started
+  #     enabled: yes
+
+
+  # etcd installation +++
+  - name: Install etcd packages RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - etcd
+      - python3-etcd
+    when: ansible_os_family == "RedHat"
+
+  - name: Restart etcd RHEL
+    service:
+      name: etcd
+      state: restarted
+      enabled: yes
+    when: ansible_os_family == "RedHat"
+
+  - name: Install patroni related packages Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - etcd
+    when: (ansible_distribution == "Ubuntu") or
+      (ansible_os_family == "Debian" and ansible_lsb.major_release|int <= 11) or
+      (ansible_os_family == "Debian" and pg_version_to_install | string is version('16.3', '>=', strict=True))
+
+  - name: Install patroni related packages Debian 12
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - etcd-server
+        - etcd-client
+    when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int == 12) and
+      pg_version_to_install | string is version('16.2', '<=', strict=True)
+
+  # etcd ++++++++++
+
+  - name: Create /etc/patroni directory
+    file:
+      path: /etc/patroni
+      state: directory
+
+  - name: Create test patroni directory
+    file:
+      path: /usr/local/pgsql/patroni_test/
+      state: directory
+      owner: postgres
+      group: postgres
+
+  - name: Copy postgresql0.yml for patroni service Debian
+    copy:
+      src: postgresql0_deb.yml
+      dest: /var/lib/pgsql/patroni_test/postgresql0.yml
+      owner: postgres
+      group: postgres
+      mode: 0644
+    when: ansible_os_family == "Debian"
+
+  - name: Copy postgresql1.yml for patroni service Debian
+    copy:
+      src: postgresql1_deb.yml
+      dest: /var/lib/pgsql/patroni_test/postgresql1.yml
+      owner: postgres
+      group: postgres
+      mode: 0644
+    when: ansible_os_family == "Debian"
+
+  - name: Copy postgresql2.yml for patroni service Debian
+    copy:
+      src: postgresql2_deb.yml
+      dest: /var/lib/pgsql/patroni_test/postgresql2.yml
+      owner: postgres
+      group: postgres
+      mode: 0644
+    when: ansible_os_family == "Debian"
+
+  - name: Copy postgresql0.yml for patroni service RHEL
+    copy:
+      src: postgresql0.yml
+      dest: /var/lib/pgsql/patroni_test/postgresql0.yml
+      owner: postgres
+      group: postgres
+      mode: 0644
+    when: ansible_os_family == "RedHat"
+
+  - name: Copy postgresql1.yml for patroni service RHEL
+    copy:
+      src: postgresql1.yml
+      dest: /var/lib/pgsql/patroni_test/postgresql1.yml
+      owner: postgres
+      group: postgres
+      mode: 0644
+    when: ansible_os_family == "RedHat"
+
+  - name: Copy postgresql2.yml for patroni service RHEL
+    copy:
+      src: postgresql2.yml
+      dest: /var/lib/pgsql/patroni_test/postgresql2.yml
+      owner: postgres
+      group: postgres
+      mode: 0644
+    when: ansible_os_family == "RedHat"
+
+  - name: Copy patroni0 service file Debian
+    copy:
+      src: patroni0_deb.service
+      dest: /lib/systemd/system/patroni0.service
+      owner: root
+      group: root
+      mode: 0644
+    when: ansible_os_family == "Debian"
+
+  - name: Copy patroni1 service file Debian
+    copy:
+      src: patroni1_deb.service
+      dest: /lib/systemd/system/patroni1.service
+      owner: root
+      group: root
+      mode: 0644
+    when: ansible_os_family == "Debian"
+
+  - name: Copy patroni2 service file Debian
+    copy:
+      src: patroni2_deb.service
+      dest: /lib/systemd/system/patroni2.service
+      owner: root
+      group: root
+      mode: 0644
+    when: ansible_os_family == "Debian"
+
+  - name: Copy patroni0 service file RHEL
+    copy:
+      src: patroni0.service
+      dest: /usr/lib/systemd/system/patroni0.service
+      owner: root
+      group: root
+      mode: 0644
+    when: ansible_os_family == "RedHat"
+
+  - name: Copy patroni1 service file RHEL
+    copy:
+      src: patroni1.service
+      dest: /usr/lib/systemd/system/patroni1.service
+      owner: root
+      group: root
+      mode: 0644
+    when: ansible_os_family == "RedHat"
+
+  - name: Copy patroni2 service file RHEL
+    copy:
+      src: patroni2.service
+      dest: /usr/lib/systemd/system/patroni2.service
+      owner: root
+      group: root
+      mode: 0644
+    when: ansible_os_family == "RedHat"
+
+  - name: Start etcd
+    service:
+      name: etcd
+      state: started
+      enabled: yes
+
+  - name: Start patroni0
+    service:
+      name: patroni0
+      state: started
+      enabled: yes
+
+  - name: Start patroni1
+    service:
+      name: patroni1
+      state: started
+      enabled: yes
+
+  - name: Start patroni2
+    service:
+      name: patroni2
+      state: started
+      enabled: yes
+
+  - name: Copy haproxy.cfg
+    copy:
+      src: haproxy.cfg
+      dest: /etc/haproxy/haproxy.cfg
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: Start haproxy
+    shell: haproxy -f  /etc/haproxy/haproxy.cfg -D
+
+  - name: Start pgpool service
+    service:
+      name: pgpool
+      state: started
+      enabled: yes
+    when: ansible_os_family == "RedHat"
+
+  # - name: Remove dpkg package if present on RedHat
+  #   yum:
+  #     name: dpkg
+  #     state: absent
+  #   ignore_errors: true
+  #   when: ansible_os_family == "RedHat" and
+  #     (ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9")
+
+  - name: Pause for 1 minutes
+    ansible.builtin.pause:
+      minutes: 1
+
+  handlers:
+    - name: Restart Postgres
+      command: "pg_ctl -D {{ data_dir }} restart"
+      environment:
+        PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{ dest_dir }}/percona-postgresql{{ major_version }}/bin"
