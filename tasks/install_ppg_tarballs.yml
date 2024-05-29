@@ -35,13 +35,13 @@
 
 
   - name: Remove the tarball destination directory if it exists
-    become: yes
+    become: true
     ansible.builtin.command:
       cmd: rm -rf "{{ dest_dir }}"
     when: dest_dir is defined and dest_dir != ''
 
   - name: Ensure tarball destination directory exists
-    become: yes
+    become: true
     ansible.builtin.file:
       path: "{{ dest_dir }}"
       state: directory
@@ -60,7 +60,7 @@
       remote_src: true
 
   - name: Copy Percona pl-languages to /opt
-    become: yes
+    become: true
     copy:
       src: "{{ dest_dir }}/{{ item }}"
       dest: "/opt/{{ item }}"

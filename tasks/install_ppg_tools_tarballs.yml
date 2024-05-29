@@ -73,7 +73,7 @@
         wal_level = logical
 
   - name: Restart Postgres
-    become: yes
+    become: true
     become_user: postgres
     command: "pg_ctl -D {{data_dir}} restart"
     environment:
@@ -109,14 +109,14 @@
     when: (ansible_os_family == "RedHat") or (ansible_os_family == "Debian")
 
   - name: Restart Postgres
-    become: yes
+    become: true
     become_user: postgres
     command: "pg_ctl -D {{data_dir}} restart"
     environment:
       PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
 
   - name: Ensure etcd destination directory exists
-    become: yes
+    become: true
     ansible.builtin.file:
       path: "{{ dest_dir }}/etcd"
       state: directory
@@ -128,7 +128,7 @@
       remote_src: true
 
   - name: Grep etcd version
-    become: yes
+    become: true
     command: "{{dest_dir}}/etcd/etcd-v{{etcd_version}}-linux-amd64/etcd --version"
     register: etcd_version
 
@@ -170,7 +170,7 @@
       - postgresql2.yml
 
   - name: Update PostgreSQL bin_dir in configuration files
-    become: yes
+    become: true
     lineinfile:
       path: "/var/lib/pgsql/patroni_test/{{ item }}"
       regexp: '^ *bin_dir:'
