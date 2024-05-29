@@ -51,6 +51,20 @@
       path: /etc/pgbackrest/
       state: directory
 
+  - name: Create pgbackrest var/lib directory
+    file:
+      path: /var/lib/pgbackrest/
+      state: directory
+      group: postgres
+      state: directory
+
+  - name: Create pgbackrest var/log directory
+    file:
+      path: /var/lib/pgbackrest/
+      owner: postgres
+      group: postgres
+      state: directory
+
   - name: Create pgbackrest configuration
     blockinfile:
       path: /etc/pgbackrest/pgbackrest.conf
@@ -60,8 +74,8 @@
         repo1-path=/var/lib/pgbackrest
 
         [testing]
-        pg1-path="{{data_dir}}"
-        pg1-port="{{server_port}}"
+        pg1-path={{data_dir}}
+        pg1-port={{server_port}}
 
   - name: Configure backup config
     blockinfile:
