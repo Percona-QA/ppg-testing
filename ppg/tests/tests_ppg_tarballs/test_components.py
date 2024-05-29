@@ -2,8 +2,6 @@ import os
 import pytest
 
 import testinfra.utils.ansible_runner
-SERVER_VERSION = os.getenv('server_version')
-os.environ['VERSION'] = f'ppg-{SERVER_VERSION}'
 from .. import settings
 # from ppg.tests.settings import get_settings, MAJOR_VER
 

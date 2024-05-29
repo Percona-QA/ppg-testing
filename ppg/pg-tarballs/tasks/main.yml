@@ -1,9 +1,8 @@
 ---
 - name: Setting facts so that they will be persisted in the fact cache
   ansible.builtin.set_fact:
-    server_version: "{{ lookup('env', 'SERVER_VERSION') }}"
+    server_version: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
     pg_version_to_install: "{{ server_version }}"
-    VERSION: "ppg-{{ server_version }}"
     major_version: "{{ server_version | string | regex_replace('([0-9]+)\\..*', '\\1') }}"
     tarball_url:  "{{ lookup('env', 'TARBALL_URL') }}"
     dest_dir: "/opt/pgdistro"
@@ -18,7 +17,7 @@
   become: true
   ansible.builtin.lineinfile:
     path: /etc/environment
-    line: "VERSION={{ VERSION }}"
+    line: "server_version={{ server_version }}"
     create: yes
 
 - name: Add data_dir to /etc/environment
