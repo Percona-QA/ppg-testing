@@ -30,36 +30,8 @@
     - wget
     - curl
 
-- name: Add data_dir to /etc/environment
-  become: true
-  ansible.builtin.lineinfile:
-    path: /etc/environment
-    line: "data_dir={{ data_dir }}"
-    create: yes
-
-- name: Add user_name to /etc/environment
-  become: true
-  ansible.builtin.lineinfile:
-    path: /etc/environment
-    line: "user_name={{ user_name }}"
-    create: yes
-
-- name: Add database_name to /etc/environment
-  become: true
-  ansible.builtin.lineinfile:
-    path: /etc/environment
-    line: "database_name={{ database_name }}"
-    create: yes
-
-- name: Add server_port to /etc/environment
-  become: true
-  ansible.builtin.lineinfile:
-    path: /etc/environment
-    line: "server_port={{ server_port }}"
-    create: yes
-
 - name: install Percona Platform for PostgreSQL {{major_version}} packages
-  include_tasks: ../../tasks/install_openssl_for_tarballs.yml
+  include_tasks: ../../../../tasks/install_openssl_for_tarballs.yml
 
 - name: Gather groups information
   become: true
@@ -79,7 +51,7 @@
   when: groups_list is defined and ('wheel' in groups_list or 'sudo' in groups_list)
 
 - name: Install Percona Platform for PostgreSQL {{major_version}} packages
-  include_tasks: ../../tasks/install_ppg_tarballs.yml
+  include_tasks: ../../../../tasks/install_ppg_tarballs.yml
 
 - name: Ensure data directory exists
   become: true
@@ -109,7 +81,7 @@
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
 
 - name: Install PPG tools
-  include_tasks: ../../tasks/install_ppg_tools_tarballs.yml
+  include_tasks: ../../../../tasks/install_ppg_tools_tarballs.yml
 
 - name: Install GCC Deb
   apt:

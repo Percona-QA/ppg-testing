@@ -146,6 +146,15 @@
         name: openssl3
         state: present
       become: yes
+      register: openssl3_install
+      ignore_errors: yes
+
+    - name: Install openssl3 on Rhel/Centos
+      yum:
+        name: openssl
+        state: present
+      become: yes
+      when: openssl3_install is failed
   when: ssl_version == "3" and (not openssl_is_version_3 and not openssl3_is_installed and ansible_os_family == "RedHat")
 
 - name: Install openssl 1
