@@ -176,7 +176,7 @@ def test_postgresql_query_version(postgresql_query_version):
 
 @pytest.mark.upgrade
 def test_postgres_client_version(host, getSqlCmd_with_param):
-    cmd = f"getSqlCmd_with_param --version"
+    cmd = f"{getSqlCmd_with_param} --version"
     result = host.check_output(cmd)
     assert settings.MAJOR_VER in result.strip("\n"), result.stdout
 
@@ -330,7 +330,7 @@ def test_deb_files(host, file):
     if os.lower() in ["redhat", "centos", "rhel", "ol"]:
         pytest.skip("This test only for Debian based platforms")
     with host.sudo("postgres"):
-        f = host.file(f"{DATA_DIR}/file")
+        f = host.file(f"{DATA_DIR}/{file}")
         assert f.exists
         assert f.size > 0
         assert f.content_string != ""
@@ -342,7 +342,7 @@ def test_rpm_files(file, host):
     if os in ["debian", "ubuntu"]:
         pytest.skip("This test only for RHEL based platforms")
     with host.sudo("postgres"):
-        f = host.file(f"{DATA_DIR}/file")
+        f = host.file(f"{DATA_DIR}/{file}")
         assert f.exists
         assert f.size > 0
         assert f.content_string != ""
