@@ -176,7 +176,7 @@ def test_postgresql_query_version(postgresql_query_version):
 
 @pytest.mark.upgrade
 def test_postgres_client_version(host, getSqlCmd_with_param):
-    cmd = getSqlCmd_with_param + " --version"
+    cmd = f"getSqlCmd_with_param --version"
     result = host.check_output(cmd)
     assert settings.MAJOR_VER in result.strip("\n"), result.stdout
 

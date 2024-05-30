@@ -59,7 +59,7 @@
     create: yes
 
 - name: install Percona Platform for PostgreSQL {{major_version}} packages
-  include_tasks: ../../../../tasks/install_openssl_for_tarballs.yml
+  include_tasks: ../../tasks/install_openssl_for_tarballs.yml
 
 - name: Gather groups information
   become: true
@@ -79,7 +79,7 @@
   when: groups_list is defined and ('wheel' in groups_list or 'sudo' in groups_list)
 
 - name: Install Percona Platform for PostgreSQL {{major_version}} packages
-  include_tasks: ../../../../tasks/install_ppg_tarballs.yml
+  include_tasks: ../../tasks/install_ppg_tarballs.yml
 
 - name: Ensure data directory exists
   become: true
@@ -109,7 +109,7 @@
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
 
 - name: Install PPG tools
-  include_tasks: ../../../../tasks/install_ppg_tools_tarballs.yml
+  include_tasks: ../../tasks/install_ppg_tools_tarballs.yml
 
 - name: Install GCC Deb
   apt:
