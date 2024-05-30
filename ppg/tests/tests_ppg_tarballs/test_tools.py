@@ -94,7 +94,7 @@ def enable_server_log(host,get_psql_binary_path):
             enable_log = f"{get_psql_binary_path} -c \"{command}\""
             result = host.run(enable_log)
             assert result.rc == 0
-        restart_postgresql
+        #restart_postgresql
 
 @pytest.fixture()
 def pgaudit(host, get_psql_binary_path,restart_postgresql,enable_server_log):
@@ -131,7 +131,7 @@ def pgaudit(host, get_psql_binary_path,restart_postgresql,enable_server_log):
         drop_pgaudit = f"{get_psql_binary_path} -c \'DROP EXTENSION pgaudit;\'"
         result = host.check_output(drop_pgaudit)
         assert result.strip("\n") == "DROP EXTENSION"
-        restart_postgresql
+        #restart_postgresql
 
 @pytest.fixture()
 def pgbackrest_bin_path(host):
@@ -159,7 +159,7 @@ def configure_postgres_pgbackrest(host, get_psql_binary_path,restart_postgresql,
             enable_log = f"{get_psql_binary_path} -c \"{command}\""
             result = host.run(enable_log)
             assert result.rc == 0
-        restart_postgresql
+        #restart_postgresql
 
 
 @pytest.mark.usefixtures("configure_postgres_pgbackrest")
