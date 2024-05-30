@@ -13,33 +13,19 @@
     ssl_version: "{{ lookup('env', 'SSL_VERSION') }}"
     etcd_version: 3.5.13
 
-- name: Add data_dir to /etc/environment
-  become: true
-  ansible.builtin.lineinfile:
-    path: /etc/environment
-    line: "data_dir={{ data_dir }}"
-    create: yes
-
-- name: Add user_name to /etc/environment
-  become: true
-  ansible.builtin.lineinfile:
-    path: /etc/environment
-    line: "user_name={{ user_name }}"
-    create: yes
-
-- name: Add database_name to /etc/environment
-  become: true
-  ansible.builtin.lineinfile:
-    path: /etc/environment
-    line: "database_name={{ database_name }}"
-    create: yes
-
-- name: Add server_port to /etc/environment
-  become: true
-  ansible.builtin.lineinfile:
-    path: /etc/environment
-    line: "server_port={{ server_port }}"
-    create: yes
+- name: Install pre-packages
+  ignore_errors: True
+  package:
+    name: "{{ item }}"
+    update_cache: yes
+    state: latest
+  with_items:
+    - sudo
+    - vim
+    - zstd
+    - tar
+    - wget
+    - curl
 
 - name: install Percona Platform for PostgreSQL {{major_version}} packages
   include_tasks: ../../../../tasks/install_openssl_for_tarballs.yml
@@ -92,7 +78,7 @@
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
 
 - name: Install PPG tools
-  include_tasks: ../../tasks/install_ppg_tools_tarballs.yml
+  include_tasks: ../../../../tasks/install_ppg_tools_tarballs.yml
 
 - name: Install GCC Deb
   apt:
