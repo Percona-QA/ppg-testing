@@ -1,5 +1,6 @@
 import os
 import pytest
+import time
 
 import testinfra.utils.ansible_runner
 
@@ -45,16 +46,19 @@ os.environ['PATH'] = f"{PG_PATH}/bin:{INSTALL_PATH}/percona-pgbouncer/bin/:{INST
 @pytest.fixture(scope='session')
 def get_server_bin_path(scope='session'):
     server_path=os.path.join(PG_PATH,'bin')
+    print('Bin Path: ' + server_path)
     return server_path
 
 @pytest.fixture(scope='session')
 def get_psql_binary_path(scope='session'):
     server_path=os.path.join(PG_PATH,'bin','psql')
+    print('PSQL Binary Path: ' + server_path)
     return server_path
 
 @pytest.fixture(scope='session')
 def getSqlCmd_with_param(get_psql_binary_path):
     rcmd = f'{get_psql_binary_path} -U {USERNAME} -p {PORT} -d {DBNAME} '
+    print('Sql Command with Param: ' + rcmd)
     return rcmd
 
 @pytest.fixture()
@@ -62,13 +66,18 @@ def start_stop_postgresql(host,get_server_bin_path):
     with host.sudo("postgres"):
         cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} stop"
         result = host.run(cmd)
+        time.sleep(5)
         assert result.rc == 0
-        cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR}  start"
+        print('--------1--------')
+        cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} start"
         result = host.run(cmd)
+        time.sleep(5)
         assert result.rc == 0
+        print('--------2--------')
         cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} status"
+        assert result.rc == 0
+        print('--------3--------')
         return host.run(cmd)
-
 
 @pytest.fixture()
 def postgresql_binary(host,get_server_bin_path):
