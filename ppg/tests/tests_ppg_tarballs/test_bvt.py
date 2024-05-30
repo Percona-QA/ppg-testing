@@ -20,7 +20,6 @@ testinfra_hosts = testinfra.utils.ansible_runner.AnsibleRunner(
 
 deb_files = ["postgresql.conf",
                       "pg_hba.conf",
-                      "pg_ctl.conf",
                       "pg_ident.conf"]
 
 rhel_files = ["postgresql.conf",
@@ -306,7 +305,7 @@ def test_drop_extension(host,getSqlCmd_with_param, extension):
         'postgis_sfcgal','address_standardizer-3','postgis-3','address_standardizer','postgis','address_standardizer_data_us-3']:
             pytest.skip("Skipping extension " + extension + " due to multiple dependencies. Already being checked in test_tools.py.")
     with host.sudo("postgres"):
-        drop_extension = host.run(getSqlCmd_with_param + " -c 'DROP EXTENSION \"{}\";'".format(extension))
+        drop_extension = host.run(getSqlCmd_with_param + " -c 'DROP EXTENSION if exists \"{}\"; CASCADE'".format(extension))
         assert drop_extension.rc == 0, drop_extension.stderr
         assert drop_extension.stdout.strip("\n") == "DROP EXTENSION", drop_extension.stdout
         extensions = host.run(getSqlCmd_with_param + " -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $3}'")
@@ -368,10 +367,10 @@ def test_language(host,getSqlCmd_with_param, language):
         assert lang.rc == 0, lang.stderr
         assert lang.stdout.strip("\n") in ["CREATE LANGUAGE", "CREATE EXTENSION"], lang.stdout
         if settings.MAJOR_VER in ["12","11"]:
-            drop_lang = host.run(getSqlCmd_with_param + " -c 'DROP LANGUAGE {};'".format(language))
+            drop_lang = host.run(getSqlCmd_with_param + " -c 'DROP LANGUAGE if exists {};'".format(language))
             assert drop_lang.rc == 0, drop_lang.stderr
             assert drop_lang.stdout.strip("\n") in ["DROP LANGUAGE"], lang.stdout
         else:
-            drop_lang = host.run(getSqlCmd_with_param + " -c 'DROP EXTENSION {};'".format(language))
+            drop_lang = host.run(getSqlCmd_with_param + " -c 'DROP EXTENSION if exists {};'".format(language))
             assert drop_lang.rc == 0, drop_lang.stderr
             assert drop_lang.stdout.strip("\n") in ["DROP LANGUAGE", "DROP EXTENSION"], lang.stdout
