@@ -109,7 +109,7 @@
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
 
 - name: Install PPG tools
-  include_tasks: ../../tasks/install_ppg_tools_tarballs.yml
+  include_tasks: ../../../../tasks/install_ppg_tools_tarballs.yml
 
 - name: Install GCC Deb
   apt:
