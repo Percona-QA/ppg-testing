@@ -51,6 +51,20 @@
       path: /etc/pgbackrest/
       state: directory
 
+  - name: Create pgbackrest var/lib directory
+    file:
+      path: /var/lib/pgbackrest/
+      state: directory
+      group: postgres
+      state: directory
+
+  - name: Create pgbackrest var/log directory
+    file:
+      path: /var/lib/pgbackrest/
+      owner: postgres
+      group: postgres
+      state: directory
+
   - name: Create pgbackrest configuration
     blockinfile:
       path: /etc/pgbackrest/pgbackrest.conf
@@ -60,15 +74,15 @@
         repo1-path=/var/lib/pgbackrest
 
         [testing]
-        pg1-path="{{data_dir}}"
-        pg1-port="{{server_port}}"
+        pg1-path={{data_dir}}
+        pg1-port={{server_port}}
 
   - name: Configure backup config
     blockinfile:
       path: "{{data_dir}}/postgresql.conf"
       block: |
         archive_mode = on
-        archive_command = 'pgbackrest --stanza=testing archive-push %p'
+        archive_command = '/opt/pgdistro/percona-pgbackrest/bin/pgbackrest --stanza=testing archive-push %p'
         max_wal_senders = 10
         wal_level = logical
 
@@ -239,10 +253,10 @@
       group: root
       mode: 0644
 
-  # - name: Start haproxy
-  #   shell: haproxy -f  /etc/haproxy/haproxy.cfg -D
-  #   environment:
-  #     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-haproxy/sbin"
+  - name: Start haproxy
+    shell: haproxy -f  /etc/haproxy/haproxy.cfg -D
+    environment:
+      PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-haproxy/sbin"
 
   - name: Remove dpkg package if present on RedHat
     yum:

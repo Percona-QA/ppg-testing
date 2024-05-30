@@ -7,21 +7,6 @@
       state: present
     when: ansible_os_family == "RedHat"
 
-  - name: Install pre-packages
-    become: true
-    ignore_errors: True
-    package:
-      name: "{{ item }}"
-      update_cache: yes
-      state: latest
-    with_items:
-      - sudo
-      - vim
-      - zstd
-      - tar
-      - wget
-      - curl
-
   - name: Clean dnf oracle linux
     become: true
     command: dnf clean all -y

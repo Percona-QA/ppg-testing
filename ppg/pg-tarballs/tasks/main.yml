@@ -13,6 +13,20 @@
     ssl_version: "{{ lookup('env', 'SSL_VERSION') }}"
     etcd_version: 3.5.13
 
+- name: Install pre-packages
+  ignore_errors: True
+  package:
+    name: "{{ item }}"
+    update_cache: yes
+    state: latest
+  with_items:
+    - sudo
+    - vim
+    - zstd
+    - tar
+    - wget
+    - curl
+
 - name: Add data_dir to /etc/environment
   become: true
   ansible.builtin.lineinfile:
