@@ -8,15 +8,13 @@ from .. import settings
 testinfra_hosts = testinfra.utils.ansible_runner.AnsibleRunner(
    os.environ['MOLECULE_INVENTORY_FILE']).get_hosts('all')
 
-
 INSTALL_FOLDER_NAME = "pgdistro"
 INSTALL_PATH = os.path.join("/opt", INSTALL_FOLDER_NAME)
-USERNAME = os.getenv('user_name')
-DBNAME = os.getenv('database_name')
-PORT = os.getenv('server_port')
-MAJOR_VER = os.getenv('major_version')
-DATA_DIR = os.getenv('data_dir')
-PG_PATH = f"{INSTALL_PATH}/percona-postgresql{MAJOR_VER}"
+USERNAME = "postgres"
+DBNAME = "postgres"
+PORT = "5432"
+DATA_DIR = "/usr/local/pgsql/data"
+PG_PATH = f"{INSTALL_PATH}/percona-postgresql{settings.MAJOR_VER}"
 
 pg_versions = settings.get_settings(os.environ['MOLECULE_SCENARIO_NAME'])[os.getenv("VERSION")]
 os.environ['PATH'] = f"{PG_PATH}/bin:{INSTALL_PATH}/percona-pgbouncer/bin/:{INSTALL_PATH}/percona-haproxy/sbin:{INSTALL_PATH}/percona-patroni/bin:{INSTALL_PATH}/percona-pgbackrest/bin:{INSTALL_PATH}/percona-pgbadger:{INSTALL_PATH}/percona-pgpool-II/bin:" + os.environ['PATH']
