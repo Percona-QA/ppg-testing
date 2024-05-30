@@ -29,7 +29,7 @@ def get_psql_binary_path(scope='session'):
 @pytest.fixture()
 def perl_function(host,get_psql_binary_path):
     with host.sudo("postgres"):
-        install_extension = host.run(f"{get_psql_binary_path} -c 'CREATE EXTENSION IF NOT EXISTS plperl;'")
+        install_extension = host.run(f"PATH=/opt/percona-perl/bin:$PATH {get_psql_binary_path} -c 'CREATE EXTENSION IF NOT EXISTS plperl;'")
         assert install_extension.rc == 0
         create_function = """CREATE FUNCTION perl_max (integer, integer) RETURNS integer AS $$
     if ($_[0] > $_[1]) { return $_[0]; }
@@ -48,7 +48,7 @@ def python3_function(host,get_psql_binary_path):
     if os.lower() in ["redhat", "centos", "rhel", "ol"]:
         pytest.skip("Skipping python3 extensions for Centos or RHEL")
     with host.sudo("postgres"):
-        install_extension = host.run(f"{get_psql_binary_path} -c 'CREATE EXTENSION IF NOT EXISTS plpython3u;'")
+        install_extension = host.run(f"PATH=/opt/percona-python3/bin:$PATH {get_psql_binary_path} -c 'CREATE EXTENSION IF NOT EXISTS plpython3u;'")
         assert install_extension.rc == 0
         create_function = """CREATE FUNCTION pymax3 (a integer, b integer)
                   RETURNS integer
