@@ -54,7 +54,7 @@ def get_psql_binary_path(scope='session'):
 
 @pytest.fixture(scope='session')
 def getSqlCmd_with_param(get_psql_binary_path):
-    rcmd = ' '.join([get_psql_binary_path, f'-U {USERNAME} -p {PORT} -d {DBNAME}'])
+    rcmd = f'{get_psql_binary_path} -U {USERNAME} -p {PORT} -d {DBNAME} '
     return rcmd
 
 @pytest.fixture()
