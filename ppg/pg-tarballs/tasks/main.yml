@@ -1,8 +1,11 @@
 ---
 - name: Setting facts so that they will be persisted in the fact cache
   ansible.builtin.set_fact:
+    pg_version_to_install: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
+
+- name: Setting facts so that they will be persisted in the fact cache
+  ansible.builtin.set_fact:
     server_version: "{{ lookup('env', 'VERSION') }}"
-    pg_version_to_install: "{{ server_version }}"
     major_version: "{{ lookup('env', 'VERSION').split('.')[0].split('-')[1] }}"
     tarball_url:  "{{ lookup('env', 'TARBALL_URL') }}"
     dest_dir: "/opt/pgdistro"
