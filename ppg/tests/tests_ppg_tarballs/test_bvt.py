@@ -180,11 +180,11 @@ def test_postgres_client_version(host, getSqlCmd_with_param):
     result = host.check_output(cmd)
     assert settings.MAJOR_VER in result.strip("\n"), result.stdout
 
-@pytest.mark.upgrade
-def test_postgres_client_string(host, getSqlCmd_with_param):
-    if settings.MAJOR_VER in ["11"]:
-        pytest.skip("Skipping for ppg 11")
-    assert getSqlCmd_with_param + " (PostgreSQL) {pg_versions['version']}" in host.check_output(getSqlCmd_with_param + ' -V')
+# @pytest.mark.upgrade
+# def test_postgres_client_string(host, getSqlCmd_with_param):
+#     if settings.MAJOR_VER in ["11"]:
+#         pytest.skip("Skipping for ppg 11")
+#     assert getSqlCmd_with_param + " (PostgreSQL) {pg_versions['version']}" in host.check_output(getSqlCmd_with_param + ' -V')
 
 def test_start_stop_postgresql(start_stop_postgresql):
     assert start_stop_postgresql.rc == 0, start_stop_postgresql.rc

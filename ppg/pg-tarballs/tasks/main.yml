@@ -14,7 +14,6 @@
     database_name: 'postgres'
     server_port: 5432
     ssl_version: "{{ lookup('env', 'SSL_VERSION') }}"
-    etcd_version: 3.5.13
 
 - name: Install pre-packages
   ignore_errors: True
@@ -27,6 +26,7 @@
     - vim
     - zstd
     - tar
+    - file
     - wget
     - curl
 
@@ -94,7 +94,7 @@
     group: postgres
     mode: '0755'
 
-- name: Initialize Postgres RHEL
+- name: Initialize Postgres
   become: true
   command: "initdb -A trust -k {{data_dir}} "
   environment:

@@ -129,29 +129,17 @@
     environment:
       PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
 
-  - name: Ensure etcd destination directory exists
-    become: true
-    ansible.builtin.file:
-      path: "{{ dest_dir }}/etcd"
-      state: directory
+  # - name: Grep etcd version
+  #   become: true
+  #   command: "{{dest_dir}}/etcd/etcd-v{{etcd_version}}-linux-amd64/etcd --version"
+  #   register: etcd_version
 
-  - name: Install etcd from tarballs.
-    unarchive:
-      src: "https://github.com/etcd-io/etcd/releases/download/v{{etcd_version}}/etcd-v{{etcd_version}}-linux-amd64.tar.gz"
-      dest:  "{{dest_dir}}/etcd"
-      remote_src: true
-
-  - name: Grep etcd version
-    become: true
-    command: "{{dest_dir}}/etcd/etcd-v{{etcd_version}}-linux-amd64/etcd --version"
-    register: etcd_version
-
-  - name: Start local ETCD server in the background
-    ansible.builtin.command:
-      cmd: "{{dest_dir}}/etcd/etcd-v{{etcd_version}}-linux-amd64/etcd"
-    async: 120
-    poll: 0
-    register: etcd_server
+  # - name: Start local ETCD server in the background
+  #   ansible.builtin.command:
+  #     cmd: "{{dest_dir}}/etcd/etcd-v{{etcd_version}}-linux-amd64/etcd"
+  #   async: 120
+  #   poll: 0
+  #   register: etcd_server
 
   # - name: Wait for ETCD to start
   #   ansible.builtin.wait_for:
@@ -254,18 +242,18 @@
       mode: 0644
 
   # this testcase is failing due to libcrypto.so.1 not found
-  # - name: Start haproxy
-  #   shell: haproxy -f  /etc/haproxy/haproxy.cfg -D
-  #   environment:
-  #     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-haproxy/sbin"
+  - name: Start haproxy
+    shell: haproxy -f  /etc/haproxy/haproxy.cfg -D
+    environment:
+      PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-haproxy/sbin"
 
-  - name: Remove dpkg package if present on RedHat
-    yum:
-      name: dpkg
-      state: absent
-    ignore_errors: true
-    when: ansible_os_family == "RedHat" and
-      (ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9")
+  # - name: Remove dpkg package if present on RedHat
+  #   yum:
+  #     name: dpkg
+  #     state: absent
+  #   ignore_errors: true
+  #   when: ansible_os_family == "RedHat" and
+  #     (ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9")
 
   - name: Pause for 1 minutes
     ansible.builtin.pause:

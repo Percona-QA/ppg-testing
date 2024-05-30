@@ -67,7 +67,7 @@ def python3_function(host,get_psql_binary_path):
 @pytest.fixture()
 def tcl_function(host,get_psql_binary_path):
     with host.sudo("postgres"):
-        install_extension = host.run(f"{get_psql_binary_path} -c 'CREATE EXTENSION IF NOT EXISTS pltcl;'")
+        install_extension = host.run(f"PATH=/opt/percona-tcl/bin:$PATH {get_psql_binary_path} -c 'CREATE EXTENSION IF NOT EXISTS pltcl;'")
         assert install_extension.rc == 0
         create_function = """CREATE FUNCTION tcl_max(integer, integer) RETURNS integer AS $$
     if {$1 > $2} {return $1}
