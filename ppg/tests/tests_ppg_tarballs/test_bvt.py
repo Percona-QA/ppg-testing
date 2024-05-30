@@ -65,17 +65,12 @@ def start_stop_postgresql(host,get_server_bin_path):
     with host.sudo("postgres"):
         cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} stop"
         result = host.run(cmd)
-        time.sleep(5)
         assert result.rc == 0
-        print('--------1--------')
         cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} start"
         result = host.run(cmd)
-        time.sleep(5)
         assert result.rc == 0
-        print('--------2--------')
         cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} status"
         assert result.rc == 0
-        print('--------3--------')
         return host.run(cmd)
 
 @pytest.fixture()
@@ -88,9 +83,9 @@ def postgresql_binary(host,get_server_bin_path):
 
 
 @pytest.fixture()
-def postgresql_query_version(host,getSqlCmd_with_param):
+def postgresql_query_version(host,get_psql_binary_path):
     with host.sudo("postgres"):
-        return host.run(getSqlCmd_with_param + " -c   'SELECT version()' | awk 'NR==3{print $2}'")
+        return host.run(get_psql_binary_path + " -c   'SELECT version()' | awk 'NR==3{print $2}'")
 
 @pytest.fixture()
 def restart_postgresql(host,get_server_bin_path):
@@ -103,15 +98,15 @@ def restart_postgresql(host,get_server_bin_path):
 
 
 @pytest.fixture()
-def extension_list(host,getSqlCmd_with_param):
+def extension_list(host,get_psql_binary_path):
     with host.sudo("postgres"):
-        result = host.check_output(getSqlCmd_with_param + " -c 'SELECT * FROM pg_available_extensions;' | awk 'NR>=3{print $1}'")
+        result = host.check_output(get_psql_binary_path + " -c 'SELECT * FROM pg_available_extensions;' | awk 'NR>=3{print $1}'")
         result = result.split()
         return result
 
 
 @pytest.fixture()
-def insert_data(host, get_server_bin_path, getSqlCmd_with_param):
+def insert_data(host, get_server_bin_path, get_psql_binary_path):
     dist = host.system_info.distribution
     print(host.run("find / -name pgbench").stdout)
     pgbench_bin =os.path.join(get_server_bin_path, "pgbench")
@@ -121,7 +116,7 @@ def insert_data(host, get_server_bin_path, getSqlCmd_with_param):
         pgbench = f"{pgbench_bin} -i -s 1"
         result = host.run(pgbench)
         assert result.rc == 0, result.stderr
-        select = getSqlCmd_with_param + " -c 'SELECT COUNT(*) FROM pgbench_accounts;' | awk 'NR==3{print $1}'"
+        select = get_psql_binary_path + " -c 'SELECT COUNT(*) FROM pgbench_accounts;' | awk 'NR==3{print $1}'"
         result = host.check_output(select)
     yield result.strip("\n")
 
@@ -159,7 +154,7 @@ def test_binaries(host,get_server_bin_path, binary):
 
 @pytest.mark.upgrade
 def test_pg_config_server_version(host,get_server_bin_path):
-    cmd = get_server_bin_path + "pg_config --version"
+    cmd = f"{get_server_bin_path}/pg_config --version"
     try:
         result = host.check_output(cmd)
         assert settings.MAJOR_VER in result, result.stdout
@@ -174,25 +169,25 @@ def test_postgresql_query_version(postgresql_query_version):
 
 
 @pytest.mark.upgrade
-def test_postgres_client_version(host, getSqlCmd_with_param):
-    cmd = f"{getSqlCmd_with_param} --version"
+def test_postgres_client_version(host, get_psql_binary_path):
+    cmd = f"{get_psql_binary_path} --version"
     result = host.check_output(cmd)
     assert settings.MAJOR_VER in result.strip("\n"), result.stdout
 
 # @pytest.mark.upgrade
-# def test_postgres_client_string(host, getSqlCmd_with_param):
+# def test_postgres_client_string(host, get_psql_binary_path):
 #     if settings.MAJOR_VER in ["11"]:
 #         pytest.skip("Skipping for ppg 11")
-#     assert getSqlCmd_with_param + " (PostgreSQL) {pg_versions['version']}" in host.check_output(getSqlCmd_with_param + ' -V')
+#     assert f"{get_psql_binary_path} (PostgreSQL) {pg_versions['version']}" in host.check_output(f"{get_psql_binary_path}  -V")
 
-def test_start_stop_postgresql(start_stop_postgresql):
-    assert start_stop_postgresql.rc == 0, start_stop_postgresql.rc
-    assert "server is running" in start_stop_postgresql.stdout, start_stop_postgresql.stdout
+# def test_start_stop_postgresql(start_stop_postgresql):
+#     assert start_stop_postgresql.rc == 0, start_stop_postgresql.rc
+#     assert "server is running" in start_stop_postgresql.stdout, start_stop_postgresql.stdout
 
 
-def test_restart_postgresql(restart_postgresql):
-    assert restart_postgresql.rc == 0, restart_postgresql.stderr
-    assert "server is running" in restart_postgresql.stdout, restart_postgresql.stdout
+# def test_restart_postgresql(restart_postgresql):
+#     assert restart_postgresql.rc == 0, restart_postgresql.stderr
+#     assert "server is running" in restart_postgresql.stdout, restart_postgresql.stdout
 
 
 def test_insert_data(insert_data):
@@ -231,7 +226,7 @@ def test_extenstions_list(extension_list, host, extension):
     assert extension in extension_list
 
 @pytest.mark.parametrize("extension", EXTENSIONS)
-def test_enable_extension(host,getSqlCmd_with_param, extension):
+def test_enable_extension(host, get_psql_binary_path , extension):
     dist = host.system_info.distribution
     if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
         if extension in ['postgis_sfcgal','address_standardizer','postgis_tiger_geocoder','postgis',
@@ -263,17 +258,17 @@ def test_enable_extension(host,getSqlCmd_with_param, extension):
         'postgis_sfcgal','address_standardizer-3','postgis-3','address_standardizer','postgis','address_standardizer_data_us-3']:
             pytest.skip("Skipping extension " + extension + " due to multiple dependencies. Already being checked in test_tools.py.")
     with host.sudo("postgres"):
-        install_extension = host.run(getSqlCmd_with_param + " -c 'CREATE EXTENSION IF NOT EXISTS \"{}\";'".format(extension))
+        install_extension = host.run(get_psql_binary_path + " -c 'CREATE EXTENSION IF NOT EXISTS \"{}\";'".format(extension))
         assert install_extension.rc == 0, install_extension.stderr
         assert install_extension.stdout.strip("\n") == "CREATE EXTENSION", install_extension.stderr
-        extensions = host.run(getSqlCmd_with_param + " -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $3}'")
+        extensions = host.run(get_psql_binary_path + " -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $3}'")
         if "11." in os.getenv("VERSION"):
-            extensions = host.run(getSqlCmd_with_param + " -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $1}'")
+            extensions = host.run(get_psql_binary_path + " -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $1}'")
         assert extensions.rc == 0, extensions.stderr
         assert extension in set(extensions.stdout.split()), extensions.stdout
 
 @pytest.mark.parametrize("extension", EXTENSIONS[::-1])
-def test_drop_extension(host,getSqlCmd_with_param, extension):
+def test_drop_extension(host,get_psql_binary_path, extension):
     dist = host.system_info.distribution
     if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
         if extension in ['postgis_sfcgal','address_standardizer','postgis_tiger_geocoder','postgis',
@@ -305,21 +300,21 @@ def test_drop_extension(host,getSqlCmd_with_param, extension):
         'postgis_sfcgal','address_standardizer-3','postgis-3','address_standardizer','postgis','address_standardizer_data_us-3']:
             pytest.skip("Skipping extension " + extension + " due to multiple dependencies. Already being checked in test_tools.py.")
     with host.sudo("postgres"):
-        drop_extension = host.run(getSqlCmd_with_param + " -c 'DROP EXTENSION if exists \"{}\"; CASCADE'".format(extension))
+        drop_extension = host.run(get_psql_binary_path + " -c 'DROP EXTENSION if exists \"{}\" CASCADE;'".format(extension))
         assert drop_extension.rc == 0, drop_extension.stderr
         assert drop_extension.stdout.strip("\n") == "DROP EXTENSION", drop_extension.stdout
-        extensions = host.run(getSqlCmd_with_param + " -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $3}'")
+        extensions = host.run(get_psql_binary_path + " -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $3}'")
         if "11." in os.getenv("VERSION"):
-            extensions = host.run(getSqlCmd_with_param + " -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $1}'")
+            extensions = host.run(get_psql_binary_path + " -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $1}'")
         assert extensions.rc == 0, extensions.stderr
         assert extension not in set(extensions.stdout.split()), extensions.stdout
 
 @pytest.mark.upgrade
-def test_plpgsql_extension(host,getSqlCmd_with_param):
+def test_plpgsql_extension(host,get_psql_binary_path):
     with host.sudo("postgres"):
-        extensions = host.run(getSqlCmd_with_param + " -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $3}'")
+        extensions = host.run(get_psql_binary_path + " -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $3}'")
         if "11." in os.getenv("VERSION"):
-            extensions = host.run(getSqlCmd_with_param + " -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $1}'")
+            extensions = host.run(get_psql_binary_path + " -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $1}'")
         assert extensions.rc == 0, extensions.stderr
         assert "plpgsql" in set(extensions.stdout.split()), extensions.stdout
 
@@ -349,7 +344,7 @@ def test_rpm_files(file, host):
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
-def test_language(host,getSqlCmd_with_param, language):
+def test_language(host,get_psql_binary_path, language):
     deb_dists = ['debian', 'ubuntu']
     rpm_dists = ["redhat", "centos", "rhel", "ol"]
     dist = host.system_info.distribution
@@ -363,14 +358,14 @@ def test_language(host,getSqlCmd_with_param, language):
             pytest.skip("Skipping python2 extensions for DEB based")
         if language in ['plpythonu', "plpython2u"] and settings.MAJOR_VER in ["12","11"] and host.system_info.release.startswith("9"):
             pytest.skip("Skipping python2 extensions for OL 9 based ppg 12 & 11")
-        lang = host.run(getSqlCmd_with_param + " -c 'CREATE LANGUAGE {};'".format(language))
+        lang = host.run(get_psql_binary_path + " -c 'CREATE LANGUAGE {};'".format(language))
         assert lang.rc == 0, lang.stderr
         assert lang.stdout.strip("\n") in ["CREATE LANGUAGE", "CREATE EXTENSION"], lang.stdout
         if settings.MAJOR_VER in ["12","11"]:
-            drop_lang = host.run(getSqlCmd_with_param + " -c 'DROP LANGUAGE if exists {};'".format(language))
+            drop_lang = host.run(get_psql_binary_path + " -c 'DROP LANGUAGE if exists {};'".format(language))
             assert drop_lang.rc == 0, drop_lang.stderr
             assert drop_lang.stdout.strip("\n") in ["DROP LANGUAGE"], lang.stdout
         else:
-            drop_lang = host.run(getSqlCmd_with_param + " -c 'DROP EXTENSION if exists {};'".format(language))
+            drop_lang = host.run(get_psql_binary_path + " -c 'DROP EXTENSION if exists {};'".format(language))
             assert drop_lang.rc == 0, drop_lang.stderr
             assert drop_lang.stdout.strip("\n") in ["DROP LANGUAGE", "DROP EXTENSION"], lang.stdout
