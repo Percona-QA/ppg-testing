@@ -6,9 +6,11 @@
     install_openssl_1: false
     openssl_is_version_1: false
 
-- name: Check tarball's SSL version
-  debug:
-    msg: "Tarball version is {{ ssl_version }}"
+- name: install Openssl
+  package:
+    name: openssl
+    state: present
+  become: yes
 
 - name: Check if openssl binary exists
   stat:

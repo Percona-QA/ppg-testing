@@ -15,6 +15,14 @@
     server_port: 5432
     ssl_version: "{{ lookup('env', 'SSL_VERSION') }}"
 
+- name: Tarball's SSL version
+  debug:
+    msg: "Tarball version is {{ ssl_version }}"
+
+- name: Tarball's URL
+  debug:
+    msg: "Tarball version is {{ tarball_url }}"
+
 - name: Install pre-packages
   ignore_errors: True
   package:
