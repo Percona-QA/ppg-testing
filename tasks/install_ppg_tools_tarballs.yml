@@ -60,7 +60,7 @@
 
   - name: Create pgbackrest var/log directory
     file:
-      path: /var/lib/pgbackrest/
+      path: /var/log/pgbackrest/
       owner: postgres
       group: postgres
       state: directory

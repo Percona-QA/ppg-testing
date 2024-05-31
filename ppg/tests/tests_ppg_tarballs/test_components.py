@@ -115,25 +115,25 @@ def test_deb_package_is_installed(host, get_server_path, package):
         # Assert that the file exists
         assert file.exists, f"{package} does not exist."
 
-# def test_perl_function(host, perl_function,get_psql_binary_path):
-#     _ = perl_function
-#     with host.sudo("postgres"):
-#         result = host.run(get_psql_binary_path+" -c \'SELECT perl_max(1, 2);\' | awk 'NR>=3{print $1}'")
-#         assert result.rc == 0
-#         assert result.stdout.strip("\n(1") == "2", result.stdout
+def test_perl_function(host, perl_function,get_psql_binary_path):
+    _ = perl_function
+    with host.sudo("postgres"):
+        result = host.run(get_psql_binary_path+" -c \'SELECT perl_max(1, 2);\' | awk 'NR>=3{print $1}'")
+        assert result.rc == 0
+        assert result.stdout.strip("\n(1") == "2", result.stdout
 
 
-# def test_tcl_function(host, tcl_function,get_psql_binary_path):
-#     _ = tcl_function
-#     with host.sudo("postgres"):
-#         result = host.run(get_psql_binary_path+" -c \'SELECT tcl_max(1, 2);\' | awk 'NR>=3{print $1}'")
-#         assert result.rc == 0
-#         assert result.stdout.strip("\n(1") == "2", result.stdout
+def test_tcl_function(host, tcl_function,get_psql_binary_path):
+    _ = tcl_function
+    with host.sudo("postgres"):
+        result = host.run(get_psql_binary_path+" -c \'SELECT tcl_max(1, 2);\' | awk 'NR>=3{print $1}'")
+        assert result.rc == 0
+        assert result.stdout.strip("\n(1") == "2", result.stdout
 
 
-# def test_python3(host, python3_function,get_psql_binary_path):
-#     _ = python3_function
-#     with host.sudo("postgres"):
-#         result = host.run(get_psql_binary_path+" -c \'SELECT pymax3(1, 2);\' | awk 'NR>=3{print $1}'")
-#         assert result.rc == 0
-#         assert result.stdout.strip("\n(1") == "2", result.stdout
+def test_python3(host, python3_function,get_psql_binary_path):
+    _ = python3_function
+    with host.sudo("postgres"):
+        result = host.run(get_psql_binary_path+" -c \'SELECT pymax3(1, 2);\' | awk 'NR>=3{print $1}'")
+        assert result.rc == 0
+        assert result.stdout.strip("\n(1") == "2", result.stdout
