@@ -24,18 +24,6 @@
       cmd: rm -rf "{{ dest_dir }}"
     when: dest_dir is defined and dest_dir != ''
 
-  - name: Copy Percona pl-languages to /opt
-    become: true
-    copy:
-      src: "{{ dest_dir }}/{{ item }}"
-      dest: "/opt/{{ item }}"
-      remote_src: yes
-      force: yes
-    with_items:
-      - percona-python3
-      - percona-perl
-      - percona-tcl
-
   - name: Ensure tarball destination directory exists
     become: true
     ansible.builtin.file:
