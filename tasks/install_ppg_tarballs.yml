@@ -75,6 +75,9 @@
       - "{{dest_dir}}/percona-postgresql{{major_version}}"
       - "{{dest_dir}}/percona-python3/bin"
       - "{{dest_dir}}/percona-tcl/bin"
+      - "/opt/percona-python3/bin"
+      - "/opt/percona-tcl/bin"
+      - "/opt/percona-perl/bin"
 
   - name: Concatenate file lists from all subdirectories
     shell: "echo '{{ file_list.results | map(attribute='stdout') | join('') }}' > /tmp/abc.list.type"
