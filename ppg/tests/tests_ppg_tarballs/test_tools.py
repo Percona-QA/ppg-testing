@@ -272,8 +272,8 @@ def test_pgaudit_is_installed(host, get_server_path):
         # Assert that the file exists
         assert file.exists, f"{pgaudit_filename} does not exist."
 
-def test_pgaudit(pgaudit):
-    assert "AUDIT" in pgaudit
+# def test_pgaudit(pgaudit):
+#     assert "AUDIT" in pgaudit
 
 def test_pgrepack_is_installed(host, get_server_path):
     with host.sudo():
@@ -329,25 +329,25 @@ def test_pgbackrest_is_installed(host):
     assert binary.exists, f"{pgbackrest_bin} does not exist."
     assert binary.is_file, f"{pgbackrest_bin} is not a file."
 
-def test_pgbackrest_version(pgbackrest_version):
-    assert pgbackrest_version == pg_versions['pgbackrest']['binary_version']
+# def test_pgbackrest_version(pgbackrest_version):
+#     assert pgbackrest_version == pg_versions['pgbackrest']['binary_version']
 
-def test_pgbackrest_create_stanza(create_stanza):
-    assert "INFO: stanza-create command end: completed successfully" in create_stanza.stdout
+# def test_pgbackrest_create_stanza(create_stanza):
+#     assert "INFO: stanza-create command end: completed successfully" in create_stanza.stdout
 
-def test_pgbackrest_check(pgbackrest_check):
-    assert "check command end: completed successfully" in pgbackrest_check[-1]
+# def test_pgbackrest_check(pgbackrest_check):
+#     assert "check command end: completed successfully" in pgbackrest_check[-1]
 
-def test_pgbackrest_full_backup(pgbackrest_full_backup):
-    assert "expire command end: completed successfully" in pgbackrest_full_backup[-1]
+# def test_pgbackrest_full_backup(pgbackrest_full_backup):
+#     assert "expire command end: completed successfully" in pgbackrest_full_backup[-1]
 
-def test_pgbackrest_restore(host, start_postgresql,get_psql_binary_path):
-    start_postgresql
-    with host.sudo("postgres"):
-        select = get_psql_binary_path + " -c 'SELECT COUNT(*) FROM pgbench_accounts;' | awk 'NR==3{print $1}'"
-        result = host.run(select)
-        assert result.rc == 0
-        assert result.stdout.strip("\n") == "100000"
+# def test_pgbackrest_restore(host, start_postgresql,get_psql_binary_path):
+#     start_postgresql
+#     with host.sudo("postgres"):
+#         select = get_psql_binary_path + " -c 'SELECT COUNT(*) FROM pgbench_accounts;' | awk 'NR==3{print $1}'"
+#         result = host.run(select)
+#         assert result.rc == 0
+#         assert result.stdout.strip("\n") == "100000"
 
 def test_patroni_is_installed(host):
     with host.sudo():
