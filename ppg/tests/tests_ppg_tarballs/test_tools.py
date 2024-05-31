@@ -470,6 +470,8 @@ def test_pgbouncer_binary_version(host):
 
 def test_pgbadger_binary_version(host):
     # Failing on RHEL 9 so commenting it out, needs manual verification
+    # NEEDS MAUNAL VERIFICATION
+    os_name = host.system_info.distribution
     if os_name.lower() in ["redhat", "centos", "rhel", "ol"]and host.system_info.release.startswith("9"):
         pytest.skip("This test only for Debian based platforms")
     with host.sudo():
