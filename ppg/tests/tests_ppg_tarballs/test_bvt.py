@@ -212,13 +212,8 @@ def test_extenstions_list(extension_list, host, extension):
     if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
         if extension in [
             'plpythonu', "plpython2u", 'jsonb_plpython2u', 'ltree_plpython2u', 'jsonb_plpythonu',
-            'ltree_plpythonu', 'hstore_plpythonu', 'hstore_plpython2u'] and settings.MAJOR_VER in ["13", "14", "15"]:
+            'ltree_plpythonu', 'hstore_plpythonu', 'hstore_plpython2u']:
             pytest.skip("Skipping extension " + extension + " for Centos or RHEL")
-        if extension in [
-            'plpythonu', "plpython2u", 'jsonb_plpython2u', 'ltree_plpython2u', 'jsonb_plpythonu',
-            'ltree_plpythonu', 'hstore_plpythonu', 'hstore_plpython2u'] and settings.MAJOR_VER in ["12","11"] and \
-            host.system_info.release.startswith("9"):
-            pytest.skip("Skipping extension " + extension + " for OL 9 based ppg 12 & 11")
     if dist.lower() in ['debian', 'ubuntu'] and os.getenv("VERSION") in SKIPPED_DEBIAN:
         if extension in ['plpythonu', "plpython2u", 'jsonb_plpython2u', 'ltree_plpython2u', 'jsonb_plpythonu',
                             'ltree_plpythonu', 'hstore_plpythonu', 'hstore_plpython2u']:
@@ -241,14 +236,8 @@ def test_enable_extension(host, get_psql_binary_path , extension):
         if extension in [
             'plpythonu', "plpython2u", 'jsonb_plpython2u', 'ltree_plpython2u', 'jsonb_plpythonu',
             'ltree_plpythonu', 'hstore_plpythonu', 'hstore_plpython2u', 'hstore_plpython3u',
-            'jsonb_plpython3u', 'ltree_plpython3u'] and settings.MAJOR_VER in ["13", "14", "15"]:
+            'jsonb_plpython3u', 'ltree_plpython3u']:
             pytest.skip("Skipping extension " + extension + " for Centos or RHEL")
-        if extension in [
-            'plpythonu', "plpython2u", 'jsonb_plpython2u', 'ltree_plpython2u', 'jsonb_plpythonu',
-            'ltree_plpythonu', 'hstore_plpythonu', 'hstore_plpython2u', 'hstore_plpython3u',
-            'jsonb_plpython3u', 'ltree_plpython3u'] and settings.MAJOR_VER in ["12","11"] and \
-            host.system_info.release.startswith("9"):
-            pytest.skip("Skipping extension " + extension + " for OL 9 based ppg 12 & 11")
 
     if dist.lower() in ['debian', 'ubuntu'] and os.getenv("VERSION") in SKIPPED_DEBIAN:
         if extension in ['plpythonu', "plpython2u", 'jsonb_plpython2u', 'ltree_plpython2u', 'jsonb_plpythonu',
@@ -287,14 +276,8 @@ def test_drop_extension(host,get_psql_binary_path, extension):
         if extension in [
             'plpythonu', "plpython2u", 'jsonb_plpython2u', 'ltree_plpython2u', 'jsonb_plpythonu',
             'ltree_plpythonu', 'hstore_plpythonu', 'hstore_plpython2u', 'hstore_plpython3u',
-            'jsonb_plpython3u', 'ltree_plpython3u'] and settings.MAJOR_VER in ["13", "14", "15"]:
+            'jsonb_plpython3u', 'ltree_plpython3u']:
             pytest.skip("Skipping extension " + extension + " for Centos or RHEL")
-        if extension in [
-            'plpythonu', "plpython2u", 'jsonb_plpython2u', 'ltree_plpython2u', 'jsonb_plpythonu',
-            'ltree_plpythonu', 'hstore_plpythonu', 'hstore_plpython2u', 'hstore_plpython3u',
-            'jsonb_plpython3u', 'ltree_plpython3u'] and settings.MAJOR_VER in ["12","11"] and \
-            host.system_info.release.startswith("9"):
-            pytest.skip("Skipping extension " + extension + " for OL 9 based ppg 12 & 11")
 
     if dist.lower() in ['debian', 'ubuntu'] and os.getenv("VERSION") in SKIPPED_DEBIAN:
         if extension in ['plpythonu', "plpython2u", 'jsonb_plpython2u', 'ltree_plpython2u', 'jsonb_plpythonu',
