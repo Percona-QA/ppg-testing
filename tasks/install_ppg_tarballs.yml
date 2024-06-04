@@ -124,12 +124,16 @@
         set_fact:
           dest_dir: "{{ dest_dir }}/percona-postgresql{{major_version}}/lib"
 
+      - name: Select the first found libreadline
+        set_fact:
+          selected_libreadline: "{{ readline_libs.files[0].path }}"
+        when: readline_libs.matched > 0
+
       - name: Create symbolic link
         file:
-          src: "{{ item.path }}"
+          src: "{{ selected_libreadline }}"
           dest: "{{ dest_dir }}/libreadline.so.7"
           state: link
-        loop: "{{ readline_libs.files }}"
-        when: item.path is search("libreadline.so")
+        when: selected_libreadline is defined
         #notify: Symlink created
     when: ansible_facts['os_family'] == 'Debian'

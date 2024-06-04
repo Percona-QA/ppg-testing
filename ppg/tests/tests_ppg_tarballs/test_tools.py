@@ -391,6 +391,22 @@ def test_pg_stat_monitor_extension_version(host,get_psql_binary_path):
         assert result.rc == 0, result.stderr
         assert result.stdout.strip("\n") == pg_versions['PGSM_version']
 
+def test_etcd_is_installed(host):
+    with host.sudo():
+        etcd_dir = os.path.join(INSTALL_PATH, 'percona-etcd')
+        # Check if the directory exists
+        directory = host.file(etcd_dir)
+        assert directory.is_directory, f"{etcd_dir} does not exist or is not a directory."
+        # Check if the directory is not empty
+        assert directory.exists, f"{etcd_dir} does not exist."
+        files = host.run(f"ls -A {etcd_dir}").stdout.strip()
+        assert files, f"{etcd_dir} is empty."
+        # Check if the binary exists and is a file
+        etcd_bin = os.path.join(etcd_dir,'bin','etcd')
+        binary = host.file(etcd_bin)
+        assert binary.exists, f"{etcd_bin} does not exist."
+        assert binary.is_file, f"{etcd_bin} is not a file."
+
 def test_pgbouncer_is_installed(host):
     with host.sudo():
         pgbouncer_dir = os.path.join(INSTALL_PATH, 'percona-pgbouncer')
@@ -457,6 +473,15 @@ def test_set_user_is_installed(host, get_server_path):
             file = host.file(file_name)
             assert file.exists, f"{file_name} does not exist."
 
+def test_etcd_binary_version(host):
+    with host.sudo():
+        etcd_bin_path = os.path.join(INSTALL_PATH, 'percona-etcd','bin')
+        binary_name = 'etcd'
+        binary = host.file(f"{etcd_bin_path}/{binary_name}")
+        assert binary.exists, f"{binary} does not exist."
+        result = host.run(f"{etcd_bin_path}/{binary_name} --version")
+        assert result.rc == 0, result.stderr
+        assert pg_versions[binary_name]['binary_version'] in result.stdout.strip("\n"), result.stdout
 
 def test_pgbouncer_binary_version(host):
     with host.sudo():   
