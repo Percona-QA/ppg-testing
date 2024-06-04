@@ -225,8 +225,8 @@ def test_enable_extension(host, get_psql_binary_path , extension):
     dist = host.system_info.distribution
     # NEEDS MAUNAL VERIFICATION
     # Disabling these extensions as failing in automated tests. Need to verify in future.
-    if extension in ['pltcl','pltclu','plperl','plperlu']:
-        pytest.skip("Skipping extension " + extension + " for tests, these are passing in manual testing.")
+    # if extension in ['pltcl','pltclu','plperl','plperlu']:
+    #     pytest.skip("Skipping extension " + extension + " for tests, these are passing in manual testing.")
     if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
         if extension in ['postgis_sfcgal','address_standardizer','postgis_tiger_geocoder','postgis',
         'postgis_topology','postgis_raster','address_standardizer_data_us']:
@@ -265,8 +265,8 @@ def test_drop_extension(host,get_psql_binary_path, extension):
     dist = host.system_info.distribution
     # NEEDS MAUNAL VERIFICATION
     # Disabling these extensions as failing in automated tests. Need to verify in future.
-    if extension in ['pltcl','pltclu','plperl','plperlu']:
-        pytest.skip("Skipping extension " + extension + " for tests, these are passing in manual testing.")
+    # if extension in ['pltcl','pltclu','plperl','plperlu']:
+    #     pytest.skip("Skipping extension " + extension + " for tests, these are passing in manual testing.")
     if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
         if extension in ['postgis_sfcgal','address_standardizer','postgis_tiger_geocoder','postgis',
         'postgis_topology','postgis_raster','address_standardizer_data_us']:
@@ -340,8 +340,8 @@ def test_language(host,get_psql_binary_path, language):
     rpm_dists = ["redhat", "centos", "rhel", "ol"]
     # NEEDS MAUNAL VERIFICATION
     # Disabling these language as failing in automated tests. Need to verify in future.
-    if language in ['pltcl','pltclu','plperl','plperlu']:
-        pytest.skip("Skipping language " + language + " for tests, these are passing in manual testing.")
+    # if language in ['pltcl','pltclu','plperl','plperlu']:
+    #     pytest.skip("Skipping language " + language + " for tests, these are passing in manual testing.")
     dist = host.system_info.distribution
     with host.sudo("postgres"):
         # if dist.lower() in ["redhat", "centos", "rhel", "ol"]:

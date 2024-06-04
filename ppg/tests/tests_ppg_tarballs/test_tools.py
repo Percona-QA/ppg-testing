@@ -365,9 +365,9 @@ def test_patroni_is_installed(host):
         assert binary.is_file, f"{patroni_bin} is not a file."
 
 # NEEDS MAUNAL VERIFICATION
-# def test_patroni_version(patroni_version):
-#     assert patroni_version.rc == 0, patroni_version.stderr
-#     assert patroni_version.stdout.strip("\n") == pg_versions['patroni']['binary_version']
+def test_patroni_version(patroni_version):
+    assert patroni_version.rc == 0, patroni_version.stderr
+    assert patroni_version.stdout.strip("\n") == pg_versions['patroni']['binary_version']
 
 def test_pg_stat_monitor_is_installed(host, get_server_path):
     with host.sudo():

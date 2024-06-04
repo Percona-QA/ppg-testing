@@ -1,21 +1,4 @@
 ---
-  - name: Setting facts so that they will be persisted in the fact cache
-    ansible.builtin.set_fact:
-      pgaudit_rhel_package_name: "percona-pgaudit"
-      postgis_rhel_package_name_prefix: "percona-postgis33"
-
-  - name: Setting facts so that they will be persisted in the fact cache
-    ansible.builtin.set_fact:
-      pgaudit_rhel_package_name: "percona-pgaudit{{major_version}}"
-      postgis_rhel_package_name_prefix: "percona-postgis33_{{major_version}}"
-    when: (pg_version_to_install | string is version('16.1', '>=', strict=True))
-
-  - debug:
-      msg: "Value of pgaudit_rhel_package_name is : {{ pgaudit_rhel_package_name }}"
-
-  - debug:
-      msg: "Value of postgis_rhel_package_name_prefix is : {{ postgis_rhel_package_name_prefix }}"
-
   - name: Install additional tools for pgbackrest test Debian
     apt:
       name: "{{ packages }}"
@@ -54,7 +37,7 @@
   - name: Create pgbackrest var/lib directory
     file:
       path: /var/lib/pgbackrest/
-      state: directory
+      owner: postgres
       group: postgres
       state: directory
 
@@ -129,17 +112,12 @@
     environment:
       PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
 
-  # - name: Grep etcd version
-  #   become: true
-  #   command: "{{dest_dir}}/etcd/etcd-v{{etcd_version}}-linux-amd64/etcd --version"
-  #   register: etcd_version
-
-  # - name: Start local ETCD server in the background
-  #   ansible.builtin.command:
-  #     cmd: "{{dest_dir}}/etcd/etcd-v{{etcd_version}}-linux-amd64/etcd"
-  #   async: 120
-  #   poll: 0
-  #   register: etcd_server
+  - name: Start local ETCD server in the background
+    ansible.builtin.command:
+      cmd: "{{dest_dir}}/percona-etcd/bin/etcd"
+    async: 120
+    poll: 0
+    register: etcd_server
 
   # - name: Wait for ETCD to start
   #   ansible.builtin.wait_for:
@@ -159,7 +137,7 @@
       owner: postgres
       group: postgres
 
-  - name: Copy postgresql<x>.yml for patroni service
+  - name: "Copy {{item}} for patroni service"
     copy:
       src: "{{item}}"
       dest: "/var/lib/pgsql/patroni_test/{{item}}"
@@ -182,7 +160,7 @@
       - postgresql1.yml
       - postgresql2.yml
 
-  - name: Copy patroni service file Debian
+  - name: "Copy {{item}} file Debian"
     copy:
       src: "{{item}}"
       dest: "/lib/systemd/system/{{item}}"
@@ -195,7 +173,7 @@
       - patroni2.service
     when: ansible_os_family == "Debian"
 
-  - name: Copy patroni service file RHEL
+  - name: "Copy {{item}} file file RHEL"
     copy:
       src: "{{item}}"
       dest: "/usr/lib/systemd/system/{{item}}"

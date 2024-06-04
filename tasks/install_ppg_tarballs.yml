@@ -76,6 +76,7 @@
       - "{{dest_dir}}/percona-postgresql{{major_version}}"
       - "{{dest_dir}}/percona-python3/bin"
       - "{{dest_dir}}/percona-tcl/bin"
+      - "{{dest_dir}}/percona-etcd/bin"
       - "/opt/percona-python3/bin"
       - "/opt/percona-tcl/bin"
       - "/opt/percona-perl/bin"
@@ -106,3 +107,29 @@
   - name: Display missing dependencies (if any)
     debug:
       msg: "{{ missing_deps.stdout_lines }}"
+
+  - name: Run tasks only on Debian systems
+    block:
+      - name: Find libreadline library
+        find:
+          paths: /lib/x86_64-linux-gnu/
+          patterns: "libreadline.so*"
+        register: readline_libs
+
+      - name: Debug found libraries
+        debug:
+          var: readline_libs.files
+
+      - name: Set the destination directory
+        set_fact:
+          dest_dir: "{{ dest_dir }}/percona-postgresql{{major_version}}/lib"
+
+      - name: Create symbolic link
+        file:
+          src: "{{ item.path }}"
+          dest: "{{ dest_dir }}/libreadline.so.7"
+          state: link
+        loop: "{{ readline_libs.files }}"
+        when: item.path is search("libreadline.so")
+        #notify: Symlink created
+    when: ansible_facts['os_family'] == 'Debian'
