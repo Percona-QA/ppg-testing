@@ -76,7 +76,7 @@
 
 - name: Initialize Postgres
   become: true
-  command: "initdb -A trust -k {{data_dir}} "
+  command: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/initdb -A trust -k {{data_dir}} "
   environment:
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
   become_user: postgres
