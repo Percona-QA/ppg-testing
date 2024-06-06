@@ -78,47 +78,21 @@ def start_postgresql(host,get_server_bin_path):
         assert result.rc == 0
 
 @pytest.fixture()
-def enable_server_log(host,get_psql_binary_path):
+def pgaudit(host, get_psql_binary_path,restart_postgresql):
     dist = host.system_info.distribution
     with host.sudo("postgres"):
-        commands = [
-        "ALTER SYSTEM SET logging_collector = 'on';",
-        "ALTER SYSTEM SET log_directory = 'pg_log';",
-        "ALTER SYSTEM SET log_filename = 'postgresql-main.log';",
-        "ALTER SYSTEM SET log_rotation_age = '1d';",
-        "ALTER SYSTEM SET log_rotation_size = '10MB';",
-        "ALTER SYSTEM SET log_statement = 'all';",
-        "SELECT pg_reload_conf();",
-    ]
-        for command in commands:
-            enable_log = f"{get_psql_binary_path} -c \"{command}\""
-            result = host.run(enable_log)
-            assert result.rc == 0
-        #restart_postgresql
-
-@pytest.fixture()
-def pgaudit(host, get_psql_binary_path,restart_postgresql,enable_server_log):
-    dist = host.system_info.distribution
-    enable_server_log
-    with host.sudo("postgres"):
-        commands = [
-        "ALTER SYSTEM SET shared_preload_libraries=pgaudit;",
-        "ALTER SYSTEM SET pgaudit.log = 'all';",
-        "SELECT pg_reload_conf();",
-    ]
         enable_pgaudit = f"{get_psql_binary_path}  -c \'CREATE EXTENSION IF NOT EXISTS pgaudit;\'"
         result = host.check_output(enable_pgaudit)
         assert result.strip("\n") == "CREATE EXTENSION"
-
-        for command in commands:
-            enable_log = f"{get_psql_binary_path} -c \"{command}\""
-            result = host.run(enable_log)
-            assert result.rc == 0
-
         cmd = f"{get_psql_binary_path} -c \"SELECT setting FROM pg_settings WHERE name='shared_preload_libraries';\""
         result = host.check_output(cmd)
         assert "pgaudit" in result, result
-
+        enable_ddl = f"""{get_psql_binary_path} -c \"ALTER SYSTEM SET pgaudit.log = 'all';\""""
+        result = host.check_output(enable_ddl)
+        assert result.strip("\n") == "ALTER SYSTEM"
+        reload_conf = f"{get_psql_binary_path} -c 'SELECT pg_reload_conf();'"
+        result = host.run(reload_conf)
+        assert result.rc == 0
         create_table = f"{get_psql_binary_path} -c \"CREATE TABLE IF NOT EXISTS t1 (id int,name varchar(30));\""
         result = host.run(create_table)
         assert result.rc == 0
@@ -141,26 +115,24 @@ def pgbackrest_bin_path(host):
 @pytest.fixture()
 def pgbackrest_version(host,pgbackrest_bin_path):
     return host.check_output(f"{pgbackrest_bin_path}/pgbackrest version").strip("\n")
-    
 
-@pytest.fixture()
-def configure_postgres_pgbackrest(host, get_psql_binary_path,restart_postgresql,enable_server_log,pgbackrest_bin_path):
-    enable_server_log
+
+@pytest.fixture(scope="module")
+def configure_postgres_pgbackrest(host,get_psql_binary_path,pgbackrest_bin_path):
     with host.sudo("postgres"):
-        commands = [
-        "ALTER SYSTEM SET max_wal_senders=3;",
-        "ALTER SYSTEM SET wal_level='replica';",
-        "ALTER SYSTEM SET archive_mode='on';",
-        "ALTER SYSTEM SET archive_timeout=120;",
-        "ALTER SYSTEM SET archive_command=f'{pgbackrest_bin_path}/pgbackrest --stanza=testing archive-push %p';",
-        "SELECT pg_reload_conf();",
-    ]
-        for command in commands:
-            enable_log = f"{get_psql_binary_path} -c \"{command}\""
-            result = host.run(enable_log)
-            assert result.rc == 0
-        #restart_postgresql
-
+        wal_senders = f"""{get_psql_binary_path} -c \"ALTER SYSTEM SET max_wal_senders=3;\""""
+        assert host.check_output(wal_senders).strip("\n") == "ALTER SYSTEM"
+        wal_level = f"""{get_psql_binary_path} -c \"ALTER SYSTEM SET wal_level='replica';\""""
+        assert host.check_output(wal_level).strip("\n") == "ALTER SYSTEM"
+        archive = f"""{get_psql_binary_path} -c \"ALTER SYSTEM SET archive_mode='on';\""""
+        assert host.check_output(archive).strip("\n") == "ALTER SYSTEM"
+        archive_command = f"""
+        {get_psql_binary_path} -c \"ALTER SYSTEM SET archive_command = '{pgbackrest_bin_path}/pgbackrest --stanza=testing archive-push %p';\"
+        """
+        assert host.check_output(archive_command).strip("\n") == "ALTER SYSTEM"
+        reload_conf = f"{get_psql_binary_path} -c 'SELECT pg_reload_conf();'"
+        result = host.run(reload_conf)
+        assert result.rc == 0
 
 @pytest.mark.usefixtures("configure_postgres_pgbackrest")
 @pytest.fixture()
@@ -272,8 +244,8 @@ def test_pgaudit_is_installed(host, get_server_path):
         # Assert that the file exists
         assert file.exists, f"{pgaudit_filename} does not exist."
 
-# def test_pgaudit(pgaudit):
-#     assert "AUDIT" in pgaudit
+def test_pgaudit(pgaudit):
+    assert "AUDIT" in pgaudit
 
 def test_pgrepack_is_installed(host, get_server_path):
     with host.sudo():
@@ -329,17 +301,17 @@ def test_pgbackrest_is_installed(host):
     assert binary.exists, f"{pgbackrest_bin} does not exist."
     assert binary.is_file, f"{pgbackrest_bin} is not a file."
 
-# def test_pgbackrest_version(pgbackrest_version):
-#     assert pgbackrest_version == pg_versions['pgbackrest']['binary_version']
+def test_pgbackrest_version(pgbackrest_version):
+    assert pgbackrest_version == pg_versions['pgbackrest']['binary_version']
 
-# def test_pgbackrest_create_stanza(create_stanza):
-#     assert "INFO: stanza-create command end: completed successfully" in create_stanza.stdout
+def test_pgbackrest_create_stanza(create_stanza):
+    assert "INFO: stanza-create command end: completed successfully" in create_stanza.stdout
 
-# def test_pgbackrest_check(pgbackrest_check):
-#     assert "check command end: completed successfully" in pgbackrest_check[-1]
+def test_pgbackrest_check(pgbackrest_check):
+    assert "check command end: completed successfully" in pgbackrest_check[-1]
 
-# def test_pgbackrest_full_backup(pgbackrest_full_backup):
-#     assert "expire command end: completed successfully" in pgbackrest_full_backup[-1]
+def test_pgbackrest_full_backup(pgbackrest_full_backup):
+    assert "expire command end: completed successfully" in pgbackrest_full_backup[-1]
 
 # def test_pgbackrest_restore(host, start_postgresql,get_psql_binary_path):
 #     start_postgresql

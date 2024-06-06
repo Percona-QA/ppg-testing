@@ -68,6 +68,9 @@
         archive_command = '/opt/pgdistro/percona-pgbackrest/bin/pgbackrest --stanza=testing archive-push %p'
         max_wal_senders = 10
         wal_level = logical
+        logging_collector = on
+        log_directory = pg_log
+        log_filename = postgresql-main.log
 
   - name: Restart Postgres
     become: true
