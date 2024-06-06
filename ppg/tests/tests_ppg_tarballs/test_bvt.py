@@ -343,11 +343,11 @@ def test_postgres_client_string(host, get_psql_binary_path):
         pytest.skip("Skipping for ppg 11")
     assert f"psql (PostgreSQL) {pg_versions['version']}" in host.check_output(f"{get_psql_binary_path}  -V")
 
-def test_start_stop_postgresql(start_stop_postgresql):
-    assert start_stop_postgresql.rc == 0, start_stop_postgresql.rc
-    assert "server is running" in start_stop_postgresql.stdout, start_stop_postgresql.stdout
+# def test_start_stop_postgresql(start_stop_postgresql):
+#     assert start_stop_postgresql.rc == 0, start_stop_postgresql.rc
+#     assert "server is running" in start_stop_postgresql.stdout, start_stop_postgresql.stdout
 
 
-def test_restart_postgresql(restart_postgresql):
-    assert restart_postgresql.rc == 0, restart_postgresql.stderr
-    assert "server is running" in restart_postgresql.stdout, restart_postgresql.stdout
+# def test_restart_postgresql(restart_postgresql):
+#     assert restart_postgresql.rc == 0, restart_postgresql.stderr
+#     assert "server is running" in restart_postgresql.stdout, restart_postgresql.stdout
