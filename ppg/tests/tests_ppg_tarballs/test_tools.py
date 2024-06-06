@@ -13,7 +13,7 @@ INSTALL_PATH = os.path.join("/opt", INSTALL_FOLDER_NAME)
 USERNAME = "postgres"
 DBNAME = "postgres"
 PORT = "5432"
-DATA_DIR = "/usr/local/pgsql/data"
+DATA_DIR = f"/usr/local/pgsql/data{settings.MAJOR_VER}"
 PG_PATH = f"{INSTALL_PATH}/percona-postgresql{settings.MAJOR_VER}"
 
 pg_versions = settings.get_settings(os.environ['MOLECULE_SCENARIO_NAME'])[os.getenv("VERSION")]
@@ -536,3 +536,6 @@ def test_pg_gather_file_version(host,get_server_bin_path):
     result = host.run(f"head -5 {get_server_bin_path}/gather.sql | tail -1 | cut -d' ' -f3")
     assert result.rc == 0, result.stderr
     assert pg_versions["pg_gather"]['sql_file_version'] in result.stdout.strip("\n"), result.stdout
+
+def test_pgaudit(pgaudit):
+    assert "AUDIT" in pgaudit
