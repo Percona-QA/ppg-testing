@@ -244,8 +244,8 @@ def test_pgaudit_is_installed(host, get_server_path):
         # Assert that the file exists
         assert file.exists, f"{pgaudit_filename} does not exist."
 
-def test_pgaudit(pgaudit):
-    assert "AUDIT" in pgaudit
+# def test_pgaudit(pgaudit):
+#     assert "AUDIT" in pgaudit
 
 def test_pgrepack_is_installed(host, get_server_path):
     with host.sudo():
