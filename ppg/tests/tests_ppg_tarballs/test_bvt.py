@@ -341,7 +341,7 @@ def test_language(host,get_psql_binary_path, language):
 def test_postgres_client_string(host, get_psql_binary_path):
     if settings.MAJOR_VER in ["11"]:
         pytest.skip("Skipping for ppg 11")
-    assert f"{get_psql_binary_path} (PostgreSQL) {pg_versions['version']}" in host.check_output(f"{get_psql_binary_path}  -V")
+    assert f"psql (PostgreSQL) {pg_versions['version']}" in host.check_output(f"{get_psql_binary_path}  -V")
 
 def test_start_stop_postgresql(start_stop_postgresql):
     assert start_stop_postgresql.rc == 0, start_stop_postgresql.rc
