@@ -11,7 +11,7 @@ INSTALL_PATH = os.path.join("/opt", INSTALL_FOLDER_NAME)
 USERNAME = "postgres"
 DBNAME = "postgres"
 PORT = "5432"
-DATA_DIR = "/usr/local/pgsql/data"
+DATA_DIR = f"/usr/local/pgsql/data{settings.MAJOR_VER}"
 PG_PATH = f"{INSTALL_PATH}/percona-postgresql{settings.MAJOR_VER}"
 
 
@@ -174,22 +174,6 @@ def test_postgres_client_version(host, get_psql_binary_path):
     result = host.check_output(cmd)
     assert settings.MAJOR_VER in result.strip("\n"), result.stdout
 
-# @pytest.mark.upgrade
-# def test_postgres_client_string(host, get_psql_binary_path):
-#     if settings.MAJOR_VER in ["11"]:
-#         pytest.skip("Skipping for ppg 11")
-#     assert f"{get_psql_binary_path} (PostgreSQL) {pg_versions['version']}" in host.check_output(f"{get_psql_binary_path}  -V")
-
-# def test_start_stop_postgresql(start_stop_postgresql):
-#     assert start_stop_postgresql.rc == 0, start_stop_postgresql.rc
-#     assert "server is running" in start_stop_postgresql.stdout, start_stop_postgresql.stdout
-
-
-# def test_restart_postgresql(restart_postgresql):
-#     assert restart_postgresql.rc == 0, restart_postgresql.stderr
-#     assert "server is running" in restart_postgresql.stdout, restart_postgresql.stdout
-
-
 def test_insert_data(insert_data):
     assert insert_data == "100000", insert_data
 
@@ -223,10 +207,6 @@ def test_extenstions_list(extension_list, host, extension):
 @pytest.mark.parametrize("extension", EXTENSIONS)
 def test_enable_extension(host, get_psql_binary_path , extension):
     dist = host.system_info.distribution
-    # NEEDS MAUNAL VERIFICATION
-    # Disabling these extensions as failing in automated tests. Need to verify in future.
-    # if extension in ['pltcl','pltclu','plperl','plperlu']:
-    #     pytest.skip("Skipping extension " + extension + " for tests, these are passing in manual testing.")
     if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
         if extension in ['postgis_sfcgal','address_standardizer','postgis_tiger_geocoder','postgis',
         'postgis_topology','postgis_raster','address_standardizer_data_us']:
@@ -263,10 +243,6 @@ def test_enable_extension(host, get_psql_binary_path , extension):
 @pytest.mark.parametrize("extension", EXTENSIONS[::-1])
 def test_drop_extension(host,get_psql_binary_path, extension):
     dist = host.system_info.distribution
-    # NEEDS MAUNAL VERIFICATION
-    # Disabling these extensions as failing in automated tests. Need to verify in future.
-    # if extension in ['pltcl','pltclu','plperl','plperlu']:
-    #     pytest.skip("Skipping extension " + extension + " for tests, these are passing in manual testing.")
     if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
         if extension in ['postgis_sfcgal','address_standardizer','postgis_tiger_geocoder','postgis',
         'postgis_topology','postgis_raster','address_standardizer_data_us']:
@@ -338,10 +314,6 @@ def test_rpm_files(file, host):
 def test_language(host,get_psql_binary_path, language):
     deb_dists = ['debian', 'ubuntu']
     rpm_dists = ["redhat", "centos", "rhel", "ol"]
-    # NEEDS MAUNAL VERIFICATION
-    # Disabling these language as failing in automated tests. Need to verify in future.
-    # if language in ['pltcl','pltclu','plperl','plperlu']:
-    #     pytest.skip("Skipping language " + language + " for tests, these are passing in manual testing.")
     dist = host.system_info.distribution
     with host.sudo("postgres"):
         # if dist.lower() in ["redhat", "centos", "rhel", "ol"]:
@@ -364,3 +336,18 @@ def test_language(host,get_psql_binary_path, language):
             drop_lang = host.run(get_psql_binary_path + " -c 'DROP EXTENSION if exists {};'".format(language))
             assert drop_lang.rc == 0, drop_lang.stderr
             assert drop_lang.stdout.strip("\n") in ["DROP LANGUAGE", "DROP EXTENSION"], lang.stdout
+
+@pytest.mark.upgrade
+def test_postgres_client_string(host, get_psql_binary_path):
+    if settings.MAJOR_VER in ["11"]:
+        pytest.skip("Skipping for ppg 11")
+    assert f"{get_psql_binary_path} (PostgreSQL) {pg_versions['version']}" in host.check_output(f"{get_psql_binary_path}  -V")
+
+def test_start_stop_postgresql(start_stop_postgresql):
+    assert start_stop_postgresql.rc == 0, start_stop_postgresql.rc
+    assert "server is running" in start_stop_postgresql.stdout, start_stop_postgresql.stdout
+
+
+def test_restart_postgresql(restart_postgresql):
+    assert restart_postgresql.rc == 0, restart_postgresql.stderr
+    assert "server is running" in restart_postgresql.stdout, restart_postgresql.stdout

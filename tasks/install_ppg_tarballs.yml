@@ -101,36 +101,36 @@
     register: missing_deps
     ignore_errors: yes
 
-  - name: Display missing dependencies (if any)
-    debug:
-      msg: "{{ missing_deps.stdout_lines }}"
+  # - name: Display missing dependencies (if any)
+  #   debug:
+  #     msg: "{{ missing_deps.stdout_lines }}"
 
-  - name: Run tasks only on Debian systems
-    block:
-      - name: Find libreadline library
-        find:
-          paths: /lib/x86_64-linux-gnu/
-          patterns: "libreadline.so*"
-        register: readline_libs
+  # - name: Run tasks only on Debian systems
+  #   block:
+  #     - name: Find libreadline library
+  #       find:
+  #         paths: /lib/x86_64-linux-gnu/
+  #         patterns: "libreadline.so*"
+  #       register: readline_libs
 
-      - name: Debug found libraries
-        debug:
-          var: readline_libs.files
+  #     - name: Debug found libraries
+  #       debug:
+  #         var: readline_libs.files
 
-      - name: Set the destination directory
-        set_fact:
-          destination_dir: "{{ dest_dir }}/percona-postgresql{{major_version}}/lib"
+  #     - name: Set the destination directory
+  #       set_fact:
+  #         destination_dir: "{{ dest_dir }}/percona-postgresql{{major_version}}/lib"
 
-      - name: Select the first found libreadline
-        set_fact:
-          selected_libreadline: "{{ readline_libs.files[0].path }}"
-        when: readline_libs.matched > 0
+  #     - name: Select the first found libreadline
+  #       set_fact:
+  #         selected_libreadline: "{{ readline_libs.files[0].path }}"
+  #       when: readline_libs.matched > 0
 
-      - name: Create symbolic link
-        file:
-          src: "{{ selected_libreadline }}"
-          dest: "{{ destination_dir }}/libreadline.so.7"
-          state: link
-        when: selected_libreadline is defined
-        #notify: Symlink created
-    when: ansible_facts['os_family'] == 'Debian'
+  #     - name: Create symbolic link
+  #       file:
+  #         src: "{{ selected_libreadline }}"
+  #         dest: "{{ destination_dir }}/libreadline.so.7"
+  #         state: link
+  #       when: selected_libreadline is defined
+  #       #notify: Symlink created
+  #   when: ansible_facts['os_family'] == 'Debian'

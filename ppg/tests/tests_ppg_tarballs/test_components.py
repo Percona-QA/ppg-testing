@@ -115,8 +115,6 @@ def test_deb_package_is_installed(host, get_server_path, package):
         # Assert that the file exists
         assert file.exists, f"{package} does not exist."
 
-# NEEDS MAUNAL VERIFICATION
-# Disabling these as failing in automated tests. Need to verify in future.
 def test_perl_function(host, perl_function,get_psql_binary_path):
     _ = perl_function
     with host.sudo("postgres"):

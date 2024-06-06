@@ -336,7 +336,6 @@ def test_patroni_is_installed(host):
         assert binary.exists, f"{patroni_bin} does not exist."
         assert binary.is_file, f"{patroni_bin} is not a file."
 
-# NEEDS MAUNAL VERIFICATION
 def test_patroni_version(patroni_version):
     assert patroni_version.rc == 0, patroni_version.stderr
     assert patroni_version.stdout.strip("\n") == pg_versions['patroni']['binary_version']
@@ -444,16 +443,17 @@ def test_set_user_is_installed(host, get_server_path):
         for file_name in files:
             file = host.file(file_name)
             assert file.exists, f"{file_name} does not exist."
+
 # Need to update etcd.py file for binary_version
-# def test_etcd_binary_version(host):
-#     with host.sudo():
-#         etcd_bin_path = os.path.join(INSTALL_PATH, 'percona-etcd','bin')
-#         binary_name = 'etcd'
-#         binary = host.file(f"{etcd_bin_path}/{binary_name}")
-#         assert binary.exists, f"{binary} does not exist."
-#         result = host.run(f"{etcd_bin_path}/{binary_name} --version")
-#         assert result.rc == 0, result.stderr
-#         assert pg_versions[binary_name]['binary_version'] in result.stdout.strip("\n"), result.stdout
+def test_etcd_binary_version(host):
+    with host.sudo():
+        etcd_bin_path = os.path.join(INSTALL_PATH, 'percona-etcd','bin')
+        binary_name = 'etcd'
+        binary = host.file(f"{etcd_bin_path}/{binary_name}")
+        assert binary.exists, f"{binary} does not exist."
+        result = host.run(f"{etcd_bin_path}/{binary_name} --version")
+        assert result.rc == 0, result.stderr
+        assert pg_versions[binary_name]['binary_version'] in result.stdout.strip("\n"), result.stdout
 
 def test_pgbouncer_binary_version(host):
     with host.sudo():   
