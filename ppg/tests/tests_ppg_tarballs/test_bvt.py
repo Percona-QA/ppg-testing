@@ -51,7 +51,6 @@ def get_server_bin_path(scope='session'):
 @pytest.fixture(scope='session')
 def get_psql_binary_path(scope='session'):
     server_path=os.path.join(PG_PATH,'bin','psql')
-    print('PSQL Binary Path: ' + server_path)
     return server_path
 
 @pytest.fixture(scope='session')
@@ -70,7 +69,6 @@ def start_stop_postgresql(host,get_server_bin_path):
         result = host.run(cmd)
         assert result.rc == 0
         cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} status"
-        assert result.rc == 0
         return host.run(cmd)
 
 @pytest.fixture()

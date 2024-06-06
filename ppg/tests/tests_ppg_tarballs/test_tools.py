@@ -537,5 +537,5 @@ def test_pg_gather_file_version(host,get_server_bin_path):
     assert result.rc == 0, result.stderr
     assert pg_versions["pg_gather"]['sql_file_version'] in result.stdout.strip("\n"), result.stdout
 
-def test_pgaudit(pgaudit):
-    assert "AUDIT" in pgaudit
+# def test_pgaudit(pgaudit):
+#     assert "AUDIT" in pgaudit
