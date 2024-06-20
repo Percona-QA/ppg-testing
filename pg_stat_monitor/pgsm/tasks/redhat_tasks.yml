@@ -68,6 +68,7 @@
       - percona-postgresql{{ postgres_version }}-pltcl
       - percona-postgresql{{ postgres_version }}-server
       - percona-postgresql{{ postgres_version }}-test
+      - percona-postgresql{{ postgres_version }}-llvmjit
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
@@ -221,6 +222,19 @@
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     when: ansible_distribution_major_version == "8"
+
+  - name: LLVM Version
+    command: llvm-config --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
 
   - name: Clone pg_stat_monitor sources
     git:
