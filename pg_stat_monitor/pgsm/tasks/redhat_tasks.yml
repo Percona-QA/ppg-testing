@@ -12,25 +12,6 @@
       update_cache: yes
       state: present
 
-  - name: Setup additional yum packages
-    yum:
-      name: "{{ packages }}"
-      update_cache: yes
-      state: present
-    vars:
-      packages:
-        - yum-utils
-        - centos-release-scl
-    when: ansible_distribution_major_version == "7"
-
-  - name: setup devtoolset-7-gcc
-    yum:
-      name: devtoolset-7-gcc*
-      update_cache: yes
-      enablerepo: centos-sclo-rh-testing
-      state: present
-    when: ansible_distribution_major_version == "7"
-
   - name: Clean dnf RHEL8
     become: true
     command: dnf clean all -y
@@ -175,16 +156,64 @@
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
+  - name: LLVM Version
+    command: llvm-config --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
   - name: Install Development tools
     become: true
     command: yum -y groupinstall "Development tools"
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
+  - name: LLVM Version
+    command: llvm-config --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
   - name: Enable llvm-toolset dnf module for RHEL8
     become: true
     command: dnf module enable llvm-toolset -y
     when: ansible_distribution_major_version == "8"
+
+  - name: LLVM Version
+    command: llvm-config --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
 
   - name: Install llvm-toolset
     become: true
