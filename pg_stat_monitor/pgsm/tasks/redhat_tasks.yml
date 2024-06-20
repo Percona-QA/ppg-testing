@@ -1,4 +1,15 @@
 ---
+  - name: Setting facts so that they will be persisted in the fact cache
+    ansible.builtin.set_fact:
+      pgaudit_rhel_package_name: "percona-pgaudit{{ major_version }}"
+      postgis_rhel_package_name_prefix: "percona-postgis33_{{ major_version }}"
+
+  - debug:
+      msg: "Value of pgaudit_rhel_package_name is : {{ pgaudit_rhel_package_name }}"
+
+  - debug:
+      msg: "Value of postgis_rhel_package_name_prefix is : {{ postgis_rhel_package_name_prefix }}"
+
   - name: setup epel release
     yum:
       name: epel-release
@@ -45,7 +56,7 @@
     when: ansible_distribution_major_version == "8"
 
   - name: Install perl-CPAN and perl-App-cpanminus on Red Hat
-    become: yes
+    become: true
     yum:
       name: "{{ item }}"
       state: present
@@ -80,6 +91,69 @@
       - percona-postgresql{{ postgres_version }}-pltcl
       - percona-postgresql{{ postgres_version }}-server
       - percona-postgresql{{ postgres_version }}-test
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install pgaudit RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - {{ pgaudit_rhel_package_name }}
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install set_user RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-pgaudit{{ postgres_version }}_set_user
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install pgrepack RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-pg_repack{{ postgres_version }}
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Enable llvm-toolset for RHEL8 to install PostGIS
+    become: true
+    command: dnf module enable llvm-toolset -y
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install percona-postgis RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - "{{postgis_rhel_package_name_prefix}}"
+      - "{{postgis_rhel_package_name_prefix}}-client"
+      - "{{postgis_rhel_package_name_prefix}}-client-debuginfo"
+      - "{{postgis_rhel_package_name_prefix}}-debuginfo"
+      - "{{postgis_rhel_package_name_prefix}}-devel"
+      - "{{postgis_rhel_package_name_prefix}}-docs"
+      - "{{postgis_rhel_package_name_prefix}}-gui"
+      - "{{postgis_rhel_package_name_prefix}}-gui-debuginfo"
+      - "{{postgis_rhel_package_name_prefix}}-llvmjit"
+      - "{{postgis_rhel_package_name_prefix}}-utils"
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
