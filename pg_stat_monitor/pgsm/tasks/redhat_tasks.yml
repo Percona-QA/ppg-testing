@@ -1,11 +1,7 @@
 ---
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
-      pgaudit_rhel_package_name: "percona-pgaudit{{ major_version }}"
       postgis_rhel_package_name_prefix: "percona-postgis33_{{ major_version }}"
-
-  - debug:
-      msg: "Value of pgaudit_rhel_package_name is : {{ pgaudit_rhel_package_name }}"
 
   - debug:
       msg: "Value of postgis_rhel_package_name_prefix is : {{ postgis_rhel_package_name_prefix }}"
@@ -102,7 +98,7 @@
     vars:
       postgres_version: "{{ major_version }}"
       packages:
-      - {{ pgaudit_rhel_package_name }}
+      - percona-pgaudit{{ postgres_version }}
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
