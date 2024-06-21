@@ -141,9 +141,34 @@
       - percona-postgresql{{ postgres_version }}-pltcl
       - percona-postgresql{{ postgres_version }}-server
       - percona-postgresql{{ postgres_version }}-test
-      # - percona-postgresql{{ postgres_version }}-llvmjit
+      - percona-postgresql{{ postgres_version }}-llvmjit
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+    when: ansible_distribution_major_version == "8"
+
+  - name: install Percona Platform for PostgreSQL rpm packages for RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-postgresql-client-common
+      - percona-postgresql-common
+      - percona-postgresql-server-dev-all
+      - percona-postgresql{{ postgres_version }}
+      - percona-postgresql{{ postgres_version }}-contrib
+      - percona-postgresql{{ postgres_version }}-devel
+      - percona-postgresql{{ postgres_version }}-libs
+      - percona-postgresql{{ postgres_version }}-plperl
+      - percona-postgresql{{ postgres_version }}-plpython3
+      - percona-postgresql{{ postgres_version }}-pltcl
+      - percona-postgresql{{ postgres_version }}-server
+      - percona-postgresql{{ postgres_version }}-test
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+    when: ansible_distribution_major_version == "9"
 
   - name: Install pgaudit RHEL
     yum:
