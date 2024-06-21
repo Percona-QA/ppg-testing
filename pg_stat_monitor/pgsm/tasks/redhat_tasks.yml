@@ -141,7 +141,7 @@
       - percona-postgresql{{ postgres_version }}-pltcl
       - percona-postgresql{{ postgres_version }}-server
       - percona-postgresql{{ postgres_version }}-test
-      - percona-postgresql{{ postgres_version }}-llvmjit
+      # - percona-postgresql{{ postgres_version }}-llvmjit
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
