@@ -93,10 +93,17 @@
 
   - name: Install llvm-toolset
     become: true
-    command: yum install -y llvm-toolset-16.0.6
+    command: yum install -y llvm-toolset clang-devel clang
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     when: ansible_distribution_major_version == "8"
+
+  - name: Install clang clang-devel on RHEL 9
+    become: true
+    command: yum install -y clang-devel clang
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_distribution_major_version == "9"
 
   - name: LLVM Version
     command: llvm-config --version
