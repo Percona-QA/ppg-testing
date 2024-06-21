@@ -48,6 +48,72 @@
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
+  - name: LLVM Version
+    command: llvm-config --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Install Development tools
+    become: true
+    command: yum -y groupinstall "Development tools"
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+  - name: LLVM Version
+    command: llvm-config --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Enable llvm-toolset dnf module for RHEL8
+    become: true
+    command: dnf module enable llvm-toolset -y
+    when: ansible_distribution_major_version == "8"
+
+  - name: Install llvm-toolset
+    become: true
+    command: yum install -y llvm-toolset-16.0.6
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_distribution_major_version == "8"
+
+  - name: LLVM Version
+    command: llvm-config --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
   - name: install Percona Platform for PostgreSQL rpm packages for RHEL
     yum:
       name: "{{ packages }}"
@@ -108,11 +174,6 @@
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-  - name: Enable llvm-toolset for RHEL8 to install PostGIS
-    become: true
-    command: dnf module enable llvm-toolset -y
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
-
   - name: Install percona-postgis RHEL
     yum:
       name: "{{ packages }}"
@@ -156,72 +217,6 @@
     command: /usr/pgsql-{{ major_version }}/bin/postgresql-{{ major_version }}-setup initdb
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
-  - name: LLVM Version
-    command: llvm-config --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: CLANG Version
-    command: clang --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: Install Development tools
-    become: true
-    command: yum -y groupinstall "Development tools"
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
-  - name: LLVM Version
-    command: llvm-config --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: CLANG Version
-    command: clang --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: Enable llvm-toolset dnf module for RHEL8
-    become: true
-    command: dnf module enable llvm-toolset -y
-    when: ansible_distribution_major_version == "8"
-
-  - name: LLVM Version
-    command: llvm-config --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: CLANG Version
-    command: clang --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: Install llvm-toolset
-    become: true
-    command: yum install -y llvm-toolset
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    when: ansible_distribution_major_version == "8"
 
   - name: LLVM Version
     command: llvm-config --version
