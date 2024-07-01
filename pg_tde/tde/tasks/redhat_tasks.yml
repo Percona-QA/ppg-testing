@@ -145,7 +145,7 @@
       update_cache: yes
     vars:
       packages:
-        - percona-pg_tde{ major_version }}
+        - percona-pg_tde_{ major_version }}
     when: use_package_install
 
   - name: Add extensions to postgresql.conf for RHEL
