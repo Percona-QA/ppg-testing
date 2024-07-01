@@ -162,6 +162,12 @@
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
     when: ansible_distribution_major_version == "9"
 
+  - name: Initialize Postgres RHEL
+    become: true
+    command: /usr/pgsql-{{ major_version }}/bin/postgresql-{{ major_version }}-setup initdb
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
   - name: Install pgaudit RHEL
     yum:
       name: "{{ packages }}"
