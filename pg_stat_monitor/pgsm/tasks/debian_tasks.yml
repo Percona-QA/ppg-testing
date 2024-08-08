@@ -48,6 +48,61 @@
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
+  - name: Install pgaudit Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+        - percona-postgresql-{{ postgres_version }}-pgaudit
+        - percona-postgresql-{{ postgres_version }}-pgaudit-dbgsym
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install percona-pgaudit{{ postgres_version }}_set_user Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+        - percona-pgaudit{{ postgres_version }}-set-user
+        - percona-pgaudit{{ postgres_version }}-set-user-dbgsym
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install pgrepack Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+        - percona-postgresql-{{ postgres_version }}-repack
+        - percona-postgresql-{{ postgres_version }}-repack-dbgsym
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install percona-postgis Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+        - percona-postgresql-{{ postgres_version }}-postgis-3
+        - percona-postgresql-{{ postgres_version }}-postgis-3-scripts
+        - percona-postgresql-postgis-scripts
+        - percona-postgresql-postgis
+        - percona-postgis
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
   - name: Clone pg_stat_monitor sources
     git:
       repo: "{{ repo }}"
