@@ -101,21 +101,20 @@
     when: not with_tde_heap
 
   - name: Configure Postgres/PDP from sources
-    shell: >
-    ./configure '--build=x86_64-linux-gnu' '--prefix=/opt/pgsql' '--enable-depend' 
-     '--enable-cassert' '--enable-coverage' '--with-icu' '--with-tcl' '--with-perl' 
-     '--with-python' '--with-pam' '--with-openssl' '--with-libxml' '--with-libxslt' 
-     '--libdir=/opt/pgsql/lib' 'PYTHON=/usr/bin/python3' '--with-extra-version= Percona Distribution' 
-     '--enable-nls' '--enable-thread-safety' '--enable-tap-tests' '--enable-debug' 
-     '--enable-dtrace' '--disable-rpath' '--with-uuid=e2fs' '--with-gnu-ld' 
-     '--with-pgport=5432' '--with-system-tzdata=/usr/share/zoneinfo' '--with-llvm' 
-     'LLVM_CONFIG=/usr/bin/llvm-config' 'CLANG=/usr/bin/clang' '--with-systemd' 
-     '--with-selinux' 'MKDIR_P=/bin/mkdir -p' 'PROVE=/usr/bin/prove' 'TAR=/bin/tar' 
-     'XSLTPROC=xsltproc --nonet' 
-     'CFLAGS=-g -O2 -fstack-protector-strong -Wformat -Werror=format-security -fno-omit-frame-pointer' 
-     'LDFLAGS=-Wl,-Bsymbolic-functions -Wl,-z,relro -Wl,-z,now' 
-     '--with-gssapi' '--with-ldap' 'build_alias=x86_64-linux-gnu' 
-     'CPPFLAGS=-Wdate-time -D_FORTIFY_SOURCE=2' 
+    shell: ./configure '--build=x86_64-linux-gnu' '--prefix=/opt/pgsql' '--enable-depend' \
+     '--enable-cassert' '--enable-coverage' '--with-icu' '--with-tcl' '--with-perl' \
+     '--with-python' '--with-pam' '--with-openssl' '--with-libxml' '--with-libxslt' \
+     '--libdir=/opt/pgsql/lib' 'PYTHON=/usr/bin/python3' '--with-extra-version= Percona Distribution' \
+     '--enable-nls' '--enable-thread-safety' '--enable-tap-tests' '--enable-debug' \
+     '--enable-dtrace' '--disable-rpath' '--with-uuid=e2fs' '--with-gnu-ld' \
+     '--with-pgport=5432' '--with-system-tzdata=/usr/share/zoneinfo' '--with-llvm' \
+     'LLVM_CONFIG=/usr/bin/llvm-config' 'CLANG=/usr/bin/clang' '--with-systemd' \
+     '--with-selinux' 'MKDIR_P=/bin/mkdir -p' 'PROVE=/usr/bin/prove' 'TAR=/bin/tar' \
+     'XSLTPROC=xsltproc --nonet' \
+     'CFLAGS=-g -O2 -fstack-protector-strong -Wformat -Werror=format-security -fno-omit-frame-pointer' \
+     'LDFLAGS=-Wl,-Bsymbolic-functions -Wl,-z,relro -Wl,-z,now' \
+     '--with-gssapi' '--with-ldap' 'build_alias=x86_64-linux-gnu' \
+     'CPPFLAGS=-Wdate-time -D_FORTIFY_SOURCE=2' \
      'CXXFLAGS=-g -O2 -fstack-protector-strong -Wformat -Werror=format-security'
     chdir: "/tmp/postgres"
     become_user: postgres
