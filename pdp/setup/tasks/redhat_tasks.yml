@@ -1,0 +1,189 @@
+---
+  - name: setup epel release
+    yum:
+      name: epel-release
+      update_cache: yes
+      state: present
+
+  - name: Clean dnf RHEL8
+    become: true
+    command: dnf clean all -y
+    when: ansible_distribution_major_version == "8"
+
+  - name: Install oracle-epel-release-el8 package
+    ansible.builtin.dnf:
+      name: oracle-epel-release-el8
+      state: present
+    when: ansible_facts['distribution'] == "OracleLinux" and ansible_facts['distribution_major_version'] == "8"
+
+  - name: Enable ol8_codeready_builder on oracle linux 8
+    become: true
+    command: dnf config-manager --set-enabled ol8_codeready_builder
+    when: ansible_distribution_major_version == "8"
+
+  - name: Enable ol9_codeready_builder on oracle linux 9
+    become: true
+    command: dnf config-manager --set-enabled ol9_codeready_builder
+    when: ansible_distribution_major_version == "9"    
+
+  - name: Disable dnf module for RHEL8
+    become: true
+    command: dnf module disable postgresql -y
+    when: ansible_distribution_major_version == "8"
+
+  - name: Install perl-CPAN and perl-App-cpanminus on Red Hat
+    become: true
+    yum:
+      name: "{{ item }}"
+      state: present
+    loop:
+      - perl-CPAN
+      - perl-App-cpanminus
+      - perl-IPC-Run
+
+  - name: Install perl module Text::Trim
+    become: true
+    command: cpanm Text::Trim
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+  - name: LLVM Version
+    command: llvm-config --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Install Development tools
+    become: true
+    command: yum -y groupinstall "Development tools"
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+  - name: LLVM Version
+    command: llvm-config --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Enable llvm-toolset dnf module for RHEL8
+    become: true
+    command: dnf module enable llvm-toolset -y
+    when: ansible_distribution_major_version == "8"
+
+  - name: Install llvm-toolset
+    become: true
+    command: yum install -y llvm-toolset clang-devel clang
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_distribution_major_version == "8"
+
+  - name: Install clang clang-devel on RHEL 9
+    become: true
+    command: yum install -y clang-devel clang
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_distribution_major_version == "9"
+
+  - name: LLVM Version
+    command: llvm-config --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: install Percona Platform for PostgreSQL rpm packages for RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-postgresql-client-common
+      - percona-postgresql-common
+      - percona-postgresql-server-dev-all
+      - percona-postgresql{{ postgres_version }}
+      - percona-postgresql{{ postgres_version }}-contrib
+      - percona-postgresql{{ postgres_version }}-devel
+      - percona-postgresql{{ postgres_version }}-libs
+      - percona-postgresql{{ postgres_version }}-plperl
+      - percona-postgresql{{ postgres_version }}-plpython3
+      - percona-postgresql{{ postgres_version }}-pltcl
+      - percona-postgresql{{ postgres_version }}-server
+      - percona-postgresql{{ postgres_version }}-test
+      - percona-postgresql{{ postgres_version }}-llvmjit
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+    when: ansible_distribution_major_version == "8"
+
+
+  - name: LLVM Version
+    command: llvm-config --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
+
+  - name: Clone Postgres/PDP sources
+    git:
+      repo: "{{ repo }}"
+      version: "{{ version }}"
+      dest: /tmp/postgres
+    vars:
+      repo: "{{ lookup('env', 'PDP_REPO') }}"
+      version: "{{ lookup('env', 'PDP_BRANCH') }}"
+    become_user: postgres
+
+  - name: Build Postgres/PDP from sources
+    make:
+      chdir: "/tmp/postgres"
+      params:
+        USE_PGXS: 1
+
+  - name: Install Postgres/PDP from sources
+    make:
+      target: install
+      chdir: "/tmp/postgres"
+      params:
+        USE_PGXS: 1
+    when: not use_package_install
+
+  # - name: Add extensions to postgresql.conf for RHEL
+  #   lineinfile:
+  #     path: /var/lib/pgsql/{{ major_version }}/data/postgresql.conf
+  #     line: shared_preload_libraries = 'pg_stat_monitor'
