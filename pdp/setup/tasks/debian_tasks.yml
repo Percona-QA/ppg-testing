@@ -174,7 +174,7 @@
       chdir: "/tmp/postgres"
       target: installcheck
     environment:
-    PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"  
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"  
     when: testsuite == 'installcheck'
 
   # - name: Add extensions to postgresql.conf for Debian
