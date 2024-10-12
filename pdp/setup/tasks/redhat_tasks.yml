@@ -21,15 +21,25 @@
     command: dnf config-manager --set-enabled ol8_codeready_builder
     when: ansible_distribution_major_version == "8"
 
+  - name: Add the user 'postgres'
+    ansible.builtin.user:
+      name: postgres
+      shell: /bin/bash
+      uid: 1040
+      group: admin
+
+  - name: Creates directory
+    ansible.builtin.file:
+      path: /opt/pgsql
+      state: directory
+      owner: postgres
+      group: postgres
+      mode: 0775      
+
   - name: Enable ol9_codeready_builder on oracle linux 9
     become: true
     command: dnf config-manager --set-enabled ol9_codeready_builder
     when: ansible_distribution_major_version == "9"    
-
-  - name: Disable dnf module for RHEL8
-    become: true
-    command: dnf module disable postgresql -y
-    when: ansible_distribution_major_version == "8"
 
   - name: Install perl-CPAN and perl-App-cpanminus on Red Hat
     become: true
@@ -120,31 +130,66 @@
   - debug:
       var: results.stdout
 
-  - name: install Percona Platform for PostgreSQL rpm packages for RHEL
+  - name: install tools
     yum:
       name: "{{ packages }}"
       state: latest
       update_cache: yes
     vars:
-      postgres_version: "{{ major_version }}"
       packages:
-      - percona-postgresql-client-common
-      - percona-postgresql-common
-      - percona-postgresql-server-dev-all
-      - percona-postgresql{{ postgres_version }}
-      - percona-postgresql{{ postgres_version }}-contrib
-      - percona-postgresql{{ postgres_version }}-devel
-      - percona-postgresql{{ postgres_version }}-libs
-      - percona-postgresql{{ postgres_version }}-plperl
-      - percona-postgresql{{ postgres_version }}-plpython3
-      - percona-postgresql{{ postgres_version }}-pltcl
-      - percona-postgresql{{ postgres_version }}-server
-      - percona-postgresql{{ postgres_version }}-test
-      - percona-postgresql{{ postgres_version }}-llvmjit
-    environment:
-      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+      - clang
+      - zlib-devel
+      - readline-devel
+      - gcc
+      - lz4
+      - lz4-devel
+      - python3
+      - krb5-devel
+      - openssl-devel
+      - pam-devel
+      - libxml2-devel
+      - libxslt-devel
+      - openldap-devel
+      - libuuid-devel
+      - systemd-devel
+      - tcl-devel
+      - python3-devel
+      - libicu-devel
+      - libzstd
+      - libzstd-devel
+      - llvm
+      - llvm-toolset
+      - llvm-devel
+      - libzstd-devel
+      - systemtap-sdt-devel
+      - vim
+      - git
+      - perl-ExtUtils*
+      - docbook-xsl
+      - perl-IPC-Run
+      - perl-Test-Simple
+      - prename
+      - perl-CPAN
+      - lcov
+      - libcurl-devel
+      - perl-App-cpanminus
     when: ansible_distribution_major_version == "8"
 
+  - name: Install perl Text-trim
+    command: cpanm Text::Trim
+    ignore_errors: true
+    register: results
+
+  - name: install perl modules for rhel 9
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - perl-FindBin
+      - perl-Opcode
+    when: ansible_distribution_major_version == "9"
 
   - name: LLVM Version
     command: llvm-config --version
@@ -159,29 +204,108 @@
     ignore_errors: true
     register: results
 
-  - name: Clone Postgres/PDP sources
+  - name: Clone Postgres/PDP sources with pg_tde
     git:
       repo: "{{ repo }}"
       version: "{{ version }}"
-      dest: /tmp/postgres
+      dest: /tmp/
+      track_submodules: true
     vars:
       repo: "{{ lookup('env', 'PDP_REPO') }}"
       version: "{{ lookup('env', 'PDP_BRANCH') }}"
     become_user: postgres
+    when: with_tde_heap
+
+  - name: Configure pg_tde from sources without pg_tde 
+    command: ./configure 
+    chdir: /tmp/postgres/contrib/pg_tde
+    become_user: postgres
+    when: with_tde_heap
+
+  - name: Clone Postgres/PDP sources
+    git:
+      repo: "{{ repo }}"
+      version: "{{ version }}"
+      dest: /tmp/
+    vars:
+      repo: "{{ lookup('env', 'PDP_REPO') }}"
+      version: "{{ lookup('env', 'PDP_BRANCH') }}"
+    become_user: postgres
+    when: not with_tde_heap
+
+  - name: Remove pg_tde from source tree contrib/pg_tde
+    command: rm -fr contrib/pg_tde*
+    chdir: /tmp/postgres
+    when: not with_tde_heap
+
+  - name: Configure Postgres/PDP from sources
+    command: "./configure '--enable-rpath' '--prefix=/opt/pgsql' '--enable-tap-tests' '--enable-depend' \
+     '--includedir=/opt/pgsql/include' '--mandir=/opt/pgsql/share/man' '--datadir=/opt/pgsql/share' \
+     '--libdir=/opt/pgsql/lib' '--with-lz4' '--with-extra-version= - Percona Distribution' '--with-zstd' \
+     '--with-icu' '--with-llvm' '--with-perl' '--with-python' '--with-tcl' '--with-tclconfig=/usr/lib64' \
+     '--with-openssl' '--with-pam' '--with-gssapi' '--with-includes=/usr/include' '--with-libraries=/usr/lib64' \
+     '--enable-nls' '--enable-dtrace' '--with-uuid=e2fs' '--with-libxml' '--with-libxslt' '--with-ldap' \
+     '--with-selinux' '--with-systemd' '--with-system-tzdata=/usr/share/zoneinfo' '--sysconfdir=/etc/sysconfig/pgsql' \
+     'CFLAGS=-O2 -g -pipe -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fexceptions -fstack-protector-strong -grecord-gcc-switches -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1 -m64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection' \
+     'LDFLAGS=-Wl,--as-needed' 'LLVM_CONFIG=/usr/bin/llvm-config' 'CLANG=/usr/bin/clang' \
+     'PKG_CONFIG_PATH=:/usr/lib64/pkgconfig:/usr/share/pkgconfig' 'PYTHON=/usr/bin/python3'" 
+    chdir: "/tmp/postgres"
+    become_user: postgres
+
+  - name: Build Postgres/PDP (world) from sources
+    make:
+      chdir: "/tmp/postgres"
+      jobs: 4 
+      target: world
+    become_user: postgres 
+    when: testsuite == 'installcheck-world'
+
+  - name: Install Postgres/PDP (install-world) from build binaries
+    make:
+      chdir: "/tmp/postgres"
+      target: install-world 
+    when: testsuite == 'installcheck-world'
 
   - name: Build Postgres/PDP from sources
     make:
       chdir: "/tmp/postgres"
-      params:
-        USE_PGXS: 1
+      jobs: 4
+    become_user: postgres 
+    when: testsuite == 'installcheck'
 
-  - name: Install Postgres/PDP from sources
+  - name: Install Postgres/PDP (install only) from build binaries
     make:
-      target: install
       chdir: "/tmp/postgres"
-      params:
-        USE_PGXS: 1
-    when: not use_package_install
+      target: install 
+    when: testsuite == 'installcheck'
+
+  - name: Copy pg_config to /usr/bin
+    become: true 
+    command: sudo cp /opt/pgsql/bin/pg_config /usr/bin
+      initdb -D /opt/pgsql/data
+      pg_ctl -D /opt/pgsql/data -l logfile start
+
+  - name: initdb cluster
+    command: initdb -D /opt/pgsql/data
+    chdir: "/opt/pgsql/bin"
+
+  - name: initdb cluster
+    command: pg_ctl -D /opt/pgsql/data -l logfile start
+    chdir: "/opt/pgsql/bin"
+  
+  - name: Run installcheck-world
+    make:
+      chdir: "/tmp/postgres"
+      target: installcheck-world 
+    when: testsuite == 'installcheck-world'
+
+  - name: Run installcheck
+    make:
+      chdir: "/tmp/postgres"
+      target: installcheck
+    environment:
+    PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"  
+    when: testsuite == 'installcheck'
 
   # - name: Add extensions to postgresql.conf for RHEL
   #   lineinfile:

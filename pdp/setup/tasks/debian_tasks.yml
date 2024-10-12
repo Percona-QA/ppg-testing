@@ -43,13 +43,13 @@
         - git
 
   - name: Install rename
-    commmand: sudo DEBIAN_FRONTEND=noninteractive apt install -y rename
+    ansible.builtin.shell: sudo DEBIAN_FRONTEND=noninteractive apt install -y rename
   
   - name: Install IPC::RUN
-    commmand: yes | sudo /usr/bin/perl -MCPAN -e 'install IPC::RUN'
+    ansible.builtin.shell: yes | sudo /usr/bin/perl -MCPAN -e 'install IPC::RUN'
 
   - name: Install Text::Trim
-    commmand: yes | sudo /usr/bin/perl -MCPAN -e 'install Text::Trim'
+    ansible.builtin.shell: yes | sudo /usr/bin/perl -MCPAN -e 'install Text::Trim'
 
   - name: Add the user 'postgres'
     ansible.builtin.user:
@@ -130,7 +130,6 @@
   - name: Install Postgres/PDP (install-world) from build binaries
     make:
       chdir: "/tmp/postgres"
-      jobs: 4 
       target: install-world 
     when: testsuite == 'installcheck-world'
 
@@ -144,7 +143,6 @@
   - name: Install Postgres/PDP (install only) from build binaries
     make:
       chdir: "/tmp/postgres"
-      jobs: 4 
       target: install 
     when: testsuite == 'installcheck'
 
