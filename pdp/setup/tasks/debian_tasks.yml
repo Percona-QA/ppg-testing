@@ -70,7 +70,7 @@
     git:
       repo: "{{ repo }}"
       version: "{{ version }}"
-      dest: /tmp/
+      dest: /tmp/postgres
       track_submodules: true
     vars:
       repo: "{{ lookup('env', 'PDP_REPO') }}"
@@ -89,7 +89,7 @@
     git:
       repo: "{{ repo }}"
       version: "{{ version }}"
-      dest: /tmp/
+      dest: /tmp/postgres
     vars:
       repo: "{{ lookup('env', 'PDP_REPO') }}"
       version: "{{ lookup('env', 'PDP_BRANCH') }}"

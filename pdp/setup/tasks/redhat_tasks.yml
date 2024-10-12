@@ -26,14 +26,14 @@
       name: postgres
       shell: /bin/bash
       uid: 1040
-      group: admin
+      group: wheel
 
   - name: Creates directory
     ansible.builtin.file:
       path: /opt/pgsql
       state: directory
       owner: postgres
-      group: admin
+      group: wheel
       mode: 0775      
 
   - name: Enable ol9_codeready_builder on oracle linux 9
@@ -208,7 +208,7 @@
     git:
       repo: "{{ repo }}"
       version: "{{ version }}"
-      dest: /tmp/
+      dest: /tmp/postgres
       track_submodules: true
     vars:
       repo: "{{ lookup('env', 'PDP_REPO') }}"
@@ -227,7 +227,7 @@
     git:
       repo: "{{ repo }}"
       version: "{{ version }}"
-      dest: /tmp/
+      dest: /tmp/postgres
     vars:
       repo: "{{ lookup('env', 'PDP_REPO') }}"
       version: "{{ lookup('env', 'PDP_BRANCH') }}"
