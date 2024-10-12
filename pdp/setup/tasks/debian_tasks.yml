@@ -79,9 +79,10 @@
     when: with_tde_heap
 
   - name: Configure pg_tde from sources without pg_tde 
-    command: ./configure 
-    chdir: /tmp/postgres/contrib/pg_tde
+    ansible.builtin.command:: ./configure 
     become_user: postgres
+    args:
+      chdir: /tmp/postgres/contrib/pg_tde
     when: with_tde_heap
 
   - name: Clone Postgres/PDP sources
@@ -97,7 +98,8 @@
 
   - name: Remove pg_tde from source tree contrib/pg_tde
     command: rm -fr contrib/pg_tde*
-    chdir: /tmp/postgres
+    args:
+      chdir: /tmp/postgres
     when: not with_tde_heap
 
   - name: Configure Postgres/PDP from sources
@@ -116,7 +118,8 @@
      '--with-gssapi' '--with-ldap' 'build_alias=x86_64-linux-gnu' \
      'CPPFLAGS=-Wdate-time -D_FORTIFY_SOURCE=2' \
      'CXXFLAGS=-g -O2 -fstack-protector-strong -Wformat -Werror=format-security'
-    chdir: "/tmp/postgres"
+    args:
+      chdir: /tmp/postgres
     become_user: postgres
 
   - name: Build Postgres/PDP (world) from sources
@@ -149,16 +152,16 @@
   - name: Copy pg_config to /usr/bin
     become: true 
     command: sudo cp /opt/pgsql/bin/pg_config /usr/bin
-      initdb -D /opt/pgsql/data
-      pg_ctl -D /opt/pgsql/data -l logfile start
 
   - name: initdb cluster
     command: initdb -D /opt/pgsql/data
-    chdir: "/opt/pgsql/bin"
+    args:
+      chdir: /tmp/postgres/bin
 
   - name: initdb cluster
     command: pg_ctl -D /opt/pgsql/data -l logfile start
-    chdir: "/opt/pgsql/bin"
+    args:
+      chdir: /tmp/postgres/bin
   
   - name: Run installcheck-world
     make:

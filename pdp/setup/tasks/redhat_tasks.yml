@@ -216,10 +216,19 @@
     become_user: postgres
     when: with_tde_heap
 
+- name: Change the working directory to somedir/ and run the command as db_owner if /path/to/database does not exist
+  ansible.builtin.command: /usr/bin/make_database.sh db_user db_name
+  become: yes
+  become_user: db_owner
+  args:
+    chdir: somedir/
+    creates: /path/to/database
+  
   - name: Configure pg_tde from sources without pg_tde 
-    command: ./configure 
-    chdir: /tmp/postgres/contrib/pg_tde
+    ansible.builtin.command:: ./configure 
     become_user: postgres
+    args:
+      chdir: /tmp/postgres/contrib/pg_tde
     when: with_tde_heap
 
   - name: Clone Postgres/PDP sources
@@ -235,7 +244,8 @@
 
   - name: Remove pg_tde from source tree contrib/pg_tde
     command: rm -fr contrib/pg_tde*
-    chdir: /tmp/postgres
+    args:
+      chdir: /tmp/postgres
     when: not with_tde_heap
 
   - name: Configure Postgres/PDP from sources
@@ -248,8 +258,9 @@
      '--with-selinux' '--with-systemd' '--with-system-tzdata=/usr/share/zoneinfo' '--sysconfdir=/etc/sysconfig/pgsql' \
      'CFLAGS=-O2 -g -pipe -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fexceptions -fstack-protector-strong -grecord-gcc-switches -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1 -m64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection' \
      'LDFLAGS=-Wl,--as-needed' 'LLVM_CONFIG=/usr/bin/llvm-config' 'CLANG=/usr/bin/clang' \
-     'PKG_CONFIG_PATH=:/usr/lib64/pkgconfig:/usr/share/pkgconfig' 'PYTHON=/usr/bin/python3'" 
-    chdir: "/tmp/postgres"
+     'PKG_CONFIG_PATH=:/usr/lib64/pkgconfig:/usr/share/pkgconfig' 'PYTHON=/usr/bin/python3'"
+    args:
+      chdir: /tmp/postgres
     become_user: postgres
 
   - name: Build Postgres/PDP (world) from sources
@@ -282,17 +293,17 @@
   - name: Copy pg_config to /usr/bin
     become: true 
     command: sudo cp /opt/pgsql/bin/pg_config /usr/bin
-      initdb -D /opt/pgsql/data
-      pg_ctl -D /opt/pgsql/data -l logfile start
 
   - name: initdb cluster
     command: initdb -D /opt/pgsql/data
-    chdir: "/opt/pgsql/bin"
+    args:
+      chdir: /opt/pgsql/bin
 
   - name: initdb cluster
     command: pg_ctl -D /opt/pgsql/data -l logfile start
-    chdir: "/opt/pgsql/bin"
-  
+    args:
+      chdir: /opt/pgsql/bin
+
   - name: Run installcheck-world
     make:
       chdir: "/tmp/postgres"
