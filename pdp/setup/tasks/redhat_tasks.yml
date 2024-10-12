@@ -261,6 +261,9 @@
     args:
       chdir: /tmp/postgres
     become_user: postgres
+    register: results
+
+  - debug: var=results.stdout_lines
 
   - name: Build Postgres/PDP (world) from sources
     make:
@@ -269,12 +272,18 @@
       target: world
     become_user: postgres 
     when: testsuite == 'installcheck-world'
+    register: results
+
+  - debug: var=results.stdout_lines
 
   - name: Install Postgres/PDP (install-world) from build binaries
     make:
       chdir: "/tmp/postgres"
       target: install-world 
     when: testsuite == 'installcheck-world'
+    register: results
+
+  - debug: var=results.stdout_lines
 
   - name: Build Postgres/PDP from sources
     make:
@@ -282,12 +291,18 @@
       jobs: 4
     become_user: postgres 
     when: testsuite == 'installcheck'
+    register: results
+
+  - debug: var=results.stdout_lines
 
   - name: Install Postgres/PDP (install only) from build binaries
     make:
       chdir: "/tmp/postgres"
       target: install 
     when: testsuite == 'installcheck'
+    register: results
+
+  - debug: var=results.stdout_lines
 
   - name: Copy pg_config to /usr/bin
     become: true 
@@ -301,6 +316,9 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
+    register: results
+
+  - debug: var=results.stdout_lines
 
   - name: initdb cluster
     become_user: postgres
@@ -310,6 +328,9 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
+    register: results
+
+  - debug: var=results.stdout_lines
   
   - name: Run installcheck-world
     become_user: postgres
@@ -320,6 +341,9 @@
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
     when: testsuite == 'installcheck-world'
+    register: results
+
+  - debug: var=results.stdout_lines
 
   - name: Run installcheck
     become_user: postgres
@@ -330,6 +354,9 @@
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
     when: testsuite == 'installcheck'
+    register: results
+
+  - debug: var=results.stdout_lines
 
   # - name: Add extensions to postgresql.conf for RHEL
   #   lineinfile:
