@@ -162,27 +162,41 @@
     command: sudo cp /opt/pgsql/bin/pg_config /usr/bin
 
   - name: initdb cluster
+    become_user: postgres
     command: ./initdb -D /opt/pgsql/data
     args:
       chdir: /opt/pgsql/bin
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
 
   - name: initdb cluster
+    become_user: postgres
     command: ./pg_ctl -D /opt/pgsql/data -l logfile start
     args:
       chdir: /opt/pgsql/bin
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
   
   - name: Run installcheck-world
+    become_user: postgres
     make:
       chdir: "/tmp/postgres"
-      target: installcheck-world 
+      target: installcheck-world
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
     when: testsuite == 'installcheck-world'
 
   - name: Run installcheck
+    become_user: postgres
     make:
       chdir: "/tmp/postgres"
       target: installcheck
     environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"  
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
     when: testsuite == 'installcheck'
 
   # - name: Add extensions to postgresql.conf for Debian
