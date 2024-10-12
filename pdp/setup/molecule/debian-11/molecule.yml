@@ -4,7 +4,7 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: pgstatmon-debian11-${BUILD_NUMBER}
+  - name: pdp-debian11-${BUILD_NUMBER}
     region: eu-central-1
     image: ami-004ff8b59bb494321
     vpc_subnet_id: subnet-085deaca8c1c59a4f

@@ -4,7 +4,7 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: pgstatmon-ol9-arm-${BUILD_NUMBER}
+  - name: pdp-ol9-arm-${BUILD_NUMBER}
     region: eu-central-1
     image: ami-098a7d45c0983caea
     vpc_subnet_id: subnet-085deaca8c1c59a4f

@@ -4,7 +4,7 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: pgstatmon-ufocal-arm-${BUILD_NUMBER}
+  - name: pdp-ufocal-arm-${BUILD_NUMBER}
     region: eu-central-1
     image: ami-05808cb5667d133b0
     vpc_subnet_id: subnet-085deaca8c1c59a4f

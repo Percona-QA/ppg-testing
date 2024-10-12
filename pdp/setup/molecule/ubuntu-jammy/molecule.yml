@@ -4,7 +4,7 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: pgstatmon-ujammy-${BUILD_NUMBER}
+  - name: pdp-ujammy-${BUILD_NUMBER}
     region: eu-central-1
     image: ami-06e89bbb5f88b3a34
     vpc_subnet_id: subnet-085deaca8c1c59a4f
