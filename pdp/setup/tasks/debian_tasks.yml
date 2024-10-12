@@ -64,7 +64,15 @@
       state: directory
       owner: postgres
       group: admin
-      mode: 0775      
+      mode: 0775
+
+  - name: Creates directory
+    ansible.builtin.file:
+      path: /opt/pgsql/data
+      state: directory
+      owner: postgres
+      group: admin
+      mode: 0775
 
   - name: Clone Postgres/PDP sources with pg_tde
     git:
