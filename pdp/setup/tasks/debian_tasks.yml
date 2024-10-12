@@ -172,7 +172,7 @@
 
   - name: initdb cluster
     become_user: postgres
-    command: ./pg_ctl -D /opt/pgsql/data -l logfile start
+    command: ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start
     args:
       chdir: /opt/pgsql/bin
     environment:
