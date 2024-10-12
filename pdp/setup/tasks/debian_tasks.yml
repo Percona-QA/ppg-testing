@@ -162,12 +162,12 @@
     command: sudo cp /opt/pgsql/bin/pg_config /usr/bin
 
   - name: initdb cluster
-    command: initdb -D /opt/pgsql/data
+    command: ./initdb -D /opt/pgsql/data
     args:
       chdir: /opt/pgsql/bin
 
   - name: initdb cluster
-    command: pg_ctl -D /opt/pgsql/data -l logfile start
+    command: ./pg_ctl -D /opt/pgsql/data -l logfile start
     args:
       chdir: /opt/pgsql/bin
   
