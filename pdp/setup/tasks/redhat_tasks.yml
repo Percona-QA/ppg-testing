@@ -33,7 +33,7 @@
       path: /opt/pgsql
       state: directory
       owner: postgres
-      group: postgres
+      group: admin
       mode: 0775      
 
   - name: Enable ol9_codeready_builder on oracle linux 9

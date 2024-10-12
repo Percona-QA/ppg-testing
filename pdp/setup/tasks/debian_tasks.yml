@@ -63,7 +63,7 @@
       path: /opt/pgsql
       state: directory
       owner: postgres
-      group: postgres
+      group: admin
       mode: 0775      
 
   - name: Clone Postgres/PDP sources with pg_tde
