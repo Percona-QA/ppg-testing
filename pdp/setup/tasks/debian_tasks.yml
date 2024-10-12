@@ -78,8 +78,8 @@
     become_user: postgres
     when: with_tde_heap
 
-  - name: Configure pg_tde from sources without pg_tde 
-    ansible.builtin.command:: ./configure 
+  - name: Configure pg_tde from sources with pg_tde
+    ansible.builtin.command: ./configure
     become_user: postgres
     args:
       chdir: /tmp/postgres/contrib/pg_tde

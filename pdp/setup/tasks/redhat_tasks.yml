@@ -216,16 +216,8 @@
     become_user: postgres
     when: with_tde_heap
 
-- name: Change the working directory to somedir/ and run the command as db_owner if /path/to/database does not exist
-  ansible.builtin.command: /usr/bin/make_database.sh db_user db_name
-  become: yes
-  become_user: db_owner
-  args:
-    chdir: somedir/
-    creates: /path/to/database
-  
-  - name: Configure pg_tde from sources without pg_tde 
-    ansible.builtin.command:: ./configure 
+  - name: Configure pg_tde from sources without pg_tde
+    ansible.builtin.command: ./configure
     become_user: postgres
     args:
       chdir: /tmp/postgres/contrib/pg_tde
