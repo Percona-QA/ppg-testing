@@ -156,12 +156,12 @@
   - name: initdb cluster
     command: initdb -D /opt/pgsql/data
     args:
-      chdir: /tmp/postgres/bin
+      chdir: /opt/pgsql/bin
 
   - name: initdb cluster
     command: pg_ctl -D /opt/pgsql/data -l logfile start
     args:
-      chdir: /tmp/postgres/bin
+      chdir: /opt/pgsql/bin
   
   - name: Run installcheck-world
     make:
