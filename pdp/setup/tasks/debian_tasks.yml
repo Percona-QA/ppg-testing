@@ -43,13 +43,13 @@
         - git
 
   - name: Install rename
-    shell: sudo DEBIAN_FRONTEND=noninteractive apt install -y rename
+    commmand: sudo DEBIAN_FRONTEND=noninteractive apt install -y rename
   
   - name: Install IPC::RUN
-    shell: yes | sudo /usr/bin/perl -MCPAN -e 'install IPC::RUN'
+    commmand: yes | sudo /usr/bin/perl -MCPAN -e 'install IPC::RUN'
 
   - name: Install Text::Trim
-    shell: yes | sudo /usr/bin/perl -MCPAN -e 'install Text::Trim'
+    commmand: yes | sudo /usr/bin/perl -MCPAN -e 'install Text::Trim'
 
   - name: Add the user 'postgres'
     ansible.builtin.user:
@@ -79,8 +79,8 @@
     when: with_tde_heap
 
   - name: Configure pg_tde from sources without pg_tde 
-    shell: ./configure 
-    chdir: "/tmp/postgres/contrib/pg_tde"
+    command: ./configure 
+    chdir: /tmp/postgres/contrib/pg_tde
     become_user: postgres
     when: with_tde_heap
 
@@ -97,11 +97,11 @@
 
   - name: Remove pg_tde from source tree contrib/pg_tde
     command: rm -fr contrib/pg_tde*
-    chdir: "/tmp/postgres"
+    chdir: /tmp/postgres
     when: not with_tde_heap
 
   - name: Configure Postgres/PDP from sources
-    shell: ./configure '--build=x86_64-linux-gnu' '--prefix=/opt/pgsql' '--enable-depend' \
+    command: ./configure '--build=x86_64-linux-gnu' '--prefix=/opt/pgsql' '--enable-depend' \
      '--enable-cassert' '--enable-coverage' '--with-icu' '--with-tcl' '--with-perl' \
      '--with-python' '--with-pam' '--with-openssl' '--with-libxml' '--with-libxslt' \
      '--libdir=/opt/pgsql/lib' 'PYTHON=/usr/bin/python3' '--with-extra-version= Percona Distribution' \
