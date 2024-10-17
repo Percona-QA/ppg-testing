@@ -265,6 +265,11 @@
 
   - debug: var=results.stdout_lines
 
+  - shell: cat /tmp/postgres/config.log
+    register: cat
+
+  - debug: var=cat.stdout_lines
+
   - name: Build Postgres/PDP (world) from sources
     make:
       chdir: "/tmp/postgres"
