@@ -261,6 +261,7 @@
     args:
       chdir: /tmp/postgres
     become_user: postgres
+    ignore_errors: true
     register: results
 
   - debug: var=results.stdout_lines
