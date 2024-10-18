@@ -214,7 +214,7 @@
       var: results.stdout
 
   - name: Debug 5
-    command: yum install -y systemtap-sdt-devel
+    command: yum install -y systemtap-sdt-devel --allowerasing
     ignore_errors: true
     register: results
 
