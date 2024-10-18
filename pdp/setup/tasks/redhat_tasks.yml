@@ -138,6 +138,22 @@
   - debug:
       var: results.stdout
 
+  - name: Debug 1
+    command: rpm -qi systemtap-sdt-devel
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Debug 2
+    command: yum -v search systemtap-sdt-devel
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
   - name: install tools
     yum:
       name: "{{ packages }}"
@@ -169,7 +185,6 @@
       - llvm-toolset
       - llvm-devel
       - clang-devel
-      - libzstd-devel
       - vim
       - git
       - perl-ExtUtils*
@@ -181,6 +196,30 @@
       - lcov
       - libcurl-devel
       - perl-App-cpanminus
+
+  - name: Debug 3
+    command: rpm -qi systemtap-sdt-devel
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Debug 4
+    command: yum -v search systemtap-sdt-devel
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Debug 5
+    command: yum install -y systemtap-sdt-devel
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
 
   - name: Install perl Text-trim
     command: cpanm Text::Trim
