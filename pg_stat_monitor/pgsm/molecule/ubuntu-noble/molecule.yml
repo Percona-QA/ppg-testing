@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pgstatmon-unoble-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-0f67ca03a667867bb
+    image: ami-07eef52105e8a2059
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t2.xlarge
     ssh_user: ubuntu

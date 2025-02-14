@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pgstatmon-ujammy-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-06e89bbb5f88b3a34
+    image: ami-03b3b5f65db7e5c6f
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t2.xlarge
     ssh_user: ubuntu

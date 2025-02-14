@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pgstatmon-debian12-arm-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-0056a7c4c0c442db6
+    image: ami-0f6c7b841127f42b3
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t4g.xlarge
     ssh_user: admin
