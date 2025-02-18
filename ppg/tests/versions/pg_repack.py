@@ -88,4 +88,8 @@ pgrepack = {
     "ppg-15.10": {"version": "1.5.1","binary_version": "pg_repack 1.5.1"},
     "ppg-16.6": {"version": "1.5.1","binary_version": "pg_repack 1.5.1"},
     "ppg-17.2": {"version": "1.5.1","binary_version": "pg_repack 1.5.1"},
+    "ppg-13.20": {"version": "1.5.2","binary_version": "pg_repack 1.5.2"},
+    "ppg-14.17": {"version": "1.5.2","binary_version": "pg_repack 1.5.2"},
+    "ppg-15.11": {"version": "1.5.2","binary_version": "pg_repack 1.5.2"},
+    "ppg-16.8": {"version": "1.5.2","binary_version": "pg_repack 1.5.2"},
 }

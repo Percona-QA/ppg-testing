@@ -58,4 +58,8 @@ haproxy = {
     "15.10": {"version": "2.8.11", "binary_version": "2.8.11"},
     "16.6": {"version": "2.8.11", "binary_version": "2.8.11"},
     "17.2": {"version": "2.8.11", "binary_version": "2.8.11"},
+    "13.20": {"version": "2.8.13", "binary_version": "2.8.13"},
+    "14.17": {"version": "2.8.13", "binary_version": "2.8.13"},
+    "15.12": {"version": "2.8.13", "binary_version": "2.8.13"},
+    "16.8": {"version": "2.8.13", "binary_version": "2.8.13"},
 }
