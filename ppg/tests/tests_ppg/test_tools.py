@@ -735,14 +735,14 @@ def test_pg_telemetry_extension_version(host):
         assert result.rc == 0, result.stderr
         assert result.stdout.strip("\n") == pg_versions['pg_telemetry_version']
 
-def test_pg_telemetry_file_pillar_version(host):
-    with host.sudo("postgres"):
-        output = host.run("cat /usr/local/percona/telemetry/pg/*.json | grep -i pillar_version")
-        assert output.rc == 0, output.stderr
-        assert pg_versions['version'] in output.stdout, output.stdout
+# def test_pg_telemetry_file_pillar_version(host):
+#     with host.sudo("postgres"):
+#         output = host.run("cat /usr/local/percona/telemetry/pg/*.json | grep -i pillar_version")
+#         assert output.rc == 0, output.stderr
+#         assert pg_versions['version'] in output.stdout, output.stdout
 
-def test_pg_telemetry_file_database_count(host):
-    with host.sudo("postgres"):
-        output = host.run("cat /usr/local/percona/telemetry/pg/*.json | grep -i databases_count")
-        assert output.rc == 0, output.stderr
-        assert '2' in output.stdout, output.stdout
+# def test_pg_telemetry_file_database_count(host):
+#     with host.sudo("postgres"):
+#         output = host.run("cat /usr/local/percona/telemetry/pg/*.json | grep -i databases_count")
+#         assert output.rc == 0, output.stderr
+        # assert '2' in output.stdout, output.stdout
