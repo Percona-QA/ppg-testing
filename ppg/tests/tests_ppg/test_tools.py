@@ -778,3 +778,20 @@ def test_pgvector(host):
             pytest.fail("Return code {}. Stderror: {}. Stdout {}".format(extension_version.rc,
                                                                             extension_version.stderr,
                                                                             extension_version.stdout))
+
+def test_pg_telemetry_package_version(host):
+    dist = host.system_info.distribution
+    if dist.lower() in ["ubuntu", "debian"]:
+        pg_telemetry = host.package(f"percona-pg-telemetry{MAJOR_VER}")
+    else:
+        pg_telemetry = host.package(f"percona-pg-telemetry{MAJOR_VER}")
+    assert pg_versions['pg_telemetry_package_version'] in pg_telemetry.version
+
+
+def test_pg_telemetry_extension_version(host):
+    with host.sudo("postgres"):
+        result = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS percona_pg_telemetry;'")
+        assert result.rc == 0, result.stderr
+        result = host.run("psql -c 'SELECT percona_pg_telemetry_version();' | awk 'NR==3{print $1}'")
+        assert result.rc == 0, result.stderr
+        assert result.stdout.strip("\n") == pg_versions['pg_telemetry_version']

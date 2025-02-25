@@ -435,28 +435,28 @@
   - name: Add extensions to postgresql.conf for Debian
     lineinfile:
       path: /etc/postgresql/16/main/postgresql.conf
-      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
+      line: shared_preload_libraries = 'percona_pg_telemetry, pg_stat_monitor, pgaudit, set_user'
     when: (ansible_os_family == "Debian") and
       (pg_version_to_install | string is version('16.3', '<=', strict=True))
 
   - name: Add extensions to postgresql.conf for RHEL
     lineinfile:
       path: /var/lib/pgsql/16/data/postgresql.conf
-      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
+      line: shared_preload_libraries = 'percona_pg_telemetry, pg_stat_monitor, pgaudit, set_user'
     when: (ansible_os_family == "RedHat") and
       (pg_version_to_install | string is version('16.3', '<=', strict=True))
 
   - name: Add extensions to postgresql.conf for Debian
     lineinfile:
       path: /etc/postgresql/16/main/postgresql.conf
-      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, percona_pg_telemetry'
+      line: shared_preload_libraries = 'percona_pg_telemetry, pg_stat_monitor, pgaudit, set_user, percona_pg_telemetry'
     when: (ansible_os_family == "Debian") and
       (pg_version_to_install | string is version('16.4', '>=', strict=True))
 
   - name: Add extensions to postgresql.conf for RHEL
     lineinfile:
       path: /var/lib/pgsql/16/data/postgresql.conf
-      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, percona_pg_telemetry'
+      line: shared_preload_libraries = 'percona_pg_telemetry, pg_stat_monitor, pgaudit, set_user, percona_pg_telemetry'
     when: (ansible_os_family == "RedHat") and
       (pg_version_to_install | string is version('16.4', '>=', strict=True))
 
