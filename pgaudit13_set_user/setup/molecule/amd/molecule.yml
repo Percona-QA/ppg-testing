@@ -4,12 +4,12 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: setuser-ol9-amd-${BUILD_NUMBER}
+  - name: setuser-U22-amd-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-08b280891de0645a1
+    image: ami-06e89bbb5f88b3a34
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t2.medium
-    ssh_user: ec2-user
+    ssh_user: ubuntu
     root_device_name: /dev/sda1
     instance_tags:
       iit-billing-tag: jenkins-pg-worker

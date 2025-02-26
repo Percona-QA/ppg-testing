@@ -1,0 +1,112 @@
+---
+- name: Set Facts - Major version
+  set_fact:
+    major_version: "{{ lookup('env', 'VERSION').split('.')[0].split('-')[1] }}"
+    cacheable: true
+
+- name: Configure repository
+  include_tasks: ../../../../tasks/enable_repo.yml
+
+- name: setup epel release
+  yum:
+    name: epel-release
+    update_cache: yes
+    state: present
+
+- name: Enable ol9_codeready_builder on oracle linux 9
+  become: true
+  command: dnf config-manager --set-enabled ol9_codeready_builder
+
+- name: install Percona Platform for PostgreSQL rpm packages
+  yum:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+    - percona-postgresql-client-common
+    - percona-postgresql-common
+    - percona-postgresql-server-dev-all
+    - percona-postgresql{{ major_version }}
+    - percona-postgresql{{ major_version }}-contrib
+    - percona-postgresql{{ major_version }}-devel
+    - percona-postgresql{{ major_version }}-libs
+    - percona-postgresql{{ major_version }}-llvmjit
+    - percona-postgresql{{ major_version }}-plperl
+    - percona-postgresql{{ major_version }}-plpython3
+    - percona-postgresql{{ major_version }}-pltcl
+    - percona-postgresql{{ major_version }}-server
+    - percona-postgresql{{ major_version }}-test
+    - openssl-devel
+    - gcc
+    - readline-devel
+    - make
+    - redhat-rpm-config
+    - clang
+    - clang-devel
+    - git
+  environment:
+    PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+- name: Initialize Postgres RHEL
+  become: true
+  command: /usr/pgsql-{{ major_version }}/bin/postgresql-{{ major_version }}-setup initdb
+  environment:
+    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+- name: Start Postgres RHEL
+  service:
+    name: postgresql-{{ major_version }}
+    state: started
+    enabled: yes
+
+- name: Clone set_user sources
+  git:
+    repo: "{{ repo }}"
+    version: "{{ version }}"
+    dest: /tmp/set_user
+  vars:
+    repo: "{{ lookup('env', 'COMPONENT_REPO') }}"
+    version: "{{ lookup('env', 'COMPONENT_VERSION') }}"
+  become_user: postgres
+
+- name: Build set_user from sources
+  make:
+    chdir: "/tmp/set_user"
+    params:
+      USE_PGXS: 1
+
+- name: Install set_user from sources
+  make:
+    target: install
+    chdir: "/tmp/set_user"
+    params:
+      USE_PGXS: 1
+
+- name: Add extensions to postgresql.conf for RHEL
+  lineinfile:
+    path: /var/lib/pgsql/{{ major_version }}/data/postgresql.conf
+    line: shared_preload_libraries = 'set_user'
+
+- name: Restart Postgres RHEL
+  service:
+    name: postgresql-{{ major_version }}
+    state: stopped
+  register: out
+
+- name: Start Postgres RHEL
+  service:
+    name: postgresql-{{ major_version }}
+    state: started
+    enabled: yes
+
+- name: Test set_user
+  make:
+    target: installcheck
+    chdir: "/tmp/set_user"
+    params:
+      USE_PGXS: 1
+  become_user: postgres
+  register: installcheck
+
+- debug: var=installcheck.stdout_lines
