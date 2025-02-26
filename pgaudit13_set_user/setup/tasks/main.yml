@@ -13,9 +13,13 @@
     update_cache: yes
     state: present
 
+- name: Enable dnf-plugins-core
+  become: true
+  command: sudo dnf install dnf-plugins-core
+
 - name: Enable ol9_codeready_builder on oracle linux 9
   become: true
-  command: dnf config-manager --set-enabled ol9_codeready_builder
+  command: dnf config-manager --set-enabled crb
 
 - name: install Percona Platform for PostgreSQL rpm packages
   yum:

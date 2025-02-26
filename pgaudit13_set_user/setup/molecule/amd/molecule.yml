@@ -6,10 +6,10 @@ driver:
 platforms:
   - name: setuser-ol9-amd-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-08b280891de0645a1
+    image: ami-041dc33d5b0f85045
     vpc_subnet_id: subnet-085deaca8c1c59a4f
-    instance_type: t2.medium
-    ssh_user: ec2-user
+    instance_type: t3.medium
+    ssh_user: rocky
     root_device_name: /dev/sda1
     instance_tags:
       iit-billing-tag: jenkins-pg-worker
