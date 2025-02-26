@@ -112,6 +112,7 @@
     state: stopped
 
 - name: Build set_user from sources
+  become_user: postgres
   make:
     chdir: "/tmp/set_user"
     params:
@@ -119,15 +120,12 @@
   become_user: postgres
 
 - name: Install set_user from sources
+  become: true
   make:
     target: install
     chdir: "/tmp/set_user"
     params:
       USE_PGXS: 1
-
-- name: Do Initdb
-  become: true
-  command: "sudo -u postgres {{ PGBIN }}/initdb -A trust -k {{ PGDATA }}"
 
 - name: Add extensions to postgresql.conf for Debian
   become_user: postgres
@@ -135,9 +133,10 @@
     path: "{{ PGDATA }}/postgresql.conf"
     line: shared_preload_libraries = 'set_user'
 
-- name: Start Server
-  become_user: postgres
-  command: "{{ PGBIN }}/pg_ctl -w start -D {{ PGDATA }}"
+- name: Start postgresql service for Debian based
+  service:
+    name: postgresql
+    state: started
 
 - name: Test set_user
   make:
