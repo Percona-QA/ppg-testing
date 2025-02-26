@@ -90,7 +90,7 @@
     become_user: postgres
 
   - name: Configure pgbouncer
-    shell: ./configure --prefix=/usr/local --with-cares=yes --with-pam
+    shell: ./configure --prefix=/usr/local --with-cares=yes
     args:
       chdir: /var/lib/postgresql/pgbouncer
     become_user: postgres

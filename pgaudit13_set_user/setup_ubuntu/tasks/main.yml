@@ -1,0 +1,150 @@
+---
+- name: Set Facts - Major version
+  set_fact:
+    major_version: "{{ lookup('env', 'VERSION').split('.')[0].split('-')[1] }}"
+    cacheable: true
+
+- name: Set Facts - PG ENV variables
+  ansible.builtin.set_fact:
+    PGVERSION: "{{ major_version }}"
+    PGBIN:  "/usr/lib/postgresql/{{ major_version }}/bin"
+    PGDATA: "/var/lib/postgresql/{{ major_version }}/test"
+    PATH: "$PATH:$PGBIN"
+
+- name: Configure repository
+  include_tasks: ../../../../tasks/enable_repo.yml
+
+- name: Install Dependencies on Debian
+  apt:
+    name: "{{ packages }}"
+    update_cache: yes
+    state: latest
+  vars:
+    packages:
+      - libreadline6-dev
+      - systemtap-sdt-dev
+      - zlib1g-dev
+      - libssl-dev
+      - libpam0g-dev
+      - python3-dev
+      - bison
+      - flex
+      - libipc-run-perl
+      - libtext-trim-perl
+      - wget
+      - gnupg
+      - tzdata
+      - locales
+      - lsb-release
+      - apt-utils
+      - make
+      - gcc
+      - libssl-dev
+      - libkrb5-dev
+      - gnupg2
+      - curl
+      - lsb-release
+
+- name: install Percona Platform for PostgreSQL deb packages
+  apt:
+    name: "{{ packages }}"
+    update_cache: yes
+    state: latest
+  vars:
+    major_version: "{{ major_version }}"
+    packages:
+    - percona-postgresql
+    - percona-postgresql-{{ major_version }}
+    - percona-postgresql-all
+    - percona-postgresql-client
+    - percona-postgresql-client-{{ major_version }}
+    - percona-postgresql-common
+    - percona-postgresql-contrib
+    - percona-postgresql-doc
+    - percona-postgresql-doc-{{ major_version }}
+    - percona-postgresql-plperl-{{ major_version }}
+    - percona-postgresql-plpython3-{{ major_version }}
+    - percona-postgresql-pltcl-{{ major_version }}
+    - percona-postgresql-server-dev-{{ major_version }}
+    - percona-postgresql-server-dev-all
+    - percona-postgresql-{{ major_version }}-dbgsym
+    - percona-postgresql-client-{{ major_version }}-dbgsym
+    - percona-postgresql-plperl-{{ major_version }}-dbgsym
+    - percona-postgresql-plpython3-{{ major_version }}-dbgsym
+    - percona-postgresql-pltcl-{{ major_version }}-dbgsym
+  environment:
+    PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+# - name: Install set_user Debian
+#   apt:
+#     name: "{{ packages }}"
+#     state: latest
+#     update_cache: yes
+#   vars:
+#     major_version: "{{ major_version }}"
+#     packages:
+#       - percona-postgresql-{{ major_version }}-set_user
+#       - percona-postgresql-{{ major_version }}-set_user-dbgsym
+#   environment:
+#     PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+- name: Clone set_user sources
+  git:
+    repo: "{{ repo }}"
+    version: "{{ version }}"
+    dest: /tmp/set_user
+  vars:
+    repo: "{{ lookup('env', 'COMPONENT_REPO') }}"
+    version: "{{ lookup('env', 'COMPONENT_VERSION') }}"
+  become_user: postgres
+
+- name: Add postgres to sudoers
+  become: true
+  lineinfile:
+      path: /etc/sudoers
+      state: present
+      line: 'postgres ALL=(ALL) NOPASSWD: ALL'
+      validate: 'visudo -cf %s'
+
+- name: Stop postgresql service for Debian based
+  service:
+    name: postgresql
+    state: stopped
+
+- name: Build set_user from sources
+  become_user: postgres
+  make:
+    chdir: "/tmp/set_user"
+    params:
+      USE_PGXS: 1
+  become_user: postgres
+
+- name: Install set_user from sources
+  become: true
+  make:
+    target: install
+    chdir: "/tmp/set_user"
+    params:
+      USE_PGXS: 1
+
+- name: Add extensions to postgresql.conf for Debian
+  become_user: postgres
+  lineinfile:
+    path: "{{ PGDATA }}/postgresql.conf"
+    line: shared_preload_libraries = 'set_user'
+
+- name: Start postgresql service for Debian based
+  service:
+    name: postgresql
+    state: started
+
+- name: Test set_user
+  make:
+    target: installcheck
+    chdir: "/tmp/set_user"
+    params:
+      USE_PGXS: 1
+  become_user: postgres
+  register: installcheck
+
+- debug: var=installcheck.stdout_lines

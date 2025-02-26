@@ -4,89 +4,61 @@
     major_version: "{{ lookup('env', 'VERSION').split('.')[0].split('-')[1] }}"
     cacheable: true
 
-- name: Set Facts - PG ENV variables
-  ansible.builtin.set_fact:
-    PGVERSION: "{{ major_version }}"
-    PGBIN:  "/usr/lib/postgresql/{{ major_version }}/bin"
-    PGDATA: "/var/lib/postgresql/{{ major_version }}/test"
-    PATH: "$PATH:$PGBIN"
-
 - name: Configure repository
   include_tasks: ../../../../tasks/enable_repo.yml
 
-- name: Install Dependencies on Debian
-  apt:
-    name: "{{ packages }}"
+- name: setup epel release
+  yum:
+    name: epel-release
     update_cache: yes
-    state: latest
-  vars:
-    packages:
-      - libreadline6-dev
-      - systemtap-sdt-dev
-      - zlib1g-dev
-      - libssl-dev
-      - libpam0g-dev
-      - python3-dev
-      - bison
-      - flex
-      - libipc-run-perl
-      - libtext-trim-perl
-      - wget
-      - gnupg
-      - tzdata
-      - locales
-      - lsb-release
-      - apt-utils
-      - make
-      - gcc
-      - libssl-dev
-      - libkrb5-dev
-      - gnupg2
-      - curl
-      - lsb-release
+    state: present
 
-- name: install Percona Platform for PostgreSQL deb packages
-  apt:
+- name: Enable ol9_codeready_builder on oracle linux 9
+  become: true
+  command: dnf config-manager --set-enabled ol9_codeready_builder
+
+- name: install Percona Platform for PostgreSQL rpm packages
+  yum:
     name: "{{ packages }}"
-    update_cache: yes
     state: latest
+    update_cache: yes
   vars:
-    major_version: "{{ major_version }}"
     packages:
-    - percona-postgresql
-    - percona-postgresql-{{ major_version }}
-    - percona-postgresql-all
-    - percona-postgresql-client
-    - percona-postgresql-client-{{ major_version }}
+    - percona-postgresql-client-common
     - percona-postgresql-common
-    - percona-postgresql-contrib
-    - percona-postgresql-doc
-    - percona-postgresql-doc-{{ major_version }}
-    - percona-postgresql-plperl-{{ major_version }}
-    - percona-postgresql-plpython3-{{ major_version }}
-    - percona-postgresql-pltcl-{{ major_version }}
-    - percona-postgresql-server-dev-{{ major_version }}
     - percona-postgresql-server-dev-all
-    - percona-postgresql-{{ major_version }}-dbgsym
-    - percona-postgresql-client-{{ major_version }}-dbgsym
-    - percona-postgresql-plperl-{{ major_version }}-dbgsym
-    - percona-postgresql-plpython3-{{ major_version }}-dbgsym
-    - percona-postgresql-pltcl-{{ major_version }}-dbgsym
+    - percona-postgresql{{ major_version }}
+    - percona-postgresql{{ major_version }}-contrib
+    - percona-postgresql{{ major_version }}-devel
+    - percona-postgresql{{ major_version }}-libs
+    - percona-postgresql{{ major_version }}-llvmjit
+    - percona-postgresql{{ major_version }}-plperl
+    - percona-postgresql{{ major_version }}-plpython3
+    - percona-postgresql{{ major_version }}-pltcl
+    - percona-postgresql{{ major_version }}-server
+    - percona-postgresql{{ major_version }}-test
+    - openssl-devel
+    - gcc
+    - readline-devel
+    - make
+    - redhat-rpm-config
+    - clang
+    - clang-devel
+    - git
   environment:
     PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-# - name: Install set_user Debian
-#   apt:
-#     name: "{{ packages }}"
-#     state: latest
-#     update_cache: yes
-#   vars:
-#     major_version: "{{ major_version }}"
-#     packages:
-#       - percona-postgresql-{{ major_version }}-set_user
-#       - percona-postgresql-{{ major_version }}-set_user-dbgsym
-#   environment:
-#     PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+- name: Initialize Postgres RHEL
+  become: true
+  command: /usr/pgsql-{{ major_version }}/bin/postgresql-{{ major_version }}-setup initdb
+  environment:
+    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+- name: Start Postgres RHEL
+  service:
+    name: postgresql-{{ major_version }}
+    state: started
+    enabled: yes
 
 - name: Clone set_user sources
   git:
@@ -98,45 +70,35 @@
     version: "{{ lookup('env', 'COMPONENT_VERSION') }}"
   become_user: postgres
 
-- name: Add postgres to sudoers
-  become: true
-  lineinfile:
-      path: /etc/sudoers
-      state: present
-      line: 'postgres ALL=(ALL) NOPASSWD: ALL'
-      validate: 'visudo -cf %s'
-
-- name: Stop postgresql service for Debian based
-  service:
-    name: postgresql
-    state: stopped
-
 - name: Build set_user from sources
-  become_user: postgres
   make:
     chdir: "/tmp/set_user"
     params:
       USE_PGXS: 1
-  become_user: postgres
 
 - name: Install set_user from sources
-  become: true
   make:
     target: install
     chdir: "/tmp/set_user"
     params:
       USE_PGXS: 1
 
-- name: Add extensions to postgresql.conf for Debian
-  become_user: postgres
+- name: Add extensions to postgresql.conf for RHEL
   lineinfile:
-    path: "{{ PGDATA }}/postgresql.conf"
+    path: /var/lib/pgsql/{{ major_version }}/data/postgresql.conf
     line: shared_preload_libraries = 'set_user'
 
-- name: Start postgresql service for Debian based
+- name: Restart Postgres RHEL
   service:
-    name: postgresql
+    name: postgresql-{{ major_version }}
+    state: stopped
+  register: out
+
+- name: Start Postgres RHEL
+  service:
+    name: postgresql-{{ major_version }}
     state: started
+    enabled: yes
 
 - name: Test set_user
   make:
