@@ -4,6 +4,6 @@
   become: true
   become_method: sudo
   roles:
-    - role: setup
+    - role: pgsm
   environment:
-    PG_TEST_PORT_DIR: /tmp/pgvector
+    PG_TEST_PORT_DIR: /tmp/pg_stat_monitor
