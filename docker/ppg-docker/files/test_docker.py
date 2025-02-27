@@ -274,3 +274,28 @@ def test_telemetry_agent_conf_exists(host):
     """Test if the percona-telemetry-agent conf file exists."""
     agent_path = get_telemetry_agent_conf_file(host)
     assert host.file(agent_path).exists, f"{agent_path} does not exist."
+
+def test_pg_telemetry_package_version(host):
+    dist = host.system_info.distribution
+    pg_telemetry = host.package(f"percona-pg-telemetry{MAJOR_VER}")
+    assert pg_docker_versions["percona-pg-telemetry"]['pg_telemetry_package_version'] in pg_telemetry.version
+
+def test_pg_telemetry_extension_version(host):
+    with host.sudo("postgres"):
+        result = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS percona_pg_telemetry;'")
+        assert result.rc == 0, result.stderr
+        result = host.run("psql -c 'SELECT percona_pg_telemetry_version();' | awk 'NR==3{print $1}'")
+        assert result.rc == 0, result.stderr
+        assert result.stdout.strip("\n") == pg_docker_versions["percona-pg-telemetry"]['pg_telemetry_version']
+
+# def test_pg_telemetry_file_pillar_version(host):
+#     with host.sudo("postgres"):
+#         output = host.run("cat /usr/local/percona/telemetry/pg/*.json | grep -i pillar_version")
+#         assert output.rc == 0, output.stderr
+#         assert pg_versions['version'] in output.stdout, output.stdout
+
+# def test_pg_telemetry_file_database_count(host):
+#     with host.sudo("postgres"):
+#         output = host.run("cat /usr/local/percona/telemetry/pg/*.json | grep -i databases_count")
+#         assert output.rc == 0, output.stderr
+        # assert '2' in output.stdout, output.stdout

@@ -200,6 +200,12 @@ wal2json = {
     "16.8": {"version": "2.6"},
 }
 
+pg_telemetry = {
+            "13.20": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
+            "14.17": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
+            "15.12": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
+            "16.8": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
+}
 
 DOCKER_LIST_EXTENSIONS = ["hstore",
                 "adminpack",
@@ -563,6 +569,7 @@ ppg_versions = {
             "percona-wal2json13": wal2json["13.20"],
             "percona-pgaudit13_set_user": set_user["13.20"],
             "percona-pg_stat_monitor13" : pg_stat_monitor["13.20"],
+            "percona-pg-telemetry" : pg_telemetry["13.20"],
             "libpq": "Version of libpq: 130020",
             "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "13"),
             "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "13"),
@@ -710,6 +717,7 @@ ppg_versions = {
             "percona-wal2json14": wal2json["14.17"],
             "percona-pgaudit14_set_user": set_user["14.17"],
             "percona-pg_stat_monitor14" : pg_stat_monitor["14.17"],
+            "percona-pg-telemetry" : pg_telemetry["14.17"],
             "libpq": "Version of libpq: 140017",
             "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "14"),
             "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "14"),
@@ -857,6 +865,7 @@ ppg_versions = {
             "percona-wal2json15": wal2json["15.12"],
             "percona-pgaudit15_set_user": set_user["15.12"],
             "percona-pg_stat_monitor15" : pg_stat_monitor["15.12"],
+            "percona-pg-telemetry" : pg_telemetry["15.12"],
             "libpq": "Version of libpq: 150012",
             "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "15"),
             "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "15"),
@@ -1004,6 +1013,7 @@ ppg_versions = {
             "percona-wal2json16": wal2json["16.8"],
             "percona-pgaudit16_set_user": set_user["16.8"],
             "percona-pg_stat_monitor16" : pg_stat_monitor["16.8"],
+            "percona-pg-telemetry" : pg_telemetry["16.8"],
             "libpq": "Version of libpq: 160008",
             "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "16"),
             "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "16"),
