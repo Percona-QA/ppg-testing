@@ -98,7 +98,7 @@
 
 
   - name: Configure Postgres/PSP from sources
-    command: ./configure '--enable-debug' '--enable-cassert' '--enable-tap-tests' --prefix='--prefix=/opt/pgsql'
+    command: ./configure '--enable-debug' '--enable-cassert' '--enable-tap-tests' '--prefix=/opt/pgsql'
     args:
       chdir: /tmp/postgres
     become_user: postgres
