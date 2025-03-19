@@ -96,7 +96,6 @@
       version: "{{ lookup('env', 'PSP_BRANCH') }}"
     become_user: postgres
 
-
   - name: Configure Postgres/PSP from sources
     command: ./configure '--enable-debug' '--enable-cassert' '--enable-tap-tests' '--prefix=/opt/pgsql'
     args:
@@ -152,18 +151,6 @@
 
   - debug: var=results.stdout_lines
 
-  # - name: Add extensions to postgresql.conf for Debian
-  #   lineinfile:
-  #     path: /opt/pgsql/data/postgresql.conf
-  #     line: shared_preload_libraries = 'pg_tde'
-  #   when: with_tde_heap
-
-  # - name: Set default Access Method - heap
-  #   lineinfile:
-  #     path: /opt/pgsql/data/postgresql.conf
-  #     line: default_table_access_method = 'heap'
-  #   when: access_method == 'heap'
-
   - name: Start Server
     become_user: postgres
     command: ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start
@@ -214,24 +201,9 @@
       TDE_MODE: 1
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
     when: testsuite == 'server-check-world-without-tde'
-    register: results
+    register: regression
 
-  - debug: var=results.stdout_lines
-
-  # - name: Run server-installcheck-world-with-tde
-  #   become_user: postgres
-  #   make:
-  #     chdir: "/tmp/postgres"
-  #     target: installcheck
-  #   environment:
-  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
-  #     INSTALL_DIR: "/opt/pgsql"
-  #     TDE_MODE: 1 
-  #   when: testsuite == 'server-installcheck-world-with-tde'
-  #   register: results
-
-  # - debug: var=results.stdout_lines
+  - debug: var=regression.stdout_lines
 
   - name: Setup env for TDE setup
     ignore_errors: yes
@@ -251,22 +223,13 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      LANG: C.UTF-8
-      LC_CTYPE: C
-      LC_ALL: C
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
       INSTALL_DIR: "/opt/pgsql"
       TDE_MODE: 1 
     when: (testsuite == 'server-installcheck-world-with-tde' or testsuite == 'tde-installcheck-only')
-    register: results
+    register: regression
 
-  - debug: var=results.stdout_lines
-
-  # - name: Add extensions to postgresql.conf for Debian
-  #   lineinfile:
-  #     path: /opt/pgsql/data/postgresql.conf
-  #     line: shared_preload_libraries = 'pg_tde'
-  #   when: with_tde_heap
+  - debug: var=regression.stdout_lines
 
   - name: Restart Server
     become_user: postgres
@@ -281,15 +244,24 @@
 
   - debug: var=results.stdout_lines
 
-  - name: Start pg_tde tests - installcheck
+  - name: Start pg_tde tests only - installcheck
     ignore_errors: yes
     shell: | 
+      cd /tmp
+      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
+      python3 create_certificates.py
+      cat client_certificate_jane_doe.pem >> client_key_jane_doe.pem
+      mkdir policies
+      cd policies
+      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/examples/policy.json
+      cd ..
+      pykmip-server -f "/tmp/postgres/contrib/pg_tde/pykmip-server.conf" -l /tmp/kmip-server.log &
       TV=$(mktemp)
       { exec >$TV; vault server -dev; } &
       sleep 10
       export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
       echo "Root token: $ROOT_TOKEN"
-      export ROOT_TOKEN=$ROOT_TOKEN && make installcheck
+      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres/contrib/pg_tde && make installcheck
     become_user: postgres
     args:
       executable: /bin/bash
@@ -297,27 +269,33 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      LANG: C.UTF-8
-      LC_CTYPE: C
-      LC_ALL: C
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
       INSTALL_DIR: "/opt/pgsql"
       TDE_MODE: 1
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
     when: testsuite == 'tde-installcheck-only'
-    register: results
+    register: regression
 
-  - debug: var=results.stdout_lines
+  - debug: var=regression.stdout_lines
 
-  - name: Start pg_tde tests - installcheck-world
+  - name: Start server & pg_tde tests - installcheck-world
     ignore_errors: yes
     shell: | 
+      cd /tmp
+      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
+      python3 create_certificates.py
+      cat client_certificate_jane_doe.pem >> client_key_jane_doe.pem
+      mkdir policies
+      cd policies
+      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/examples/policy.json
+      cd ..
+      pykmip-server -f "/tmp/postgres/contrib/pg_tde/pykmip-server.conf" -l /tmp/kmip-server.log &
       TV=$(mktemp)
       { exec >$TV; vault server -dev; } &
       sleep 10
       export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
       echo "Root token: $ROOT_TOKEN"
-      export ROOT_TOKEN=$ROOT_TOKEN && make installcheck-world
+      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres && make installcheck-world
     become_user: postgres
     args:
       executable: /bin/bash
@@ -325,17 +303,14 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      LANG: C.UTF-8
-      LC_CTYPE: C
-      LC_ALL: C
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
       INSTALL_DIR: "/opt/pgsql"
       TDE_MODE: 1
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
     when: testsuite == 'server-installcheck-world-with-tde'
-    register: results
+    register: regression
 
-  - debug: var=results.stdout_lines
+  - debug: var=regression.stdout_lines
 
   - stat:
       path: /tmp/postgres/src/test/regress/regression.diffs
@@ -392,3 +367,8 @@
     debug:
       msg: "{{command_output.stdout_lines}}"
     when: output.stat.isreg is defined and output.stat.isreg == True
+
+  - name: End play if regression has failures
+    fail:
+      msg: regression failed
+    when: regression.rc != 0
