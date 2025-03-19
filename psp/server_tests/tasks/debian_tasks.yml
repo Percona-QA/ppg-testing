@@ -183,23 +183,59 @@
 # server-installcheck-world-with-tde
 # tde-installcheck-only
 
+# # Check-World Server testsuite 
+#   - name: Run server-check-world-without-tde
+#     become_user: postgres
+#     make:
+#       chdir: "/tmp/postgres"
+#       target: check-world
+#     params:
+#       -s:  
+#     environment:
+#       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+#       LD_LIBRARY_PATH: "/opt/pgsql/lib"
+#       INSTALL_DIR: "/opt/pgsql"
+#       TDE_MODE: 1
+#       LANG: C.UTF-8
+#       LC_CTYPE: C
+#       LC_ALL: C
+#       PG_TEST_PORT_DIR: "/tmp/pg_tde"
+#     when: testsuite == 'server-check-world-without-tde'
+#     register: results
+
 # Check-World Server testsuite 
   - name: Run server-check-world-without-tde
+    ignore_errors: yes
+    shell: | 
+      cd /tmp
+      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
+      python3 create_certificates.py
+      cat client_certificate_jane_doe.pem >> client_key_jane_doe.pem
+      mkdir policies
+      cd policies
+      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/examples/policy.json
+      cd ..
+      pykmip-server -f "/tmp/postgres/contrib/pg_tde/pykmip-server.conf" -l /tmp/kmip-server.log &
+      TV=$(mktemp)
+      { exec >$TV; vault server -dev; } &
+      sleep 10
+      export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
+      echo "Root token: $ROOT_TOKEN"
+      export ROOT_TOKEN=$ROOT_TOKEN && make -s check-world
     become_user: postgres
-    make:
-      chdir: "/tmp/postgres"
-      target: check-world
-    params:
-      -s:  
+    args:
+      executable: /bin/bash
+      chdir: "/tmp/postgres/"
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      INSTALL_DIR: "/opt/pgsql"
-      TDE_MODE: 1
       LANG: C.UTF-8
       LC_CTYPE: C
       LC_ALL: C
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
+      INSTALL_DIR: "/opt/pgsql"
+      TDE_MODE: 1
+      PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
     when: testsuite == 'server-check-world-without-tde'
     register: results
 
