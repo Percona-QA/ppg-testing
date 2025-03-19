@@ -341,15 +341,43 @@
       path: /tmp/postgres/src/test/regress/regression.diffs
     register: output
 
+  # - name: Get Server - regression.diffs contents
+  #   ignore_errors: yes
+  #   command: cat /tmp/postgres/src/test/regress/regression.diffs
+  #   register: command_output
+  #   when: output.stat.exists == True
+
+  # - name: Print to console Server - regression.diffs contents
+  #   ignore_errors: yes
+  #   debug:
+  #     msg: "{{command_output.stdout_lines}}"
+  #   when: output.stat.exists == True
+
+  # - stat:
+  #     path: /tmp/postgres/contrib/pg_tde/regression.diffs
+  #   register: output
+
+  # - name: Get pg_tde - regression.diffs contents
+  #   ignore_errors: yes
+  #   command: cat /tmp/postgres/contrib/pg_tde/regression.diffs
+  #   register: command_output
+  #   when: output.stat.exists == True
+
+  # - name: Print to console pg_tde - regression.diffs contents
+  #   ignore_errors: yes
+  #   debug:
+  #     msg: "{{command_output.stdout_lines}}"
+  #   when: output.stat.exists == True
+
   - name: Get Server - regression.diffs contents
     command: cat /tmp/postgres/src/test/regress/regression.diffs
     register: command_output
-    when: output.stat.exists == True
+    when: output.stat.isreg is defined and output.stat.isreg == True
 
   - name: Print to console Server - regression.diffs contents
     debug:
       msg: "{{command_output.stdout_lines}}"
-    when: output.stat.exists == True
+    when: output.stat.isreg is defined and output.stat.isreg == True
 
   - stat:
       path: /tmp/postgres/contrib/pg_tde/regression.diffs
@@ -358,9 +386,9 @@
   - name: Get pg_tde - regression.diffs contents
     command: cat /tmp/postgres/contrib/pg_tde/regression.diffs
     register: command_output
-    when: output.stat.exists == True
+    when: output.stat.isreg is defined and output.stat.isreg == True
 
   - name: Print to console pg_tde - regression.diffs contents
     debug:
       msg: "{{command_output.stdout_lines}}"
-    when: output.stat.exists == True
+    when: output.stat.isreg is defined and output.stat.isreg == True
