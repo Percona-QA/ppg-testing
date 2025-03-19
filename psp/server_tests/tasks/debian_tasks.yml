@@ -189,6 +189,8 @@
     make:
       chdir: "/tmp/postgres"
       target: check-world
+    params:
+      -s:  
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
