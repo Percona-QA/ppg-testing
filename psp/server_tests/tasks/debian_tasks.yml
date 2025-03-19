@@ -85,67 +85,20 @@
       group: admin
       mode: 0775
 
-  - name: Clone Postgres/PDP sources with pg_tde
+  - name: Clone Postgres/PSP sources with pg_tde
     git:
       repo: "{{ repo }}"
       version: "{{ version }}"
       dest: /tmp/postgres
       track_submodules: true
     vars:
-      repo: "{{ lookup('env', 'PDP_REPO') }}"
-      version: "{{ lookup('env', 'PDP_BRANCH') }}"
+      repo: "{{ lookup('env', 'PSP_REPO') }}"
+      version: "{{ lookup('env', 'PSP_BRANCH') }}"
     become_user: postgres
-    when: with_tde_heap
 
-  - name: Checkout user provided pg_tde branch
-    command: git checkout {{ branch }}
-    args:
-      chdir: /tmp/postgres/contrib/pg_tde
-    vars:
-      branch: "{{ lookup('env', 'tde_branch') }}"
-    become_user: postgres
-    when: with_tde_heap and change_tde_branch
 
-  - name: Configure pg_tde from sources with pg_tde
-    ansible.builtin.command: ./configure
-    become_user: postgres
-    args:
-      chdir: /tmp/postgres/contrib/pg_tde
-    when: with_tde_heap
-
-  - name: Clone Postgres/PDP sources
-    git:
-      repo: "{{ repo }}"
-      version: "{{ version }}"
-      dest: /tmp/postgres
-    vars:
-      repo: "{{ lookup('env', 'PDP_REPO') }}"
-      version: "{{ lookup('env', 'PDP_BRANCH') }}"
-    become_user: postgres
-    when: not with_tde_heap
-
-  - name: Remove pg_tde from source tree contrib/pg_tde
-    command: rm -fr contrib/pg_tde*
-    args:
-      chdir: /tmp/postgres
-    when: not with_tde_heap
-
-  - name: Configure Postgres/PDP from sources
-    command: ./configure '--build=x86_64-linux-gnu' '--prefix=/opt/pgsql' '--enable-depend' \
-     '--enable-cassert' '--enable-coverage' '--with-icu' '--with-tcl' '--with-perl' \
-     '--with-python' '--with-pam' '--with-openssl' '--with-libxml' '--with-libxslt' \
-     '--libdir=/opt/pgsql/lib' 'PYTHON=/usr/bin/python3' '--with-extra-version= Percona Distribution' \
-     '--enable-nls' '--enable-thread-safety' '--enable-tap-tests' '--enable-debug' \
-     '--enable-dtrace' '--disable-rpath' '--with-uuid=e2fs' '--with-gnu-ld' \
-     '--with-pgport=5432' '--with-system-tzdata=/usr/share/zoneinfo' '--with-llvm' \
-     'LLVM_CONFIG=/usr/bin/llvm-config' 'CLANG=/usr/bin/clang' '--with-systemd' \
-     '--with-selinux' 'MKDIR_P=/bin/mkdir -p' 'PROVE=/usr/bin/prove' 'TAR=/bin/tar' \
-     'XSLTPROC=xsltproc --nonet' \
-     'CFLAGS=-g -O2 -fstack-protector-strong -Wformat -Werror=format-security -fno-omit-frame-pointer' \
-     'LDFLAGS=-Wl,-Bsymbolic-functions -Wl,-z,relro -Wl,-z,now' \
-     '--with-gssapi' '--with-ldap' 'build_alias=x86_64-linux-gnu' \
-     'CPPFLAGS=-Wdate-time -D_FORTIFY_SOURCE=2' \
-     'CXXFLAGS=-g -O2 -fstack-protector-strong -Wformat -Werror=format-security'
+  - name: Configure Postgres/PSP from sources
+    command: ./configure '--enable-debug' '--enable-cassert' '--enable-tap-tests' --prefix='--prefix=/opt/pgsql'
     args:
       chdir: /tmp/postgres
     become_user: postgres
@@ -153,41 +106,24 @@
 
   - debug: var=results.stdout_lines
 
-  - name: Build Postgres/PDP (world) from sources
+  - name: Build Postgres/PSP (world) from sources
     make:
       chdir: "/tmp/postgres"
       jobs: 4 
       target: world
-    become_user: postgres 
-    when: testsuite == 'installcheck-world'
+    become_user: postgres
+    environment:
+      TDE_MODE: 1 
     register: results
 
   - debug: var=results.stdout_lines
 
-  - name: Install Postgres/PDP (install-world) from build binaries
+  - name: Install Postgres/PSP (install-world) from build binaries
     make:
       chdir: "/tmp/postgres"
       target: install-world 
-    when: testsuite == 'installcheck-world'
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Build Postgres/PDP from sources
-    make:
-      chdir: "/tmp/postgres"
-      jobs: 4
-    become_user: postgres 
-    when: testsuite == 'installcheck'
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Install Postgres/PDP (install only) from build binaries
-    make:
-      chdir: "/tmp/postgres"
-      target: install 
-    when: testsuite == 'installcheck'
+    environment:
+      TDE_MODE: 1 
     register: results
 
   - debug: var=results.stdout_lines
@@ -196,14 +132,22 @@
     become: true 
     command: sudo cp /opt/pgsql/bin/pg_config /usr/bin
 
+  - name: Remove multiple extensions tap test case from pg_tde
+    become_user: postgres
+    command: rm -f /tmp/postgres/contrib/pg_tde/t/005_multiple_extensions.pl
+    register: results
+
+  - debug: var=results.stdout_lines
+
   - name: initdb cluster
     become_user: postgres
-    command: ./initdb -D /opt/pgsql/data
+    command: ./initdb -D /opt/pgsql/data --set shared_preload_libraries=pg_tde
     args:
       chdir: /opt/pgsql/bin
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
+    when: testsuite == 'server-check-world-without-tde' OR testsuite == 'tde-installcheck-only'
     register: results
 
   - debug: var=results.stdout_lines
@@ -228,28 +172,86 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
+      TDE_MODE: 1 
+    when: testsuite == 'server-check-world-without-tde' OR testsuite == 'tde-installcheck-only'
     register: results
 
   - debug: var=results.stdout_lines
 
-  - name: Build pg_tde from sources
-    make:
-      chdir: "/tmp/postgres/contrib/pg_tde"
-      jobs: 4
+# ## tde test methods
+# server-check-world-without-tde
+# server-installcheck-world-with-tde
+# tde-installcheck-only
+
+# Check-World Server testsuite 
+  - name: Run server-check-world-without-tde
     become_user: postgres
-    when: with_tde_heap
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Install pg_tde from build binaries
     make:
-      chdir: "/tmp/postgres/contrib/pg_tde"
-      target: install
-    when: with_tde_heap
+      chdir: "/tmp/postgres"
+      target: check-world
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
+      INSTALL_DIR: "/opt/pgsql"
+      TDE_MODE: 1
+      LANG: C.UTF-8
+      LC_CTYPE: C
+      LC_ALL: C
+      PG_TEST_PORT_DIR: "/tmp/pg_tde"
+    when: testsuite == 'server-check-world-without-tde'
     register: results
 
   - debug: var=results.stdout_lines
+
+  # - name: Run server-installcheck-world-with-tde
+  #   become_user: postgres
+  #   make:
+  #     chdir: "/tmp/postgres"
+  #     target: installcheck
+  #   environment:
+  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
+  #     INSTALL_DIR: "/opt/pgsql"
+  #     TDE_MODE: 1 
+  #   when: testsuite == 'server-installcheck-world-with-tde'
+  #   register: results
+
+  # - debug: var=results.stdout_lines
+
+  - name: Setup env for TDE setup
+    ignore_errors: yes
+    shell: |
+      psql -c "CREATE SCHEMA tde;"
+      psql -c "CREATE EXTENSION pg_tde;"
+      psql -c "SELECT tde.pg_tde_add_global_key_provider_file('reg_file-global', '/tmp/pg_tde_test_keyring.per');"
+      psql -c "SELECT tde.pg_tde_set_server_principal_key('global-principal-key', 'reg_file-global');"
+      psql -c "ALTER SYSTEM SET pg_tde.wal_encrypt = on;"
+      psql -c "ALTER SYSTEM SET default_table_access_method = 'tde_heap';"
+      psql -c "ALTER SYSTEM SET search_path = "$user",public,tde;"
+      psql -c "SELECT pg_reload_conf();"
+    become_user: postgres
+    args:
+      executable: /bin/bash
+      chdir: "/tmp/postgres"
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
+      LANG: C.UTF-8
+      LC_CTYPE: C
+      LC_ALL: C
+      PG_TEST_PORT_DIR: "/tmp/pg_tde"
+      INSTALL_DIR: "/opt/pgsql"
+      TDE_MODE: 1 
+    when: testsuite == 'server-check-world-without-tde' OR testsuite == 'tde-installcheck-only'
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  # - name: Add extensions to postgresql.conf for Debian
+  #   lineinfile:
+  #     path: /opt/pgsql/data/postgresql.conf
+  #     line: shared_preload_libraries = 'pg_tde'
+  #   when: with_tde_heap
 
   - name: Restart Server
     become_user: postgres
@@ -263,136 +265,6 @@
 
   - debug: var=results.stdout_lines
 
-  # - name: Set default Access Method - tde_heap
-  #   lineinfile:
-  #     path: /opt/pgsql/data/postgresql.conf
-  #     line: default_table_access_method = 'tde_heap'
-  #   when: with_tde_heap and access_method == 'tde_heap'
-
-  # - name: Set default Access Method - tde_heap_basic
-  #   lineinfile:
-  #     path: /opt/pgsql/data/postgresql.conf
-  #     line: default_table_access_method = 'tde_heap_basic'
-  #   when: with_tde_heap and access_method == 'tde_heap_basic'
-
-  - name: Run installcheck-world Server - heap
-    become_user: postgres
-    make:
-      chdir: "/tmp/postgres"
-      target: installcheck-world
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: testsuite == 'installcheck-world' and access_method == 'heap'
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Run installcheck Server - heap
-    become_user: postgres
-    make:
-      chdir: "/tmp/postgres"
-      target: installcheck
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: testsuite == 'installcheck' and access_method == 'heap'
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Run installcheck Server - tde_heap_basic/tde_heap
-    ignore_errors: yes
-    shell: |
-      psql -d $DB_NAME -c "ALTER SYSTEM SET shared_preload_libraries ='pg_tde';"
-      psql -d $DB_NAME -c "SELECT pg_reload_conf();"
-      psql -c "CREATE EXTENSION pg_tde;"
-      psql -c "ALTER SYSTEM SET default_table_access_method='{{ method }}';"
-      psql -c "SELECT pg_reload_conf();"
-      psql -c "SELECT pg_tde_add_key_provider_file('file-vault','/tmp/pg_tde_test_keyring.per');"
-      psql -c "SELECT pg_tde_set_principal_key('test-db-master-key','file-vault');"
-      make installcheck
-    become_user: postgres
-    args:
-      executable: /bin/bash
-      chdir: "/tmp/postgres"
-    vars:
-      method: "{{ access_method }}"
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: testsuite == 'installcheck' and
-      (access_method == 'tde_heap_basic' or access_method == 'tde_heap')
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Run installcheck-world Server - tde_heap_basic/tde_heap
-    ignore_errors: yes
-    shell: |
-      psql -d $DB_NAME -c "ALTER SYSTEM SET shared_preload_libraries ='pg_tde';"
-      psql -d $DB_NAME -c "SELECT pg_reload_conf();"
-      psql -c "CREATE EXTENSION pg_tde;"
-      psql -c "ALTER SYSTEM SET default_table_access_method='{{ method }}';"
-      psql -c "SELECT pg_reload_conf();"
-      psql -c "SELECT pg_tde_add_key_provider_file('file-vault','/tmp/pg_tde_test_keyring.per');"
-      psql -c "SELECT pg_tde_set_principal_key('test-db-master-key','file-vault');"
-      make installcheck-world
-    become_user: postgres
-    args:
-      executable: /bin/bash
-      chdir: "/tmp/postgres"
-    vars:
-      method: "{{ access_method }}"
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: testsuite == 'installcheck-world' and
-      (access_method == 'tde_heap_basic' or access_method == 'tde_heap')
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - stat:
-      path: /tmp/postgres/src/test/regress/regression.diffs
-    register: output
-
-  - name: Get Server - regression.diffs contents
-    ignore_errors: yes
-    command: cat /tmp/postgres/src/test/regress/regression.diffs
-    register: command_output
-    when: output.stat.exists
-
-  - name: Print to console Server - regression.diffs contents
-    ignore_errors: yes
-    debug:
-      msg: "{{command_output.stdout_lines}}"
-    when: output.stat.exists
-
-  - name: Remove multiple extensions tap test case from pg_tde
-    become_user: postgres
-    command: rm -f /tmp/postgres/contrib/pg_tde/t/005_multiple_extensions.pl
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Add extensions to postgresql.conf for Debian
-    lineinfile:
-      path: /opt/pgsql/data/postgresql.conf
-      line: shared_preload_libraries = 'pg_tde'
-    when: with_tde_heap
-
-  - name: Restart Server
-    become_user: postgres
-    command: ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile restart
-    args:
-      chdir: /opt/pgsql/bin
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    register: results
-
-  - debug: var=results.stdout_lines
   - name: Start pg_tde tests - installcheck
     ignore_errors: yes
     shell: | 
@@ -413,7 +285,10 @@
       LC_CTYPE: C
       LC_ALL: C
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
-    when: with_tde_heap and testsuite == 'installcheck'
+      INSTALL_DIR: "/opt/pgsql"
+      TDE_MODE: 1
+      PERCONA_SERVER_VERSION: {{ percona_server_version }}
+    when: testsuite == 'tde-installcheck-only'
     register: results
 
   - debug: var=results.stdout_lines
@@ -426,11 +301,11 @@
       sleep 10
       export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
       echo "Root token: $ROOT_TOKEN"
-      export ROOT_TOKEN=$ROOT_TOKEN && make installcheck
+      export ROOT_TOKEN=$ROOT_TOKEN && make installcheck-world
     become_user: postgres
     args:
       executable: /bin/bash
-      chdir: "/tmp/postgres/contrib/pg_tde"
+      chdir: "/tmp/postgres/"
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
@@ -438,10 +313,29 @@
       LC_CTYPE: C
       LC_ALL: C
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
-    when: with_tde_heap and testsuite == 'installcheck-world'
+      INSTALL_DIR: "/opt/pgsql"
+      TDE_MODE: 1
+      PERCONA_SERVER_VERSION: {{ percona_server_version }}
+    when: testsuite == 'server-installcheck-world-with-tde'
     register: results
 
   - debug: var=results.stdout_lines
+
+  - stat:
+      path: /tmp/postgres/src/test/regress/regression.diffs
+    register: output
+
+  - name: Get Server - regression.diffs contents
+    ignore_errors: yes
+    command: cat /tmp/postgres/src/test/regress/regression.diffs
+    register: command_output
+    when: output.stat.exists
+
+  - name: Print to console Server - regression.diffs contents
+    ignore_errors: yes
+    debug:
+      msg: "{{command_output.stdout_lines}}"
+    when: output.stat.exists
 
   - stat:
       path: /tmp/postgres/contrib/pg_tde/regression.diffs

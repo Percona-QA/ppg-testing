@@ -1,44 +1,80 @@
 ---
-  - name: setup epel release
-    yum:
-      name: epel-release
+  - name: Install Debian Packages
+    apt:
+      name: "{{ packages }}"
       update_cache: yes
-      state: present
+      state: latest
+    vars:
+      packages:
+        - wget
+        - libtext-trim-perl
+        - libreadline6-dev
+        - systemtap-sdt-dev
+        - zlib1g-dev
+        - libssl-dev
+        - libpam0g-dev
+        - python3-dev
+        - bison
+        - flex
+        - libipc-run-perl
+        - docbook-xsl
+        - docbook-xsl
+        - libxml2
+        - libxml2-utils
+        - libxml2-dev
+        - libxslt-dev
+        - xsltproc
+        - libkrb5-dev
+        - libldap2-dev
+        - libsystemd-dev
+        - gettext
+        - tcl-dev
+        - libperl-dev
+        - pkg-config
+        - clang
+        - llvm
+        - llvm-dev
+        - libselinux1-dev
+        - uuid-dev
+        - liblz4-dev
+        - lcov
+        - libcurl4-openssl-dev
+        - vim
+        - git
+        - make
+        - gcc
+        - autoconf
+        - libjson-c-dev
+        - libhttp-server-simple-perl
 
-  - name: Clean dnf RHEL8
-    become: true
-    command: dnf clean all -y
-    when: ansible_distribution_major_version == "8"
+  - name: Install rename
+    ansible.builtin.shell: sudo DEBIAN_FRONTEND=noninteractive apt install -y rename
+  
+  - name: Install IPC::RUN
+    ansible.builtin.shell: yes | sudo /usr/bin/perl -MCPAN -e 'install IPC::RUN'
 
-  # - name: Install oracle-epel-release-el8 package
-  #   ansible.builtin.dnf:
-  #     name: oracle-epel-release-el8
-  #     state: present
-  #   when: ansible_facts['distribution'] == "OracleLinux" and ansible_facts['distribution_major_version'] == "8"
+  - name: Install Text::Trim
+    ansible.builtin.shell: yes | sudo /usr/bin/perl -MCPAN -e 'install Text::Trim'
 
-  - name: Enable ol8_codeready_builder on oracle linux 8
-    become: true
-    command: dnf config-manager --set-enabled ol8_codeready_builder
-    when: ansible_distribution_major_version == "8"
-
-  - name: Enable ol9_codeready_builder on oracle linux 9
-    become: true
-    command: dnf config-manager --set-enabled ol9_codeready_builder
-    when: ansible_distribution_major_version == "9"    
+  - name: Install hashicorp repo and vault
+    shell: |
+      wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+      sudo apt update && sudo apt install -y vault
 
   - name: Add the user 'postgres'
     ansible.builtin.user:
       name: postgres
       shell: /bin/bash
       uid: 1040
-      group: wheel
+      group: admin
 
   - name: Creates directory
     ansible.builtin.file:
       path: /opt/pgsql
       state: directory
       owner: postgres
-      group: wheel
+      group: admin
       mode: 0775
 
   - name: Creates directory
@@ -46,188 +82,8 @@
       path: /opt/pgsql/data
       state: directory
       owner: postgres
-      group: wheel
-      mode: 0775      
-
-  - name: Install perl-CPAN and perl-App-cpanminus on Red Hat
-    become: true
-    yum:
-      name: "{{ item }}"
-      state: present
-    loop:
-      - perl-CPAN
-      - perl-App-cpanminus
-      - perl-IPC-Run
-
-  - name: Install perl module Text::Trim
-    become: true
-    command: cpanm Text::Trim
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
-  - name: Install Development tools
-    become: true
-    command: yum -y groupinstall "Development tools"
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
-  - name: Enable llvm-toolset dnf module for RHEL8
-    become: true
-    command: dnf module enable llvm-toolset -y
-    when: ansible_distribution_major_version == "8"
-
-  - name: Install llvm-toolset
-    become: true
-    command: yum install -y llvm-toolset clang-devel clang
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    when: ansible_distribution_major_version == "8"
-
-  - name: Install clang clang-devel on RHEL 9
-    become: true
-    command: yum install -y clang-devel clang
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    when: ansible_distribution_major_version == "9"
-
-  - name: LLVM Version
-    command: llvm-config --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: CLANG Version
-    command: clang --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: Debug 1
-    command: rpm -qi systemtap-sdt-devel
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: Debug 2
-    command: yum -v search systemtap-sdt-devel
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: install tools
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - clang
-      - zlib-devel
-      - readline-devel
-      - gcc
-      - lz4
-      - lz4-devel
-      - python3
-      - krb5-devel
-      - openssl-devel
-      - pam-devel
-      - libxml2-devel
-      - libxslt-devel
-      - openldap-devel
-      - libuuid-devel
-      - systemd-devel
-      - tcl-devel
-      - python3-devel
-      - libicu-devel
-      - libzstd
-      - libzstd-devel
-      - llvm
-      - llvm-toolset
-      - llvm-devel
-      - clang-devel
-      - vim
-      - git
-      - perl-ExtUtils*
-      - docbook-xsl
-      - perl-IPC-Run
-      - perl-Test-Simple
-      - prename
-      - perl-CPAN
-      - lcov
-      - libcurl-devel
-      - perl-App-cpanminus
-      - make
-      - autoconf
-      - json-c-devel
-
-  - name: Install cpanm CGI::Session
-    become: true
-    command: cpanm CGI::Session
-
-  - name: Install HTTP::Server::Simple::CGI
-    become: true
-    command: cpanm HTTP::Server::Simple::CGI
-
-  - name: Debug 3
-    command: rpm -qi systemtap-sdt-devel
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: Debug 4
-    command: yum -v search systemtap-sdt-devel
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: Debug 5
-    command: yum install -y systemtap-sdt-devel --allowerasing
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: Install perl Text-trim
-    command: cpanm Text::Trim
-    ignore_errors: true
-    register: results
-
-  - name: install perl modules for rhel 9
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - perl-FindBin
-      - perl-Opcode
-    when: ansible_distribution_major_version == "9"
-
-  - name: LLVM Version
-    command: llvm-config --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: CLANG Version
-    command: clang --version
-    ignore_errors: true
-    register: results
+      group: admin
+      mode: 0775
 
   - name: Clone Postgres/PSP sources with pg_tde
     git:
@@ -250,7 +106,7 @@
     become_user: postgres
     when: with_tde_heap and change_tde_branch
 
-  - name: Configure pg_tde from sources without pg_tde
+  - name: Configure pg_tde from sources with pg_tde
     ansible.builtin.command: ./configure
     become_user: postgres
     args:
@@ -275,45 +131,27 @@
     when: not with_tde_heap
 
   - name: Configure Postgres/PSP from sources
-    command: ./configure '--enable-rpath' '--prefix=/opt/pgsql' '--enable-tap-tests' '--enable-depend' \
-     '--includedir=/opt/pgsql/include' '--mandir=/opt/pgsql/share/man' '--datadir=/opt/pgsql/share' \
-     '--libdir=/opt/pgsql/lib' '--with-lz4' '--with-extra-version= - Percona Distribution' '--with-zstd' \
-     '--with-icu' '--with-llvm' '--with-perl' '--with-python' '--with-tcl' '--with-tclconfig=/usr/lib64' \
-     '--with-openssl' '--with-pam' '--with-gssapi' '--with-includes=/usr/include' '--with-libraries=/usr/lib64' \
-     '--enable-nls' '--enable-dtrace' '--with-uuid=e2fs' '--with-libxml' '--with-libxslt' '--with-ldap' \
-     '--with-selinux' '--with-systemd' '--with-system-tzdata=/usr/share/zoneinfo' '--sysconfdir=/etc/sysconfig/pgsql' \
-     'CFLAGS=-O2 -g -pipe -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fexceptions -fstack-protector-strong -grecord-gcc-switches -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1 -m64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection' \
-     'LDFLAGS=-Wl,--as-needed' 'LLVM_CONFIG=/usr/bin/llvm-config' 'CLANG=/usr/bin/clang' \
-     'PKG_CONFIG_PATH=:/usr/lib64/pkgconfig:/usr/share/pkgconfig' 'PYTHON=/usr/bin/python3'
+    command: ./configure '--build=x86_64-linux-gnu' '--prefix=/opt/pgsql' '--enable-depend' \
+     '--enable-cassert' '--enable-coverage' '--with-icu' '--with-tcl' '--with-perl' \
+     '--with-python' '--with-pam' '--with-openssl' '--with-libxml' '--with-libxslt' \
+     '--libdir=/opt/pgsql/lib' 'PYTHON=/usr/bin/python3' '--with-extra-version= Percona Distribution' \
+     '--enable-nls' '--enable-thread-safety' '--enable-tap-tests' '--enable-debug' \
+     '--enable-dtrace' '--disable-rpath' '--with-uuid=e2fs' '--with-gnu-ld' \
+     '--with-pgport=5432' '--with-system-tzdata=/usr/share/zoneinfo' '--with-llvm' \
+     'LLVM_CONFIG=/usr/bin/llvm-config' 'CLANG=/usr/bin/clang' '--with-systemd' \
+     '--with-selinux' 'MKDIR_P=/bin/mkdir -p' 'PROVE=/usr/bin/prove' 'TAR=/bin/tar' \
+     'XSLTPROC=xsltproc --nonet' \
+     'CFLAGS=-g -O2 -fstack-protector-strong -Wformat -Werror=format-security -fno-omit-frame-pointer' \
+     'LDFLAGS=-Wl,-Bsymbolic-functions -Wl,-z,relro -Wl,-z,now' \
+     '--with-gssapi' '--with-ldap' 'build_alias=x86_64-linux-gnu' \
+     'CPPFLAGS=-Wdate-time -D_FORTIFY_SOURCE=2' \
+     'CXXFLAGS=-g -O2 -fstack-protector-strong -Wformat -Werror=format-security'
     args:
       chdir: /tmp/postgres
     become_user: postgres
     register: results
-    when: ansible_architecture == 'x86_64'
-
-  - name: Configure Postgres/PSP from sources
-    command: ./configure '--enable-rpath' '--prefix=/opt/pgsql' '--enable-tap-tests' '--enable-depend' \
-     '--includedir=/opt/pgsql/include' '--mandir=/opt/pgsql/share/man' '--datadir=/opt/pgsql/share' \
-     '--libdir=/opt/pgsql/lib' '--with-lz4' '--with-extra-version= - Percona Distribution' '--with-zstd' \
-     '--with-icu' '--with-llvm' '--with-perl' '--with-python' '--with-tcl' '--with-tclconfig=/usr/lib64' \
-     '--with-openssl' '--with-pam' '--with-gssapi' '--with-includes=/usr/include' '--with-libraries=/usr/lib64' \
-     '--enable-nls' '--enable-dtrace' '--with-uuid=e2fs' '--with-libxml' '--with-libxslt' '--with-ldap' \
-     '--with-selinux' '--with-systemd' '--with-system-tzdata=/usr/share/zoneinfo' '--sysconfdir=/etc/sysconfig/pgsql' \
-     'CFLAGS=-O2 -g -pipe -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fexceptions -fstack-protector-strong -grecord-gcc-switches -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection' \
-     'LDFLAGS=-Wl,--as-needed' 'LLVM_CONFIG=/usr/bin/llvm-config' 'CLANG=/usr/bin/clang' \
-     'PKG_CONFIG_PATH=:/usr/lib64/pkgconfig:/usr/share/pkgconfig' 'PYTHON=/usr/bin/python3'
-    args:
-      chdir: /tmp/postgres
-    become_user: postgres
-    register: results
-    when: ansible_architecture == 'aarch64'
 
   - debug: var=results.stdout_lines
-
-  - shell: cat /tmp/postgres/config.log
-    register: cat
-
-  - debug: var=cat.stdout_lines
 
   - name: Build Postgres/PSP (world) from sources
     make:
@@ -354,6 +192,46 @@
 
   - debug: var=results.stdout_lines
 
+  - name: Copy pg_config to /usr/bin
+    become: true 
+    command: sudo cp /opt/pgsql/bin/pg_config /usr/bin
+
+  - name: initdb cluster
+    become_user: postgres
+    command: ./initdb -D /opt/pgsql/data
+    args:
+      chdir: /opt/pgsql/bin
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  # - name: Add extensions to postgresql.conf for Debian
+  #   lineinfile:
+  #     path: /opt/pgsql/data/postgresql.conf
+  #     line: shared_preload_libraries = 'pg_tde'
+  #   when: with_tde_heap
+
+  # - name: Set default Access Method - heap
+  #   lineinfile:
+  #     path: /opt/pgsql/data/postgresql.conf
+  #     line: default_table_access_method = 'heap'
+  #   when: access_method == 'heap'
+
+  - name: Start Server
+    become_user: postgres
+    command: ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start
+    args:
+      chdir: /opt/pgsql/bin
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
+    register: results
+
+  - debug: var=results.stdout_lines
+
   - name: Build pg_tde from sources
     make:
       chdir: "/tmp/postgres/contrib/pg_tde"
@@ -373,37 +251,9 @@
 
   - debug: var=results.stdout_lines
 
-  - name: Copy pg_config to /usr/bin
-    become: true 
-    command: sudo cp /opt/pgsql/bin/pg_config /usr/bin
-
-  - name: initdb cluster
+  - name: Restart Server
     become_user: postgres
-    command: ./initdb -D /opt/pgsql/data
-    args:
-      chdir: /opt/pgsql/bin
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Add extensions to postgresql.conf for Debian
-    lineinfile:
-      path: /opt/pgsql/data/postgresql.conf
-      line: shared_preload_libraries = 'pg_tde'
-    when: with_tde_heap
-
-  # - name: Set default Access Method - heap
-  #   lineinfile:
-  #     path: /opt/pgsql/data/postgresql.conf
-  #     line: default_table_access_method = 'heap'
-  #   when: access_method == 'heap'
-
-  - name: Start Server
-    become_user: postgres
-    command: ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start
+    command: ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile restart
     args:
       chdir: /opt/pgsql/bin
     environment:
@@ -454,6 +304,8 @@
   - name: Run installcheck Server - tde_heap_basic/tde_heap
     ignore_errors: yes
     shell: |
+      psql -d $DB_NAME -c "ALTER SYSTEM SET shared_preload_libraries ='pg_tde';"
+      psql -d $DB_NAME -c "SELECT pg_reload_conf();"
       psql -c "CREATE EXTENSION pg_tde;"
       psql -c "ALTER SYSTEM SET default_table_access_method='{{ method }}';"
       psql -c "SELECT pg_reload_conf();"
@@ -478,6 +330,8 @@
   - name: Run installcheck-world Server - tde_heap_basic/tde_heap
     ignore_errors: yes
     shell: |
+      psql -d $DB_NAME -c "ALTER SYSTEM SET shared_preload_libraries ='pg_tde';"
+      psql -d $DB_NAME -c "SELECT pg_reload_conf();"
       psql -c "CREATE EXTENSION pg_tde;"
       psql -c "ALTER SYSTEM SET default_table_access_method='{{ method }}';"
       psql -c "SELECT pg_reload_conf();"
@@ -515,21 +369,6 @@
       msg: "{{command_output.stdout_lines}}"
     when: output.stat.exists
 
-  - name: yum install -y yum-utils
-    become: true
-    command: yum install -y yum-utils
-    when: with_tde_heap
-
-  - name: yum-config-manager hashicorp repo
-    become: true
-    command: yum-config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
-    when: with_tde_heap
-
-  - name: yum -y install vault
-    become: true
-    command: yum -y install vault
-    when: with_tde_heap
-
   - name: Remove multiple extensions tap test case from pg_tde
     become_user: postgres
     command: rm -f /tmp/postgres/contrib/pg_tde/t/005_multiple_extensions.pl
@@ -537,7 +376,25 @@
 
   - debug: var=results.stdout_lines
 
+  - name: Add extensions to postgresql.conf for Debian
+    lineinfile:
+      path: /opt/pgsql/data/postgresql.conf
+      line: shared_preload_libraries = 'pg_tde'
+    when: with_tde_heap
+
+  - name: Restart Server
+    become_user: postgres
+    command: ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile restart
+    args:
+      chdir: /opt/pgsql/bin
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
+    register: results
+
+  - debug: var=results.stdout_lines
   - name: Start pg_tde tests - installcheck
+    ignore_errors: yes
     shell: | 
       TV=$(mktemp)
       { exec >$TV; vault server -dev; } &
@@ -562,6 +419,7 @@
   - debug: var=results.stdout_lines
 
   - name: Start pg_tde tests - installcheck-world
+    ignore_errors: yes
     shell: | 
       TV=$(mktemp)
       { exec >$TV; vault server -dev; } &

@@ -2,8 +2,11 @@
   - name: Set Facts
     set_fact:
       testsuite: "{{ lookup('env', 'TESTSUITE') }}"
-      percona_server_version: "{{ lookup('env', 'PERCONA_SERVER_VERSION') }}"
-      major_version: "{{ lookup('env', 'VERSION').split('.') }}"
+      access_method: "{{ lookup('env', 'ACCESS_METHOD') }}"
+      with_tde_heap: "{{ lookup('env', 'WITH_TDE_HEAP') }}"
+      change_tde_branch: "{{ lookup('env', 'CHANGE_TDE_BRANCH') }}"
+      tde_branch: "{{ lookup('env', 'TDE_BRANCH') }}"
+      major_version: "{{ lookup('env', 'VERSION').split('.')[0].split('-')[1] }}"
       cacheable: true
 
   - name: Include Redhat tasks file 
