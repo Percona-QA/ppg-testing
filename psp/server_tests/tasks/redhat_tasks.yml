@@ -229,6 +229,21 @@
     ignore_errors: true
     register: results
 
+  - name: yum install -y yum-utils
+    become: true
+    command: yum install -y yum-utils
+    when: with_tde_heap
+
+  - name: yum-config-manager hashicorp repo
+    become: true
+    command: yum-config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
+    when: with_tde_heap
+
+  - name: yum -y install vault
+    become: true
+    command: yum -y install vault
+    when: with_tde_heap
+
   - name: Clone Postgres/PSP sources with pg_tde
     git:
       repo: "{{ repo }}"
@@ -514,21 +529,6 @@
     debug:
       msg: "{{command_output.stdout_lines}}"
     when: output.stat.exists
-
-  - name: yum install -y yum-utils
-    become: true
-    command: yum install -y yum-utils
-    when: with_tde_heap
-
-  - name: yum-config-manager hashicorp repo
-    become: true
-    command: yum-config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
-    when: with_tde_heap
-
-  - name: yum -y install vault
-    become: true
-    command: yum -y install vault
-    when: with_tde_heap
 
   - name: Remove multiple extensions tap test case from pg_tde
     become_user: postgres

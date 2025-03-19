@@ -46,6 +46,7 @@
         - autoconf
         - libjson-c-dev
         - libhttp-server-simple-perl
+        - python3-pykmip
 
   - name: Install rename
     ansible.builtin.shell: sudo DEBIAN_FRONTEND=noninteractive apt install -y rename
@@ -231,18 +232,18 @@
 
   - debug: var=regression.stdout_lines
 
-  - name: Restart Server
-    become_user: postgres
-    command: ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile restart
-    args:
-      chdir: /opt/pgsql/bin
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: (testsuite == 'server-installcheck-world-with-tde' or testsuite == 'tde-installcheck-only')
-    register: results
+  # - name: Restart Server
+  #   become_user: postgres
+  #   command: ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile restart
+  #   args:
+  #     chdir: /opt/pgsql/bin
+  #   environment:
+  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
+  #   when: (testsuite == 'server-installcheck-world-with-tde' or testsuite == 'tde-installcheck-only')
+  #   register: results
 
-  - debug: var=results.stdout_lines
+  # - debug: var=results.stdout_lines
 
   - name: Start pg_tde tests only - installcheck
     ignore_errors: yes
