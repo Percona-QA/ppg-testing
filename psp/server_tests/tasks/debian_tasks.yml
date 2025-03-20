@@ -166,7 +166,10 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      TDE_MODE: 1 
+      TDE_MODE: 1
+      LANG: C.UTF-8
+      LC_CTYPE: C
+      LC_ALL: C
     when: (testsuite == 'server-installcheck-world-with-tde' or testsuite == 'tde-installcheck-only')
     register: results
 
