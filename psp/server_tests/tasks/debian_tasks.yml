@@ -318,7 +318,15 @@
 
   - name: Start server & pg_tde tests - installcheck-world
     ignore_errors: yes
-    shell: | 
+    shell: | | 
+      psql -c "CREATE SCHEMA tde;"
+      psql -c "CREATE EXTENSION pg_tde;"
+      psql -c "SELECT tde.pg_tde_add_global_key_provider_file('reg_file-global', '/tmp/pg_tde_test_keyring.per');"
+      psql -c "SELECT tde.pg_tde_set_server_principal_key('global-principal-key', 'reg_file-global');"
+      psql -c "ALTER SYSTEM SET pg_tde.wal_encrypt = on;"
+      psql -c "ALTER SYSTEM SET default_table_access_method = 'tde_heap';"
+      psql -c "ALTER SYSTEM SET search_path = "$user",public,tde;"
+      psql -c "SELECT pg_reload_conf();"
       cd /tmp
       wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
       python3 create_certificates.py
