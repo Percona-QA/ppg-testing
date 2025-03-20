@@ -284,7 +284,8 @@
       psql -c "ALTER SYSTEM SET pg_tde.wal_encrypt = on;"
       psql -c "ALTER SYSTEM SET default_table_access_method = 'tde_heap';"
       psql -c "ALTER SYSTEM SET search_path = "$user",public,tde;"
-      psql -c "SELECT pg_reload_conf();"
+      cd /opt/pgsql/bin
+      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile restart
       cd /tmp
       wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
       python3 create_certificates.py
@@ -326,7 +327,8 @@
       psql -c "ALTER SYSTEM SET pg_tde.wal_encrypt = on;"
       psql -c "ALTER SYSTEM SET default_table_access_method = 'tde_heap';"
       psql -c "ALTER SYSTEM SET search_path = "$user",public,tde;"
-      psql -c "SELECT pg_reload_conf();"
+      cd /opt/pgsql/bin
+      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile restart
       cd /tmp
       wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
       python3 create_certificates.py
