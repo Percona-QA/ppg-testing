@@ -418,5 +418,5 @@
 
   - name: End play if regression has failures
     fail:
-      msg: regression failed
-    when: regression.rc != 0
+      msg: "regression failed"
+    when: regression is defined and regression.rc != 0
