@@ -416,7 +416,17 @@
       msg: "{{command_output.stdout_lines}}"
     when: output.stat.isreg is defined and output.stat.isreg == True
 
+  - name: Get server logfile contents if exists
+    command: cat /tmp/postgres/logfile
+    register: log_output
+    when: regression.rc is defined and regression.rc != 0
+
+  - name: Print to console logfile
+    debug:
+      msg: "{{log_output.stdout_lines}}"
+    when: regression.rc is defined and regression.rc != 0
+
   - name: End play if regression has failures
     fail:
       msg: "regression failed"
-    when: regression is defined and regression.rc != 0
+    when: regression.rc is defined and regression.rc != 0
