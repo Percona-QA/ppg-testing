@@ -335,12 +335,17 @@
       psql -c "SELECT pg_tde_add_global_key_provider_file('reg_file-global', '/tmp/pg_tde_test_keyring.per');"
       psql -c "SELECT pg_tde_set_server_principal_key('global-principal-key', 'reg_file-global');"
       psql -c "ALTER SYSTEM SET pg_tde.wal_encrypt = on;"
+      psql -c "show default_table_access_method ;"
       psql -c "SELECT pg_reload_conf();"
       cd /opt/pgsql/bin
       echo "default_table_access_method = 'tde_heap'" >> /opt/pgsql/data/postgresql.conf
       ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop
       sleep 5
       ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start
+      psql -c "show default_table_access_method ;"
+      psql -c "ALTER SYSTEM SET default_table_access_method = 'tde_heap';"
+      psql -c "SELECT pg_reload_conf();"
+      psql -c "show default_table_access_method ;"
       psql -c "SELECT pg_tde_set_default_principal_key('test-db-principal-key', 'reg_file-global');"
       cd /tmps
       wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
