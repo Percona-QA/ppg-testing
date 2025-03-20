@@ -160,7 +160,7 @@
 
   - name: Start Server
     become_user: postgres
-    command: ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start
+    command: ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
     args:
       chdir: /opt/pgsql/bin
     environment:
@@ -293,9 +293,9 @@
       psql -c "SELECT pg_reload_conf();"
       cd /opt/pgsql/bin
       echo "default_table_access_method = 'tde_heap'" >> /opt/pgsql/data/postgresql.conf
-      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop
+      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop -o '-p 5432'
       sleep 5
-      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start
+      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
       psql -c "SELECT tde.pg_tde_set_default_principal_key('test-db-principal-key', 'reg_file-global');"
       cd /tmp
       wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
@@ -311,7 +311,7 @@
       sleep 10
       export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
       echo "Root token: $ROOT_TOKEN"
-      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres/contrib/pg_tde && make installcheck
+      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres/contrib/pg_tde && make -s installcheck
     become_user: postgres
     args:
       executable: /bin/bash
@@ -320,7 +320,6 @@
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
-      INSTALL_DIR: "/opt/pgsql"
       TDE_MODE: 1
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
     when: testsuite == 'tde-installcheck-only'
@@ -339,9 +338,9 @@
       psql -c "SELECT pg_reload_conf();"
       cd /opt/pgsql/bin
       echo "default_table_access_method = 'tde_heap'" >> /opt/pgsql/data/postgresql.conf
-      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop
+      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop -o '-p 5432'
       sleep 5
-      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start
+      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
       psql -c "show default_table_access_method ;"
       psql -c "ALTER SYSTEM SET default_table_access_method = 'tde_heap';"
       psql -c "SELECT pg_reload_conf();"
@@ -361,7 +360,7 @@
       sleep 10
       export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
       echo "Root token: $ROOT_TOKEN"
-      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres && make installcheck-world
+      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres && make -s installcheck-world
     become_user: postgres
     args:
       executable: /bin/bash
@@ -370,7 +369,6 @@
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
-      INSTALL_DIR: "/opt/pgsql"
       TDE_MODE: 1
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
     when: testsuite == 'server-installcheck-world-with-tde'
