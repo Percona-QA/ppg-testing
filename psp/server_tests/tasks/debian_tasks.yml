@@ -289,10 +289,13 @@
       psql -c "SELECT tde.pg_tde_set_server_principal_key('global-principal-key', 'reg_file-global');"
       psql -c "ALTER SYSTEM SET pg_tde.wal_encrypt = on;"
       psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde;"
-      psql -c "ALTER SYSTEM SET default_table_access_method = 'tde_heap';"
       psql -c "ALTER SYSTEM SET search_path = postgres,public,tde;"
+      psql -c "SELECT pg_reload_conf();"
       cd /opt/pgsql/bin
-      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile restart
+      echo "default_table_access_method = 'tde_heap'" >> /opt/pgsql/data/postgresql.conf
+      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop
+      sleep 5
+      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start
       psql -c "SELECT tde.pg_tde_set_default_principal_key('test-db-principal-key', 'reg_file-global');"
       cd /tmp
       wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
@@ -328,18 +331,18 @@
   - name: Start server & pg_tde tests - installcheck-world
     ignore_errors: yes
     shell: | 
-      psql -c "CREATE SCHEMA tde;"
-      psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde SCHEMA tde;"
-      psql -c "SELECT tde.pg_tde_add_global_key_provider_file('reg_file-global', '/tmp/pg_tde_test_keyring.per');"
-      psql -c "SELECT tde.pg_tde_set_server_principal_key('global-principal-key', 'reg_file-global');"
-      psql -c "ALTER SYSTEM SET pg_tde.wal_encrypt = on;"
       psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde;"
-      psql -c "ALTER SYSTEM SET default_table_access_method = 'tde_heap';"
-      psql -c "ALTER SYSTEM SET search_path = postgres,public,tde;"
+      psql -c "SELECT pg_tde_add_global_key_provider_file('reg_file-global', '/tmp/pg_tde_test_keyring.per');"
+      psql -c "SELECT pg_tde_set_server_principal_key('global-principal-key', 'reg_file-global');"
+      psql -c "ALTER SYSTEM SET pg_tde.wal_encrypt = on;"
+      psql -c "SELECT pg_reload_conf();"
       cd /opt/pgsql/bin
-      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile restart
-      psql -c "SELECT tde.pg_tde_set_default_principal_key('test-db-principal-key', 'reg_file-global');"
-      cd /tmp
+      echo "default_table_access_method = 'tde_heap'" >> /opt/pgsql/data/postgresql.conf
+      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop
+      sleep 5
+      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start
+      psql -c "SELECT pg_tde_set_default_principal_key('test-db-principal-key', 'reg_file-global');"
+      cd /tmps
       wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
       python3 create_certificates.py
       cat client_certificate_jane_doe.pem >> client_key_jane_doe.pem
