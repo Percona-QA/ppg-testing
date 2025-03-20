@@ -318,7 +318,7 @@
 
   - name: Start server & pg_tde tests - installcheck-world
     ignore_errors: yes
-    shell: | | 
+    shell: | 
       psql -c "CREATE SCHEMA tde;"
       psql -c "CREATE EXTENSION pg_tde;"
       psql -c "SELECT tde.pg_tde_add_global_key_provider_file('reg_file-global', '/tmp/pg_tde_test_keyring.per');"
