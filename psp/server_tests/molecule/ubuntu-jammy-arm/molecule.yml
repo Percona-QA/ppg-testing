@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pdp-ujammy-arm-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-0a50d18f624ae0302
+    image: ami-0f45e2f16611e3139
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t4g.xlarge
     ssh_user: ubuntu

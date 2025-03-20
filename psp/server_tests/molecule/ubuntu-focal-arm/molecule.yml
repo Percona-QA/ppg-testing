@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pdp-ufocal-arm-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-05808cb5667d133b0
+    image: ami-0f0d21f59265f50a1
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t4g.xlarge
     ssh_user: ubuntu

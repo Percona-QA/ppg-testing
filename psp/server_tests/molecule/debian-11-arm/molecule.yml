@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pdp-debian11-arm-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-079862e16fe3822d0
+    image: ami-070c9c7ba2bbe7399
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t4g.xlarge
     ssh_user: admin
