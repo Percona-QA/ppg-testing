@@ -296,7 +296,6 @@
       ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop -o '-p 5432'
       sleep 5
       ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
-      psql -c "SELECT tde.pg_tde_set_default_principal_key('test-db-principal-key', 'reg_file-global');"
       cd /tmp
       wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
       python3 create_certificates.py
@@ -311,7 +310,7 @@
       sleep 10
       export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
       echo "Root token: $ROOT_TOKEN"
-      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres/contrib/pg_tde && make -s installcheck
+      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres/contrib/pg_tde && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck
     become_user: postgres
     args:
       executable: /bin/bash
@@ -320,6 +319,7 @@
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
+      INSTALL_DIR: "/opt/pgsql"
       TDE_MODE: 1
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
     when: testsuite == 'tde-installcheck-only'
@@ -330,11 +330,13 @@
   - name: Start server & pg_tde tests - installcheck-world
     ignore_errors: yes
     shell: | 
-      psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde;"
-      psql -c "SELECT pg_tde_add_global_key_provider_file('reg_file-global', '/tmp/pg_tde_test_keyring.per');"
-      psql -c "SELECT pg_tde_set_server_principal_key('global-principal-key', 'reg_file-global');"
+      psql -c "CREATE SCHEMA tde;"
+      psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde SCHEMA tde;"
+      psql -c "SELECT tde.pg_tde_add_global_key_provider_file('reg_file-global', '/tmp/pg_tde_test_keyring.per');"
+      psql -c "SELECT tde.pg_tde_set_server_principal_key('global-principal-key', 'reg_file-global');"
       psql -c "ALTER SYSTEM SET pg_tde.wal_encrypt = on;"
-      psql -c "show default_table_access_method ;"
+      psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde;"
+      psql -c "ALTER SYSTEM SET search_path = postgres,public,tde;"
       psql -c "SELECT pg_reload_conf();"
       cd /opt/pgsql/bin
       echo "default_table_access_method = 'tde_heap'" >> /opt/pgsql/data/postgresql.conf
@@ -345,7 +347,6 @@
       psql -c "ALTER SYSTEM SET default_table_access_method = 'tde_heap';"
       psql -c "SELECT pg_reload_conf();"
       psql -c "show default_table_access_method ;"
-      psql -c "SELECT pg_tde_set_default_principal_key('test-db-principal-key', 'reg_file-global');"
       cd /tmps
       wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
       python3 create_certificates.py
@@ -360,7 +361,7 @@
       sleep 10
       export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
       echo "Root token: $ROOT_TOKEN"
-      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres && make -s installcheck-world
+      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world
     become_user: postgres
     args:
       executable: /bin/bash
@@ -369,6 +370,7 @@
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
+      INSTALL_DIR: "/opt/pgsql"
       TDE_MODE: 1
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
     when: testsuite == 'server-installcheck-world-with-tde'
