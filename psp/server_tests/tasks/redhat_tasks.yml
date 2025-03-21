@@ -19,7 +19,7 @@
   - name: Enable Powertools on Rocky 8
     become: true
     shell: | 
-       dnf install dnf-plugins-core
+       dnf install -y dnf-plugins-core
        dnf config-manager --set-enabled powertools
     when: ansible_distribution_major_version == "8"
 
@@ -271,6 +271,41 @@
     register: results
 
   - debug: var=results.stdout_lines
+
+
+  - name: Configure Postgres/PSP from sources
+    command: ./configure '--enable-debug' '--enable-cassert' '--enable-tap-tests' '--with-icu' '--prefix=/opt/pgsql' \
+     '--enable-rpath' '--includedir=/opt/pgsql/include' '--mandir=/opt/pgsql/share/man' '--datadir=/opt/pgsql/share' \
+     '--libdir=/opt/pgsql/lib' '--with-lz4' '--with-extra-version= - Percona Distribution' '--with-zstd' \
+     '--with-icu' '--with-llvm' '--with-perl' '--with-python' '--with-tcl' '--with-tclconfig=/usr/lib64' \
+     '--with-openssl' '--with-pam' '--with-gssapi' '--with-includes=/usr/include' '--with-libraries=/usr/lib64' \
+     '--enable-nls' '--enable-dtrace' '--with-uuid=e2fs' '--with-libxml' '--with-libxslt' '--with-ldap' \
+     '--with-selinux' '--with-systemd' '--with-system-tzdata=/usr/share/zoneinfo' '--sysconfdir=/etc/sysconfig/pgsql' \
+     'CFLAGS=-O2 -g -pipe -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fexceptions -fstack-protector-strong -grecord-gcc-switches -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1 -m64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection' \
+     'LDFLAGS=-Wl,--as-needed' 'LLVM_CONFIG=/usr/bin/llvm-config' 'CLANG=/usr/bin/clang' \
+     'PKG_CONFIG_PATH=:/usr/lib64/pkgconfig:/usr/share/pkgconfig' 'PYTHON=/usr/bin/python3'
+    args:
+      chdir: /tmp/postgres
+    become_user: postgres
+    register: results
+    when: ansible_architecture == 'x86_64'
+
+  - name: Configure Postgres/PSP from sources
+    command: ./configure '--enable-debug' '--enable-cassert' '--enable-tap-tests' '--with-icu' '--prefix=/opt/pgsql' \
+     '--enable-rpath' '--includedir=/opt/pgsql/include' '--mandir=/opt/pgsql/share/man' '--datadir=/opt/pgsql/share' \
+     '--libdir=/opt/pgsql/lib' '--with-lz4' '--with-extra-version= - Percona Distribution' '--with-zstd' \
+     '--with-icu' '--with-llvm' '--with-perl' '--with-python' '--with-tcl' '--with-tclconfig=/usr/lib64' \
+     '--with-openssl' '--with-pam' '--with-gssapi' '--with-includes=/usr/include' '--with-libraries=/usr/lib64' \
+     '--enable-nls' '--enable-dtrace' '--with-uuid=e2fs' '--with-libxml' '--with-libxslt' '--with-ldap' \
+     '--with-selinux' '--with-systemd' '--with-system-tzdata=/usr/share/zoneinfo' '--sysconfdir=/etc/sysconfig/pgsql' \
+     'CFLAGS=-O2 -g -pipe -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fexceptions -fstack-protector-strong -grecord-gcc-switches -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection' \
+     'LDFLAGS=-Wl,--as-needed' 'LLVM_CONFIG=/usr/bin/llvm-config' 'CLANG=/usr/bin/clang' \
+     'PKG_CONFIG_PATH=:/usr/lib64/pkgconfig:/usr/share/pkgconfig' 'PYTHON=/usr/bin/python3'
+    args:
+      chdir: /tmp/postgres
+    become_user: postgres
+    register: results
+    when: ansible_architecture == 'aarch64'
 
   - name: Build Postgres/PSP (world) from sources
     make:
