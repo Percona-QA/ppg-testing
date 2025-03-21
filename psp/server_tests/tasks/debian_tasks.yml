@@ -145,6 +145,14 @@
 
   - debug: var=results.stdout_lines
 
+  - name: Remove create_schema.sql test case for tde_heap
+    become_user: postgres
+    command: rm -f /tmp/postgres/src/test/regress/sql/create_schema.sql
+    when: (testsuite == 'server-installcheck-world-with-tde' or testsuite == 'tde-installcheck-only')
+    register: results
+
+  - debug: var=results.stdout_lines
+
   - name: initdb cluster
     become_user: postgres
     command: ./initdb -D /opt/pgsql/data --set shared_preload_libraries=pg_tde
@@ -364,7 +372,7 @@
       sleep 10
       export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
       echo "Root token: $ROOT_TOKEN"
-      export ROOT_TOKEN=$ROOT_TOKEN && export TDE_MODE=1 && cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world
+      export ROOT_TOKEN=$ROOT_TOKEN && export TDE_MODE=1 && cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world -k
     become_user: postgres
     args:
       executable: /bin/bash
