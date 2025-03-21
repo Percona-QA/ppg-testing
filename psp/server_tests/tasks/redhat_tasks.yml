@@ -264,21 +264,21 @@
       chdir: /tmp/postgres
     become_user: postgres
 
-  - name: Remove pg_tde from source tree for heap-checkworld
-    become_user: postgres
-    command: rm -fr /tmp/postgres/contrib/pg_tde
-    when: testsuite == 'server-check-world-without-tde'
-    register: results
+  # - name: Remove pg_tde from source tree for heap-checkworld
+  #   become_user: postgres
+  #   command: rm -fr /tmp/postgres/contrib/pg_tde
+  #   when: testsuite == 'server-check-world-without-tde'
+  #   register: results
 
-  - debug: var=results.stdout_lines
+  # - debug: var=results.stdout_lines
 
-  - name: Remove libtde from source tree for heap-checkworld
-    become_user: postgres
-    command: rm -fr /tmp/postgres/src/libtde
-    when: testsuite == 'server-check-world-without-tde'
-    register: results
+  # - name: Remove libtde from source tree for heap-checkworld
+  #   become_user: postgres
+  #   command: rm -fr /tmp/postgres/src/libtde
+  #   when: testsuite == 'server-check-world-without-tde'
+  #   register: results
 
-  - debug: var=results.stdout_lines
+  # - debug: var=results.stdout_lines
 
   # - name: Configure Postgres/PSP from sources
   #   command: ./configure '--enable-debug' '--enable-cassert' '--enable-tap-tests' '--with-icu' '--prefix=/opt/pgsql'
