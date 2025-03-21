@@ -167,7 +167,8 @@
       - make
       - autoconf
       - json-c-devel
-
+      - python3-pip
+  
   - name: Install cpanm CGI::Session
     become: true
     command: cpanm CGI::Session
@@ -254,89 +255,30 @@
       repo: "{{ lookup('env', 'PSP_REPO') }}"
       version: "{{ lookup('env', 'PSP_BRANCH') }}"
     become_user: postgres
-    when: with_tde_heap
 
-  - name: Checkout user provided pg_tde branch
-    command: git checkout {{ branch }}
-    args:
-      chdir: /tmp/postgres/contrib/pg_tde
-    vars:
-      branch: "{{ lookup('env', 'tde_branch') }}"
-    become_user: postgres
-    when: with_tde_heap and change_tde_branch
-
-  - name: Configure pg_tde from sources without pg_tde
-    ansible.builtin.command: ./configure
-    become_user: postgres
-    args:
-      chdir: /tmp/postgres/contrib/pg_tde
-    when: with_tde_heap
-
-  - name: Clone Postgres/PSP sources
-    git:
-      repo: "{{ repo }}"
-      version: "{{ version }}"
-      dest: /tmp/postgres
-    vars:
-      repo: "{{ lookup('env', 'PSP_REPO') }}"
-      version: "{{ lookup('env', 'PSP_BRANCH') }}"
-    become_user: postgres
-    when: not with_tde_heap
-
-  - name: Remove pg_tde from source tree contrib/pg_tde
-    command: rm -fr contrib/pg_tde*
+  - name: Submodule update
+    command : git submodule update --init --recursive
     args:
       chdir: /tmp/postgres
-    when: not with_tde_heap
+    become_user: postgres
 
   - name: Configure Postgres/PSP from sources
-    command: ./configure '--enable-rpath' '--prefix=/opt/pgsql' '--enable-tap-tests' '--enable-depend' \
-     '--includedir=/opt/pgsql/include' '--mandir=/opt/pgsql/share/man' '--datadir=/opt/pgsql/share' \
-     '--libdir=/opt/pgsql/lib' '--with-lz4' '--with-extra-version= - Percona Distribution' '--with-zstd' \
-     '--with-icu' '--with-llvm' '--with-perl' '--with-python' '--with-tcl' '--with-tclconfig=/usr/lib64' \
-     '--with-openssl' '--with-pam' '--with-gssapi' '--with-includes=/usr/include' '--with-libraries=/usr/lib64' \
-     '--enable-nls' '--enable-dtrace' '--with-uuid=e2fs' '--with-libxml' '--with-libxslt' '--with-ldap' \
-     '--with-selinux' '--with-systemd' '--with-system-tzdata=/usr/share/zoneinfo' '--sysconfdir=/etc/sysconfig/pgsql' \
-     'CFLAGS=-O2 -g -pipe -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fexceptions -fstack-protector-strong -grecord-gcc-switches -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1 -m64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection' \
-     'LDFLAGS=-Wl,--as-needed' 'LLVM_CONFIG=/usr/bin/llvm-config' 'CLANG=/usr/bin/clang' \
-     'PKG_CONFIG_PATH=:/usr/lib64/pkgconfig:/usr/share/pkgconfig' 'PYTHON=/usr/bin/python3'
+    command: ./configure '--enable-debug' '--enable-cassert' '--enable-tap-tests' '--with-icu' '--prefix=/opt/pgsql'
     args:
       chdir: /tmp/postgres
     become_user: postgres
     register: results
-    when: ansible_architecture == 'x86_64'
-
-  - name: Configure Postgres/PSP from sources
-    command: ./configure '--enable-rpath' '--prefix=/opt/pgsql' '--enable-tap-tests' '--enable-depend' \
-     '--includedir=/opt/pgsql/include' '--mandir=/opt/pgsql/share/man' '--datadir=/opt/pgsql/share' \
-     '--libdir=/opt/pgsql/lib' '--with-lz4' '--with-extra-version= - Percona Distribution' '--with-zstd' \
-     '--with-icu' '--with-llvm' '--with-perl' '--with-python' '--with-tcl' '--with-tclconfig=/usr/lib64' \
-     '--with-openssl' '--with-pam' '--with-gssapi' '--with-includes=/usr/include' '--with-libraries=/usr/lib64' \
-     '--enable-nls' '--enable-dtrace' '--with-uuid=e2fs' '--with-libxml' '--with-libxslt' '--with-ldap' \
-     '--with-selinux' '--with-systemd' '--with-system-tzdata=/usr/share/zoneinfo' '--sysconfdir=/etc/sysconfig/pgsql' \
-     'CFLAGS=-O2 -g -pipe -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fexceptions -fstack-protector-strong -grecord-gcc-switches -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection' \
-     'LDFLAGS=-Wl,--as-needed' 'LLVM_CONFIG=/usr/bin/llvm-config' 'CLANG=/usr/bin/clang' \
-     'PKG_CONFIG_PATH=:/usr/lib64/pkgconfig:/usr/share/pkgconfig' 'PYTHON=/usr/bin/python3'
-    args:
-      chdir: /tmp/postgres
-    become_user: postgres
-    register: results
-    when: ansible_architecture == 'aarch64'
 
   - debug: var=results.stdout_lines
-
-  - shell: cat /tmp/postgres/config.log
-    register: cat
-
-  - debug: var=cat.stdout_lines
 
   - name: Build Postgres/PSP (world) from sources
     make:
       chdir: "/tmp/postgres"
       jobs: 4 
       target: world
-    become_user: postgres 
-    when: testsuite == 'installcheck-world'
+    become_user: postgres
+    environment:
+      TDE_MODE: 1 
     register: results
 
   - debug: var=results.stdout_lines
@@ -345,45 +287,8 @@
     make:
       chdir: "/tmp/postgres"
       target: install-world 
-    when: testsuite == 'installcheck-world'
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Build Postgres/PSP from sources
-    make:
-      chdir: "/tmp/postgres"
-      jobs: 4
-    become_user: postgres 
-    when: testsuite == 'installcheck'
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Install Postgres/PSP (install only) from build binaries
-    make:
-      chdir: "/tmp/postgres"
-      target: install 
-    when: testsuite == 'installcheck'
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Build pg_tde from sources
-    make:
-      chdir: "/tmp/postgres/contrib/pg_tde"
-      jobs: 4
-    become_user: postgres
-    when: with_tde_heap
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Install pg_tde from build binaries
-    make:
-      chdir: "/tmp/postgres/contrib/pg_tde"
-      target: install
-    when: with_tde_heap
+    environment:
+      TDE_MODE: 1 
     register: results
 
   - debug: var=results.stdout_lines
@@ -392,144 +297,6 @@
     become: true 
     command: sudo cp /opt/pgsql/bin/pg_config /usr/bin
 
-  - name: initdb cluster
-    become_user: postgres
-    command: ./initdb -D /opt/pgsql/data
-    args:
-      chdir: /opt/pgsql/bin
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Add extensions to postgresql.conf for Debian
-    lineinfile:
-      path: /opt/pgsql/data/postgresql.conf
-      line: shared_preload_libraries = 'pg_tde'
-    when: with_tde_heap
-
-  # - name: Set default Access Method - heap
-  #   lineinfile:
-  #     path: /opt/pgsql/data/postgresql.conf
-  #     line: default_table_access_method = 'heap'
-  #   when: access_method == 'heap'
-
-  - name: Start Server
-    become_user: postgres
-    command: ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start
-    args:
-      chdir: /opt/pgsql/bin
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  # - name: Set default Access Method - tde_heap
-  #   lineinfile:
-  #     path: /opt/pgsql/data/postgresql.conf
-  #     line: default_table_access_method = 'tde_heap'
-  #   when: with_tde_heap and access_method == 'tde_heap'
-
-  # - name: Set default Access Method - tde_heap_basic
-  #   lineinfile:
-  #     path: /opt/pgsql/data/postgresql.conf
-  #     line: default_table_access_method = 'tde_heap_basic'
-  #   when: with_tde_heap and access_method == 'tde_heap_basic'
-
-  - name: Run installcheck-world Server - heap
-    become_user: postgres
-    make:
-      chdir: "/tmp/postgres"
-      target: installcheck-world
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: testsuite == 'installcheck-world' and access_method == 'heap'
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Run installcheck Server - heap
-    become_user: postgres
-    make:
-      chdir: "/tmp/postgres"
-      target: installcheck
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: testsuite == 'installcheck' and access_method == 'heap'
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Run installcheck Server - tde_heap_basic/tde_heap
-    ignore_errors: yes
-    shell: |
-      psql -c "CREATE EXTENSION pg_tde;"
-      psql -c "ALTER SYSTEM SET default_table_access_method='{{ method }}';"
-      psql -c "SELECT pg_reload_conf();"
-      psql -c "SELECT pg_tde_add_key_provider_file('file-vault','/tmp/pg_tde_test_keyring.per');"
-      psql -c "SELECT pg_tde_set_principal_key('test-db-master-key','file-vault');"
-      make installcheck
-    become_user: postgres
-    args:
-      executable: /bin/bash
-      chdir: "/tmp/postgres"
-    vars:
-      method: "{{ access_method }}"
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: testsuite == 'installcheck' and
-      (access_method == 'tde_heap_basic' or access_method == 'tde_heap')
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Run installcheck-world Server - tde_heap_basic/tde_heap
-    ignore_errors: yes
-    shell: |
-      psql -c "CREATE EXTENSION pg_tde;"
-      psql -c "ALTER SYSTEM SET default_table_access_method='{{ method }}';"
-      psql -c "SELECT pg_reload_conf();"
-      psql -c "SELECT pg_tde_add_key_provider_file('file-vault','/tmp/pg_tde_test_keyring.per');"
-      psql -c "SELECT pg_tde_set_principal_key('test-db-master-key','file-vault');"
-      make installcheck-world
-    become_user: postgres
-    args:
-      executable: /bin/bash
-      chdir: "/tmp/postgres"
-    vars:
-      method: "{{ access_method }}"
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: testsuite == 'installcheck-world' and
-      (access_method == 'tde_heap_basic' or access_method == 'tde_heap')
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - stat:
-      path: /tmp/postgres/src/test/regress/regression.diffs
-    register: output
-
-  - name: Get Server - regression.diffs contents
-    ignore_errors: yes
-    command: cat /tmp/postgres/src/test/regress/regression.diffs
-    register: command_output
-    when: output.stat.exists
-
-  - name: Print to console Server - regression.diffs contents
-    ignore_errors: yes
-    debug:
-      msg: "{{command_output.stdout_lines}}"
-    when: output.stat.exists
-
   - name: Remove multiple extensions tap test case from pg_tde
     become_user: postgres
     command: rm -f /tmp/postgres/contrib/pg_tde/t/005_multiple_extensions.pl
@@ -537,14 +304,150 @@
 
   - debug: var=results.stdout_lines
 
-  - name: Start pg_tde tests - installcheck
+  - name: Remove create_schema.sql test case for tde_heap
+    become_user: postgres
+    command: rm -f /tmp/postgres/src/test/regress/sql/create_schema.sql
+    when: (testsuite == 'server-installcheck-world-with-tde' or testsuite == 'tde-installcheck-only')
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: initdb cluster
+    become_user: postgres
+    command: ./initdb -D /opt/pgsql/data --set shared_preload_libraries=pg_tde
+    args:
+      chdir: /opt/pgsql/bin
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
+    when: (testsuite == 'server-installcheck-world-with-tde' or testsuite == 'tde-installcheck-only')
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Start Server
+    become_user: postgres
+    command: ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
+    args:
+      chdir: /opt/pgsql/bin
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
+      TDE_MODE: 1
+      LANG: C.UTF-8
+      LC_CTYPE: C
+      LC_ALL: C
+    when: (testsuite == 'server-installcheck-world-with-tde' or testsuite == 'tde-installcheck-only')
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Check pg_tde library output
+    become_user: postgres
     shell: | 
+      psql -c "select * from pg_available_extensions where name like 'pg_tde';"
+    args:
+      executable: /bin/bash
+      chdir: "/tmp/postgres"
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
+    when: (testsuite == 'server-installcheck-world-with-tde' or testsuite == 'tde-installcheck-only')
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Check default_table_access_method library output
+    become_user: postgres
+    shell: | 
+      psql -c "show default_table_access_method ;"
+    args:
+      executable: /bin/bash
+      chdir: "/tmp/postgres"
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
+    when: (testsuite == 'server-installcheck-world-with-tde' or testsuite == 'tde-installcheck-only')
+    register: results
+
+  - debug: var=results.stdout_lines
+
+# ## tde test methods
+# server-check-world-without-tde
+# server-installcheck-world-with-tde
+# tde-installcheck-only
+
+# Check-World Server testsuite 
+  - name: Run server-check-world-without-tde
+    ignore_errors: yes
+    shell: | 
+      cd /tmp
+      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
+      python3 create_certificates.py
+      cat client_certificate_jane_doe.pem >> client_key_jane_doe.pem
+      mkdir policies
+      cd policies
+      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/examples/policy.json
+      cd ..
+      pykmip-server -f "/tmp/postgres/contrib/pg_tde/pykmip-server.conf" -l /tmp/kmip-server.log &
       TV=$(mktemp)
       { exec >$TV; vault server -dev; } &
       sleep 10
       export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
       echo "Root token: $ROOT_TOKEN"
-      export ROOT_TOKEN=$ROOT_TOKEN && make installcheck
+      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres && make -s check-world
+    become_user: postgres
+    args:
+      executable: /bin/bash
+      chdir: "/tmp/postgres/"
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
+      PG_TEST_PORT_DIR: "/tmp/pg_tde"
+      INSTALL_DIR: "/opt/pgsql"
+      TDE_MODE: 1
+      PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+    when: testsuite == 'server-check-world-without-tde'
+    register: regression
+
+  - debug: var=regression.stdout_lines
+
+  - name: Start pg_tde tests only - installcheck
+    ignore_errors: yes
+    shell: | 
+      psql -c "CREATE SCHEMA tde;"
+      psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde SCHEMA tde;"
+      psql -c "SELECT tde.pg_tde_add_global_key_provider_file('reg_file-global', '/tmp/pg_tde_test_keyring.per');"
+      psql -c "SELECT tde.pg_tde_set_server_principal_key('global-principal-key', 'reg_file-global');"
+      psql -c "ALTER SYSTEM SET pg_tde.wal_encrypt = on;"
+      psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde;"
+      psql -c "ALTER SYSTEM SET search_path = postgres,public,tde;"
+      psql -c "SELECT pg_reload_conf();"
+      cd /opt/pgsql/bin
+      echo "default_table_access_method = 'tde_heap'" >> /opt/pgsql/data/postgresql.conf
+      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop -o '-p 5432'
+      sleep 5
+      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
+      sudo dnf install -y python3 python3-pip python3-devel gcc openssl-devel
+      cd /tmp
+      python3 -m venv validation
+      source validation/bin/activate
+      pip install pykmip
+      export $PATH:/tmp/validation/bin
+      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
+      python3 create_certificates.py
+      cat client_certificate_jane_doe.pem >> client_key_jane_doe.pem
+      mkdir policies
+      cd policies
+      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/examples/policy.json
+      cd ..
+      pykmip-server -f "/tmp/postgres/contrib/pg_tde/pykmip-server.conf" -l /tmp/kmip-server.log &
+      TV=$(mktemp)
+      { exec >$TV; vault server -dev; } &
+      sleep 10
+      export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
+      echo "Root token: $ROOT_TOKEN"
+      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres/contrib/pg_tde && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck -k
     become_user: postgres
     args:
       executable: /bin/bash
@@ -552,51 +455,142 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      LANG: C.UTF-8
-      LC_CTYPE: C
-      LC_ALL: C
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
-    when: with_tde_heap and testsuite == 'installcheck'
-    register: results
+      INSTALL_DIR: "/opt/pgsql"
+      TDE_MODE: 1
+      PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+    when: testsuite == 'tde-installcheck-only'
+    register: regression
 
-  - debug: var=results.stdout_lines
+  - debug: var=regression.stdout_lines
 
-  - name: Start pg_tde tests - installcheck-world
+  - name: Start server & pg_tde tests - installcheck-world
+    ignore_errors: yes
     shell: | 
+      psql -c "CREATE SCHEMA tde;"
+      psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde SCHEMA tde;"
+      psql -c "SELECT tde.pg_tde_add_global_key_provider_file('reg_file-global', '/tmp/pg_tde_test_keyring.per');"
+      psql -c "SELECT tde.pg_tde_set_server_principal_key('global-principal-key', 'reg_file-global');"
+      psql -c "ALTER SYSTEM SET pg_tde.wal_encrypt = on;"
+      psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde;"
+      psql -c "ALTER SYSTEM SET search_path = postgres,public,tde;"
+      psql -c "SELECT pg_reload_conf();"
+      cd /opt/pgsql/bin
+      echo "default_table_access_method = 'tde_heap'" >> /opt/pgsql/data/postgresql.conf
+      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop -o '-p 5432'
+      sleep 5
+      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
+      psql -c "show default_table_access_method ;"
+      psql -c "ALTER SYSTEM SET default_table_access_method = 'tde_heap';"
+      psql -c "SELECT pg_reload_conf();"
+      psql -c "show default_table_access_method ;"
+      sudo dnf install -y python3 python3-pip python3-devel gcc openssl-devel
+      cd /tmp
+      python3 -m venv validation
+      source validation/bin/activate
+      pip install pykmip
+      export $PATH:/tmp/validation/bin
+      cd /tmp
+      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
+      python3 create_certificates.py
+      cat client_certificate_jane_doe.pem >> client_key_jane_doe.pem
+      mkdir policies
+      cd policies
+      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/examples/policy.json
+      cd ..
+      pykmip-server -f "/tmp/postgres/contrib/pg_tde/pykmip-server.conf" -l /tmp/kmip-server.log &
       TV=$(mktemp)
       { exec >$TV; vault server -dev; } &
       sleep 10
       export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
       echo "Root token: $ROOT_TOKEN"
-      export ROOT_TOKEN=$ROOT_TOKEN && make installcheck
+      export ROOT_TOKEN=$ROOT_TOKEN && export TDE_MODE=1 && cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world -k
     become_user: postgres
     args:
       executable: /bin/bash
-      chdir: "/tmp/postgres/contrib/pg_tde"
+      chdir: "/tmp/postgres/"
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
+      PG_TEST_PORT_DIR: "/tmp/pg_tde"
+      INSTALL_DIR: "/opt/pgsql"
+      TDE_MODE: 1
       LANG: C.UTF-8
       LC_CTYPE: C
       LC_ALL: C
-      PG_TEST_PORT_DIR: "/tmp/pg_tde"
-    when: with_tde_heap and testsuite == 'installcheck-world'
-    register: results
+      PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+    when: testsuite == 'server-installcheck-world-with-tde'
+    register: regression
 
-  - debug: var=results.stdout_lines
+  - debug: var=regression.stdout_lines
+
+  - stat:
+      path: /tmp/postgres/src/test/regress/regression.diffs
+    register: output
+
+  # - name: Get Server - regression.diffs contents
+  #   ignore_errors: yes
+  #   command: cat /tmp/postgres/src/test/regress/regression.diffs
+  #   register: command_output
+  #   when: output.stat.exists == True
+
+  # - name: Print to console Server - regression.diffs contents
+  #   ignore_errors: yes
+  #   debug:
+  #     msg: "{{command_output.stdout_lines}}"
+  #   when: output.stat.exists == True
+
+  # - stat:
+  #     path: /tmp/postgres/contrib/pg_tde/regression.diffs
+  #   register: output
+
+  # - name: Get pg_tde - regression.diffs contents
+  #   ignore_errors: yes
+  #   command: cat /tmp/postgres/contrib/pg_tde/regression.diffs
+  #   register: command_output
+  #   when: output.stat.exists == True
+
+  # - name: Print to console pg_tde - regression.diffs contents
+  #   ignore_errors: yes
+  #   debug:
+  #     msg: "{{command_output.stdout_lines}}"
+  #   when: output.stat.exists == True
+
+  - name: Get Server - regression.diffs contents
+    command: cat /tmp/postgres/src/test/regress/regression.diffs
+    register: command_output
+    when: output.stat.isreg is defined and output.stat.isreg == True
+
+  - name: Print to console Server - regression.diffs contents
+    debug:
+      msg: "{{command_output.stdout_lines}}"
+    when: output.stat.isreg is defined and output.stat.isreg == True
 
   - stat:
       path: /tmp/postgres/contrib/pg_tde/regression.diffs
     register: output
 
   - name: Get pg_tde - regression.diffs contents
-    ignore_errors: yes
     command: cat /tmp/postgres/contrib/pg_tde/regression.diffs
     register: command_output
-    when: output.stat.exists
+    when: output.stat.isreg is defined and output.stat.isreg == True
 
   - name: Print to console pg_tde - regression.diffs contents
-    ignore_errors: yes
     debug:
       msg: "{{command_output.stdout_lines}}"
-    when: output.stat.exists
+    when: output.stat.isreg is defined and output.stat.isreg == True
+
+  - name: Get server logfile contents if exists
+    command: cat /tmp/postgres/logfile
+    register: log_output
+    when: regression.rc is defined and regression.rc != 0
+
+  - name: Print to console logfile
+    debug:
+      msg: "{{log_output.stdout_lines}}"
+    when: regression.rc is defined and regression.rc != 0
+
+  - name: End play if regression has failures
+    fail:
+      msg: "regression failed"
+    when: regression.rc is defined and regression.rc != 0

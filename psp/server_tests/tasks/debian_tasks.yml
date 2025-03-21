@@ -253,44 +253,6 @@
 
   - debug: var=regression.stdout_lines
 
-  # - name: Setup env for TDE setup
-  #   shell: |
-  #     psql -c "CREATE SCHEMA tde;"
-  #     psql -c "CREATE EXTENSION pg_tde;"
-  #     psql -c "SELECT tde.pg_tde_add_global_key_provider_file('reg_file-global', '/tmp/pg_tde_test_keyring.per');"
-  #     psql -c "SELECT tde.pg_tde_set_server_principal_key('global-principal-key', 'reg_file-global');"
-  #     psql -c "ALTER SYSTEM SET pg_tde.wal_encrypt = on;"
-  #     psql -c "ALTER SYSTEM SET default_table_access_method = 'tde_heap';"
-  #     psql -c "ALTER SYSTEM SET search_path = "$user",public,tde;"
-  #     psql -c "SELECT pg_reload_conf();"
-  #   become_user: postgres
-  #   args:
-  #     executable: /bin/bash
-  #     chdir: "/tmp/postgres"
-  #   environment:
-  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
-  #     PG_TEST_PORT_DIR: "/tmp/pg_tde"
-  #     INSTALL_DIR: "/opt/pgsql"
-  #     TDE_MODE: 1 
-  #   when: (testsuite == 'server-installcheck-world-with-tde' or testsuite == 'tde-installcheck-only')
-  #   register: output
-
-  - debug: var=output.stdout_lines
-
-  # - name: Restart Server
-  #   become_user: postgres
-  #   command: ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile restart
-  #   args:
-  #     chdir: /opt/pgsql/bin
-  #   environment:
-  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
-  #   when: (testsuite == 'server-installcheck-world-with-tde' or testsuite == 'tde-installcheck-only')
-  #   register: results
-
-  # - debug: var=results.stdout_lines
-
   - name: Start pg_tde tests only - installcheck
     ignore_errors: yes
     shell: | 
@@ -358,7 +320,7 @@
       psql -c "ALTER SYSTEM SET default_table_access_method = 'tde_heap';"
       psql -c "SELECT pg_reload_conf();"
       psql -c "show default_table_access_method ;"
-      cd /tmps
+      cd /tmp
       wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
       python3 create_certificates.py
       cat client_certificate_jane_doe.pem >> client_key_jane_doe.pem
