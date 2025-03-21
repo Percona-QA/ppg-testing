@@ -16,14 +16,18 @@
   #     state: present
   #   when: ansible_facts['distribution'] == "OracleLinux" and ansible_facts['distribution_major_version'] == "8"
 
-  - name: Enable Powertools on Rocky 9
+  - name: Enable Powertools on Rocky 8
     become: true
-    command: dnf install dnf-plugins-core && dnf config-manager --set-enabled powertools
+    shell: | 
+       dnf install dnf-plugins-core
+       dnf config-manager --set-enabled powertools
     when: ansible_distribution_major_version == "8"
 
   - name: Enable CRB on Rocky 9
     become: true
-    command: dnf install dnf-plugins-core && dnf config-manager --set-enabled crb
+    shell: | 
+       dnf install dnf-plugins-core
+       dnf config-manager --set-enabled crb
     when: ansible_distribution_major_version == "9"    
 
   - name: Add the user 'postgres'
