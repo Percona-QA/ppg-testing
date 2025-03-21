@@ -139,12 +139,19 @@
         state: present
       when: ansible_os_family == "RedHat" and ansible_distribution_major_version|int <= 7
 
-    - name: Enable devel on Rocky
+    - name: Enable Powertools on Rocky 8
       become: true
       shell: | 
-       dnf install dnf-plugins-core
-       dnf config-manager --set-enabled devel
-      when: ansible_os_family == "RedHat" and ansible_distribution == "Rocky"
+        dnf install -y dnf-plugins-core
+        dnf config-manager --set-enabled powertools
+      when: ansible_distribution_major_version == "8"
+
+    - name: Enable CRB on Rocky 9
+      become: true
+      shell: | 
+        dnf install -y dnf-plugins-core
+        dnf config-manager --set-enabled crb
+      when: ansible_distribution_major_version == "9"
 
     - name: Install additional packages RPM
       yum:
