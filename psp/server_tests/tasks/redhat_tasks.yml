@@ -263,15 +263,14 @@
       chdir: /tmp/postgres
     become_user: postgres
 
-  - name: Configure Postgres/PSP from sources
-    command: ./configure '--enable-debug' '--enable-cassert' '--enable-tap-tests' '--with-icu' '--prefix=/opt/pgsql'
-    args:
-      chdir: /tmp/postgres
-    become_user: postgres
-    register: results
+  # - name: Configure Postgres/PSP from sources
+  #   command: ./configure '--enable-debug' '--enable-cassert' '--enable-tap-tests' '--with-icu' '--prefix=/opt/pgsql'
+  #   args:
+  #     chdir: /tmp/postgres
+  #   become_user: postgres
+  #   register: results
 
-  - debug: var=results.stdout_lines
-
+  # - debug: var=results.stdout_lines
 
   - name: Configure Postgres/PSP from sources
     command: ./configure '--enable-debug' '--enable-cassert' '--enable-tap-tests' '--with-icu' '--prefix=/opt/pgsql' \
