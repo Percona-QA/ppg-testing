@@ -172,6 +172,7 @@
       - autoconf
       - json-c-devel
       - python3-pip
+      - wget
   
   - name: Install cpanm CGI::Session
     become: true
@@ -467,6 +468,7 @@
       cd /tmp
       python3 -m venv validation
       source validation/bin/activate
+      pip install --upgrade pip
       pip install pykmip
       export $PATH:/tmp/validation/bin
       wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
@@ -523,6 +525,7 @@
       cd /tmp
       python3 -m venv validation
       source validation/bin/activate
+      pip install --upgrade pip
       pip install pykmip
       export $PATH:/tmp/validation/bin
       cd /tmp
