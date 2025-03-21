@@ -220,7 +220,6 @@
 
 # Check-World Server testsuite 
   - name: Run server-check-world-without-tde
-    ignore_errors: yes
     shell: | 
       cd /tmp
       wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
@@ -254,7 +253,6 @@
   - debug: var=regression.stdout_lines
 
   - name: Start pg_tde tests only - installcheck
-    ignore_errors: yes
     shell: | 
       psql -c "CREATE SCHEMA tde;"
       psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde SCHEMA tde;"
@@ -301,7 +299,6 @@
   - debug: var=regression.stdout_lines
 
   - name: Start server & pg_tde tests - installcheck-world
-    ignore_errors: yes
     shell: | 
       psql -c "CREATE SCHEMA tde;"
       psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde SCHEMA tde;"
