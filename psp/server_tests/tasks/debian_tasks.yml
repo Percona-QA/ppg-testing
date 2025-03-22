@@ -227,12 +227,7 @@
 
   - debug: var=results.stdout_lines
 
-# ## tde test methods
-# server-check-world-without-tde
-# server-installcheck-world-with-tde
-# tde-installcheck-only
-
-# Check-World Server testsuite
+  # Check-World Server testsuite
   - name: Run server-check-world-without-tde
     shell: | 
       cd /tmp
@@ -286,6 +281,7 @@
 
 #   - debug: var=regression.stdout_lines
 
+  # installcheck pg_tde testsuite testsuite
   - name: Start pg_tde tests only - installcheck
     shell: | 
       psql -c "CREATE SCHEMA tde;"
@@ -332,6 +328,7 @@
 
   - debug: var=regression.stdout_lines
 
+  # installcheck-world server testsuite
   - name: Start server & pg_tde tests - installcheck-world
     shell: | 
       psql -c "CREATE SCHEMA tde;"

@@ -431,12 +431,13 @@
 
   - debug: var=results.stdout_lines
 
-# ## tde test methods
-# server-check-world-without-tde
-# server-installcheck-world-with-tde
-# tde-installcheck-only
+  - name: Remove pg_tde from source tree for heap-checkworld
+    become_user: postgres
+    command: rm -fr /tmp/postgres/contrib/pg_tde
+    when: testsuite == 'server-check-world-without-tde'
+    register: results
 
-# Check-World Server testsuite
+  # Check-World Server testsuite
   - name: Run server-check-world-without-tde
     shell: | 
       sudo dnf install -y python3 python3-pip python3-devel gcc openssl-devel
@@ -476,26 +477,27 @@
 
   - debug: var=regression.stdout_lines
 
-# Check-World Server testsuite 
-  - name: Run server-check-world-without-tde
-    shell: | 
-      cd /tmp/postgres && make -s check-world
-    become_user: postgres
-    args:
-      executable: /bin/bash
-      chdir: "/tmp/postgres/"
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      PG_TEST_PORT_DIR: "/tmp/pg_tde"
-      INSTALL_DIR: "/opt/pgsql"
-      TDE_MODE: 1
-      PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
-    when: testsuite == 'server-check-world-without-tde'
-    register: regression
+  # # Check-World Server testsuite
+  # - name: Run server-check-world-without-tde
+  #   shell: | 
+  #     cd /tmp/postgres && make -s check-world
+  #   become_user: postgres
+  #   args:
+  #     executable: /bin/bash
+  #     chdir: "/tmp/postgres/"
+  #   environment:
+  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
+  #     PG_TEST_PORT_DIR: "/tmp/pg_tde"
+  #     INSTALL_DIR: "/opt/pgsql"
+  #     TDE_MODE: 1
+  #     PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+  #   when: testsuite == 'server-check-world-without-tde'
+  #   register: regression
 
-  - debug: var=regression.stdout_lines
+  # - debug: var=regression.stdout_lines
 
+  # installcheck-world Server testsuite
   - name: Start pg_tde tests only - installcheck
     shell: | 
       psql -c "CREATE SCHEMA tde;"
@@ -548,6 +550,7 @@
 
   - debug: var=regression.stdout_lines
 
+  # installcheck pg_tde testsuite testsuite
   - name: Start server & pg_tde tests - installcheck-world
     shell: | 
       psql -c "CREATE SCHEMA tde;"
