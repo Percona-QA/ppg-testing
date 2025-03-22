@@ -431,11 +431,11 @@
 
   - debug: var=results.stdout_lines
 
-  - name: Remove pg_tde from source tree for heap-checkworld
-    become_user: postgres
-    command: rm -fr /tmp/postgres/contrib/pg_tde
-    when: testsuite == 'server-check-world-without-tde'
-    register: results
+  # - name: Remove pg_tde from source tree for heap-checkworld
+  #   become_user: postgres
+  #   command: rm -fr /tmp/postgres/contrib/pg_tde
+  #   when: testsuite == 'server-check-world-without-tde'
+  #   register: results
 
   # Check-World Server testsuite
   - name: Run server-check-world-without-tde
