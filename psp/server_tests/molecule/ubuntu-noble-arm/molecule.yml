@@ -4,7 +4,7 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: pdp-unoble-arm-${BUILD_NUMBER}
+  - name: psp-unoble-arm-${BUILD_NUMBER}
     region: eu-central-1
     image: ami-0bdb7aa9d654d4878
     vpc_subnet_id: subnet-085deaca8c1c59a4f

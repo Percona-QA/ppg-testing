@@ -4,7 +4,7 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: pdp-ol9-${BUILD_NUMBER}
+  - name: psp-ol9-${BUILD_NUMBER}
     region: eu-central-1
     image: ami-041dc33d5b0f85045
     vpc_subnet_id: subnet-085deaca8c1c59a4f

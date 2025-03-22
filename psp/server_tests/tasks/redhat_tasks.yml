@@ -440,7 +440,6 @@
   # Check-World Server testsuite
   - name: Run server-check-world-without-tde
     shell: | 
-      sudo dnf install -y python3 python3-pip python3-devel gcc openssl-devel
       cd /tmp
       python3 -m venv validation
       source validation/bin/activate
@@ -513,7 +512,6 @@
       ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop -o '-p 5432'
       sleep 5
       ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
-      sudo dnf install -y python3 python3-pip python3-devel gcc openssl-devel
       cd /tmp
       python3 -m venv validation
       source validation/bin/activate
@@ -570,7 +568,6 @@
       psql -c "ALTER SYSTEM SET default_table_access_method = 'tde_heap';"
       psql -c "SELECT pg_reload_conf();"
       psql -c "show default_table_access_method ;"
-      sudo dnf install -y python3 python3-pip python3-devel gcc openssl-devel
       cd /tmp
       python3 -m venv validation
       source validation/bin/activate

@@ -4,7 +4,7 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: pdp-debian11-arm-${BUILD_NUMBER}
+  - name: psp-debian11-arm-${BUILD_NUMBER}
     region: eu-central-1
     image: ami-070c9c7ba2bbe7399
     vpc_subnet_id: subnet-085deaca8c1c59a4f

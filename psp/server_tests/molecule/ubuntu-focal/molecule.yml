@@ -4,7 +4,7 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: pdp-ufocal-${BUILD_NUMBER}
+  - name: psp-ufocal-${BUILD_NUMBER}
     region: eu-central-1
     image: ami-0bbb8baafb1bdbd3b
     vpc_subnet_id: subnet-085deaca8c1c59a4f

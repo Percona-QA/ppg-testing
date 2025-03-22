@@ -4,7 +4,7 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: pdp-ujammy-arm-${BUILD_NUMBER}
+  - name: psp-ujammy-arm-${BUILD_NUMBER}
     region: eu-central-1
     image: ami-0f45e2f16611e3139
     vpc_subnet_id: subnet-085deaca8c1c59a4f
