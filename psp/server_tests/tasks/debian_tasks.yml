@@ -311,7 +311,7 @@
       sleep 10
       export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
       echo "Root token: $ROOT_TOKEN"
-      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres/contrib/pg_tde && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck -k
+      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres/contrib/pg_tde && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck
     become_user: postgres
     args:
       executable: /bin/bash
@@ -456,3 +456,8 @@
   #   fail:
   #     msg: "regression failed"
   #   when: regression.rc is defined and regression.rc != 0
+
+  - name: End play if regression has failures
+    fail:
+      msg: "regression failed"
+    when: regression.rc is defined and (regression.rc != 0 and regression.rc != 2)
