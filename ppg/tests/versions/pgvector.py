@@ -9,4 +9,9 @@ pgvector = {
     "15.12": {"version": "0.8.0", "extension_version": "0.8.0"},
     "16.8": {"version": "0.8.0", "extension_version": "0.8.0"},
     "17.4": {"version": "0.8.0", "extension_version": "0.8.0"},
+    "13.21": {"version": "0.8.0", "extension_version": "0.8.0"},
+    "14.18": {"version": "0.8.0", "extension_version": "0.8.0"},
+    "15.13": {"version": "0.8.0", "extension_version": "0.8.0"},
+    "16.9": {"version": "0.8.0", "extension_version": "0.8.0"},
+    "17.5": {"version": "0.8.0", "extension_version": "0.8.0"},
 }
