@@ -30,7 +30,7 @@
     packages:
     - percona-postgresql-client-common
     - percona-postgresql-common
-    - percona-postgresql-server-dev-all
+    - percona-postgresql-common-dev
     - percona-postgresql{{ major_version }}
     - percona-postgresql{{ major_version }}-contrib
     - percona-postgresql{{ major_version }}-devel

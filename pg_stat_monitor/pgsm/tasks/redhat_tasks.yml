@@ -137,7 +137,7 @@
       packages:
       - percona-postgresql-client-common
       - percona-postgresql-common
-      - percona-postgresql-server-dev-all
+      - percona-postgresql-common-dev
       - percona-postgresql{{ postgres_version }}
       - percona-postgresql{{ postgres_version }}-contrib
       - percona-postgresql{{ postgres_version }}-devel
@@ -162,7 +162,7 @@
       packages:
       - percona-postgresql-client-common
       - percona-postgresql-common
-      - percona-postgresql-server-dev-all
+      - percona-postgresql-common-dev
       - percona-postgresql{{ postgres_version }}
       - percona-postgresql{{ postgres_version }}-contrib
       - percona-postgresql{{ postgres_version }}-devel
