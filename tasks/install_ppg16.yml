@@ -130,7 +130,7 @@
       packages:
         - percona-postgresql-client-common
         - percona-postgresql-common
-        - percona-postgresql-server-dev-all
+        - percona-postgresql-common-dev
         - percona-postgresql16
         - percona-postgresql16-contrib
         - percona-postgresql16-debuginfo
