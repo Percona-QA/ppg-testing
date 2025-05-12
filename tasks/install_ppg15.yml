@@ -120,7 +120,6 @@
       packages:
         - percona-postgresql-client-common
         - percona-postgresql-common
-        - percona-postgresql-server-dev-all
         - percona-postgresql15
         - percona-postgresql15-contrib
         - percona-postgresql15-debuginfo
@@ -146,6 +145,26 @@
       (ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9")
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install postgresql-server-dev-all RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgresql-server-dev-all
+    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('15.12', '<=', strict=True))
+
+  - name: Install postgresql-common-dev RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgresql-common-dev
+    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('15.13', '>=', strict=True))
 
   - name: Check if Telemetry file exisits
     stat:
