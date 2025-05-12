@@ -2,6 +2,7 @@
   - name: Set Facts
     set_fact:
       major_version: "{{ lookup('env', 'VERSION').split('.')[0].split('-')[1] }}"
+      pg_version_to_install: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
       cacheable: true
 
   - name: Configure repository
