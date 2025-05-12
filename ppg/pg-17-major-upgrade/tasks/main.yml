@@ -150,7 +150,7 @@
     packages:
         - percona-postgresql-client-common
         - percona-postgresql-common
-        - percona-postgresql-server-dev-all
+        - percona-postgresql-common-dev
         - percona-postgresql17
         - percona-postgresql17-contrib
         - percona-postgresql17-debuginfo
