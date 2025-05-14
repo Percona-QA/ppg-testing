@@ -76,7 +76,7 @@
       - percona-postgresql-plpython3-16
       - percona-postgresql-pltcl-16
       - percona-postgresql-server-dev-16
-      - percona-postgresql-server-dev-all
+      - percona-postgresql-common-dev
       - percona-postgresql-16-dbgsym
       - percona-postgresql-client-16-dbgsym
       - percona-postgresql-plperl-16-dbgsym
