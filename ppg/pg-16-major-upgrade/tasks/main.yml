@@ -308,7 +308,7 @@
   register: results
 
 - debug:
-      var: results.stdout_lines
+    var: results.stdout_lines
 
 - name: list pg_lsclsuters
   command: pg_lsclusters
@@ -319,7 +319,7 @@
   register: results
 
 - debug:
-      var: results.stdout_lines
+    var: results.stdout_lines
 
 - name: Drop pg_dropcluster for version 15
   command: /usr/bin/pg_dropcluster 15 main
@@ -330,7 +330,7 @@
   register: results
 
 - debug:
-      var: results.stdout_lines
+    var: results.stdout_lines
 
 - name: list pg_lsclsuters
   command: pg_lsclusters
@@ -341,7 +341,7 @@
   register: results
 
 - debug:
-      var: results.stdout_lines
+    var: results.stdout_lines
 
 - name: Delete /var/run/postgresql lock and pid file
   command: rm -fr /var/run/postgresql/*
@@ -350,7 +350,7 @@
   register: results
 
 - debug:
-      var: results.stdout_lines
+    var: results.stdout_lines
 
 - name: list /var/run/postgresql
   command: ls -la /var/run/postgresql/
@@ -359,7 +359,7 @@
   register: results
 
 - debug:
-      var: results.stdout_lines
+    var: results.stdout_lines
 
 - name: Restart postgresql service for Debian based
   service:
@@ -370,7 +370,7 @@
   register: results
 
 - debug:
-      var: results.stdout_lines
+    var: results.stdout_lines
 
 - name: list pg_lsclsuters
   command: pg_lsclusters
@@ -381,18 +381,15 @@
   register: results
 
 - debug:
-      var: results.stdout_lines
+    var: results.stdout_lines
 
-- name: Status postgresql service for Debian based
-  service:
-    name: postgresql
-    state: status
-    enabled: true
-  when: ansible_os_family == "Debian"
-  register: results
+- name: Get Service Status
+  ansible.builtin.systemd:
+    name: "postgresql"
+  register: pg_service_status
 
 - debug:
-      var: results.stdout_lines
+    var: pg_service_status.status.ActiveState
 
 - name: list /var/run/postgresql
   command: ls -la /var/run/postgresql/
@@ -401,7 +398,7 @@
   register: results
 
 - debug:
-      var: results.stdout_lines
+    var: results.stdout_lines
 
 - name: show running process for postgres
   command: ps -ef | grep -i postgres
@@ -410,7 +407,7 @@
   register: results
 
 - debug:
-      var: results.stdout_lines
+    var: results.stdout_lines
 
 - name: show running process for postgres
   command: grep -i port /etc/postgresql/16/main/postgresql.conf
@@ -419,7 +416,7 @@
   register: results
 
 - debug:
-      var: results.stdout_lines
+    var: results.stdout_lines
 
 - pause:
     minutes: 1
@@ -431,4 +428,4 @@
   register: results
 
 - debug:
-      var: results.stdout_lines
+    var: results.stdout_lines
