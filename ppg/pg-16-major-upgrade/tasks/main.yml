@@ -310,8 +310,30 @@
 - debug:
       var: results.stdout_lines
 
-- name: Drop pg_createcluster for version 15
+- name: list pg_lsclsuters
+  command: pg_lsclusters
+  become: true
+  become_method: sudo
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+      var: results.stdout_lines
+
+- name: Drop pg_dropcluster for version 15
   command: /usr/bin/pg_dropcluster 15 main
+  become: true
+  become_method: sudo
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+      var: results.stdout_lines
+
+- name: list pg_lsclsuters
+  command: pg_lsclusters
   become: true
   become_method: sudo
   become_user: postgres
@@ -344,6 +366,17 @@
     name: postgresql
     state: started
     enabled: true
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+      var: results.stdout_lines
+
+- name: list pg_lsclsuters
+  command: pg_lsclusters
+  become: true
+  become_method: sudo
+  become_user: postgres
   when: ansible_os_family == "Debian"
   register: results
 
@@ -392,6 +425,7 @@
     minutes: 1
 
 - name: Display ppg version
+  ignore_errors: true
   become_user: postgres
   shell: psql -c "select version();"
   register: results
