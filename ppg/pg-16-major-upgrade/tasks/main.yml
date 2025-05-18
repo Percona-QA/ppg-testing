@@ -418,6 +418,26 @@
 - debug:
     var: results.stdout_lines
 
+- name: show pg log 15 for postgres
+  ignore_errors: true
+  command: cat /var/log/postgresql/postgresql-15-main.log
+  become: true
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: show pg log 16 for postgres
+  ignore_errors: true
+  command: cat /var/log/postgresql/postgresql-16-main.log
+  become: true
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
 - pause:
     minutes: 1
 
