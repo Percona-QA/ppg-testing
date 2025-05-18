@@ -227,6 +227,15 @@
     state: stopped
   when: ansible_os_family == "Debian"
 
+- name: Execute pg_createcluster for version 16
+  command: /usr/lib/postgresql/16/bin/pg_createcluster 16 main --port=5433
+  become: true
+  become_method: sudo
+  become_user: postgres
+  args:
+    chdir: /tmp
+  when: ansible_os_family == "Debian"
+
 - pause:
     minutes: 1
 
