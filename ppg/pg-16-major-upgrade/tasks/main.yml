@@ -400,16 +400,16 @@
 - debug:
     var: results.stdout_lines
 
-- name: show running process for postgres
-  command: ps -ef | grep -i postgres
-  become: true
-  when: ansible_os_family == "Debian"
-  register: results
+# - name: show running process for postgres
+#   command: ps -ef | grep -i postgres
+#   become: true
+#   when: ansible_os_family == "Debian"
+#   register: results
 
-- debug:
-    var: results.stdout_lines
+# - debug:
+#     var: results.stdout_lines
 
-- name: show running process for postgres
+- name: show port for postgres
   command: grep -i port /etc/postgresql/16/main/postgresql.conf
   become: true
   when: ansible_os_family == "Debian"
