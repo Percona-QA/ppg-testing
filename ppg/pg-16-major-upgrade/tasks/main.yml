@@ -303,6 +303,15 @@
     enabled: true
   when: ansible_os_family == "RedHat"
 
+- name: Drop pg_createcluster for version 15
+  command: /usr/bin/pg_dropcluster 15 main
+  become: true
+  become_method: sudo
+  become_user: postgres
+  args:
+    chdir: /tmp
+  when: ansible_os_family == "Debian"
+
 - name: Restart postgresql service for Debian based
   service:
     name: postgresql
@@ -312,7 +321,7 @@
 
 - name: Display ppg version
   become_user: postgres
-  shell: psql -c "select version()"
+  shell: psql -c "select version();"
   register: results
 
 - debug:
