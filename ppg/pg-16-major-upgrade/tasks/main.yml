@@ -232,8 +232,6 @@
   become: true
   become_method: sudo
   become_user: postgres
-  args:
-    chdir: /tmp
   when: ansible_os_family == "Debian"
 
 - pause:
@@ -303,12 +301,22 @@
     enabled: true
   when: ansible_os_family == "RedHat"
 
+- name: list /var/run/postgresql
+  command: ls -la /var/run/postgresql
+  become: true
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+      var: results.stdout
+
 - name: Drop pg_createcluster for version 15
   command: /usr/bin/pg_dropcluster 15 main
   become: true
   become_method: sudo
   become_user: postgres
   when: ansible_os_family == "Debian"
+  register: results
 
 - debug:
       var: results.stdout
@@ -317,6 +325,16 @@
   command: rm -fr /var/run/postgresql/*
   become: true
   when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+      var: results.stdout
+
+- name: list /var/run/postgresql
+  command: ls -la /var/run/postgresql/
+  become: true
+  when: ansible_os_family == "Debian"
+  register: results
 
 - debug:
       var: results.stdout
@@ -327,6 +345,18 @@
     state: started
     enabled: true
   when: ansible_os_family == "Debian"
+
+- name: list /var/run/postgresql
+  command: ls -la /var/run/postgresql/
+  become: true
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+      var: results.stdout
+
+- pause:
+    minutes: 1
 
 - name: Display ppg version
   become_user: postgres
