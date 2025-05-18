@@ -308,14 +308,23 @@
   become: true
   become_method: sudo
   become_user: postgres
-  args:
-    chdir: /tmp
   when: ansible_os_family == "Debian"
+
+- debug:
+      var: results.stdout
+
+- name: Delete /var/run/postgresql lock and pid file
+  command: rm -fr /var/run/postgresql/*
+  become: true
+  when: ansible_os_family == "Debian"
+
+- debug:
+      var: results.stdout
 
 - name: Restart postgresql service for Debian based
   service:
     name: postgresql
-    state: restarted
+    state: started
     enabled: true
   when: ansible_os_family == "Debian"
 
