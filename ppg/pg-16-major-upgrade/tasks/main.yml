@@ -363,7 +363,7 @@
 
 - name: Restart postgresql service for Debian based
   service:
-    name: postgresql
+    name: postgresql@16-main.service
     state: started
     enabled: true
   when: ansible_os_family == "Debian"
@@ -386,6 +386,14 @@
 - name: Get Service Status
   ansible.builtin.systemd:
     name: "postgresql"
+  register: pg_service_status
+
+- debug:
+    var: pg_service_status.status.ActiveState
+
+- name: Get Service Status
+  ansible.builtin.systemd:
+    name: "postgresql@16-main.service"
   register: pg_service_status
 
 - debug:
