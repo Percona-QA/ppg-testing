@@ -99,6 +99,8 @@ def test_deb_package_is_installed(host, package):
     dist = host.system_info.distribution
     if dist.lower() in ["redhat", "centos", "rhel", "rocky"]:
         pytest.skip("This test only for Debian based platforms")
+    if package in ['percona-postgresql-server-dev-all']:
+        pytest.skip("Skipping for Q2-2025 releses and moving forward.")
     pkg = host.package(package)
     assert pkg.is_installed
     assert pkg.version in pg_versions['deb_pkg_ver']
@@ -166,11 +168,16 @@ def test_postgresql_version(host):
 @pytest.mark.upgrade
 def test_postgresql_is_running_and_enabled(host):
     dist = host.system_info.distribution
-    service_name = "postgresql"
     if dist.lower() in ["redhat", "centos", "rhel", "rocky"]:
         service_name = f"postgresql-{settings.MAJOR_VER}"
-    service = host.service(service_name)
-    assert service.is_running
+        service = host.service(service_name)
+        assert service.is_running
+    if dist.lower() in ['debian', 'ubuntu']:
+        service_name = "postgresql"
+        service_name_2 = f"postgresql@{settings.MAJOR_VER}-main.service"
+        service = host.service(service_name)
+        service2 = host.service(service_name_2)
+        assert service.is_running or service2.is_running
 
 
 def test_postgres_unit_file(postgres_unit_file):
