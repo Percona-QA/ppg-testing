@@ -85,7 +85,7 @@
       - percona-postgresql-plpython3-17
       - percona-postgresql-pltcl-17
       - percona-postgresql-server-dev-17
-      - percona-postgresql-server-dev-all
+      - percona-postgresql-common-dev
       - percona-postgresql-17-dbgsym
       - percona-postgresql-client-17-dbgsym
       - percona-postgresql-plperl-17-dbgsym
@@ -215,6 +215,13 @@
     state: stopped
   when: ansible_os_family == "Debian"
 
+- name: Execute pg_createcluster for version 17
+  command: /usr/bin/pg_createcluster 17 main --port=5433
+  become: true
+  become_method: sudo
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+
 - pause:
     minutes: 1
 
@@ -282,9 +289,37 @@
     enabled: true
   when: ansible_os_family == "RedHat"
 
+- name: Drop pg_dropcluster for version 16
+  command: /usr/bin/pg_dropcluster 16 main
+  become: true
+  become_method: sudo
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: list pg_lsclsuters
+  command: pg_lsclusters
+  become: true
+  become_method: sudo
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: Delete /var/run/postgresql lock and pid file
+  command: rm -fr /var/run/postgresql/*
+  become: true
+  when: ansible_os_family == "Debian"
+  register: results
+
 - name: Restart postgresql service for Debian based
   service:
-    name: postgresql
+    name: postgresql@17-main.service
     state: restarted
     enabled: true
   when: ansible_os_family == "Debian"
