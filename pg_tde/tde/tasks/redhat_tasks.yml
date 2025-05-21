@@ -475,22 +475,23 @@
     when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
 
   - debug: var=results.stdout_lines
-  
+
+      # psql -c "CREATE SCHEMA tde;"
+      # psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde SCHEMA tde;"
+      # psql -c "SELECT tde.pg_tde_add_global_key_provider_file('reg_file-global', '/tmp/pg_tde_test_keyring.per');"
+      # psql -c "SELECT tde.pg_tde_set_server_key_using_global_key_provider('server-key', 'reg_file-global');"
+      # psql -c "ALTER SYSTEM SET pg_tde.wal_encrypt = on;"
+      # psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde;"
+      # psql -c "ALTER SYSTEM SET search_path = postgres,public,tde;"
+      # psql -c "SELECT pg_reload_conf();"
+      # echo "default_table_access_method = 'tde_heap'" >> /var/lib/pgsql/17/data/postgresql.conf
+      # sudo systemctl stop postgresql-17
+      # sleep 5
+      # sudo systemctl start postgresql-17
+
   # installcheck-world Server testsuite
   - name: Start pg_tde tests only - installcheck
     shell: | 
-      psql -c "CREATE SCHEMA tde;"
-      psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde SCHEMA tde;"
-      psql -c "SELECT tde.pg_tde_add_global_key_provider_file('reg_file-global', '/tmp/pg_tde_test_keyring.per');"
-      psql -c "SELECT tde.pg_tde_set_server_key_using_global_key_provider('server-key', 'reg_file-global');"
-      psql -c "ALTER SYSTEM SET pg_tde.wal_encrypt = on;"
-      psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde;"
-      psql -c "ALTER SYSTEM SET search_path = postgres,public,tde;"
-      psql -c "SELECT pg_reload_conf();"
-      echo "default_table_access_method = 'tde_heap'" >> /var/lib/pgsql/17/data/postgresql.conf
-      sudo systemctl stop postgresql-17
-      sleep 5
-      sudo systemctl start postgresql-17
       cd /tmp
       python3 -m venv validation
       source validation/bin/activate
@@ -509,9 +510,7 @@
       { exec >$TV; vault server -dev; } &
       sleep 10
       export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
-      echo "Root token: $ROOT_TOKEN"
-      export ROOT_TOKEN=$ROOT_TOKEN
-      EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck USE_PGXS=1 -k
+      echo "Root token: $ROOT_TOKEN" && export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres/contrib/pg_tde && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck USE_PGXS=1 -k
     become_user: postgres
     args:
       executable: /bin/bash
