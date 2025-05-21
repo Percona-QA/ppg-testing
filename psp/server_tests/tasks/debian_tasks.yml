@@ -162,7 +162,7 @@
   - name: Remove create_schema.sql test case for tde_heap
     become_user: postgres
     command: rm -f /tmp/postgres/src/test/regress/sql/create_schema.sql
-    when: (testsuite == 'server-installcheck-world-with-tde' or testsuite == 'tde-installcheck-only')
+    when: (testsuite == 'server-installcheck-world-with-tde')
     register: results
 
   - debug: var=results.stdout_lines
@@ -175,7 +175,7 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: (testsuite == 'server-installcheck-world-with-tde' or testsuite == 'tde-installcheck-only')
+    when: (testsuite == 'server-installcheck-world-with-tde')
     register: results
 
   - debug: var=results.stdout_lines
@@ -192,7 +192,7 @@
       LANG: C.UTF-8
       LC_CTYPE: C
       LC_ALL: C
-    when: (testsuite == 'server-installcheck-world-with-tde' or testsuite == 'tde-installcheck-only')
+    when: (testsuite == 'server-installcheck-world-with-tde')
     register: results
 
   - debug: var=results.stdout_lines
@@ -207,7 +207,7 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: (testsuite == 'server-installcheck-world-with-tde' or testsuite == 'tde-installcheck-only')
+    when: (testsuite == 'server-installcheck-world-with-tde')
     register: results
 
   - debug: var=results.stdout_lines
@@ -222,13 +222,12 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: (testsuite == 'server-installcheck-world-with-tde' or testsuite == 'tde-installcheck-only')
+    when: (testsuite == 'server-installcheck-world-with-tde')
     register: results
 
   - debug: var=results.stdout_lines
 
-  # Check-World Server testsuite
-  - name: Run server-check-world-without-tde
+  - name: Run server-check-world
     shell: | 
       cd /tmp
       wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
@@ -261,37 +260,8 @@
 
   - debug: var=regression.stdout_lines
 
-# # Check-World Server testsuite
-#   - name: Run server-check-world-without-tde
-#     shell: | 
-#       cd /tmp/postgres && make -s check-world
-#     become_user: postgres
-#     args:
-#       executable: /bin/bash
-#       chdir: "/tmp/postgres/"
-#     environment:
-#       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-#       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-#       PG_TEST_PORT_DIR: "/tmp/pg_tde"
-#       INSTALL_DIR: "/opt/pgsql"
-#       TDE_MODE: 1
-#       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
-#     when: testsuite == 'server-check-world-without-tde'
-#     register: regression
-
-#   - debug: var=regression.stdout_lines
-
-  # installcheck pg_tde testsuite testsuite
-  - name: Start pg_tde tests only - installcheck
+  - name: Run pg_tde tests only - check
     shell: | 
-      psql -c "CREATE SCHEMA tde;"
-      psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde SCHEMA tde;"
-      psql -c "SELECT tde.pg_tde_add_global_key_provider_file('reg_file-global', '/tmp/pg_tde_test_keyring.per');"
-      psql -c "SELECT tde.pg_tde_set_server_key_using_global_key_provider('server-key', 'reg_file-global');"
-      psql -c "ALTER SYSTEM SET pg_tde.wal_encrypt = on;"
-      psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde;"
-      psql -c "ALTER SYSTEM SET search_path = postgres,public,tde;"
-      psql -c "SELECT pg_reload_conf();"
       cd /opt/pgsql/bin
       echo "default_table_access_method = 'tde_heap'" >> /opt/pgsql/data/postgresql.conf
       ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop -o '-p 5432'
@@ -311,7 +281,7 @@
       sleep 10
       export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
       echo "Root token: $ROOT_TOKEN"
-      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres/contrib/pg_tde && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck
+      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres/contrib/pg_tde && make -s check -k
     become_user: postgres
     args:
       executable: /bin/bash
@@ -328,8 +298,7 @@
 
   - debug: var=regression.stdout_lines
 
-  # installcheck-world server testsuite
-  - name: Start server & pg_tde tests - installcheck-world
+  - name: Run installcheck-world with tde
     ignore_errors: yes
     shell: | 
       psql -c "CREATE SCHEMA tde;"
