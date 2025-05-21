@@ -510,19 +510,32 @@
       sleep 10
       export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
       echo "Root token: $ROOT_TOKEN"
-      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres/contrib/pg_tde && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck USE_PGXS=1 -k
+      export ROOT_TOKEN=$ROOT_TOKEN
+      EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck USE_PGXS=1 -k
     become_user: postgres
     args:
       executable: /bin/bash
       chdir: "/tmp/postgres/contrib/pg_tde"
     environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
       TDE_MODE: 1
     register: regression
 
   - debug: var=regression.stdout_lines
+
+  - stat:
+      path: /tmp/postgres/contrib/pg_tde/regression.out
+    register: tde_diff
+
+  - name: Get pg_tde - regression.out contents
+    command: cat /tmp/postgres/contrib/pg_tde/regression.out
+    register: command_output
+    when: tde_diff.stat.isreg is defined and tde_diff.stat.isreg == True
+
+  - name: Print to console pg_tde - regression.out contents
+    debug:
+      msg: "{{command_output.stdout_lines}}"
+    when: tde_diff.stat.isreg is defined and tde_diff.stat.isreg == True
 
   - stat:
       path: /tmp/postgres/contrib/pg_tde/regression.diffs
