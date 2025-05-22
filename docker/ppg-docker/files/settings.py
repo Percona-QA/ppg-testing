@@ -240,7 +240,7 @@ pg_telemetry = {
             "14.18": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
             "15.13": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
             "16.9": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
-            "17.5": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
+            "17.5": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.1"},
 }
 
 DOCKER_LIST_EXTENSIONS = ["hstore",
