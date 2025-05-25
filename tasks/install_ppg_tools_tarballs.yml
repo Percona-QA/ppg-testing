@@ -29,7 +29,7 @@
         - libtext-csv-xs-perl
     when: ansible_os_family == "Debian"
 
-  - name: Install libreadline for Debian 11 and Ubuntu 20
+  - name: Install libreadline for Debian and Ubuntu
     apt:
       name: "{{ packages }}"
       state: latest
@@ -38,9 +38,8 @@
         - libreadline8
         - libreadline-dev
     when: ansible_os_family == "Debian"
-    #when: ansible_os_family == "Debian" and (ansible_distribution_major_version == "20" or ansible_distribution_major_version == "11")
 
-  - name: Install libreadline for RHEL 8
+  - name: Install libreadline for RHEL
     yum:
       name: "{{ packages }}"
       state: latest
@@ -48,7 +47,6 @@
       packages:
         - readline-devel
     when: ansible_os_family == "RedHat"
-    #when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
   - name: Create pgbackrest directory
     file:

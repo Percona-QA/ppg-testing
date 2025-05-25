@@ -36,12 +36,17 @@
       owner: postgres
       group: postgres
       mode: '0755'
+      recurse: yes
+      state: directory
 
   - name: Install Percona PG tarballs
     unarchive:
       src: "{{ tarball_url }}"
       dest:  "{{dest_dir}}"
       remote_src: true
+      owner: postgres
+      group: postgres
+      mode: '0755'
 
   - name: Copy Percona pl-languages to /opt
     become: true
