@@ -102,6 +102,52 @@
   environment:
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
 
+- name: Display ppg version
+  ignore_errors: yes
+  become: true
+  ansible.builtin.command:
+    cmd: ./psql -c "select version()"
+  become_user: postgres
+  args:
+    chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+  register: results
+
+- debug: var=results.stdout_lines
+
+- name: Display ppg version
+  ignore_errors: yes
+  shell: ./psql -c "select version();"
+  become_user: postgres
+  args:
+    chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+  register: results
+
+- debug: var=results.stdout_lines
+
+- name: list /home/postgres
+  ignore_errors: yes
+  become: true
+  shell: ls -ltra /home/postgres
+  register: results
+
+- debug: var=results.stdout_lines
+
+- name: list /opt/pgdistro
+  ignore_errors: yes
+  become: true
+  shell: ls -l /opt/pgdistro
+  register: results
+
+- debug: var=results.stdout_lines
+
+- name: list /opt/pgdistro server bin dir
+  ignore_errors: yes
+  become: true
+  shell: ls -l /opt/pgdistro/percona-postgresql17/bin
+  register: results
+
+- debug: var=results.stdout_lines
+
 - name: Install PPG tools
   include_tasks: ../../../../tasks/install_ppg_tools_tarballs.yml
 
