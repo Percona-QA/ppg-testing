@@ -17,7 +17,6 @@
     command: dnf module disable postgresql -y
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
-
   - name: Remove the tarball destination directory if it exists
     become: true
     ansible.builtin.command:
@@ -44,9 +43,6 @@
       src: "{{ tarball_url }}"
       dest:  "{{dest_dir}}"
       remote_src: true
-      owner: postgres
-      group: postgres
-      mode: '0755'
 
   - name: Copy Percona pl-languages to /opt
     become: true
@@ -59,6 +55,11 @@
       - percona-python3
       - percona-perl
       - percona-tcl
+
+  - name: Change ownership of /opt/pgdistro/ to postgres
+    become: true
+    ansible.builtin.command:
+      cmd: chown -R  postgres:postgres /opt/pgdistro/
 
   - name: Remove existing abc.list.type file if it exists
     file:
