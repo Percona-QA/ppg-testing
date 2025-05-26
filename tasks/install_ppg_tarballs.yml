@@ -61,6 +61,40 @@
     ansible.builtin.command:
       cmd: chown -R  postgres:postgres /opt/pgdistro/
 
+  - name: Display ppg version
+    ignore_errors: true
+    become_user: postgres
+    shell: ./psql -c "select version();"
+    chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+    register: results
+
+  - debug:
+      var: results.stdout_lines
+
+  - name: list /opt/pgdistro
+    ignore_errors: yes
+    become: true
+    shell: ls -l "{{dest_dir}}
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: list /opt/pgdistro server bin dir
+    ignore_errors: yes
+    become: true
+    shell: ls -l "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: list /opt/pgdistro percona-pgbackrest bin dir
+    ignore_errors: yes
+    become: true
+    shell: ls -l "{{dest_dir}}/percona-pgbackrest/bin"
+    register: results
+
+  - debug: var=results.stdout_lines
+
   - name: Remove existing abc.list.type file if it exists
     file:
       path: /tmp/abc.list.type
