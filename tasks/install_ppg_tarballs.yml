@@ -67,7 +67,7 @@
     args:
       executable: /bin/bash
       chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
-    when: ansible_os_family == 'RedHat' and ansible_distribution_major_version == '9'
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9"
 
   - name: Create symlink for the libreadline Ubuntu 22 & 24 AMD
     become: true
@@ -75,8 +75,8 @@
     args:
       executable: /bin/bash
       chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
-    when: ansible_os_family == 'Debian' and and ansible_architecture == 'x86_64' and 
-      (ansible_distribution_major_version == '22' or ansible_distribution_major_version == '24')
+    when: ansible_os_family == "Debian" and ansible_architecture == "x86_64" and 
+      (ansible_distribution_major_version == "22" or ansible_distribution_major_version == "24")
 
   - name: Create symlink for the libreadline Ubuntu 22 & 24 ARM
     become: true
@@ -84,8 +84,8 @@
     args:
       executable: /bin/bash
       chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
-    when: ansible_os_family == 'Debian' and and ansible_architecture == 'aarch64' and 
-      (ansible_distribution_major_version == '22' or ansible_distribution_major_version == '24')
+    when: ansible_os_family == "Debian" and ansible_architecture == "aarch64" and 
+      (ansible_distribution_major_version == "22" or ansible_distribution_major_version == "24")
 
   # - name: Display ppg version
   #   ignore_errors: yes
