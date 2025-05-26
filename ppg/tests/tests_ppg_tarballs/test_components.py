@@ -10,7 +10,7 @@ INSTALL_PATH = os.path.join("/opt", INSTALL_FOLDER_NAME)
 USERNAME = "postgres"
 DBNAME = "postgres"
 PORT = "5432"
-DATA_DIR = f"/usr/local/pgsql/data{settings.MAJOR_VER}"
+DATA_DIR = "/opt/pgdistro/data"
 PG_PATH = f"{INSTALL_PATH}/percona-postgresql{settings.MAJOR_VER}"
 
 testinfra_hosts = testinfra.utils.ansible_runner.AnsibleRunner(
