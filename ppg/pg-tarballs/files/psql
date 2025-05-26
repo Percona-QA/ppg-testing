@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# Use OS-supplied libreadline as it's more reliable than libedit
+PLL=""
+
+# Attempt to use libreadline.so.7 directly
+if [ -f /lib64/libreadline.so.7 ]; then
+    PLL="/lib64/libreadline.so.7"
+
+elif [ -f /lib/libreadline.so.7 ]; then
+    PLL="/lib/libreadline.so.7"
+
+# Search for libreadline.so.8.* in common locations
+else
+    for dir in /lib64 /lib /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu; do
+        readline_path=$(ls "$dir"/libreadline.so.8.* 2>/dev/null | head -n 1)
+        if [ -n "$readline_path" ]; then
+            PLL=":$readline_path"
+
+            # Attempt to create a local libreadline.so.7 symlink if not already present
+            if [ ! -f ./libreadline.so.7 ]; then
+                ln -sf "$readline_path" ./libreadline.so.7
+                PLL=":./libreadline.so.7"
+            fi
+
+            break
+        fi
+    done
+fi
+
+# Get the PG bin directory path relative to the psql wrapper script
+PG_BIN_PATH=$(dirname "$0")
+
+# Launch psql.bin with appropriate preload and library path settings
+if [ -z "$PLL" ]; then
+    LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$PG_BIN_PATH/../lib" "$PG_BIN_PATH/psql.bin" "$@"
+else
+    LD_PRELOAD="$PLL" LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$PG_BIN_PATH/../lib" "$PG_BIN_PATH/psql.bin" "$@"
+fi
