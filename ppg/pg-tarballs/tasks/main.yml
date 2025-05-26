@@ -27,7 +27,7 @@
 
 - name: Set Data directory
   ansible.builtin.set_fact:
-    data_dir: "{{data_dir_path}}}}"
+    data_dir: "{{ data_dir_path }}"
 
 - name: Tarball's SSL version
   debug:
