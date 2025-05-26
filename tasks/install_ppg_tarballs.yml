@@ -56,50 +56,50 @@
       - percona-perl
       - percona-tcl
 
-  # - name: Create a symbolic link Rhel 9
-  #   become: true
-  #   ansible.builtin.file:
-  #     src: /lib64/libreadline.so.8
-  #     dest: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/libreadline.so.7"
-  #     owner: postgres
-  #     group: postgres
-  #     state: link
-  #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9"
-
-  # - name: Create a symbolic link Ubuntu 22 & 24 AMD
-  #   become: true
-  #   ansible.builtin.file:
-  #     src: /usr/lib/x86_64-linux-gnu/libreadline.so.8
-  #     dest: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/libreadline.so.7"
-  #     owner: postgres
-  #     group: postgres
-  #     state: link
-  #   when: ansible_os_family == "Debian" and ansible_architecture == "x86_64" and 
-  #     (ansible_distribution_major_version == "22" or ansible_distribution_major_version == "24")
-
-  # - name: Create a symbolic link Ubuntu 22 & 24 ARM
-  #   become: true
-  #   ansible.builtin.file:
-  #     src: /usr/lib/aarch64-linux-gnu/libreadline.so.8
-  #     dest: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/libreadline.so.7"
-  #     owner: postgres
-  #     group: postgres
-  #     state: link
-  #   when: ansible_os_family == "Debian" and ansible_architecture == "aarch64" and 
-  #     (ansible_distribution_major_version == "22" or ansible_distribution_major_version == "24")
-
-  - name: Remove existing psql script file
+  - name: Create a symbolic link Rhel 9
+    become: true
     ansible.builtin.file:
-      state: absent
-      path: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/psql"
-
-  - name: Add psql file
-    copy:
-      src: psql
-      dest: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/psql"
+      src: /lib64/libreadline.so.8
+      dest: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/libreadline.so.7"
       owner: postgres
       group: postgres
-      mode: 0755
+      state: link
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9"
+
+  - name: Create a symbolic link Ubuntu 22 & 24 AMD
+    become: true
+    ansible.builtin.file:
+      src: /usr/lib/x86_64-linux-gnu/libreadline.so.8
+      dest: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/libreadline.so.7"
+      owner: postgres
+      group: postgres
+      state: link
+    when: ansible_os_family == "Debian" and ansible_architecture == "x86_64" and 
+      (ansible_distribution_major_version == "22" or ansible_distribution_major_version == "24")
+
+  - name: Create a symbolic link Ubuntu 22 & 24 ARM
+    become: true
+    ansible.builtin.file:
+      src: /usr/lib/aarch64-linux-gnu/libreadline.so.8
+      dest: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/libreadline.so.7"
+      owner: postgres
+      group: postgres
+      state: link
+    when: ansible_os_family == "Debian" and ansible_architecture == "aarch64" and 
+      (ansible_distribution_major_version == "22" or ansible_distribution_major_version == "24")
+
+  # - name: Remove existing psql script file
+  #   ansible.builtin.file:
+  #     state: absent
+  #     path: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/psql"
+
+  # - name: Add psql file
+  #   copy:
+  #     src: psql
+  #     dest: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/psql"
+  #     owner: postgres
+  #     group: postgres
+  #     mode: 0755
 
   - name: Change ownership of /opt/pgdistro/ to postgres
     become: true
