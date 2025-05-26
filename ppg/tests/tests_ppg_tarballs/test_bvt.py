@@ -135,7 +135,7 @@ def test_psql_client_version(host):
 
 def test_postgres_binary(postgresql_binary):
     assert postgresql_binary.exists
-    assert postgresql_binary.user == "root" or assert postgresql_binary.user == "postgres"
+    assert postgresql_binary.user == "root" or postgresql_binary.user == "postgres"
 
 
 @pytest.mark.upgrade
