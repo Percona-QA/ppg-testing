@@ -56,37 +56,37 @@
       - percona-perl
       - percona-tcl
 
-  - name: Create a symbolic link Rhel 9
-    become: true
-    ansible.builtin.file:
-      src: /lib64/libreadline.so.8
-      dest: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/libreadline.so.7"
-      owner: postgres
-      group: postgres
-      state: link
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9"
+  # - name: Create a symbolic link Rhel 9
+  #   become: true
+  #   ansible.builtin.file:
+  #     src: /lib64/libreadline.so.8
+  #     dest: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/libreadline.so.7"
+  #     owner: postgres
+  #     group: postgres
+  #     state: link
+  #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9"
 
-  - name: Create a symbolic link Ubuntu 22 & 24 AMD
-    become: true
-    ansible.builtin.file:
-      src: /usr/lib/x86_64-linux-gnu/libreadline.so.8
-      dest: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/libreadline.so.7"
-      owner: postgres
-      group: postgres
-      state: link
-    when: ansible_os_family == "Debian" and ansible_architecture == "x86_64" and 
-      (ansible_distribution_major_version == "22" or ansible_distribution_major_version == "24")
+  # - name: Create a symbolic link Ubuntu 22 & 24 AMD
+  #   become: true
+  #   ansible.builtin.file:
+  #     src: /usr/lib/x86_64-linux-gnu/libreadline.so.8
+  #     dest: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/libreadline.so.7"
+  #     owner: postgres
+  #     group: postgres
+  #     state: link
+  #   when: ansible_os_family == "Debian" and ansible_architecture == "x86_64" and 
+  #     (ansible_distribution_major_version == "22" or ansible_distribution_major_version == "24")
 
-  - name: Create a symbolic link Ubuntu 22 & 24 ARM
-    become: true
-    ansible.builtin.file:
-      src: /usr/lib/aarch64-linux-gnu/libreadline.so.8
-      dest: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/libreadline.so.7"
-      owner: postgres
-      group: postgres
-      state: link
-    when: ansible_os_family == "Debian" and ansible_architecture == "aarch64" and 
-      (ansible_distribution_major_version == "22" or ansible_distribution_major_version == "24")
+  # - name: Create a symbolic link Ubuntu 22 & 24 ARM
+  #   become: true
+  #   ansible.builtin.file:
+  #     src: /usr/lib/aarch64-linux-gnu/libreadline.so.8
+  #     dest: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/libreadline.so.7"
+  #     owner: postgres
+  #     group: postgres
+  #     state: link
+  #   when: ansible_os_family == "Debian" and ansible_architecture == "aarch64" and 
+  #     (ansible_distribution_major_version == "22" or ansible_distribution_major_version == "24")
 
   # - name: Remove existing psql script file
   #   ansible.builtin.file:
@@ -106,6 +106,50 @@
     ansible.builtin.command:
       cmd: chown -R  postgres:postgres /opt/pgdistro/
 
+  - name: Display ppg version
+    ignore_errors: yes
+    become: true
+    ansible.builtin.command:
+      cmd: ./psql -c "select version()"
+    become_user: postgres
+    args:
+      chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Display ppg version
+    ignore_errors: yes
+    become: true
+    ansible.builtin.command:
+      cmd: psql -c "select version()"
+    become_user: postgres
+    args:
+      chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Display ppg version
+    ignore_errors: yes
+    shell: ./psql -c "select version();"
+    become_user: postgres
+    args:
+      chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Display ppg version
+    ignore_errors: yes
+    shell: psql -c "select version();"
+    become_user: postgres
+    args:
+      chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+    register: results
+
+  - debug: var=results.stdout_lines
+
   # - name: Display ppg version
   #   ignore_errors: yes
   #   become_user: postgres
@@ -115,6 +159,14 @@
 
   # - debug:
   #     var: results.stdout_lines
+
+  - name: list /home/postgres
+    ignore_errors: yes
+    become: true
+    shell: ls -ltra /home/postgres
+    register: results
+
+  - debug: var=results.stdout_lines
 
   - name: list /opt/pgdistro
     ignore_errors: yes
