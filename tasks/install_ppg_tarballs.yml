@@ -120,18 +120,6 @@
 
   - name: Display ppg version
     ignore_errors: yes
-    become: true
-    ansible.builtin.command:
-      cmd: psql -c "select version()"
-    become_user: postgres
-    args:
-      chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Display ppg version
-    ignore_errors: yes
     shell: ./psql -c "select version();"
     become_user: postgres
     args:
@@ -139,26 +127,6 @@
     register: results
 
   - debug: var=results.stdout_lines
-
-  - name: Display ppg version
-    ignore_errors: yes
-    shell: psql -c "select version();"
-    become_user: postgres
-    args:
-      chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  # - name: Display ppg version
-  #   ignore_errors: yes
-  #   become_user: postgres
-  #   shell: ./psql -c "select version();"
-  #   chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
-  #   register: results
-
-  # - debug:
-  #     var: results.stdout_lines
 
   - name: list /home/postgres
     ignore_errors: yes

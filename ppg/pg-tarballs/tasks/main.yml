@@ -124,6 +124,36 @@
 
 - debug: var=results.stdout_lines
 
+- name: Create extension
+  ignore_errors: yes
+  shell: ./psql -c "create extension adminpack;"
+  become_user: postgres
+  args:
+    chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+  register: results
+
+- debug: var=results.stdout_lines
+
+- name: Create extension
+  ignore_errors: yes
+  shell: ./psql -c "create extension pg_stat_monitor;"
+  become_user: postgres
+  args:
+    chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+  register: results
+
+- debug: var=results.stdout_lines
+
+- name: Create extension
+  ignore_errors: yes
+  shell: ./psql -c "create extension plperl;"
+  become_user: postgres
+  args:
+    chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+  register: results
+
+- debug: var=results.stdout_lines
+
 - name: list /home/postgres
   ignore_errors: yes
   become: true
