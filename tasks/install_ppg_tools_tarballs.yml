@@ -31,21 +31,16 @@
 
   - name: Install libreadline for Debian and Ubuntu
     apt:
-      name: "{{ packages }}"
-      state: latest
-    vars:
-      packages:
-        - libreadline8
-        - libreadline-dev
+    name:
+      - libreadline-dev
+    state: latest
     when: ansible_os_family == "Debian"
 
   - name: Install libreadline for RHEL
     yum:
-      name: "{{ packages }}"
-      state: latest
-    vars:
-      packages:
-        - readline-devel
+    name:
+      - readline-devel
+    state: latest
     when: ansible_os_family == "RedHat"
 
   - name: Create pgbackrest directory
