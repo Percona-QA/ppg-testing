@@ -61,20 +61,20 @@
     ansible.builtin.command:
       cmd: chown -R  postgres:postgres /opt/pgdistro/
 
-  - name: Display ppg version
-    ignore_errors: true
-    become_user: postgres
-    shell: ./psql -c "select version();"
-    chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
-    register: results
+  # - name: Display ppg version
+  #   ignore_errors: yes
+  #   become_user: postgres
+  #   shell: ./psql -c "select version();"
+  #   chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+  #   register: results
 
-  - debug:
-      var: results.stdout_lines
+  # - debug:
+  #     var: results.stdout_lines
 
   - name: list /opt/pgdistro
     ignore_errors: yes
     become: true
-    shell: ls -l "{{dest_dir}}
+    shell: ls -l /opt/pgdistro
     register: results
 
   - debug: var=results.stdout_lines
@@ -82,7 +82,7 @@
   - name: list /opt/pgdistro server bin dir
     ignore_errors: yes
     become: true
-    shell: ls -l "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+    shell: ls -l /opt/pgdistro/percona-postgresql17/bin
     register: results
 
   - debug: var=results.stdout_lines
@@ -90,7 +90,7 @@
   - name: list /opt/pgdistro percona-pgbackrest bin dir
     ignore_errors: yes
     become: true
-    shell: ls -l "{{dest_dir}}/percona-pgbackrest/bin"
+    shell: ls -l /opt/pgdistro/percona-pgbackrest/bin
     register: results
 
   - debug: var=results.stdout_lines

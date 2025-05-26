@@ -9,7 +9,7 @@
     major_version: "{{ lookup('env', 'VERSION').split('.')[0].split('-')[1] }}"
     tarball_url:  "{{ lookup('env', 'TARBALL_URL') }}"
     dest_dir: "/opt/pgdistro"
-    data_dir_path: "/usr/local/pgsql"
+    data_dir_path: "/opt/pgdistro/data"
     user_name: 'postgres'
     database_name: 'postgres'
     server_port: 5432
