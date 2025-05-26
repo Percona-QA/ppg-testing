@@ -47,7 +47,6 @@
       owner: postgres
       group: postgres
       mode: '0755'
-      recurse: yes
 
   - name: Copy Percona pl-languages to /opt
     become: true
