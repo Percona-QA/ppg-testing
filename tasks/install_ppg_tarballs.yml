@@ -128,6 +128,18 @@
 
   - debug: var=results.stdout_lines
 
+  - name: ldd psql
+    ignore_errors: yes
+    become: true
+    ansible.builtin.command:
+      cmd: ldd psql
+    become_user: postgres
+    args:
+      chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+    register: results
+
+  - debug: var=results.stdout_lines
+
   - name: list /home/postgres
     ignore_errors: yes
     become: true
