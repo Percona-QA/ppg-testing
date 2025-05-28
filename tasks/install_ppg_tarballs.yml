@@ -106,40 +106,6 @@
     ansible.builtin.command:
       cmd: chown -R  postgres:postgres /opt/pgdistro/
 
-  - name: Display ppg version
-    ignore_errors: yes
-    become: true
-    ansible.builtin.command:
-      cmd: ./psql -c "select version()"
-    become_user: postgres
-    args:
-      chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Display ppg version
-    ignore_errors: yes
-    shell: ./psql -c "select version();"
-    become_user: postgres
-    args:
-      chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: ldd psql
-    ignore_errors: yes
-    become: true
-    ansible.builtin.command:
-      cmd: ldd psql
-    become_user: postgres
-    args:
-      chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
-    register: results
-
-  - debug: var=results.stdout_lines
-
   - name: list /home/postgres
     ignore_errors: yes
     become: true

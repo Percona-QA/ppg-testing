@@ -103,7 +103,6 @@
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
 
 - name: Display ppg version
-  ignore_errors: yes
   become: true
   ansible.builtin.command:
     cmd: ./psql -c "select version()"
@@ -115,7 +114,6 @@
 - debug: var=results.stdout_lines
 
 - name: Display ppg version
-  ignore_errors: yes
   shell: ./psql -c "select version();"
   become_user: postgres
   args:
@@ -125,8 +123,7 @@
 - debug: var=results.stdout_lines
 
 - name: Create extension
-  ignore_errors: yes
-  shell: ./psql -c "create extension adminpack;"
+  shell: ./psql -c "create extension xml2;"
   become_user: postgres
   args:
     chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
@@ -135,17 +132,6 @@
 - debug: var=results.stdout_lines
 
 - name: Create extension
-  ignore_errors: yes
-  shell: ./psql -c "create extension pg_stat_monitor;"
-  become_user: postgres
-  args:
-    chdir: "{{dest_dir}}/percona-postgresql{{major_version}}/bin"
-  register: results
-
-- debug: var=results.stdout_lines
-
-- name: Create extension
-  ignore_errors: yes
   shell: ./psql -c "create extension plperl;"
   become_user: postgres
   args:
