@@ -97,7 +97,7 @@
       - percona-postgresql-plpython3-14
       - percona-postgresql-pltcl-14
       - percona-postgresql-server-dev-14
-      - percona-postgresql-server-dev-all
+      - percona-postgresql-common-dev
       - percona-postgresql-14-dbgsym
       - percona-postgresql-client-14-dbgsym
       - percona-postgresql-plperl-14-dbgsym

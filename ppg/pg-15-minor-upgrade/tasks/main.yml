@@ -88,7 +88,7 @@
       - percona-postgresql-plpython3-15
       - percona-postgresql-pltcl-15
       - percona-postgresql-server-dev-15
-      - percona-postgresql-server-dev-all
+      - percona-postgresql-common-dev
       - percona-postgresql-15-dbgsym
       - percona-postgresql-client-15-dbgsym
       - percona-postgresql-plperl-15-dbgsym
@@ -148,7 +148,7 @@
     packages:
         - percona-postgresql-client-common
         - percona-postgresql-common
-        - percona-postgresql-server-dev-all
+        - percona-postgresql-common-dev
         - percona-postgresql15
         - percona-postgresql15-contrib
         - percona-postgresql15-debuginfo

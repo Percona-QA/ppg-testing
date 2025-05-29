@@ -85,9 +85,9 @@ pgaudit = {
     "15.12": {"version": "1.7.0"},
     "16.8": {"version": "16.0"},
     "17.4": {"version": "17.1"},
-    "13.21": {"version": "1.5.2"},
-    "14.18": {"version": "1.6.2"},
-    "15.13": {"version": "1.7.0"},
+    "13.21": {"version": "1.5.3"},
+    "14.18": {"version": "1.6.3"},
+    "15.13": {"version": "1.7.1"},
     "16.9": {"version": "16.0"},
     "17.5": {"version": "17.1"},
 }
@@ -236,10 +236,10 @@ pg_telemetry = {
             "15.12": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
             "16.8": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
             "17.4": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
-            "13.21": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
-            "14.18": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
-            "15.13": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
-            "16.9": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
+            "13.21": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.1"},
+            "14.18": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.1"},
+            "15.13": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.1"},
+            "16.9": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.1"},
             "17.5": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.1"},
 }
 
