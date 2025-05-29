@@ -213,6 +213,13 @@
     state: stopped
   when: ansible_os_family == "Debian"
 
+- name: Execute pg_createcluster for version 13
+  command: /usr/bin/pg_createcluster 13 main --port=5433
+  become: true
+  become_method: sudo
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+
 - pause:
     minutes: 1
 
@@ -281,18 +288,159 @@
     enabled: true
   when: ansible_os_family == "RedHat"
 
-- name: Restart postgresql service for Debian based
-  service:
-    masked: no
-    name: postgresql
-    state: restarted
-    enabled: true
+- name: list /var/run/postgresql
+  command: ls -la /var/run/postgresql
+  become: true
   when: ansible_os_family == "Debian"
-
-- name: Display ppg version
-  become_user: postgres
-  shell: psql -c "select version()"
   register: results
 
 - debug:
-      var: results.stdout
+    var: results.stdout_lines
+
+- name: list pg_lsclsuters
+  command: pg_lsclusters
+  become: true
+  become_method: sudo
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: Drop pg_dropcluster for version 12
+  command: /usr/bin/pg_dropcluster 12 main
+  become: true
+  become_method: sudo
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: list pg_lsclsuters
+  command: pg_lsclusters
+  become: true
+  become_method: sudo
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: Delete /var/run/postgresql lock and pid file
+  command: rm -fr /var/run/postgresql/*
+  become: true
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: list /var/run/postgresql
+  command: ls -la /var/run/postgresql/
+  become: true
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: Restart postgresql service for Debian based
+  service:
+    name: postgresql@13-main.service
+    state: started
+    enabled: true
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: list pg_lsclsuters
+  command: pg_lsclusters
+  become: true
+  become_method: sudo
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: Get Service Status
+  ansible.builtin.systemd:
+    name: "postgresql"
+  register: pg_service_status
+
+- debug:
+    var: pg_service_status.status.ActiveState
+
+- name: Get Service Status
+  ansible.builtin.systemd:
+    name: "postgresql@13-main.service"
+  register: pg_service_status
+
+- debug:
+    var: pg_service_status.status.ActiveState
+
+- name: list /var/run/postgresql
+  command: ls -la /var/run/postgresql/
+  become: true
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+# - name: show running process for postgres
+#   command: ps -ef | grep -i postgres
+#   become: true
+#   when: ansible_os_family == "Debian"
+#   register: results
+
+# - debug:
+#     var: results.stdout_lines
+
+- name: show port for postgres
+  command: grep -i port /etc/postgresql/13/main/postgresql.conf
+  become: true
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: show pg log 15 for postgres
+  ignore_errors: true
+  command: cat /var/log/postgresql/postgresql-15-main.log
+  become: true
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: show pg log 13 for postgres
+  ignore_errors: true
+  command: cat /var/log/postgresql/postgresql-13-main.log
+  become: true
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- pause:
+    minutes: 1
+
+- name: Display ppg version
+  ignore_errors: true
+  become_user: postgres
+  shell: psql -c "select version();"
+  register: results
+
+- debug:
+    var: results.stdout_lines
