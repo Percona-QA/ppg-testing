@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: psp-debian12-arm-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-0ef32de3e8ab0640e
+    image: ami-08e742a2a7106d77d
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t4g.xlarge
     ssh_user: admin

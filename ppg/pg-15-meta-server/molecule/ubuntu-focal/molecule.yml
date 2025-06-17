@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: ufocal-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
-    image: ami-0bbb8baafb1bdbd3b
+    image: ami-06c374f393664f330
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t2.small
     ssh_user: ubuntu

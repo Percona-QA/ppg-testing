@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: psp-unoble-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-03250b0e01c28d196
+    image: ami-02003f9f0fde924ea
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t2.xlarge
     ssh_user: ubuntu

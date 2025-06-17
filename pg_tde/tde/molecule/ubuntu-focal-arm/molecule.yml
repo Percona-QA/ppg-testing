@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pgtde-ufocal-arm-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-0f0d21f59265f50a1
+    image: ami-0e7c86bbd7b2890be
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t4g.xlarge
     ssh_user: ubuntu

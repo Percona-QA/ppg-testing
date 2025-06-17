@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pgbadger-U22-amd-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-04a5bacc58328233d
+    image: ami-0a87a69d69fa289be
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t2.small
     ssh_user: ubuntu

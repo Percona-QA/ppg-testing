@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: psp-debian11-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-06c55281058e54447
+    image: ami-0f5c8d83742d4b666
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t2.xlarge
     ssh_user: admin

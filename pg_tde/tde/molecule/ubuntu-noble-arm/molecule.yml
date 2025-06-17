@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pgtde-unoble-arm-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-0bdb7aa9d654d4878
+    image: ami-0fd8fe5cdf7cad6f6
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t4g.xlarge
     ssh_user: ubuntu

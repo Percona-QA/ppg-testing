@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: rocky9-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
-    image: ami-083d7dfbd29efb0f4
+    image: ami-0899e48d70f37fb63
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t4g.large
     ssh_user: rocky

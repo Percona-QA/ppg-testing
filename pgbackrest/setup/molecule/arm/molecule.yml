@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pgbackrest-U22-arm-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-0f45e2f16611e3139
+    image: ami-0424722f9acea213b
     vpc_subnet_id: subnet-085deaca8c1c59a4f
     instance_type: t4g.2xlarge
     ssh_user: ubuntu
