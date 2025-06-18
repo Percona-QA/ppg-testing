@@ -3342,6 +3342,6 @@ def get_settings(distro_type):
             "postgis_version": "3.3.8",
             "postgis_package_version": "3.3.8",
             "pg_telemetry_version": "1.1",
-            "pg_telemetry_package_version": "1.1.1",
+            "pg_telemetry_package_version": "1.1.2",
         },
     }
