@@ -7,6 +7,16 @@
   - debug:
       msg: "Value of PERCONA_TELEMETRY_URL is : {{ PERCONA_TELEMETRY_URL }}"
 
+  - name: Clean dnf
+    become: true
+    command: dnf clean all -y
+    when: ansible_os_family == "RedHat"
+
+  - name: Install dnf-plugins-core
+    become: true
+    command: dnf install -y dnf-plugins-core
+    when: ansible_os_family == "RedHat"
+
   - name: setup epel release
     yum:
       name: epel-release
@@ -14,11 +24,15 @@
       state: present
     when: ansible_os_family == "RedHat"
 
-  - name: Clean dnf rocky linux
+  - name: Enable epel-release on Rhel8 systems using Fedora epel rpm
     become: true
-    command: dnf clean all -y
-    when: ansible_os_family == "RedHat" and
-      (ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9")
+    command: dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+
+  - name: Enable epel-release on Rhel9 systems using Fedora epel rpm
+    become: true
+    command: dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9"
 
   - name: Enable powertools on rocky linux 8
     become: true
