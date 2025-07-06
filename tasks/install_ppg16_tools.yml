@@ -309,28 +309,28 @@
         - libpgpool2
     when: ansible_os_family == "Debian"
 
-#==========================================
+# #==========================================
 
-  - name: setup epel release
-    become: True
-    ansible.builtin.yum:
-      name: epel-release
-      update_cache: yes
-      state: absent
-    when: ansible_facts['os_family'] == "RedHat" and ansible_facts['distribution_major_version'] == "8"
+#   - name: setup epel release
+#     become: True
+#     ansible.builtin.yum:
+#       name: epel-release
+#       update_cache: yes
+#       state: absent
+#     when: ansible_facts['os_family'] == "RedHat" and ansible_facts['distribution_major_version'] == "8"
 
-  - name: Install epel-release package
-    ansible.builtin.dnf:
-      name: epel-release
-      state: present
-    when: ansible_facts['distribution'] == "Rocky" and ansible_facts['distribution_major_version'] == "8"
+#   - name: Install epel-release package
+#     ansible.builtin.dnf:
+#       name: epel-release
+#       state: present
+#     when: ansible_facts['distribution'] == "Rocky" and ansible_facts['distribution_major_version'] == "8"
 
-  # - name: Enable codeready_builder on rocky linux 8
-  #   become: true
-  #   command: dnf config-manager --set-enabled powertools
-  #   when: ansible_facts['os_family'] == "RedHat" and ansible_facts['distribution_major_version'] == "8"
+#   # - name: Enable codeready_builder on rocky linux 8
+#   #   become: true
+#   #   command: dnf config-manager --set-enabled powertools
+#   #   when: ansible_facts['os_family'] == "RedHat" and ansible_facts['distribution_major_version'] == "8"
 
-#==========================================
+# #==========================================
 
   - name: Install percona-postgis RHEL
     yum:
