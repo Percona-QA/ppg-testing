@@ -7,7 +7,7 @@ platforms:
   - name: pgtde-ujammy-${BUILD_NUMBER}
     region: eu-central-1
     image: ami-0a87a69d69fa289be
-    vpc_subnet_id: subnet-085deaca8c1c59a4f
+    vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t2.xlarge
     ssh_user: ubuntu
     root_device_name: /dev/sda1

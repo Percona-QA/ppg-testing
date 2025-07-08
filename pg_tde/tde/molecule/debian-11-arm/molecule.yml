@@ -7,7 +7,7 @@ platforms:
   - name: pgtde-debian11-arm-${BUILD_NUMBER}
     region: eu-central-1
     image: ami-0f41d093198bfb6d5
-    vpc_subnet_id: subnet-085deaca8c1c59a4f
+    vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t4g.xlarge
     ssh_user: admin
     root_device_name: /dev/xvda

@@ -4,12 +4,12 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: pgtde-ol8-arm-${BUILD_NUMBER}
+  - name: psp-rocky9-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-02d0bbe49c30e7652
+    image: ami-0974816532424c446
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
-    instance_type: t4g.large
-    ssh_user: ec2-user
+    instance_type: t3.xlarge
+    ssh_user: rocky
     root_device_name: /dev/sda1
     instance_tags:
       iit-billing-tag: jenkins-pg-worker
