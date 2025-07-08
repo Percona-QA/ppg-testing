@@ -131,10 +131,10 @@ pg_stat_monitor = {
     "15.12": {"version": "2.1.1"},
     "16.8": {"version": "2.1.1"},
     "17.4": {"version": "2.1.1"},
-    "13.21": {"version": "2.1.1"},
-    "14.18": {"version": "2.1.1"},
-    "15.13": {"version": "2.1.1"},
-    "16.9": {"version": "2.1.1"},
+    "13.21": {"version": "2.2.0"},
+    "14.18": {"version": "2.2.0"},
+    "15.13": {"version": "2.2.0"},
+    "16.9": {"version": "2.2.0"},
     "17.5": {"version": "2.2.0"},
 }
 
@@ -236,10 +236,10 @@ pg_telemetry = {
             "15.12": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
             "16.8": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
             "17.4": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.0"},
-            "13.21": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.1"},
-            "14.18": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.1"},
-            "15.13": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.1"},
-            "16.9": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.1"},
+            "13.21": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.2"},
+            "14.18": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.2"},
+            "15.13": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.2"},
+            "16.9": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.2"},
             "17.5": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.2"},
 }
 
