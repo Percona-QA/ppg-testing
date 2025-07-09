@@ -25,14 +25,24 @@
     shell: | 
        dnf install -y dnf-plugins-core
        dnf config-manager --set-enabled powertools
-    when: ansible_distribution_major_version == "8"
+    when: ansible_os_family == "RedHat" and ansible_distribution == "Rocky" and ansible_distribution_major_version == "8"
+
+  - name: Enable ol8_codeready_builder on Oracle linux 8
+    become: true
+    command: dnf config-manager --set-enabled ol8_codeready_builder
+    when: ansible_os_family == "RedHat" and ansible_distribution == "OracleLinux" and ansible_distribution_major_version == "8"
 
   - name: Enable CRB on Rocky 9
     become: true
     shell: | 
        dnf install dnf-plugins-core
        dnf config-manager --set-enabled crb
-    when: ansible_distribution_major_version == "9"    
+    when: ansible_os_family == "RedHat" and ansible_distribution == "Rocky" and ansible_distribution_major_version == "9"
+
+  - name: Enable ol9_codeready_builder on Oracle linux 9
+    become: true
+    command: dnf config-manager --set-enabled ol9_codeready_builder
+    when: ansible_os_family == "RedHat" and ansible_distribution == "OracleLinux" and ansible_distribution_major_version == "9"
 
   - name: Add the user 'postgres'
     ansible.builtin.user:
