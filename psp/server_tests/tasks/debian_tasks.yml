@@ -300,10 +300,9 @@
   - debug: var=regression.stdout_lines
   - debug: var=regression.stderr_lines
 
-  - name: Run tde_setup_global using postgresql_query
-    community.postgresql.postgresql_query:
-      db: postgres
-      query: "{{ lookup('file', '/tmp/postgres/ci_scripts/tde_setup_global.sql') }}"
+  - name: Run tde_setup_global.sql using psql
+    shell: |
+      psql -d postgres -f /tmp/postgres/ci_scripts/tde_setup_global.sql
     become: true
     become_user: postgres
     environment:
