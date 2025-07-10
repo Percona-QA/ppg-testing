@@ -562,19 +562,30 @@
   - debug: var=regression.stdout_lines
   - debug: var=regression.stderr_lines
 
+  - name: Run tde_setup_global using postgresql_query
+    community.postgresql.postgresql_query:
+      db: postgres
+      query: "{{ lookup('file', '/tmp/postgres/ci_scripts/tde_setup_global.sql') }}"
+    become: true
+    become_user: postgres
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
+      PG_TEST_PORT_DIR: "/tmp/pg_tde"
+      INSTALL_DIR: "/opt/pgsql"
+      TDE_MODE: "1"
+      LANG: "C.UTF-8"
+      LC_CTYPE: "C"
+      LC_ALL: "C"
+      PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+    ignore_errors: yes
+    when: testsuite == 'server-installcheck-world-with-tde'
+
+
+
   - name: Run installcheck-world with tde
     ignore_errors: yes
     shell: | 
-      rm -f /tmp/pg_tde_test_keyring.per
-      psql -c "CREATE SCHEMA tde;"
-      psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde SCHEMA tde;"
-      psql -c "SELECT tde.pg_tde_add_global_key_provider_file('reg_file-global', '/tmp/pg_tde_test_keyring.per');"
-      psql -c "SELECT tde.pg_tde_create_key_using_global_key_provider('server-key', 'reg_file-global');"
-      psql -c "SELECT tde.pg_tde_set_server_key_using_global_key_provider('server-key', 'reg_file-global');"
-      psql -c "ALTER SYSTEM SET pg_tde.wal_encrypt = on;"
-      psql -c "CREATE EXTENSION IF NOT EXISTS pg_tde;"
-      psql -c "ALTER SYSTEM SET search_path = postgres,public,tde;"
-      psql -c "SELECT pg_reload_conf();"
       cd /opt/pgsql/bin
       echo "default_table_access_method = 'tde_heap'" >> /opt/pgsql/data/postgresql.conf
       ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop -o '-p 5432'
