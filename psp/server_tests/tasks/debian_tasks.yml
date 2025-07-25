@@ -57,31 +57,6 @@
   - name: Install Text::Trim
     ansible.builtin.shell: yes | sudo /usr/bin/perl -MCPAN -e 'install Text::Trim'
 
-  - name: Install docker.io Deb
-    become: true
-    apt:
-      name: docker.io
-      update_cache: yes
-
-  - name: Install python3-pip
-    become: true
-    apt:
-      name: python3-pip
-      state: latest
-      update_cache: yes
-
-  - name: show docker version
-    command: docker -v
-    register: docker_version_result
-
-  - debug:
-      var: docker_version_result.stdout
-
-  - name: Install hashicorp repo and vault
-    shell: |
-      wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-      echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-      sudo apt update && sudo apt install -y vault
 
   - name: Add the user 'postgres'
     ansible.builtin.user:
@@ -105,6 +80,17 @@
       owner: postgres
       group: admin
       mode: 0775
+
+  - name: Include KMIP server setup playbook
+    include_tasks: run_kmip_vault_server.yml
+
+  - name: Change ownership of /tmp/vault_env to postgres
+    ansible.builtin.file:
+      path: /tmp/vault_env
+      owner: postgres
+      group: admin
+      recurse: true
+    become: true
 
   - name: Clone Postgres/PSP sources with pg_tde
     git:
@@ -249,21 +235,14 @@
 
   - name: Run server-check-world
     shell: | 
-      cd /tmp
-      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
-      python3 create_certificates.py
-      cat client_certificate_jane_doe.pem >> client_key_jane_doe.pem
-      mkdir policies
-      cd policies
-      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/examples/policy.json
-      cd ..
-      pykmip-server -f "/tmp/postgres/contrib/pg_tde/pykmip-server.conf" -l /tmp/kmip-server.log &
-      TV=$(mktemp)
-      { exec >$TV; vault server -dev; } &
-      sleep 10
-      export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
-      echo "Root token: $ROOT_TOKEN"
-      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres && make -s check-world
+      export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
+      export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
+      export VAULT_ADDR=https://127.0.0.1:8200
+      export VAULT_TOKEN=root
+
+      echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
+      echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
+      cd /tmp/postgres && make -s check-world
     become_user: postgres
     args:
       executable: /bin/bash
@@ -286,23 +265,16 @@
       cd /opt/pgsql/bin
       echo "default_table_access_method = 'tde_heap'" >> /opt/pgsql/data/postgresql.conf
       ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop -o '-p 5432'
-      sleep 5
-      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
-      cd /tmp
-      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
-      python3 create_certificates.py
-      cat client_certificate_jane_doe.pem >> client_key_jane_doe.pem
-      mkdir policies
-      cd policies
-      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/examples/policy.json
-      cd ..
-      pykmip-server -f "/tmp/postgres/contrib/pg_tde/pykmip-server.conf" -l /tmp/kmip-server.log &
-      TV=$(mktemp)
-      { exec >$TV; vault server -dev; } &
-      sleep 10
-      export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
-      echo "Root token: $ROOT_TOKEN"
-      export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres/contrib/pg_tde && make -s check -k
+      psql -c "show default_table_access_method ;"
+
+      export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
+      export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
+      export VAULT_ADDR=https://127.0.0.1:8200
+      export VAULT_TOKEN=root
+
+      echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
+      echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
+      cd /tmp/postgres/contrib/pg_tde && make -s check -k
     become_user: postgres
     args:
       executable: /bin/bash
@@ -344,27 +316,16 @@
       cd /opt/pgsql/bin
       echo "default_table_access_method = 'tde_heap'" >> /opt/pgsql/data/postgresql.conf
       ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop -o '-p 5432'
-      sleep 5
-      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
       psql -c "show default_table_access_method ;"
-      psql -c "ALTER SYSTEM SET default_table_access_method = 'tde_heap';"
-      psql -c "SELECT pg_reload_conf();"
-      psql -c "show default_table_access_method ;"
-      cd /tmp
-      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
-      python3 create_certificates.py
-      cat client_certificate_jane_doe.pem >> client_key_jane_doe.pem
-      mkdir policies
-      cd policies
-      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/examples/policy.json
-      cd ..
-      pykmip-server -f "/tmp/postgres/contrib/pg_tde/pykmip-server.conf" -l /tmp/kmip-server.log &
-      TV=$(mktemp)
-      { exec >$TV; vault server -dev; } &
-      sleep 10
-      export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
-      echo "Root token: $ROOT_TOKEN"
-      export ROOT_TOKEN=$ROOT_TOKEN && export TDE_MODE=1 && cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world -k
+
+      export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
+      export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
+      export VAULT_ADDR=https://127.0.0.1:8200
+      export VAULT_TOKEN=root
+
+      echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
+      echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
+      export TDE_MODE=1 && cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world -k
     become_user: postgres
     args:
       executable: /bin/bash
