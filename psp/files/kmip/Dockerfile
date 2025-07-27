@@ -1,26 +1,27 @@
-# Pull base image.
 FROM ubuntu:jammy
 
+# Install packages and Python dependencies
 RUN apt update && \
-    DEBIAN_FRONTEND=noninteractive apt -y install apt-utils && \
-    DEBIAN_FRONTEND=noninteractive apt -y upgrade
+    DEBIAN_FRONTEND=noninteractive apt -y install \
+        apt-utils git vim sudo wget netcat python3 python3-pip \
+        python3-dev build-essential && \
+    apt -y upgrade && \
+    python3 -m pip install cryptography pycrypto
 
-RUN DEBIAN_FRONTEND=noninteractive apt -y install git vim sudo wget netcat pip python3 python3-pip
+# Clone and install PyKMIP
+RUN git clone https://github.com/dutow/PyKMIP.git /opt/PyKMIP && \
+    python3 /opt/PyKMIP/setup.py install
 
-RUN python3 -m pip install cryptography pycrypto
+# Create directories
+RUN mkdir -p /opt/certs /opt/polices
 
-RUN git clone https://github.com/dutow/PyKMIP.git /opt/PyKMIP
-#ADD pykmip-src /opt/PyKMIP
-
-RUN cd /opt/PyKMIP && python3 setup.py install
-
-RUN mkdir /opt/certs /opt/polices
-
+# Copy default policy
 RUN cp /opt/PyKMIP/examples/policy.json /opt/polices
 
-RUN cd /opt/certs && \
-    python3 /opt/PyKMIP/bin/create_certificates.py
+# Generate certificates
+RUN python3 /opt/PyKMIP/bin/create_certificates.py -c /opt/certs
 
+# Add server config (optional: copy a pre-created one instead)
 RUN echo "[server]\n\
 hostname=0.0.0.0\n\
 port=5696\n\
@@ -30,14 +31,13 @@ ca_path=/opt/certs/root_certificate.pem\n\
 policy_path=/opt/polices\n\
 logging_level=DEBUG\n\
 auth_suite=TLS1.2\n\
-enable_tls_client_auth=True" | tee /opt/PyKMIP/server.conf
+enable_tls_client_auth=True" > /opt/PyKMIP/server.conf
 
-RUN cat /opt/PyKMIP/server.conf
-
+# Expose KMIP port
 EXPOSE 5696
 
+# Add entrypoint script
 COPY entrypoint.sh /bin/entrypoint.sh
-
 RUN chmod +x /bin/entrypoint.sh
 
 CMD ["/bin/entrypoint.sh"]
