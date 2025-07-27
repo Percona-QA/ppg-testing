@@ -74,15 +74,22 @@
   args:
     chdir: /tmp/kmip_server
 
-- name: Run KMIP Docker container
-  community.docker.docker_container:
-    name: kmip
-    image: kmip-server
-    state: started
-    ports:
-      - "5696:5696"
-    restart_policy: unless-stopped
-    detach: true
+- name: Run KMIP Docker container using CLI
+  become: true
+  ansible.builtin.shell: |
+    docker run -d --name kmip -p 5696:5696 \
+      --restart unless-stopped \
+      kmip-server
+
+# - name: Run KMIP Docker container
+#   community.docker.docker_container:
+#     name: kmip
+#     image: kmip-server
+#     state: started
+#     ports:
+#       - "5696:5696"
+#     restart_policy: unless-stopped
+#     detach: true
 
 
 - name: Recreate /tmp/certs directory
