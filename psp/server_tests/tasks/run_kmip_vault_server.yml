@@ -89,13 +89,6 @@
     timeout: 60
     state: started
 
-# - name: Recreate /tmp/certs directory
-#   ansible.builtin.file:
-#     path: /tmp/certs
-#     state: directory
-#     mode: '0755'
-#     recurse: yes
-
 - name: Copy KMIP certificates from container to host
   ansible.builtin.shell: |
     docker cp kmip:/opt/certs/server_certificate.pem /tmp/
@@ -110,25 +103,38 @@
     state: directory
     mode: '0755'
 
-- name: Run Vault container with TLS enabled in dev mode
-  community.docker.docker_container:
-    name: vault
-    image: hashicorp/vault:latest
-    state: started
-    restart_policy: unless-stopped
-    ports:
-      - "8200:8200"
-    env:
-      VAULT_DEV_ROOT_TOKEN_ID: root
-      VAULT_ADDR: https://0.0.0.0:8200
-    capabilities:
-      - IPC_LOCK
-    command: >
-      vault server -dev
-      -dev-tls
-      -dev-listen-address=0.0.0.0:8200
-    volumes:
-      - /tmp/vault_env:/vault/env  # Shared volume for environment output (optional)
+# - name: Run Vault container with TLS enabled in dev mode
+#   community.docker.docker_container:
+#     name: vault
+#     image: hashicorp/vault:latest
+#     state: started
+#     restart_policy: unless-stopped
+#     ports:
+#       - "8200:8200"
+#     env:
+#       VAULT_DEV_ROOT_TOKEN_ID: root
+#       VAULT_ADDR: https://0.0.0.0:8200
+#     capabilities:
+#       - IPC_LOCK
+#     command: >
+#       vault server -dev
+#       -dev-tls
+#       -dev-listen-address=0.0.0.0:8200
+#     volumes:
+#       - /tmp/vault_env:/vault/env  # Shared volume for environment output (optional)
+
+- name: Run Vault container (fallback)
+  become: true
+  ansible.builtin.shell: |
+    docker run -d --name vault \
+      --cap-add=IPC_LOCK \
+      -e VAULT_DEV_ROOT_TOKEN_ID=root \
+      -e VAULT_ADDR=https://0.0.0.0:8200 \
+      -p 8200:8200 \
+      -v /tmp/vault_env:/vault/env \
+      hashicorp/vault:latest \
+      vault server -dev -dev-tls -dev-listen-address=0.0.0.0:8200
+
 
 - name: Wait for Vault with TLS to start
   ansible.builtin.wait_for:
