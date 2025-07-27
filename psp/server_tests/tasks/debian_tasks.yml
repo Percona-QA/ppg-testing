@@ -165,11 +165,11 @@
 
   - debug: var=results.stdout_lines
 
-  - name: Remove create_schema.sql test case for tde_heap
-    become_user: postgres
-    command: rm -f /tmp/postgres/src/test/regress/sql/create_schema.sql
-    when: (testsuite == 'server-installcheck-world-with-tde')
-    register: results
+  # - name: Remove create_schema.sql test case for tde_heap
+  #   become_user: postgres
+  #   command: rm -f /tmp/postgres/src/test/regress/sql/create_schema.sql
+  #   when: (testsuite == 'server-installcheck-world-with-tde')
+  #   register: results
 
   - debug: var=results.stdout_lines
 
@@ -181,7 +181,7 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: (testsuite == 'server-installcheck-world-with-tde')
+    when: testsuite in ['server-installcheck-world-with-tde', 'tde-installcheck-only']
     register: results
 
   - debug: var=results.stdout_lines
@@ -198,7 +198,7 @@
       LANG: C.UTF-8
       LC_CTYPE: C
       LC_ALL: C
-    when: (testsuite == 'server-installcheck-world-with-tde')
+    when: testsuite in ['server-installcheck-world-with-tde', 'tde-installcheck-only']
     register: results
 
   - debug: var=results.stdout_lines
