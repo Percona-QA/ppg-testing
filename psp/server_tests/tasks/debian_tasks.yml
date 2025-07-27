@@ -213,7 +213,7 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: (testsuite == 'server-installcheck-world-with-tde')
+    when: testsuite in ['server-installcheck-world-with-tde', 'tde-installcheck-only']
     register: results
 
   - debug: var=results.stdout_lines
@@ -228,7 +228,7 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: (testsuite == 'server-installcheck-world-with-tde')
+    when: testsuite in ['server-installcheck-world-with-tde', 'tde-installcheck-only']
     register: results
 
   - debug: var=results.stdout_lines
@@ -239,6 +239,12 @@
       export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
       export VAULT_ADDR=https://127.0.0.1:8200
       export VAULT_TOKEN=root
+      export PATH="/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      export LD_LIBRARY_PATH="/opt/pgsql/lib"
+      export PG_TEST_PORT_DIR="/tmp/pg_tde"
+      export INSTALL_DIR="/opt/pgsql"
+      export TDE_MODE=0
+      export PERCONA_SERVER_VERSION="{{ percona_server_version }}"
 
       echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
       echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
@@ -247,13 +253,6 @@
     args:
       executable: /bin/bash
       chdir: "/tmp/postgres/"
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      PG_TEST_PORT_DIR: "/tmp/pg_tde"
-      INSTALL_DIR: "/opt/pgsql"
-      TDE_MODE: 1
-      PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
     when: testsuite == 'server-check-world-without-tde'
     register: regression
 
@@ -271,6 +270,12 @@
       export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
       export VAULT_ADDR=https://127.0.0.1:8200
       export VAULT_TOKEN=root
+      export PATH="/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      export LD_LIBRARY_PATH="/opt/pgsql/lib"
+      export PG_TEST_PORT_DIR="/tmp/pg_tde"
+      export INSTALL_DIR="/opt/pgsql"
+      export TDE_MODE=1
+      export PERCONA_SERVER_VERSION="{{ percona_server_version }}"
 
       echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
       echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
@@ -279,13 +284,6 @@
     args:
       executable: /bin/bash
       chdir: "/tmp/postgres/contrib/pg_tde"
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      PG_TEST_PORT_DIR: "/tmp/pg_tde"
-      INSTALL_DIR: "/opt/pgsql"
-      TDE_MODE: 1
-      PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
     when: testsuite == 'tde-installcheck-only'
     register: regression
 
@@ -322,6 +320,16 @@
       export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
       export VAULT_ADDR=https://127.0.0.1:8200
       export VAULT_TOKEN=root
+      export PATH="/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      export LD_LIBRARY_PATH="/opt/pgsql/lib"
+      export PG_TEST_PORT_DIR="/tmp/pg_tde"
+      export INSTALL_DIR="/opt/pgsql"
+      export TDE_MODE=1
+      export LANG=C.UTF-8
+      export LC_CTYPE=C
+      export LC_ALL=C
+      export PERCONA_SERVER_VERSION="{{ percona_server_version }}"
+
 
       echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
       echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
@@ -330,16 +338,6 @@
     args:
       executable: /bin/bash
       chdir: "/tmp/postgres/"
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      PG_TEST_PORT_DIR: "/tmp/pg_tde"
-      INSTALL_DIR: "/opt/pgsql"
-      TDE_MODE: 1
-      LANG: C.UTF-8
-      LC_CTYPE: C
-      LC_ALL: C
-      PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
     when: testsuite == 'server-installcheck-world-with-tde'
     register: regression
 
