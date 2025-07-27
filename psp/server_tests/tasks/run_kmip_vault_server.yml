@@ -81,23 +81,20 @@
       --restart unless-stopped \
       kmip-server
 
-# - name: Run KMIP Docker container
-#   community.docker.docker_container:
-#     name: kmip
-#     image: kmip-server
-#     state: started
-#     ports:
-#       - "5696:5696"
-#     restart_policy: unless-stopped
-#     detach: true
+- name: Wait for KMIP server to listen on port 5696
+  ansible.builtin.wait_for:
+    port: 5696
+    host: 0.0.0.0
+    delay: 5
+    timeout: 60
+    state: started
 
-
-- name: Recreate /tmp/certs directory
-  ansible.builtin.file:
-    path: /tmp/certs
-    state: directory
-    mode: '0755'
-    recurse: yes
+# - name: Recreate /tmp/certs directory
+#   ansible.builtin.file:
+#     path: /tmp/certs
+#     state: directory
+#     mode: '0755'
+#     recurse: yes
 
 - name: Copy KMIP certificates from container to host
   ansible.builtin.shell: |
@@ -106,14 +103,6 @@
     docker cp kmip:/opt/certs/client_certificate_jane_doe.pem /tmp/
   args:
     executable: /bin/bash
-
-- name: Wait for KMIP server to listen on port 5696
-  ansible.builtin.wait_for:
-    port: 5696
-    host: 0.0.0.0
-    delay: 5
-    timeout: 60
-    state: started
 
 - name: Create Vault env dir
   ansible.builtin.file:
