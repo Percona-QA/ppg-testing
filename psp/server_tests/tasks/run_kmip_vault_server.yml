@@ -67,12 +67,18 @@
     dest: /tmp/kmip_server/entrypoint.sh
     mode: '0755'
 
-- name: Build KMIP Docker image
-  community.docker.docker_image:
-    name: kmip-server
-    build:
-      path: /tmp/kmip_server
-    source: build
+# - name: Build KMIP Docker image
+#   community.docker.docker_image:
+#     name: kmip-server
+#     build:
+#       path: /tmp/kmip_server
+#     source: build
+
+- name: Build KMIP Docker image using CLI
+  shell: docker build -t kmip-server /tmp/kmip_server
+  args:
+    chdir: /tmp/kmip_server
+
 
 - name: Run KMIP Docker container
   community.docker.docker_container:
