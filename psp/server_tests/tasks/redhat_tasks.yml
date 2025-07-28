@@ -398,6 +398,7 @@
     register: results
 
   - debug: var=results.stdout_lines
+    when: (testsuite == 'server-installcheck-world-with-tde')
 
   - name: Start Server
     become_user: postgres
@@ -415,6 +416,7 @@
     register: results
 
   - debug: var=results.stdout_lines
+    when: (testsuite == 'server-installcheck-world-with-tde')
 
   - name: Check pg_tde library output
     become_user: postgres
@@ -430,6 +432,7 @@
     register: results
 
   - debug: var=results.stdout_lines
+    when: (testsuite == 'server-installcheck-world-with-tde')
 
   - name: Check default_table_access_method library output
     become_user: postgres
@@ -459,6 +462,7 @@
     when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
 
   - debug: var=results.stdout_lines
+    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
 
   - name: Modify memlock, both soft and hard, limit for the user postgres
     community.general.pam_limits:
@@ -470,6 +474,7 @@
     when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
 
   - debug: var=results.stdout_lines
+    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
 
   - name: Get ulimit on Rocky 8 ARM for postgres user
     become_user: postgres
@@ -478,6 +483,7 @@
     when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
 
   - debug: var=results.stdout_lines
+    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
 
   - name: Run server-check-world
     shell: | 
@@ -504,7 +510,9 @@
     register: regression
 
   - debug: var=regression.stdout_lines
+    when: testsuite == 'server-check-world-without-tde'
   - debug: var=regression.stderr_lines
+    when: testsuite == 'server-check-world-without-tde'
 
   - name: Run pg_tde tests only - check
     shell: | 
@@ -537,7 +545,9 @@
     register: regression
 
   - debug: var=regression.stdout_lines
+    when: testsuite == 'tde-installcheck-only'
   - debug: var=regression.stderr_lines
+    when: testsuite == 'tde-installcheck-only'
 
   - name: Run tde_setup_global.sql using psql
     shell: |
@@ -594,7 +604,9 @@
     register: regression
 
   - debug: var=regression.stdout_lines
+    when: testsuite == 'server-installcheck-world-with-tde'
   - debug: var=regression.stderr_lines
+    when: testsuite == 'server-installcheck-world-with-tde'
 
   - stat:
       path: /tmp/postgres/src/test/regress/regression.diffs
