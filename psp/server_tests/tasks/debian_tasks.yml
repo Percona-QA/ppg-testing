@@ -213,7 +213,7 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: testsuite in ['server-installcheck-world-with-tde', 'tde-installcheck-only']
+    when: testsuite == 'server-installcheck-world-with-tde')
     register: results
 
   - debug: var=results.stdout_lines
@@ -228,7 +228,7 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: testsuite in ['server-installcheck-world-with-tde', 'tde-installcheck-only']
+    when: testsuite == 'server-installcheck-world-with-tde')
     register: results
 
   - debug: var=results.stdout_lines
