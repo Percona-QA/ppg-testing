@@ -144,15 +144,17 @@
     debug:
       var: regression.stderr_lines
     when:
-      - regression is defined and regression.rc != 0
       - testsuite == 'check-tde'
+      - regression is defined
+      - regression.rc != 0
 
   - name: Fail the playbook if tests failed
     fail:
       msg: "TDE regression tests failed with return code {{ regression.rc }}"
     when:
-      - regression is defined and regression.rc != 0
       - testsuite == 'check-tde'
+      - regression is defined
+      - regression.rc != 0
 
   # =============================
   # Run server regression tests
@@ -184,15 +186,17 @@
     debug:
       var: regression.stderr_lines
     when:
-      - regression is defined and regression.rc != 0
       - testsuite == 'check-server'
+      - regression is defined
+      - regression.rc != 0
 
   - name: Fail the playbook if server tests failed
     fail:
       msg: "Server regression tests failed with return code {{ regression.rc }}"
     when:
-      - regression is defined and regression.rc != 0
       - testsuite == 'check-server'
+      - regression is defined
+      - regression.rc != 0
 
   # =============================
   # Run check-all regression tests
@@ -227,15 +231,17 @@
     debug:
       var: regression.stderr_lines
     when:
-      - regression is defined and regression.rc != 0
       - testsuite == 'check-all'
+      - regression is defined
+      - regression.rc != 0
 
   - name: Fail the playbook if tests failed
     fail:
       msg: "All regression tests failed with return code {{ regression.rc }}"
     when:
-      - regression is defined and regression.rc != 0
       - testsuite == 'check-all'
+      - regression is defined
+      - regression.rc != 0
 
   # - name: Run tde_setup_global.sql using psql
   #   shell: |
