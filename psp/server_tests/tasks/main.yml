@@ -121,6 +121,8 @@
       export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
       export VAULT_ADDR=https://127.0.0.1:8200
       export VAULT_TOKEN=root
+      echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
+      echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
       cd /tmp/postgres/contrib/pg_tde && make -s check -k
     become_user: postgres
     args:
@@ -132,9 +134,6 @@
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
       INSTALL_DIR: "/opt/pgsql"
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
-
-      echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
-      echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
     when: testsuite == 'check-tde'
     ignore_errors: yes
     register: regression
