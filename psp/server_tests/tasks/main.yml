@@ -263,6 +263,14 @@
       msg: "{{command_output.stdout_lines}}"
     when: tde_diff.stat.isreg is defined and tde_diff.stat.isreg == True
 
+  - name: Print vault sql.out
+    command: cat /tmp/postgres/contrib/pg_tde/results/vault_v2_test.out
+    register: sql_output
+    when: testsuite == 'check-tde'
+  - debug:
+      msg: "{{ sql_output.stdout_lines }}"
+    when: testsuite == 'check-tde'
+
   # - name: Get server logfile contents if exists
   #   command: cat /tmp/postgres/logfile
   #   register: log_output
