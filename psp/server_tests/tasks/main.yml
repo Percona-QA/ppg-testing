@@ -119,7 +119,7 @@
     shell: | 
       export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
       export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
-      export VAULT_ADDR=https://127.0.0.1:8200
+      export VAULT_ADDR="https://127.0.0.1:8200"
       export VAULT_TOKEN=root
       echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
       echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
