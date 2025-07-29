@@ -65,14 +65,10 @@
 
   - debug: var=results.stdout_lines
 
-  # - name: Remove create_schema.sql test case for tde_heap
-  #   become_user: postgres
-  #   command: rm -f /tmp/postgres/src/test/regress/sql/create_schema.sql
-  #   when: testsuite in ['server-installcheck-world-with-tde', 'tde-installcheck-only']
-  #   register: results
-
-  # - debug: var=results.stdout_lines
-
+  # =============================
+  # Initialize Postgres with pg_tde
+  # Start the Postgres server with pg_tde enabled
+  # =============================
   - name: initdb cluster
     become_user: postgres
     command: ./initdb -D /opt/pgsql/data --set shared_preload_libraries=pg_tde
@@ -115,6 +111,9 @@
 
   - debug: var=results.stdout_lines
 
+  # =============================
+  # Run pg_tde regression tests
+  # =============================
   - name: Run check tde tests
     shell: | 
       export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
@@ -125,7 +124,7 @@
     become_user: postgres
     args:
       executable: /bin/bash
-      chdir: "/tmp/postgres/"
+      chdir: "/tmp/postgres/contrib/pg_tde"
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
@@ -136,12 +135,10 @@
     ignore_errors: yes
     register: regression
 
-  - name: Show stdout if test fails
+  - name: Show stdout of check tde tests
     debug:
       var: regression.stdout_lines
-    when:
-      - regression is defined and regression.rc != 0
-      - testsuite == 'check-tde'
+    when: testsuite == 'check-tde'
 
   - name: Show stderr if test fails
     debug:
@@ -157,41 +154,88 @@
       - regression is defined and regression.rc != 0
       - testsuite == 'check-tde'
 
-  # - name: Run pg_tde tests only - check
-  #   shell: | 
-  #     cd /opt/pgsql/bin
-  #     echo "default_table_access_method = 'tde_heap'" >> /opt/pgsql/data/postgresql.conf
-  #     ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop -o '-p 5432'
-  #     sleep 5
-  #     ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
-  #     psql -c "show default_table_access_method ;"
+  # =============================
+  # Run server regression tests
+  # =============================
+  - name: Run server regression tests
+    shell: |
+      cd /tmp/postgres/ && make -s check -k
+    become_user: postgres
+    args:
+      executable: /bin/bash
+      chdir: "/tmp/postgres/"
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
+      PG_TEST_PORT_DIR: "/tmp/pg_tde"
+      INSTALL_DIR: "/opt/pgsql"
+      TDE_MODE: 1
+      PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+    when: testsuite == 'check-server'
+    ignore_errors: yes
+    register: regression
 
-  #     export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
-  #     export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
-  #     export VAULT_ADDR=https://127.0.0.1:8200
-  #     export VAULT_TOKEN=root
+  - name: Show stdout of server regression tests
+    debug:
+      var: regression.stdout_lines
+    when: testsuite == 'check-server'
 
-  #     echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
-  #     echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
-  #     cd /tmp/postgres/contrib/pg_tde && make -s check -k
-  #   become_user: postgres
-  #   args:
-  #     executable: /bin/bash
-  #     chdir: "/tmp/postgres/contrib/pg_tde"
-  #   environment:
-  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
-  #     PG_TEST_PORT_DIR: "/tmp/pg_tde"
-  #     INSTALL_DIR: "/opt/pgsql"
-  #     TDE_MODE: 1
-  #     PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
-  #   when: testsuite == 'tde-installcheck-only'
-  #   register: regression
+  - name: Show stderr if server test fails
+    debug:
+      var: regression.stderr_lines
+    when:
+      - regression is defined and regression.rc != 0
+      - testsuite == 'check-server'
 
-  # - debug: var=regression.stdout_lines
-  #   when: testsuite == 'tde-installcheck-only'
-  # - debug: var=regression.stderr_lines
-  #   when: testsuite == 'tde-installcheck-only'
+  - name: Fail the playbook if server tests failed
+    fail:
+      msg: "Server regression tests failed with return code {{ regression.rc }}"
+    when:
+      - regression is defined and regression.rc != 0
+      - testsuite == 'check-server'
+
+  # =============================
+  # Run check-all regression tests
+  # =============================
+  - name: Run all regression tests
+    shell: |
+      export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
+      export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
+      export VAULT_ADDR="https://127.0.0.1:8200"
+      export VAULT_TOKEN=root
+      cd /tmp/postgres/ && make -s check-world -k
+    become_user: postgres
+    args:
+      executable: /bin/bash
+      chdir: "/tmp/postgres/"
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
+      PG_TEST_PORT_DIR: "/tmp/pg_tde"
+      INSTALL_DIR: "/opt/pgsql"
+      PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+    when: testsuite == 'check-all'
+    ignore_errors: yes
+    register: regression
+
+  - name: Show stdout of check-all regression tests
+    debug:
+      var: regression.stdout_lines
+    when: testsuite == 'check-all'
+
+  - name: Show stderr if test fails
+    debug:
+      var: regression.stderr_lines
+    when:
+      - regression is defined and regression.rc != 0
+      - testsuite == 'check-all'
+
+  - name: Fail the playbook if tests failed
+    fail:
+      msg: "All regression tests failed with return code {{ regression.rc }}"
+    when:
+      - regression is defined and regression.rc != 0
+      - testsuite == 'check-all'
 
   # - name: Run tde_setup_global.sql using psql
   #   shell: |
