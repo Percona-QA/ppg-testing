@@ -121,8 +121,6 @@
       export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
       export VAULT_ADDR="https://127.0.0.1:8200"
       export VAULT_TOKEN=root
-      echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
-      echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
       cd /tmp/postgres/contrib/pg_tde && make -s check -k
     become_user: postgres
     args:
@@ -138,8 +136,26 @@
     ignore_errors: yes
     register: regression
 
-  - debug: var=regression.stdout_lines
-  - debug: var=regression.stderr_lines
+  - name: Show stdout if test fails
+    debug:
+      var: regression.stdout_lines
+    when:
+      - regression is defined and regression.rc != 0
+      - testsuite == 'check-tde'
+
+  - name: Show stderr if test fails
+    debug:
+      var: regression.stderr_lines
+    when:
+      - regression is defined and regression.rc != 0
+      - testsuite == 'check-tde'
+
+  - name: Fail the playbook if tests failed
+    fail:
+      msg: "TDE regression tests failed with return code {{ regression.rc }}"
+    when:
+      - regression is defined and regression.rc != 0
+      - testsuite == 'check-tde'
 
   # - name: Run pg_tde tests only - check
   #   shell: | 
@@ -248,28 +264,6 @@
   #   debug:
   #     msg: "{{command_output.stdout_lines}}"
   #   when: server_diff.stat.isreg is defined and server_diff.stat.isreg == True
-
-  - stat:
-      path: /tmp/postgres/contrib/pg_tde/regression.diffs
-    register: tde_diff
-
-  - name: Get pg_tde - regression.diffs contents
-    command: cat /tmp/postgres/contrib/pg_tde/regression.diffs
-    register: command_output
-    when: tde_diff.stat.isreg is defined and tde_diff.stat.isreg == True
-
-  - name: Print to console pg_tde - regression.diffs contents
-    debug:
-      msg: "{{command_output.stdout_lines}}"
-    when: tde_diff.stat.isreg is defined and tde_diff.stat.isreg == True
-
-  - name: Print vault sql.out
-    command: cat /tmp/postgres/contrib/pg_tde/results/vault_v2_test.out
-    register: sql_output
-    when: testsuite == 'check-tde'
-  - debug:
-      msg: "{{ sql_output.stdout_lines }}"
-    when: testsuite == 'check-tde'
 
   # - name: Get server logfile contents if exists
   #   command: cat /tmp/postgres/logfile
