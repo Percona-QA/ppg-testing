@@ -132,7 +132,11 @@
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
       INSTALL_DIR: "/opt/pgsql"
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+
+      echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
+      echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
     when: testsuite == 'check-tde'
+    ignore_errors: yes
     register: regression
 
   - debug: var=regression.stdout_lines
@@ -246,19 +250,19 @@
   #     msg: "{{command_output.stdout_lines}}"
   #   when: server_diff.stat.isreg is defined and server_diff.stat.isreg == True
 
-  # - stat:
-  #     path: /tmp/postgres/contrib/pg_tde/regression.diffs
-  #   register: tde_diff
+  - stat:
+      path: /tmp/postgres/contrib/pg_tde/regression.diffs
+    register: tde_diff
 
-  # - name: Get pg_tde - regression.diffs contents
-  #   command: cat /tmp/postgres/contrib/pg_tde/regression.diffs
-  #   register: command_output
-  #   when: tde_diff.stat.isreg is defined and tde_diff.stat.isreg == True
+  - name: Get pg_tde - regression.diffs contents
+    command: cat /tmp/postgres/contrib/pg_tde/regression.diffs
+    register: command_output
+    when: tde_diff.stat.isreg is defined and tde_diff.stat.isreg == True
 
-  # - name: Print to console pg_tde - regression.diffs contents
-  #   debug:
-  #     msg: "{{command_output.stdout_lines}}"
-  #   when: tde_diff.stat.isreg is defined and tde_diff.stat.isreg == True
+  - name: Print to console pg_tde - regression.diffs contents
+    debug:
+      msg: "{{command_output.stdout_lines}}"
+    when: tde_diff.stat.isreg is defined and tde_diff.stat.isreg == True
 
   # - name: Get server logfile contents if exists
   #   command: cat /tmp/postgres/logfile
