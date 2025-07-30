@@ -16,7 +16,6 @@
       file: "debian_tasks.yml"
     when: ansible_os_family == 'Debian'
 
-
   - name: Clone Postgres/PSP sources with pg_tde
     git:
       repo: "{{ repo }}"
@@ -148,7 +147,7 @@
       - regression is defined
       - regression.rc != 0
 
-  - name: Fail the playbook if tests failed
+  - name: Fail the playbook if tde tests failed
     fail:
       msg: "TDE regression tests failed with return code {{ regression.rc }}"
     when:
@@ -235,7 +234,7 @@
       - regression is defined
       - regression.rc != 0
 
-  - name: Fail the playbook if tests failed
+  - name: Fail the playbook if tests failed in check-all
     fail:
       msg: "All regression tests failed with return code {{ regression.rc }}"
     when:
@@ -243,98 +242,73 @@
       - regression is defined
       - regression.rc != 0
 
-  # - name: Run tde_setup_global.sql using psql
-  #   shell: |
-  #     cd /opt/pgsql/bin
-  #     ./psql -d postgres -f /tmp/postgres/ci_scripts/tde_setup_global.sql  -v ON_ERROR_STOP=on
-  #     ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile restart -o '-p 5432'
-  #   become: true
-  #   become_user: postgres
-  #   environment:
-  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
-  #     PG_TEST_PORT_DIR: "/tmp/pg_tde"
-  #     INSTALL_DIR: "/opt/pgsql"
-  #     TDE_MODE: "1"
-  #     LANG: "C.UTF-8"
-  #     LC_CTYPE: "C"
-  #     LC_ALL: "C"
-  #     PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
-  #   ignore_errors: yes
-  #   when: testsuite == 'server-installcheck-world-with-tde'
+  # =============================
+  # Run installcheck-world regression tests with pg_tde
+  # =============================
+  - name: Run tde_setup_global.sql using psql
+    shell: |
+      cd /opt/pgsql/bin
+      ./psql -d postgres -f /tmp/postgres/ci_scripts/tde_setup_global.sql  -v ON_ERROR_STOP=on
+      ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile restart -o '-p 5432'
+    become: true
+    become_user: postgres
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
+      PG_TEST_PORT_DIR: "/tmp/pg_tde"
+      INSTALL_DIR: "/opt/pgsql"
+      TDE_MODE: "1"
+      LANG: "C.UTF-8"
+      LC_CTYPE: "C"
+      LC_ALL: "C"
+      PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+    ignore_errors: yes
+    when: testsuite == 'installcheck-world'
 
-  # - name: Run installcheck-world with tde
-  #   ignore_errors: yes
-  #   shell: | 
-  #     cd /opt/pgsql/bin
-  #     echo "default_table_access_method = 'tde_heap'" >> /opt/pgsql/data/postgresql.conf
-  #     ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop -o '-p 5432'
-  #     psql -c "show default_table_access_method ;"
+  - name: Run installcheck-world with tde
+    ignore_errors: yes
+    shell: |
+      psql -c "show default_table_access_method ;"
 
-  #     export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
-  #     export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
-  #     export VAULT_ADDR=https://127.0.0.1:8200
-  #     export VAULT_TOKEN=root
+      export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
+      export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
+      export VAULT_ADDR=https://127.0.0.1:8200
+      export VAULT_TOKEN=root
+      export TDE_MODE=1 && cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world -k
+    become_user: postgres
+    args:
+      executable: /bin/bash
+      chdir: "/tmp/postgres/"
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
+      PG_TEST_PORT_DIR: "/tmp/pg_tde"
+      INSTALL_DIR: "/opt/pgsql"
+      TDE_MODE: 1
+      LANG: C.UTF-8
+      LC_CTYPE: C
+      LC_ALL: C
+      PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+    when: testsuite == 'installcheck-world'
+    register: regression
 
-  #     echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
-  #     echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
-  #     export TDE_MODE=1 && cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world -k
-  #   become_user: postgres
-  #   args:
-  #     executable: /bin/bash
-  #     chdir: "/tmp/postgres/"
-  #   environment:
-  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
-  #     PG_TEST_PORT_DIR: "/tmp/pg_tde"
-  #     INSTALL_DIR: "/opt/pgsql"
-  #     TDE_MODE: 1
-  #     LANG: C.UTF-8
-  #     LC_CTYPE: C
-  #     LC_ALL: C
-  #     PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
-  #   when: testsuite == 'server-installcheck-world-with-tde'
-  #   register: regression
+  - name: Show stdout of installcheck-world regression tests
+    debug:
+      var: regression.stdout_lines
+    when: testsuite == 'installcheck-world'
 
-  # - debug: var=regression.stdout_lines
-  #   when: testsuite == 'server-installcheck-world-with-tde'
-  # - debug: var=regression.stderr_lines
-  #   when: testsuite == 'server-installcheck-world-with-tde'
+  - name: Show stderr if installcheck-world test fails
+    debug:
+      var: regression.stderr_lines
+    when:
+      - testsuite == 'installcheck-world'
+      - regression is defined
+      - regression.rc != 0
 
-  # - stat:
-  #     path: /tmp/postgres/src/test/regress/regression.diffs
-  #   register: server_diff
-
-  # - name: Get Server - regression.diffs contents
-  #   command: cat /tmp/postgres/src/test/regress/regression.diffs
-  #   register: command_output
-  #   when: server_diff.stat.isreg is defined and server_diff.stat.isreg == True
-
-  # - name: Print to console Server - regression.diffs contents
-  #   debug:
-  #     msg: "{{command_output.stdout_lines}}"
-  #   when: server_diff.stat.isreg is defined and server_diff.stat.isreg == True
-
-  # - name: Get server logfile contents if exists
-  #   command: cat /tmp/postgres/logfile
-  #   register: log_output
-  #   when: regression.rc is defined and regression.rc != 0
-
-  # - name: Print to console logfile
-  #   debug:
-  #     msg: "{{log_output.stdout_lines}}"
-  #   when: regression.rc is defined and regression.rc != 0
-
-  # - debug: var=regression.rc
-  #   when: regression.rc is defined
-
-  # # - name: End play if regression has failures
-  # #   fail:
-  # #     msg: "regression failed"
-  # #   when: regression.rc is defined and regression.rc != 0
-
-  # - name: End play if regression has failures
-  #   fail:
-  #     msg: "regression failed"
-  #   when: regression.rc is defined and (regression.rc != 0 and regression.rc != 2)
-
+  - name: Fail the playbook if tests failed in installcheck-world
+    fail:
+      msg: "All regression tests failed with return code {{ regression.rc }}"
+    when:
+      - testsuite == 'installcheck-world'
+      - regression is defined
+      - regression.rc != 0
