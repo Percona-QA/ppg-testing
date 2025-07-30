@@ -4,9 +4,9 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: debian11-${BUILD_NUMBER}-${JOB_NAME}
+  - name: debian11-arm-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
-    image: ami-0f41d093198bfb6d5
+    image: ami-095ac0bb50bd8d45e
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t4g.small
     ssh_user: admin
@@ -20,10 +20,11 @@ provisioner:
     create: ../../../../playbooks/create.yml
     destroy: ../../../../playbooks/destroy.yml
     prepare: ../../../../playbooks/prepare.yml
+    cleanup: ../../playbooks/cleanup.yml
     converge: ../../playbooks/playbook.yml
 verifier:
   name: testinfra
-  directory: ../../../tests/tests_ppg/
+  directory: ../../../tests/tests_ppg
   options:
     verbose: true
     s: true
@@ -40,4 +41,5 @@ scenario:
     - prepare
     - converge
     - verify
+    - cleanup
     - destroy

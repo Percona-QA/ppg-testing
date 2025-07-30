@@ -4,9 +4,9 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: ol9-${BUILD_NUMBER}-${JOB_NAME}
+  - name: ol9-arm-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
-    image: ami-098a7d45c0983caea
+    image: ami-09be81b9afe02d86b
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t4g.large
     ssh_user: ec2-user
@@ -23,7 +23,7 @@ provisioner:
     converge: ../../playbooks/playbook.yml
 verifier:
   name: testinfra
-  directory: ../../../tests/tests_ppg/
+  directory: ../../../tests/tests_ppg
   options:
     verbose: true
     s: true

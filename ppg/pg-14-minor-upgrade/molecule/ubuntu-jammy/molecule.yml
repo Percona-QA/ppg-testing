@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: ujammy-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
-    image: ami-0a87a69d69fa289be
+    image: ami-0dc33c9c954b3f073
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t2.small
     ssh_user: ubuntu
@@ -23,7 +23,7 @@ provisioner:
     converge: ../../playbooks/playbook.yml
 verifier:
   name: testinfra
-  directory: ../../../tests/tests_ppg/
+  directory: ../../../tests/tests_ppg
   options:
     verbose: true
     s: true

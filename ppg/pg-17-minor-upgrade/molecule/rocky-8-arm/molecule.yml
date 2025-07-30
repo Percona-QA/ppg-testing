@@ -4,7 +4,7 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: rocky8-${BUILD_NUMBER}-${JOB_NAME}
+  - name: rocky8-arm-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
     image: ami-0ef838b0ab2b120cf
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
@@ -23,7 +23,7 @@ provisioner:
     converge: ../../playbooks/playbook.yml
 verifier:
   name: testinfra
-  directory: ../../../tests/tests_ppg/
+  directory: ../../../tests/tests_ppg
   options:
     verbose: true
     s: true

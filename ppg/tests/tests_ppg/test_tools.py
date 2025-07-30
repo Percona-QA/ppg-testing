@@ -369,14 +369,14 @@ def test_pg_stat_monitor_extension_version(host):
         assert result.stdout.strip("\n") == pg_versions['PGSM_version']
 
 def test_postgis_package_version(host):
-    ppg_version=float(pg_versions['version'])
+    # ppg_version=float(pg_versions['version'])
 
-    if (pg_versions['version'].startswith("15") and ppg_version <= 15.2) or \
-    (pg_versions['version'].startswith("14") and ppg_version <= 14.7) or \
-    (pg_versions['version'].startswith("13") and ppg_version <= 13.10) or \
-    (pg_versions['version'].startswith("12") and ppg_version <= 12.14) or \
-    (pg_versions['version'].startswith("11") and ppg_version <= 11.19):
-        pytest.skip("Postgis not available on " + pg_versions['version'])
+    # if (pg_versions['version'].startswith("15") and ppg_version <= 15.2) or \
+    # (pg_versions['version'].startswith("14") and ppg_version <= 14.7) or \
+    # (pg_versions['version'].startswith("13") and ppg_version <= 13.10) or \
+    # (pg_versions['version'].startswith("12") and ppg_version <= 12.14) or \
+    # (pg_versions['version'].startswith("11") and ppg_version <= 11.19):
+    #     pytest.skip("Postgis not available on " + pg_versions['version'])
 
     dist = host.system_info.distribution
     if dist.lower() in ["ubuntu", "debian"]:
@@ -419,14 +419,14 @@ def installed_extensions_list(host):
         return result
 
 def test_postgis_extenstions_list(installed_extensions_list, host):
-    ppg_version=float(pg_versions['version'])
+    #ppg_version=float(pg_versions['version'])
 
-    if (pg_versions['version'].startswith("15") and ppg_version <= 15.2) or \
-    (pg_versions['version'].startswith("14") and ppg_version <= 14.7) or \
-    (pg_versions['version'].startswith("13") and ppg_version <= 13.10) or \
-    (pg_versions['version'].startswith("12") and ppg_version <= 12.14) or \
-    (pg_versions['version'].startswith("11") and ppg_version <= 11.19):
-        pytest.skip("Postgis not available on " + pg_versions['version'])
+    # if (pg_versions['version'].startswith("15") and ppg_version <= 15.2) or \
+    # (pg_versions['version'].startswith("14") and ppg_version <= 14.7) or \
+    # (pg_versions['version'].startswith("13") and ppg_version <= 13.10) or \
+    # (pg_versions['version'].startswith("12") and ppg_version <= 12.14) or \
+    # (pg_versions['version'].startswith("11") and ppg_version <= 11.19):
+    #     pytest.skip("Postgis not available on " + pg_versions['version'])
 
     dist = host.system_info.distribution
     POSTGIS_DEB_EXTENSIONS = ['postgis_tiger_geocoder-3','postgis_sfcgal-3','postgis_raster-3','postgis_topology-3',
@@ -444,14 +444,14 @@ def test_postgis_extenstions_list(installed_extensions_list, host):
             assert extension in installed_extensions_list
 
 def test_postgis_extensions_create_drop(host):
-    ppg_version=float(pg_versions['version'])
+    #ppg_version=float(pg_versions['version'])
 
-    if (pg_versions['version'].startswith("15") and ppg_version <= 15.2) or \
-    (pg_versions['version'].startswith("14") and ppg_version <= 14.7) or \
-    (pg_versions['version'].startswith("13") and ppg_version <= 13.10) or \
-    (pg_versions['version'].startswith("12") and ppg_version <= 12.14) or \
-    (pg_versions['version'].startswith("11") and ppg_version <= 11.19):
-        pytest.skip("Postgis not available on " + pg_versions['version'])
+    # if (pg_versions['version'].startswith("15") and ppg_version <= 15.2) or \
+    # (pg_versions['version'].startswith("14") and ppg_version <= 14.7) or \
+    # (pg_versions['version'].startswith("13") and ppg_version <= 13.10) or \
+    # (pg_versions['version'].startswith("12") and ppg_version <= 12.14) or \
+    # (pg_versions['version'].startswith("11") and ppg_version <= 11.19):
+    #     pytest.skip("Postgis not available on " + pg_versions['version'])
 
     with host.sudo("postgres"):
         # result = host.run("psql -c 'SET pgaudit.log = 'none';'")
@@ -488,14 +488,14 @@ def test_postgis_extensions_create_drop(host):
         # assert result.rc == 0, result.stderr
 
 def test_postgis_extension_version(host):
-    ppg_version=float(pg_versions['version'])
+    #ppg_version=float(pg_versions['version'])
 
-    if (pg_versions['version'].startswith("15") and ppg_version <= 15.2) or \
-    (pg_versions['version'].startswith("14") and ppg_version <= 14.7) or \
-    (pg_versions['version'].startswith("13") and ppg_version <= 13.10) or \
-    (pg_versions['version'].startswith("12") and ppg_version <= 12.14) or \
-    (pg_versions['version'].startswith("11") and ppg_version <= 11.19):
-        pytest.skip("Postgis not available on " + pg_versions['version'])
+    # if (pg_versions['version'].startswith("15") and ppg_version <= 15.2) or \
+    # (pg_versions['version'].startswith("14") and ppg_version <= 14.7) or \
+    # (pg_versions['version'].startswith("13") and ppg_version <= 13.10) or \
+    # (pg_versions['version'].startswith("12") and ppg_version <= 12.14) or \
+    # (pg_versions['version'].startswith("11") and ppg_version <= 11.19):
+    #     pytest.skip("Postgis not available on " + pg_versions['version'])
 
     with host.sudo("postgres"):
         # result = host.run("psql -c 'SET pgaudit.log = 'none';'")

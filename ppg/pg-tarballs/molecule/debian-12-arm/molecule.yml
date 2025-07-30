@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: debian12-arm-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
-    image: ami-08e742a2a7106d77d
+    image: ami-0718c075e71ef5774
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t4g.small
     ssh_user: admin

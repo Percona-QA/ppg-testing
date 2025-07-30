@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: ujammy-arm-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
-    image: ami-0424722f9acea213b
+    image: ami-065dd4baa169f7fd0
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t4g.small
     ssh_user: ubuntu

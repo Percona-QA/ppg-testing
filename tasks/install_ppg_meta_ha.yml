@@ -2,30 +2,10 @@
   - set_fact:
       version: "{{ lookup('env', 'VERSION').split('.')[0].split('-')[1] }}"
 
-  - name: Clean dnf RHEL8
+  - name: Clean dnf
     become: true
     command: dnf clean all -y
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
-
-  - name: Enable powertools on rocky linux 8
-    become: true
-    command: dnf config-manager --set-enabled powertools
-    when: ansible_os_family == "RedHat" and ansible_distribution == "Rocky" and ansible_distribution_major_version == "8"
-
-  - name: Enable ol8_codeready_builder on Oracle linux 8
-    become: true
-    command: dnf config-manager --set-enabled ol8_codeready_builder
-    when: ansible_os_family == "RedHat" and ansible_distribution == "OracleLinux" and ansible_distribution_major_version == "8"
-
-  - name: Enable powertools on rocky linux 9
-    become: true
-    command: dnf config-manager --set-enabled crb
-    when: ansible_os_family == "RedHat" and ansible_distribution == "Rocky" and ansible_distribution_major_version == "9"
-
-  - name: Enable ol9_codeready_builder on Oracle linux 9
-    become: true
-    command: dnf config-manager --set-enabled ol9_codeready_builder
-    when: ansible_os_family == "RedHat" and ansible_distribution == "OracleLinux" and ansible_distribution_major_version == "9"
+    when: ansible_os_family == "RedHat"
 
   - name: Disable dnf module for RHEL8
     become: true
@@ -56,7 +36,8 @@
       name: python3-pip
       state: latest
       update_cache: yes
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9"
+    when: ansible_os_family == "RedHat" and
+      (ansible_distribution_major_version == "9" or ansible_distribution_major_version == "10")
 
   # - name: Install python3 module - patroni[etcd]
   #   become: true

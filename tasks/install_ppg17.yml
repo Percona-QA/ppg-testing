@@ -12,48 +12,6 @@
     command: dnf clean all -y
     when: ansible_os_family == "RedHat"
 
-  - name: Install dnf-plugins-core
-    become: true
-    command: dnf install -y dnf-plugins-core
-    when: ansible_os_family == "RedHat"
-
-  - name: setup epel release
-    yum:
-      name: epel-release
-      update_cache: yes
-      state: present
-    when: ansible_os_family == "RedHat"
-
-  - name: Enable epel-release on Rhel8 systems using Fedora epel rpm
-    become: true
-    command: dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
-
-  - name: Enable epel-release on Rhel9 systems using Fedora epel rpm
-    become: true
-    command: dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9"
-
-  - name: Enable powertools on rocky linux 8
-    become: true
-    command: dnf config-manager --set-enabled powertools
-    when: ansible_os_family == "RedHat" and ansible_distribution == "Rocky" and ansible_distribution_major_version == "8"
-
-  - name: Enable ol8_codeready_builder on Oracle linux 8
-    become: true
-    command: dnf config-manager --set-enabled ol8_codeready_builder
-    when: ansible_os_family == "RedHat" and ansible_distribution == "OracleLinux" and ansible_distribution_major_version == "8"
-
-  - name: Enable powertools on rocky linux 9
-    become: true
-    command: dnf config-manager --set-enabled crb
-    when: ansible_os_family == "RedHat" and ansible_distribution == "Rocky" and ansible_distribution_major_version == "9"
-
-  - name: Enable ol9_codeready_builder on Oracle linux 9
-    become: true
-    command: dnf config-manager --set-enabled ol9_codeready_builder
-    when: ansible_os_family == "RedHat" and ansible_distribution == "OracleLinux" and ansible_distribution_major_version == "9"
-
   - name: Disable dnf postgresql for RHEL8
     become: true
     command: dnf module disable postgresql -y
@@ -115,33 +73,6 @@
       update_cache: yes
     vars:
       packages:
-      - percona-postgresql-client-common
-      - percona-postgresql-common
-      - percona-postgresql-server-dev-all
-      - percona-postgresql17
-      - percona-postgresql17-contrib
-      - percona-postgresql17-debuginfo
-      - percona-postgresql17-devel
-      - percona-postgresql17-docs
-      - percona-postgresql17-libs
-      - percona-postgresql17-llvmjit
-      - percona-postgresql17-plperl
-      - percona-postgresql17-plpython3
-      - percona-postgresql17-pltcl
-      - percona-postgresql17-server
-      - percona-postgresql17-test
-      - percona-postgresql17-debuginfo
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "7"
-    environment:
-      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
-
-  - name: install Percona Platform for PostgreSQL rpm packages for RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
         - percona-postgresql-client-common
         - percona-postgresql-common
         - percona-postgresql17
@@ -165,8 +96,7 @@
         - percona-postgresql17-pltcl-debuginfo
         - percona-postgresql17-plpython3-debuginfo
         - percona-postgresql17-server-debuginfo
-    when: ansible_os_family == "RedHat" and
-      (ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9")
+    when: ansible_os_family == "RedHat"
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 

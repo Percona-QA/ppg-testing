@@ -1,4 +1,15 @@
 ---
+- name: Setting facts so that they will be persisted in the fact cache
+  ansible.builtin.set_fact:
+    pg_version_to_install: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
+
+- name: End play on RedHat 10 and 17.5 and older versions
+  fail:
+    msg: "Stopping execution on rhel 10 because 17.5 and below are not supported."
+  when: ansible_os_family == "RedHat" and
+   ansible_distribution_major_version == "10" and
+   pg_version_to_install | string is version('17.5', '<=', strict=True)
+
 - name: Configure repository
   include_tasks: ../../../../tasks/enable_repo.yml
 

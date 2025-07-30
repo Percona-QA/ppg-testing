@@ -21,6 +21,13 @@
    ansible_distribution_major_version == "24" and
    pg_version_to_install | string is version('16.2', '<=', strict=True)
 
+- name: End play on RedHat 10 and 16.9 and older versions
+  fail:
+    msg: "Stopping execution on rhel 10 because 16.9 and below are not supported."
+  when: ansible_os_family == "RedHat" and
+   ansible_distribution_major_version == "10" and
+   pg_version_to_install | string is version('16.9', '<=', strict=True)
+
 - name: Setup initial (old) repository
   command: percona-release enable {{ pg_version }} {{ repo }}
   vars:

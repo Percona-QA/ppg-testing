@@ -309,46 +309,6 @@
         - libpgpool2
     when: ansible_os_family == "Debian"
 
-# #==========================================
-
-#   - name: setup epel release
-#     become: True
-#     ansible.builtin.yum:
-#       name: epel-release
-#       update_cache: yes
-#       state: absent
-#     when: ansible_facts['os_family'] == "RedHat" and ansible_facts['distribution_major_version'] == "8"
-
-#   - name: Install epel-release package
-#     ansible.builtin.dnf:
-#       name: epel-release
-#       state: present
-#     when: ansible_facts['distribution'] == "Rocky" and ansible_facts['distribution_major_version'] == "8"
-
-#   # - name: Enable codeready_builder on rocky linux 8
-#   #   become: true
-#   #   command: dnf config-manager --set-enabled powertools
-#   #   when: ansible_facts['os_family'] == "RedHat" and ansible_facts['distribution_major_version'] == "8"
-
-# #==========================================
-
-  - name: Install percona-postgis RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - "{{postgis_rhel_package_name_prefix}}"
-      - "{{postgis_rhel_package_name_prefix}}-client"
-      - "{{postgis_rhel_package_name_prefix}}-debuginfo"
-      - "{{postgis_rhel_package_name_prefix}}-devel"
-      - "{{postgis_rhel_package_name_prefix}}-docs"
-      - "{{postgis_rhel_package_name_prefix}}-gui"
-      - "{{postgis_rhel_package_name_prefix}}-llvmjit"
-      - "{{postgis_rhel_package_name_prefix}}-utils"
-    when: ansible_distribution_major_version == "7"
-
   - name: Enable llvm-toolset for RHEL8 to install PostGIS
     become: true
     command: dnf module enable llvm-toolset -y
@@ -371,7 +331,7 @@
       - "{{postgis_rhel_package_name_prefix}}-gui-debuginfo"
       - "{{postgis_rhel_package_name_prefix}}-llvmjit"
       - "{{postgis_rhel_package_name_prefix}}-utils"
-    when: ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
+    when: ansible_os_family == "RedHat"
 
   - name: Install percona-postgis Debian
     apt:
