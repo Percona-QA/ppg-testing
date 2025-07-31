@@ -16,6 +16,9 @@
       file: "debian_tasks.yml"
     when: ansible_os_family == 'Debian'
 
+# =============================
+# Clone Postgres/PSP sources with pg_tde
+# =============================
   - name: Clone Postgres/PSP sources with pg_tde
     git:
       repo: "{{ repo }}"
@@ -63,6 +66,11 @@
     register: results
 
   - debug: var=results.stdout_lines
+
+  - name: Copy Vault_v2 test output file
+    ansible.builtin.copy:
+      src: ../../files/vault_v2_test1.out
+      dest: /tmp/postgres/contrib/pg_tde/expected/vault_v2_test1.out
 
   # =============================
   # Initialize Postgres with pg_tde
