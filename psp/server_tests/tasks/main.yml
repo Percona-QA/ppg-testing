@@ -69,8 +69,8 @@
 
   - name: Copy Vault_v2 test output file
     ansible.builtin.copy:
-      src: ../../files/vault_v2_test1.out
-      dest: /tmp/postgres/contrib/pg_tde/expected/vault_v2_test1.out
+      src: ../../files/vault_v2_test_1.out
+      dest: /tmp/postgres/contrib/pg_tde/expected/vault_v2_test_1.out
 
   # =============================
   # Initialize Postgres with pg_tde
