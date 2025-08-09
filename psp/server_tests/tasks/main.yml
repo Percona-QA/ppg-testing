@@ -158,13 +158,20 @@
   - name: Show tde regression diffs if tests failed
     shell: cat /tmp/postgres/contrib/pg_tde/regression.diffs
     register: diffs_output
-    when: regression.rc != 0
+    when:
+      - testsuite == 'check-tde'
+      - regression is defined
+      - regression.rc != 0
     ignore_errors: true
 
   - name: Print tde regression diffs
     debug:
       msg: "{{ diffs_output.stdout_lines }}"
-    when: regression.rc != 0 and diffs_output.stdout is defined
+    when:
+      - testsuite == 'check-tde'
+      - regression is defined
+      - regression.rc != 0
+      - diffs_output is defined
 
   - name: Fail the playbook if tde tests failed
     fail:
@@ -211,13 +218,20 @@
   - name: Show server regression diffs if tests failed
     shell: cat /tmp/postgres/src/test/regress/regression.diffs
     register: diffs_output
-    when: regression.rc != 0
+    when:
+      - testsuite == 'check-server'
+      - regression is defined
+      - regression.rc != 0
     ignore_errors: true
 
   - name: Print regression diffs
     debug:
       msg: "{{ diffs_output.stdout_lines }}"
-    when: regression.rc != 0 and diffs_output.stdout is defined
+    when:
+      - testsuite == 'check-server'
+      - regression is defined
+      - regression.rc != 0
+      - diffs_output.stdout is defined
 
   - name: Fail the playbook if server tests failed
     fail:
@@ -284,6 +298,7 @@
       - testsuite == 'check-all'
       - regression is defined
       - regression.rc != 0
+      - regression_diff_files is defined
 
   - name: Fail the playbook if tests failed in check-all
     fail:
