@@ -10,7 +10,7 @@ ERROR:  vault mount at "cubbyhole" has unsupported engine type "cubbyhole"
 HINT:  The only supported vault engine type is Key/Value version "2"
 -- FAILS as it's not supported engine version
 SELECT pg_tde_add_database_key_provider_vault_v2('vault-incorrect', 'https://127.0.0.1:8200', 'kv-v1', :'root_token_file', :'cacert_file');
-ERROR:  failed to get mount info for \https://127.0.0.1:8200\ at mountpoint \kv-v1\ (HTTP 400)
+ERROR:  failed to get mount info for "https://127.0.0.1:8200" at mountpoint "kv-v1" (HTTP 400)
 SELECT pg_tde_add_database_key_provider_vault_v2('vault-v2', 'https://127.0.0.1:8200', 'secret', :'root_token_file', :'cacert_file');
  pg_tde_add_database_key_provider_vault_v2 
 -------------------------------------------
