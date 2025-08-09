@@ -264,6 +264,27 @@
       - regression is defined
       - regression.rc != 0
 
+  - name: Find regression.diffs files if tests fail
+    find:
+      paths: "/tmp/postgres"
+      patterns: "regression.diffs"
+      recurse: yes
+    register: regression_diff_files
+    when:
+      - testsuite == 'check-all'
+      - regression is defined
+      - regression.rc != 0
+
+  - name: Show contents of regression.diffs with directory name
+    shell: |
+      echo "Directory: $(dirname {{ item.path }})"
+      cat {{ item.path }}
+    loop: "{{ regression_diff_files.files }}"
+    when:
+      - testsuite == 'check-all'
+      - regression is defined
+      - regression.rc != 0
+
   - name: Fail the playbook if tests failed in check-all
     fail:
       msg: "All regression tests failed with return code {{ regression.rc }}"
@@ -338,6 +359,27 @@
   - name: Fail the playbook if tests failed in installcheck-world
     fail:
       msg: "All regression tests failed with return code {{ regression.rc }}"
+    when:
+      - testsuite == 'installcheck-world'
+      - regression is defined
+      - regression.rc != 0
+
+  - name: Find regression.diffs files if installcheck-world tests fail
+    find:
+      paths: "/tmp/postgres"
+      patterns: "regression.diffs"
+      recurse: yes
+    register: regression_diff_files
+    when:
+      - testsuite == 'installcheck-world'
+      - regression is defined
+      - regression.rc != 0
+
+  - name: Show contents of regression.diffs with directory name
+    shell: |
+      echo "Directory: $(dirname {{ item.path }})"
+      cat {{ item.path }}
+    loop: "{{ regression_diff_files.files }}"
     when:
       - testsuite == 'installcheck-world'
       - regression is defined
