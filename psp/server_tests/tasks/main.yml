@@ -149,13 +149,7 @@
           chdir: /tmp/percona-qa
 
       - name: Copy postgresql/t files to pg_tde/t
-        copy:
-          src: /tmp/percona-qa/postgresql/t/
-          dest: /tmp/postgres/contrib/pg_tde/t/
-          owner: postgres
-          group: postgres
-          mode: '0644'
-        remote_src: yes
+        command: cp -r /tmp/percona-qa/postgresql/t/* /tmp/postgres/contrib/pg_tde/t/
     when: testsuite == 'check-tde'
 
   # =============================
