@@ -119,6 +119,46 @@
   - debug: var=results.stdout_lines
 
   # =============================
+  # Clone Percona-QA repo for regression tests
+  # This is done to avoid checking out all files in the repo
+  # and only include the postgresql directory
+  # =============================
+  - name: Clone only postgresql directory and copy t files to pg_tde
+    block:
+      - name: Clone Percona-QA repo without checking out files
+        git:
+          repo: https://github.com/Percona-QA/percona-qa.git
+          dest: /tmp/percona-qa
+          bare: no
+          clone: yes
+          update: no
+
+      - name: Enable sparse checkout
+        command: git sparse-checkout init --cone
+        args:
+          chdir: /tmp/percona-qa
+
+      - name: Set sparse-checkout to only include postgresql directory
+        command: git sparse-checkout set postgresql
+        args:
+          chdir: /tmp/percona-qa
+
+      - name: Checkout master branch
+        command: git checkout master
+        args:
+          chdir: /tmp/percona-qa
+
+      - name: Copy postgresql/t files to pg_tde/t
+        copy:
+          src: /tmp/percona-qa/postgresql/t/
+          dest: /tmp/postgres/contrib/pg_tde/t/
+          owner: postgres
+          group: postgres
+          mode: '0644'
+        remote_src: yes
+    when: testsuite == 'check-tde'
+
+  # =============================
   # Run pg_tde regression tests
   # =============================
   - name: Run check tde tests
