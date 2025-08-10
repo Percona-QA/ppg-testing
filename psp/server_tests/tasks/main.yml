@@ -138,8 +138,8 @@
         args:
           chdir: /tmp/percona-qa
 
-      - name: Set sparse-checkout to only include postgresql directory
-        command: git sparse-checkout set postgresql
+      - name: Set sparse-checkout to only include postgresql/t directory
+        command: git sparse-checkout set postgresql/t
         args:
           chdir: /tmp/percona-qa
 
@@ -148,8 +148,19 @@
         args:
           chdir: /tmp/percona-qa
 
+      - name: List postgresql directory contents
+        command: ls -R /tmp/percona-qa/postgresql/t
+        register: pgsql_dir_listing
+
+      - name: Show postgresql directory tree
+        debug:
+          var: pgsql_dir_listing.stdout_lines
+
       - name: Copy postgresql/t files to pg_tde/t
         command: cp -r /tmp/percona-qa/postgresql/t/* /tmp/postgres/contrib/pg_tde/t/
+        args:
+          warn: false
+
     when: testsuite == 'check-tde'
 
   # =============================
