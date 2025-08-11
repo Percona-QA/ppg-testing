@@ -158,8 +158,6 @@
 
       - name: Copy postgresql/t files to pg_tde/t
         shell: cp -r /tmp/percona-qa/postgresql/t/* /tmp/postgres/contrib/pg_tde/t/
-        args:
-          warn: false
 
     when: testsuite == 'check-tde'
 
