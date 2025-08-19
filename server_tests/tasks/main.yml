@@ -159,6 +159,9 @@
       - name: Copy postgresql/t files to pg_tde/t
         shell: cp -r /tmp/percona-qa/postgresql/t/* /tmp/postgres/contrib/pg_tde/t/
 
+      - name: Copy postgresql/t/recovery files to pg_tde/t
+        shell: cp -r /tmp/percona-qa/postgresql/t/recovery/* /tmp/postgres/contrib/pg_tde/t/
+
     when: testsuite == 'check-tde'
 
   # =============================
