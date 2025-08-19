@@ -1,0 +1,7 @@
+---
+- name: Run KMIP server setup on all EC2 hosts
+  hosts: aws_instances
+  become: yes
+  tasks:
+    - name: Include KMIP server setup playbook
+      include_tasks: main.yml
