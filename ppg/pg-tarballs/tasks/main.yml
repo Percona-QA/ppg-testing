@@ -72,6 +72,11 @@
     groups: "{{ 'wheel' if 'wheel' in groups_list else 'sudo' }}"
   when: groups_list is defined and ('wheel' in groups_list or 'sudo' in groups_list)
 
+- name: install acl package on rhel 10
+  become: true
+  command:  sudo dnf install -y acl
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
 - name: Install Percona Platform for PostgreSQL {{major_version}} packages
   include_tasks: ../../../../tasks/install_ppg_tarballs.yml
 

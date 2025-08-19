@@ -42,28 +42,53 @@
         state: present
       when: ansible_os_family == "RedHat"
 
-    - name: install GPG key for epel 8
-      rpm_key:
-        state: present
-        key: https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-8
+    # - name: install GPG key for epel 8
+    #   rpm_key:
+    #     state: present
+    #     key: https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-8
+    #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+
+    # - name: install GPG key for Percona repos
+    #   rpm_key:
+    #     state: present
+    #     key: https://repo.percona.com/yum/RPM-GPG-KEY-Percona
+    #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+
+    # - name: setup epel 8 repo
+    #   yum: name=https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm state=present
+    #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+
+    - name: Enable epel-release on Rhel8 systems using Fedora epel rpm
+      become: true
+      command: dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
       when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
-    - name: install GPG key for Percona repos
-      rpm_key:
-        state: present
-        key: https://repo.percona.com/yum/RPM-GPG-KEY-Percona
-      when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+    - name: Enable epel-release on Rhel9 systems using Fedora epel rpm
+      become: true
+      command: dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+      when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9"
 
-    - name: setup epel 8 repo
-      yum: name=https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm state=present
-      when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+    - name: Enable epel-release on Rhel10 systems using Fedora epel rpm
+      become: true
+      command: dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
+      when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+    - name: Disable subscription message on RHEL OS
+      become: true
+      command: sudo sed -i 's/enabled[ ]*=[ ]*1/enabled=0/g' /etc/dnf/plugins/subscription-manager.conf
+      when: ansible_os_family == "RedHat" and ansible_distribution == "RedHat"
 
     - name: setup epel release
       yum:
         name: epel-release
         update_cache: yes
         state: present
-      when: ansible_os_family == "RedHat" and ansible_distribution_major_version != "8"
+      when: ansible_os_family == "RedHat" and ansible_distribution != "RedHat"
+
+    - name: Update /etc/apt/sources.list on Debian 11
+      become: true
+      command: sudo sed -i 's/cdn-aws\.deb/archive/g' /etc/apt/sources.list
+      when: ansible_os_family == "Debian" and ansible_distribution_major_version == "11"
 
     - name: install needed packages for running tests with apt
       apt:
@@ -139,11 +164,11 @@
         state: present
       when: ansible_os_family == "RedHat" and ansible_distribution_major_version|int <= 7
 
-    - name: Install epel-release package
-      ansible.builtin.dnf:
-        name: epel-release
-        state: present
-      when: ansible_facts['os_family'] == "RedHat"
+    # - name: Install epel-release package
+    #   ansible.builtin.dnf:
+    #     name: epel-release
+    #     state: present
+    #   when: ansible_facts['os_family'] == "RedHat"
 
     - name: Enable Powertools on Rocky 8
       become: true
@@ -152,12 +177,13 @@
         dnf config-manager --set-enabled powertools
       when: ansible_distribution == "Rocky" and ansible_distribution_major_version == "8"
 
-    - name: Enable CRB on Rocky 9
+    - name: Enable CRB on rocky linux 9 and 10
       become: true
       shell: | 
         dnf install -y dnf-plugins-core
         dnf config-manager --set-enabled crb
-      when: ansible_distribution == "Rocky" and ansible_distribution_major_version == "9"
+      when: ansible_os_family == "RedHat" and ansible_distribution == "Rocky" and
+        (ansible_distribution_major_version == "9" or ansible_distribution_major_version == "10")
 
     - name: Enable ol8_codeready_builder on Oracle Linux 8
       become: true
@@ -172,6 +198,32 @@
         dnf install -y dnf-plugins-core
         dnf config-manager --set-enabled ol9_codeready_builder
       when: ansible_distribution == "OracleLinux" and ansible_distribution_major_version == "9"
+
+    - name: Enable codeready-builder for RHEL 8
+      become: true
+      shell: | 
+        dnf install -y dnf-plugins-core
+        dnf config-manager --set-enabled codeready-builder-for-rhel-8-rhui-rpms
+      when: ansible_os_family == "RedHat" and ansible_distribution == "RedHat" and ansible_distribution_major_version == "8"
+
+    - name: Enable codeready-builder for RHEL 9
+      become: true
+      shell: | 
+        dnf install -y dnf-plugins-core
+        dnf config-manager --set-enabled codeready-builder-for-rhel-9-rhui-rpms
+      when: ansible_os_family == "RedHat" and ansible_distribution == "RedHat" and ansible_distribution_major_version == "9"
+
+    - name: Enable codeready-builder for RHEL 10
+      become: true
+      shell: | 
+        dnf install -y dnf-plugins-core
+        dnf config-manager --set-enabled codeready-builder-for-rhel-10-rhui-rpms
+      when: ansible_os_family == "RedHat" and ansible_distribution == "RedHat" and ansible_distribution_major_version == "10"
+
+    - name: install acl package on rhel 10
+      become: true
+      command:  sudo dnf install -y acl
+      when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
     - name: Update Oracle Linux 8 and 9 to latest
       become: true
@@ -189,30 +241,28 @@
         systemctl start sshd
       when: ansible_distribution == "OracleLinux" and ansible_distribution_major_version == "9"
 
-    - name: Install additional packages RPM
-      yum:
-        name: "{{ packages }}"
-        state: latest
-        update_cache: yes
-      vars:
-        packages:
-          - openssl-devel
-          - readline-devel
-          - gcc
-          - gcc-c++
-          - libevent-devel
-          - perl-Pod-Checker
-          - perl-devel
-          - perl-JSON-XS
-          - libtool
-          - openssl
-          - make
-          - pandoc
-          - pkgconfig
-          - llvm-toolset-7-clang
-          - llvm5.0
-          - llvm-toolset-7
-      when: ansible_os_family == "RedHat" and ansible_distribution_major_version|int <= 7
+    # - name: Install additional packages RPM
+    #   yum:
+    #     name: "{{ packages }}"
+    #     state: latest
+    #     update_cache: yes
+    #   vars:
+    #     packages:
+    #       - openssl-devel
+    #       - readline-devel
+    #       - openssl
+    #       - gcc
+    #       - gcc-c++
+    #       - libevent-devel
+    #       - perl-Pod-Checker
+    #       - perl-devel
+    #       - perl-JSON-XS
+    #       - perl-Test-Simple
+    #       - libtool
+    #       - make
+    #       - pandoc
+    #       - pkgconfig
+    #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version|int == 8
 
     - name: Install additional packages RPM
       yum:
@@ -235,30 +285,7 @@
           - make
           - pandoc
           - pkgconfig
-      when: ansible_os_family == "RedHat" and ansible_distribution_major_version|int == 8
-
-    - name: Install additional packages RPM
-      yum:
-        name: "{{ packages }}"
-        state: latest
-        update_cache: yes
-      vars:
-        packages:
-          - openssl-devel
-          - readline-devel
-          - openssl
-          - gcc
-          - gcc-c++
-          - libevent-devel
-          - perl-Pod-Checker
-          - perl-devel
-          - perl-JSON-XS
-          - perl-Test-Simple
-          - libtool
-          - make
-          - pandoc
-          - pkgconfig
-      when: ansible_os_family == "RedHat" and ansible_distribution_major_version|int == 9
+      when: ansible_os_family == "RedHat"
 
     - name: Install additional packages Debian
       apt:

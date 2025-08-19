@@ -26,4 +26,9 @@ etcd = {
     "15.13": {"version": "3.5.21", "binary_version": "3.5.21"},
     "16.9": {"version": "3.5.21", "binary_version": "3.5.21"},
     "17.5": {"version": "3.5.21", "binary_version": "3.5.21"},
+    "13.22": {"version": "3.5.21", "binary_version": "3.5.21"},
+    "14.19": {"version": "3.5.21", "binary_version": "3.5.21"},
+    "15.14": {"version": "3.5.21", "binary_version": "3.5.21"},
+    "16.10": {"version": "3.5.21", "binary_version": "3.5.21"},
+    "17.6": {"version": "3.5.21", "binary_version": "3.5.21"},
 }

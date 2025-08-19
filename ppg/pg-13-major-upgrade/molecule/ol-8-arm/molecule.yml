@@ -4,9 +4,9 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: ol8-${BUILD_NUMBER}-${JOB_NAME}
+  - name: ol8-arm-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
-    image: ami-02d0bbe49c30e7652
+    image: ami-0050e5ad3acfd6ae2
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t4g.large
     ssh_user: ec2-user
@@ -24,7 +24,7 @@ provisioner:
     cleanup: ../../playbooks/cleanup.yml
 verifier:
   name: testinfra
-  directory: ../../../tests/tests_ppg/
+  directory: ../../../tests/tests_ppg
   options:
     verbose: true
     s: true
@@ -41,3 +41,5 @@ scenario:
     - prepare
     - converge
     - verify
+    - cleanup
+    - destroy

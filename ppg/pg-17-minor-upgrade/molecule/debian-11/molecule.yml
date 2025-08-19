@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: debian11-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
-    image: ami-0f5c8d83742d4b666
+    image: ami-0f718539b0e46ac24
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t2.small
     ssh_user: admin
@@ -23,7 +23,7 @@ provisioner:
     converge: ../../playbooks/playbook.yml
 verifier:
   name: testinfra
-  directory: ../../../tests/tests_ppg/
+  directory: ../../../tests/tests_ppg
   options:
     verbose: true
     s: true

@@ -4,7 +4,7 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: rocky9-${BUILD_NUMBER}-${JOB_NAME}
+  - name: rocky9-arm-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
     image: ami-0899e48d70f37fb63
     vpc_subnet_id: subnet-0fad4db6fdd8025b6

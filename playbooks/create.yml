@@ -140,47 +140,48 @@
       debug:
         msg: "ec2_jobs Info : {{ ec2_jobs.results }}"
 
-    - name: Display 1
-      debug:
-        msg:
-          'instance': "{{ item.instances[0].tags.Name }}"
-      with_items: "{{ ec2_jobs.results }}"
-      ignore_errors: true
+    # Following commented (Display Section) are only for debugging purposes
+    # - name: Display Tag Names
+    #   debug:
+    #     msg:
+    #       'instance': "{{ item.instances[0].tags.Name }}"
+    #   with_items: "{{ ec2_jobs.results }}"
+    #   ignore_errors: true
 
-    - name: Display 2
-      debug:
-        msg:
-          'address': "{{ item.instances[0].public_ip_address }}"
-      with_items: "{{ ec2_jobs.results }}"
-      ignore_errors: true
+    # - name: Display IP Address
+    #   debug:
+    #     msg:
+    #       'address': "{{ item.instances[0].public_ip_address }}"
+    #   with_items: "{{ ec2_jobs.results }}"
+    #   ignore_errors: true
 
-    - name: Display 3
-      debug:
-        msg:
-          'user': "{{ item.instances[0].tags.ssh_user }}"
-      with_items: "{{ ec2_jobs.results }}"
-      ignore_errors: true
+    # - name: Display ssh user
+    #   debug:
+    #     msg:
+    #       'user': "{{ item.instances[0].tags.ssh_user }}"
+    #   with_items: "{{ ec2_jobs.results }}"
+    #   ignore_errors: true
 
-    - name: Display 4
-      debug:
-        msg:
-          'port': "{{ ssh_port }}"
-      with_items: "{{ ec2_jobs.results }}"
-      ignore_errors: true
+    # - name: Display port
+    #   debug:
+    #     msg:
+    #       'port': "{{ ssh_port }}"
+    #   with_items: "{{ ec2_jobs.results }}"
+    #   ignore_errors: true
 
-    - name: Display 5
-      debug:
-        msg:
-          'instance_id': "{{ item.instances[0].instance_id }}"
-      with_items: "{{ ec2_jobs.results }}"
-      ignore_errors: true
+    # - name: Display Instance ID
+    #   debug:
+    #     msg:
+    #       'instance_id': "{{ item.instances[0].instance_id }}"
+    #   with_items: "{{ ec2_jobs.results }}"
+    #   ignore_errors: true
 
-    - name: Display 6
-      debug:
-        msg:
-          'region': "{{ item.invocation.module_args.region }}"
-      with_items: "{{ ec2_jobs.results }}"
-      ignore_errors: true
+    # - name: Display Region
+    #   debug:
+    #     msg:
+    #       'region': "{{ item.invocation.module_args.region }}"
+    #   with_items: "{{ ec2_jobs.results }}"
+    #   ignore_errors: true
 
     - name: Populate instance config dict
       set_fact:

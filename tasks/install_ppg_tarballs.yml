@@ -1,16 +1,8 @@
 ---
-  - name: setup epel release
-    yum:
-      name: epel-release
-      update_cache: yes
-      state: present
-    when: ansible_os_family == "RedHat"
-
   - name: Clean dnf rocky linux
     become: true
     command: dnf clean all -y
-    when: ansible_os_family == "RedHat" and
-      (ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9")
+    when: ansible_os_family == "RedHat"
 
   - name: Disable dnf postgresql for RHEL8
     become: true

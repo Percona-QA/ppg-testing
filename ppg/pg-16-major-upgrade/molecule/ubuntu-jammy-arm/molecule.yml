@@ -4,9 +4,9 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: ujammy-${BUILD_NUMBER}-${JOB_NAME}
+  - name: ujammy-arm-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
-    image: ami-0424722f9acea213b
+    image: ami-065dd4baa169f7fd0
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t4g.small
     ssh_user: ubuntu
@@ -21,9 +21,10 @@ provisioner:
     destroy: ../../../../playbooks/destroy.yml
     prepare: ../../../../playbooks/prepare.yml
     converge: ../../playbooks/playbook.yml
+    cleanup: ../../playbooks/cleanup.yml
 verifier:
   name: testinfra
-  directory: ../../../tests/tests_ppg/
+  directory: ../../../tests/tests_ppg
   options:
     verbose: true
     s: true
@@ -32,10 +33,13 @@ verifier:
 scenario:
   destroy_sequence:
     - destroy
+  cleanup_sequence:
+    - cleanup
   test_sequence:
     - destroy
     - create
     - prepare
     - converge
     - verify
+    - cleanup
     - destroy

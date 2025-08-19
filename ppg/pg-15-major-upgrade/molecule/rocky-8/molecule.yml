@@ -24,11 +24,10 @@ provisioner:
     cleanup: ../../playbooks/cleanup.yml
 verifier:
   name: testinfra
-  directory: ../../../tests/tests_ppg/
+  directory: ../../../tests/tests_ppg
   options:
     verbose: true
     s: true
-    m: upgrade
     junitxml: report.xml
 scenario:
   destroy_sequence:
@@ -41,3 +40,5 @@ scenario:
     - prepare
     - converge
     - verify
+    - cleanup
+    - destroy

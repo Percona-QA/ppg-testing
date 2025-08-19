@@ -4,9 +4,9 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: unoble-${BUILD_NUMBER}-${JOB_NAME}
+  - name: unoble-arm-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
-    image: ami-0fd8fe5cdf7cad6f6
+    image: ami-0cf445cd7f85869e0
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t4g.small
     ssh_user: ubuntu
@@ -23,7 +23,7 @@ provisioner:
     converge: ../../playbooks/playbook.yml
 verifier:
   name: testinfra
-  directory: ../../../tests/tests_ppg/
+  directory: ../../../tests/tests_ppg
   options:
     verbose: true
     s: true

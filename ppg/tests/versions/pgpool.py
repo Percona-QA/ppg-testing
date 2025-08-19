@@ -53,4 +53,9 @@ pgpool = {
     "15.13": {"version": "4.6.0", "binary_version": "4.6.0"},
     "16.9": {"version": "4.6.0", "binary_version": "4.6.0"},
     "17.5": {"version": "4.6.0", "binary_version": "4.6.0"},
+    "13.22": {"version": "4.6.2", "binary_version": "4.6.2"},
+    "14.19": {"version": "4.6.2", "binary_version": "4.6.2"},
+    "15.14": {"version": "4.6.2", "binary_version": "4.6.2"},
+    "16.10": {"version": "4.6.2", "binary_version": "4.6.2"},
+    "17.6": {"version": "4.6.2", "binary_version": "4.6.2"},
 }
