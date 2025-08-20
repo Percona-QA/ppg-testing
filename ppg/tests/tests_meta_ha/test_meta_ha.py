@@ -21,6 +21,7 @@ def test_deb_package_is_installed(host, package):
     pkg = host.package(package)
     assert pkg.is_installed
 
+and host.system_info.release.startswith("9"):
 
 @pytest.mark.upgrade
 @pytest.mark.parametrize("package", RPM_PACKAGES)
@@ -29,9 +30,10 @@ def test_rpm_package_is_installed(host, package):
         ds = host.system_info.distribution
         if ds in ["debian", "ubuntu"]:
             pytest.skip("This test only for RHEL based platforms")
-        if package == 'python3-etcd' and host.system_info.release == '10':
+        if package == 'python3-etcd' and host.system_info.release.startswith("10"):
             pytest.skip("This test only for RHEL based version 8 & 9")
-        if package == 'python3.12-etcd' and host.system_info.release in ['8', '9']:
+        if (package == 'python3.12-etcd') and \
+        (host.system_info.release.startswith("8") or host.system_info.release.startswith("9")):
             pytest.skip("This test only for RHEL based version 10")
         pkg = host.package(package)
         assert pkg.is_installed
