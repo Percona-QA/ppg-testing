@@ -14,6 +14,7 @@
 - name: Setting facts so that they will be persisted in the fact cache
   ansible.builtin.set_fact:
     pg_version_to_install: "{{ lookup('env', 'FROM_VERSION') | replace('ppg-','') }}"
+    upgrade_to_pg_version: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
 
 - name: End play on rocky linux 9
   meta: end_play
@@ -121,32 +122,12 @@
 #   when:
 #     - ansible_os_family == "Debian"
 
-- name: install Percona Platform for PostgreSQL rpm packages for RHEL
-  yum:
-    name: "{{ packages }}"
-    state: latest
-    update_cache: yes
-  vars:
-    packages:
-      - percona-postgresql-client-common
-      - percona-postgresql-common
-      - percona-postgresql-server-dev-all
-      - percona-postgresql15
-      - percona-postgresql15-contrib
-      - percona-postgresql15-debuginfo
-      - percona-postgresql15-devel
-      - percona-postgresql15-docs
-      - percona-postgresql15-libs
-      - percona-postgresql15-llvmjit
-      - percona-postgresql15-plperl
-      - percona-postgresql15-plpython3
-      - percona-postgresql15-pltcl
-      - percona-postgresql15-server
-      - percona-postgresql15-test
-      - percona-postgresql15-debuginfo
-  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "7"
-  environment:
-      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+#Remove conflicting package to make installation move on
+- name: Remove conflicting percona-postgresql-common-dev
+  ansible.builtin.package:
+    name: percona-postgresql-common-dev
+    state: absent
+  when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('14.18', '>=', strict=True))
 
 - name: install Percona Platform for PostgreSQL rpm packages for RHEL
   yum:
@@ -157,7 +138,6 @@
     packages:
         - percona-postgresql-client-common
         - percona-postgresql-common
-        - percona-postgresql-common-dev
         - percona-postgresql15
         - percona-postgresql15-contrib
         - percona-postgresql15-debuginfo
@@ -179,10 +159,24 @@
         - percona-postgresql15-pltcl-debuginfo
         - percona-postgresql15-plpython3-debuginfo
         - percona-postgresql15-server-debuginfo
-  when: ansible_os_family == "RedHat" and
-      (ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9")
+  when: ansible_os_family == "RedHat"
   environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+- name: Determine required PostgreSQL dev package for RHEL
+  set_fact:
+    pg_dev_package: >-
+      {{ 'percona-postgresql-server-dev-all'
+         if (upgrade_to_pg_version | string is version('15.12', '<=', strict=True))
+         else 'percona-postgresql-common-dev' }}
+  when: ansible_os_family == "RedHat"
+
+- name: Install PostgreSQL dev package on RHEL
+  yum:
+    name: "{{ pg_dev_package }}"
+    state: latest
+    update_cache: yes
+  when: ansible_os_family == "RedHat"
 
 - name: Install pg-stat-monitor RHEL
   yum:

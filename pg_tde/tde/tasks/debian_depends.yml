@@ -1,0 +1,57 @@
+- name: Install Debian Packages
+  apt:
+    name: "{{ packages }}"
+    update_cache: yes
+    state: latest
+  vars:
+    packages:
+    - wget
+    - libtext-trim-perl
+    - libreadline-dev
+    - systemtap-sdt-dev
+    - zlib1g-dev
+    - libssl-dev
+    - libpam0g-dev
+    - python3-dev
+    - bison
+    - flex
+    - libipc-run-perl
+    - docbook-xsl
+    - libxml2
+    - libxml2-utils
+    - libxml2-dev
+    - libxslt-dev
+    - xsltproc
+    - libkrb5-dev
+    - libldap2-dev
+    - libsystemd-dev
+    - gettext
+    - tcl-dev
+    - libperl-dev
+    - pkg-config
+    - clang
+    - llvm
+    - llvm-dev
+    - libselinux1-dev
+    - uuid-dev
+    - liblz4-dev
+    - libcurl4-openssl-dev
+    - vim
+    - git
+    - make
+    - gcc
+    - autoconf
+    - libjson-c-dev
+    - libhttp-server-simple-perl
+    - python3-pykmip
+    - libjson-perl
+    - cpanminus
+    - rename
+
+- name: Install missing Perl modules via CPAN
+  ansible.builtin.cpanm:
+    name: "{{ item }}"
+    notest: true
+  loop:
+    - IPC::Run
+    - Text::Trim

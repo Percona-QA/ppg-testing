@@ -10,40 +10,6 @@
     command: dnf clean all -y
     when: ansible_distribution_major_version == "8"
 
-  # - name: Install epel-release package
-  #   ansible.builtin.dnf:
-  #     name: epel-release
-  #     state: present
-  #   when: ansible_facts['distribution'] == "Rocky" and ansible_facts['distribution_major_version'] == "8"
-
-  # - name: End play on Rocky 8 -Temporary
-  #   meta: end_play
-  #   when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
-
-  - name: Enable Powertools on Rocky 8
-    become: true
-    shell: | 
-       dnf install -y dnf-plugins-core
-       dnf config-manager --set-enabled powertools
-    when: ansible_os_family == "RedHat" and ansible_distribution == "Rocky" and ansible_distribution_major_version == "8"
-
-  - name: Enable ol8_codeready_builder on Oracle linux 8
-    become: true
-    command: dnf config-manager --set-enabled ol8_codeready_builder
-    when: ansible_os_family == "RedHat" and ansible_distribution == "OracleLinux" and ansible_distribution_major_version == "8"
-
-  - name: Enable CRB on Rocky 9
-    become: true
-    shell: | 
-       dnf install dnf-plugins-core
-       dnf config-manager --set-enabled crb
-    when: ansible_os_family == "RedHat" and ansible_distribution == "Rocky" and ansible_distribution_major_version == "9"
-
-  - name: Enable ol9_codeready_builder on Oracle linux 9
-    become: true
-    command: dnf config-manager --set-enabled ol9_codeready_builder
-    when: ansible_os_family == "RedHat" and ansible_distribution == "OracleLinux" and ansible_distribution_major_version == "9"
-
   - name: Add the user 'postgres'
     ansible.builtin.user:
       name: postgres
@@ -177,9 +143,7 @@
       - docbook-xsl
       - perl-IPC-Run
       - perl-Test-Simple
-      - prename
       - perl-CPAN
-      - lcov
       - libcurl-devel
       - perl-App-cpanminus
       - make
@@ -188,6 +152,47 @@
       - python3-pip
       - wget
       - perl-LWP-Protocol-https
+      - perl-JSON
+
+  - name: install packages specific to rhel 8 and 9
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - lcov
+      - prename
+    when: ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
+
+  # - name: install packages specific to rhel 10
+  #   yum:
+  #     name: "{{ packages }}"
+  #     state: latest
+  #     update_cache: yes
+  #   vars:
+  #     packages:
+  #     - kernel-modules-extra
+  #   when: ansible_distribution_major_version == "10"
+
+  - name: Install kernel-modules-extra on RHEL 10
+    become: true
+    dnf:
+      name: "kernel-modules-extra-{{ ansible_kernel }}"
+      state: present
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+  - name: Ensure br_netfilter module is loaded
+    become: true
+    community.general.modprobe:
+      name: br_netfilter
+      state: present
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+  - name: Install cpanm File::Rename
+    become: true
+    command: cpanm File::Rename
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
   - name: Install cpanm CGI::Session
     become: true

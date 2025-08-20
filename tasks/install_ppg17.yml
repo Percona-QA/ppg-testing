@@ -17,10 +17,10 @@
     command: dnf module disable postgresql -y
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
-  - name: Disable llvm-toolset dnf module for RHEL8
-    become: true
-    command: dnf module disable llvm-toolset -y
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+  # - name: Disable llvm-toolset dnf module for RHEL8
+  #   become: true
+  #   command: dnf module disable llvm-toolset -y
+  #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
   - name: install Percona Platform for PostgreSQL deb packages
     apt:
@@ -100,25 +100,20 @@
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-  - name: Install postgresql-server-dev-all RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - percona-postgresql-server-dev-all
-    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('17.4', '<=', strict=True))
+  - name: Determine required PostgreSQL dev package for RHEL
+    set_fact:
+      pg_dev_package: >-
+        {{ 'percona-postgresql-server-dev-all'
+          if (pg_version_to_install | string is version('17.4', '<=', strict=True))
+          else 'percona-postgresql-common-dev' }}
+    when: ansible_os_family == "RedHat"
 
-  - name: Install postgresql-common-dev RHEL
+  - name: Install PostgreSQL dev package on RHEL
     yum:
-      name: "{{ packages }}"
+      name: "{{ pg_dev_package }}"
       state: latest
       update_cache: yes
-    vars:
-      packages:
-      - percona-postgresql-common-dev
-    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('17.5', '>=', strict=True))
+    when: ansible_os_family == "RedHat"
 
   - name: Check if Telemetry file exisits
     stat:

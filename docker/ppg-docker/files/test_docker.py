@@ -11,6 +11,10 @@ MAJOR_VER = os.getenv('VERSION').split('.')[0]
 MAJOR_MINOR_VER = os.getenv('VERSION')
 DOCKER_REPO = os.getenv('DOCKER_REPOSITORY')
 IMG_TAG = os.getenv('TAG')
+# MAJOR_VER = '17'
+# MAJOR_MINOR_VER = '17.5'
+# DOCKER_REPO = 'perconalab'
+# IMG_TAG = '17'
 
 pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER)
 
@@ -56,9 +60,10 @@ def test_wait_docker_load(host):
 @pytest.fixture()
 def postgresql_binary(host):
     dist = host.system_info.distribution
-    pg_bin = f"/usr/lib/postgresql/{MAJOR_VER}/bin/postgres"
-    if dist.lower() in ["redhat", "centos", "rhel", "rocky"]:
-        pg_bin = f"/usr/pgsql-{MAJOR_VER}/bin/postgres"
+    # pg_bin = f"/usr/lib/postgresql/{MAJOR_VER}/bin/postgres"
+    # if dist.lower() in ["redhat", "centos", "rhel", "rocky"]:
+    #     pg_bin = f"/usr/pgsql-{MAJOR_VER}/bin/postgres"
+    pg_bin = f"/usr/pgsql-{MAJOR_VER}/bin/postgres"
     return host.file(pg_bin)
 
 @pytest.fixture()
@@ -86,9 +91,10 @@ def postgres_binary(postgresql_binary):
 @pytest.mark.parametrize("binary", DOCKER_BINARIES)
 def test_binaries(host, binary):
     dist = host.system_info.distribution
-    bin_path = f"/usr/lib/postgresql/{MAJOR_VER}/bin/"
-    if dist.lower() in ["redhat", "centos", "rhel", "rocky"]:
-        bin_path = f"/usr/pgsql-{MAJOR_VER}/bin/"
+    # bin_path = f"/usr/lib/postgresql/{MAJOR_VER}/bin/"
+    # if dist.lower() in ["redhat", "centos", "rhel", "rocky"]:
+    #     bin_path = f"/usr/pgsql-{MAJOR_VER}/bin/"
+    bin_path = f"/usr/pgsql-{MAJOR_VER}/bin/"
     bin_full_path = os.path.join(bin_path, binary)
     binary_file = host.file(bin_full_path)
     assert binary_file.exists
@@ -252,10 +258,11 @@ def test_telemetry_extension_in_conf(host):
 def get_telemetry_agent_conf_file(host):
     """Determine the percona-telemetry-agent path based on the OS."""
     dist = host.system_info.distribution
-    if dist.lower() in ["redhat", "centos", "rhel", "rocky"]:
-        return redhat_percona_telemetry_agent
-    else:
-        return debian_percona_telemetry_agent
+    # if dist.lower() in ["redhat", "centos", "rhel", "rocky"]:
+    #     return redhat_percona_telemetry_agent
+    # else:
+    #     return debian_percona_telemetry_agent
+    return redhat_percona_telemetry_agent
 
 def test_telemetry_json_directories_exist(host):
     """Test if the history and pg directories exist."""

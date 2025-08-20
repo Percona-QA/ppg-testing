@@ -87,7 +87,7 @@
     register: results
 
   - debug:
-      var: results.stdout
+      var: results.stdout_lines
 
   - name: Delete failover files
     command: rm -f /etc/pgpool-II/*fail*
@@ -95,7 +95,7 @@
     register: results
 
   - debug:
-      var: results.stdout
+      var: results.stdout_lines
 
   - name: Start server 1
     become_user: postgres
@@ -111,7 +111,7 @@
     register: results
 
   - debug:
-      var: results.stdout
+      var: results.stdout_lines
 
   - name: Create User appuser
     become_user: postgres
@@ -119,7 +119,7 @@
     register: results
 
   - debug:
-      var: results.stdout
+      var: results.stdout_lines
 
   - name: Create database monitor
     become_user: postgres
@@ -127,7 +127,7 @@
     register: results
 
   - debug:
-      var: results.stdout
+      var: results.stdout_lines
 
   - name: Display ppg version
     become_user: postgres
@@ -135,7 +135,7 @@
     register: results
 
   - debug:
-        var: results.stdout
+        var: results.stdout_lines
 
   - name: Start pgpool service
     service:
@@ -154,7 +154,7 @@
     register: results
 
   - debug:
-      var: results.stdout
+      var: results.stdout_lines
 
   - name: show pool_nodes
     become_user: postgres
@@ -162,7 +162,7 @@
     register: results
 
   - debug:
-      var: results.stdout
+      var: results.stdout_lines
 
   - name: show pool_version
     become_user: postgres
@@ -170,4 +170,4 @@
     register: results
 
   - debug:
-      var: results.stdout
+      var: results.stdout_lines
