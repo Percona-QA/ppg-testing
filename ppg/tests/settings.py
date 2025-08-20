@@ -3465,7 +3465,7 @@ def get_settings(distro_type):
         },
         "ppg-17.5": {
             "version": "17.5",
-            "percona-version": "17.5.2",
+            "percona-version": "17.5.3",
             "deb_pkg_ver": ppg_versions["ppg-17.5"]["deb_pkg_ver"],
             "deb_packages": ppg_versions["ppg-17.5"]["deb_packages"],
             "percona-postgresql-common": "277",
