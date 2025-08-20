@@ -181,6 +181,8 @@
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
       INSTALL_DIR: "/opt/pgsql"
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+      PGCTLTIMEOUT: 120
+      PG_TEST_TIMEOUT_DEFAULT: 300
     when: testsuite == 'check-tde'
     ignore_errors: yes
     register: regression
@@ -241,6 +243,8 @@
       INSTALL_DIR: "/opt/pgsql"
       TDE_MODE: 1
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+      PGCTLTIMEOUT: 120
+      PG_TEST_TIMEOUT_DEFAULT: 300
     when: testsuite == 'check-server'
     ignore_errors: yes
     register: regression
@@ -304,6 +308,8 @@
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
       INSTALL_DIR: "/opt/pgsql"
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+      PGCTLTIMEOUT: 120
+      PG_TEST_TIMEOUT_DEFAULT: 300
     when: testsuite == 'check-all'
     ignore_errors: yes
     register: regression
@@ -398,6 +404,8 @@
       LC_CTYPE: C
       LC_ALL: C
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+      PGCTLTIMEOUT: 120
+      PG_TEST_TIMEOUT_DEFAULT: 300
     when: testsuite == 'installcheck-world'
     register: regression
 
