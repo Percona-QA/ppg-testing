@@ -1,9 +1,0 @@
----
-- name: Converge
-  hosts: all
-  become: true
-  become_method: sudo
-  roles:
-    - role: server_tests
-  environment:
-    PG_TEST_PORT_DIR: /tmp/postgres

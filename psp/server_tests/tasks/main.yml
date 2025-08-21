@@ -23,10 +23,19 @@
 
   - debug: var=results.stdout_lines
 
-  - name: set ulimit unlimited
-    ansible.builtin.shell: ulimit -s unlimited
-    become_user: postgres
+  # - name: set ulimit unlimited
+  #   ansible.builtin.shell: ulimit -s unlimited
+  #   become_user: postgres
+  #   become: true
+  #   register: results
+
+  - name: Set stack ulimit for a specific user
     become: true
+    pam_limits:
+      domain: postgres  # Replace with the target username
+      limit_type: "-"         # Applies to both soft and hard limits
+      limit_item: stack
+      value: 102400            # Desired stack size in KB
     register: results
 
   - debug: var=results.stdout_lines
