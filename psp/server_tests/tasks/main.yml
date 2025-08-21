@@ -18,7 +18,7 @@
 
   - name: Get ulimit results
     become_user: postgres
-    command: ulimit -a
+    ansible.builtin.shell: ulimit -a
     register: results
 
   - debug: var=results.stdout_lines
@@ -26,13 +26,14 @@
   - name: set ulimit unlimited
     ansible.builtin.shell: ulimit -s unlimited
     become_user: postgres
+    become: true
     register: results
 
   - debug: var=results.stdout_lines
 
   - name: Get ulimit results
     become_user: postgres
-    command: ulimit -a
+    ansible.builtin.shell: ulimit -a
     register: results
 
   - debug: var=results.stdout_lines
