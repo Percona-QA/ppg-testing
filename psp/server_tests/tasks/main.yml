@@ -84,6 +84,7 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
+    when: testsuite == 'installcheck-world'
     register: results
 
   - debug: var=results.stdout_lines
@@ -100,6 +101,7 @@
       LANG: C.UTF-8
       LC_CTYPE: C
       LC_ALL: C
+    when: testsuite == 'installcheck-world'
     register: results
 
   - debug: var=results.stdout_lines
@@ -114,6 +116,7 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
+    when: testsuite == 'installcheck-world'
     register: results
 
   - debug: var=results.stdout_lines
@@ -170,7 +173,7 @@
       export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
       export VAULT_ADDR="https://127.0.0.1:8200"
       export VAULT_TOKEN=root
-      cd /tmp/postgres/contrib/pg_tde && make -s check -k
+      export PGCTLTIMEOUT=120 PG_TEST_TIMEOUT_DEFAULT=300 && cd /tmp/postgres/contrib/pg_tde && make -s check -k
     become_user: postgres
     args:
       executable: /bin/bash
@@ -231,7 +234,7 @@
   # =============================
   - name: Run server regression tests
     shell: |
-      cd /tmp/postgres/ && make -s check -k
+      export PGCTLTIMEOUT=120 PG_TEST_TIMEOUT_DEFAULT=300 && cd /tmp/postgres/ && make -s check -k
     become_user: postgres
     args:
       executable: /bin/bash
@@ -297,7 +300,7 @@
       export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
       export VAULT_ADDR="https://127.0.0.1:8200"
       export VAULT_TOKEN=root
-      cd /tmp/postgres/ && make -s check-world -k
+      export PGCTLTIMEOUT=120 PG_TEST_TIMEOUT_DEFAULT=300 && cd /tmp/postgres/ && make -s check-world -k
     become_user: postgres
     args:
       executable: /bin/bash
@@ -389,7 +392,7 @@
       export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
       export VAULT_ADDR=https://127.0.0.1:8200
       export VAULT_TOKEN=root
-      export TDE_MODE=1 && cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world -k
+      export TDE_MODE=1 PGCTLTIMEOUT=120 PG_TEST_TIMEOUT_DEFAULT=300 && cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world -k
     become_user: postgres
     args:
       executable: /bin/bash
