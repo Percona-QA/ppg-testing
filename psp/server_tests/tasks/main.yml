@@ -16,9 +16,23 @@
       file: "debian_tasks.yml"
     when: ansible_os_family == 'Debian'
 
+  - name: Get ulimit results
+    become_user: postgres
+    command: ulimit -a
+    register: results
+
+  - debug: var=results.stdout_lines
+
   - name: set ulimit unlimited
     ansible.builtin.shell: ulimit -s unlimited
     become_user: postgres
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Get ulimit results
+    become_user: postgres
+    command: ulimit -a
     register: results
 
   - debug: var=results.stdout_lines
