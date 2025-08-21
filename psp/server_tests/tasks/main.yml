@@ -16,6 +16,13 @@
       file: "debian_tasks.yml"
     when: ansible_os_family == 'Debian'
 
+  - name: set ulimit unlimited
+    command: ulimit -s unlimited
+    become_user: postgres
+    register: results
+
+  - debug: var=results.stdout_lines
+
 # =============================
 # Clone Postgres/PSP sources with pg_tde
 # =============================
@@ -173,7 +180,9 @@
       export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
       export VAULT_ADDR="https://127.0.0.1:8200"
       export VAULT_TOKEN=root
-      export PGCTLTIMEOUT=120 PG_TEST_TIMEOUT_DEFAULT=300 && cd /tmp/postgres/contrib/pg_tde && make -s check -k
+      export PGCTLTIMEOUT=120
+      export PG_TEST_TIMEOUT_DEFAULT=300
+      cd /tmp/postgres/contrib/pg_tde && make -s check -k
     become_user: postgres
     args:
       executable: /bin/bash
@@ -233,8 +242,10 @@
   # Run server regression tests
   # =============================
   - name: Run server regression tests
-    shell: |
-      export PGCTLTIMEOUT=120 PG_TEST_TIMEOUT_DEFAULT=300 && cd /tmp/postgres/ && make -s check -k
+    shell: | 
+      export PGCTLTIMEOUT=120
+      export PG_TEST_TIMEOUT_DEFAULT=300
+      cd /tmp/postgres/ && make -s check -k
     become_user: postgres
     args:
       executable: /bin/bash
@@ -295,12 +306,14 @@
   # Run check-all regression tests
   # =============================
   - name: Run all regression tests
-    shell: |
+    shell: | 
       export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
       export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
       export VAULT_ADDR="https://127.0.0.1:8200"
       export VAULT_TOKEN=root
-      export PGCTLTIMEOUT=120 PG_TEST_TIMEOUT_DEFAULT=300 && cd /tmp/postgres/ && make -s check-world -k
+      export PGCTLTIMEOUT=120
+      export PG_TEST_TIMEOUT_DEFAULT=300
+      cd /tmp/postgres/ && make -s check-world -k
     become_user: postgres
     args:
       executable: /bin/bash
@@ -364,7 +377,7 @@
   # Run installcheck-world regression tests with pg_tde
   # =============================
   - name: Run tde_setup_global.sql using psql
-    shell: |
+    shell: | 
       cd /opt/pgsql/bin
       ./psql -d postgres -f /tmp/postgres/ci_scripts/tde_setup_global.sql  -v ON_ERROR_STOP=on
       ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile restart -o '-p 5432'
@@ -392,7 +405,10 @@
       export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
       export VAULT_ADDR=https://127.0.0.1:8200
       export VAULT_TOKEN=root
-      export TDE_MODE=1 PGCTLTIMEOUT=120 PG_TEST_TIMEOUT_DEFAULT=300 && cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world -k
+      export TDE_MODE=1
+      export PGCTLTIMEOUT=120
+      export PG_TEST_TIMEOUT_DEFAULT=300
+      cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world -k
     become_user: postgres
     args:
       executable: /bin/bash
