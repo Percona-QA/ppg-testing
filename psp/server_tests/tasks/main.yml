@@ -17,7 +17,7 @@
     when: ansible_os_family == 'Debian'
 
   - name: set ulimit unlimited
-    command: ulimit -s unlimited
+    ansible.builtin.shell: ulimit -s unlimited
     become_user: postgres
     register: results
 
