@@ -37,7 +37,6 @@
         - libselinux1-dev
         - uuid-dev
         - liblz4-dev
-        - lcov
         - libcurl4-openssl-dev
         - vim
         - git

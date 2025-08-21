@@ -179,7 +179,6 @@
       - perl-Test-Simple
       - prename
       - perl-CPAN
-      - lcov
       - libcurl-devel
       - perl-App-cpanminus
       - make
