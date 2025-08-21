@@ -186,6 +186,7 @@
       - python3-pip
       - wget
       - perl-LWP-Protocol-https
+      - perl-JSON
 
   - name: install packages specific to rhel 8 and 9
     yum:

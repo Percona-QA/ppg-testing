@@ -46,6 +46,7 @@
         - libjson-c-dev
         - libhttp-server-simple-perl
         - python3-pykmip
+        - libjson-perl
 
   - name: Install rename
     ansible.builtin.shell: sudo DEBIAN_FRONTEND=noninteractive apt install -y rename
