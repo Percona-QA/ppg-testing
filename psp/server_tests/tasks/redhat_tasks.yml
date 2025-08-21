@@ -177,9 +177,7 @@
       - docbook-xsl
       - perl-IPC-Run
       - perl-Test-Simple
-      - prename
       - perl-CPAN
-      - lcov
       - libcurl-devel
       - perl-App-cpanminus
       - make
@@ -188,6 +186,22 @@
       - python3-pip
       - wget
       - perl-LWP-Protocol-https
+
+  - name: install packages specific to rhel 8 and 9
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - lcov
+      - prename
+    when: ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
+
+  - name: Install cpanm File::Rename
+    become: true
+    command: cpanm File::Rename
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
   - name: Install cpanm CGI::Session
     become: true
