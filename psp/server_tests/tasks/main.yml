@@ -106,6 +106,8 @@
   # =============================
   # Initialize Postgres with pg_tde
   # Start the Postgres server with pg_tde enabled
+  # This section is only applicable for installcheck and installcheck-world scenarios.
+  # For check and check-world, following 3 steps don't apply.
   # =============================
   - name: initdb cluster
     become_user: postgres
