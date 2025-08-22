@@ -199,19 +199,24 @@
       - prename
     when: ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
 
+  # - name: install packages specific to rhel 10
+  #   yum:
+  #     name: "{{ packages }}"
+  #     state: latest
+  #     update_cache: yes
+  #   vars:
+  #     packages:
+  #     - kernel-modules-extra
+  #   when: ansible_distribution_major_version == "10"
+
   - name: install packages specific to rhel 10
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - kernel-modules-extra
-    when: ansible_distribution_major_version == "10"
+    become: true
+    command: sudo dnf install -y kernel-modules-extra-$(uname -r)
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
   - name: Load br_netfilter in kernel module path
     become: true
-    command: modprobe br_netfilter
+    command: sudo modprobe br_netfilter
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
   - name: Install cpanm File::Rename
