@@ -240,7 +240,7 @@ pg_telemetry = {
             "14.18": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.2"},
             "15.13": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.2"},
             "16.9": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.2"},
-            "17.5": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.2"},
+            "17.5": {"pg_telemetry_version": "1.1","pg_telemetry_package_version": "1.1.3"},
 }
 
 DOCKER_LIST_EXTENSIONS = ["hstore",
@@ -1218,7 +1218,7 @@ ppg_versions = {
         },
         "17.5": {
             "version": "17.5",
-            "percona-version": "17.5.2",
+            "percona-version": "17.5.3",
             "percona-postgresql-common": "277",
             "percona-postgresql-client-common": "277",
             "libpq_version": "170005",
