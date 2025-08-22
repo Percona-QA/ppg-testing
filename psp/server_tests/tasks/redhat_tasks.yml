@@ -209,14 +209,18 @@
   #     - kernel-modules-extra
   #   when: ansible_distribution_major_version == "10"
 
-  - name: install packages specific to rhel 10
+  - name: Install kernel-modules-extra on RHEL 10
     become: true
-    command: sudo dnf install -y kernel-modules-extra-$(uname -r)
+    dnf:
+      name: "kernel-modules-extra-{{ ansible_kernel }}"
+      state: present
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
-  - name: Load br_netfilter in kernel module path
+  - name: Ensure br_netfilter module is loaded
     become: true
-    command: sudo modprobe br_netfilter
+    community.general.modprobe:
+      name: br_netfilter
+      state: present
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
   - name: Install cpanm File::Rename
