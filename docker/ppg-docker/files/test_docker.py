@@ -258,10 +258,11 @@ def test_telemetry_extension_in_conf(host):
 def get_telemetry_agent_conf_file(host):
     """Determine the percona-telemetry-agent path based on the OS."""
     dist = host.system_info.distribution
-    if dist.lower() in ["redhat", "centos", "rhel", "rocky"]:
-        return redhat_percona_telemetry_agent
-    else:
-        return debian_percona_telemetry_agent
+    # if dist.lower() in ["redhat", "centos", "rhel", "rocky"]:
+    #     return redhat_percona_telemetry_agent
+    # else:
+    #     return debian_percona_telemetry_agent
+    return redhat_percona_telemetry_agent
 
 def test_telemetry_json_directories_exist(host):
     """Test if the history and pg directories exist."""
