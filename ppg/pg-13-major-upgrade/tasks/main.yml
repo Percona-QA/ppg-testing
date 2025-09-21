@@ -7,6 +7,7 @@
 - name: Setting facts so that they will be persisted in the fact cache
   ansible.builtin.set_fact:
     pg_version_to_install: "{{ lookup('env', 'FROM_VERSION') | replace('ppg-','') }}"
+    upgrade_to_pg_version: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
 
 - name: End play on rocky linux 9
   meta: end_play
@@ -121,32 +122,6 @@
     update_cache: yes
   vars:
     packages:
-    - percona-postgresql13
-    - percona-postgresql13-contrib
-    - percona-postgresql13-debuginfo
-    - percona-postgresql13-devel
-    - percona-postgresql13-docs
-    - percona-postgresql13-libs
-    - percona-postgresql13-llvmjit
-    - percona-postgresql13-plperl
-    - percona-postgresql13-pltcl
-    - percona-postgresql13-server
-    - percona-postgresql13-test
-    - percona-postgresql13-plpython3
-    - percona-postgresql13-debuginfo
-    - percona-postgresql-client-common
-    - percona-postgresql-common
-  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "7"
-  environment:
-      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
-
-- name: install Percona Platform for PostgreSQL rpm packages for RHEL
-  yum:
-    name: "{{ packages }}"
-    state: latest
-    update_cache: yes
-  vars:
-    packages:
       - percona-postgresql13
       - percona-postgresql13-contrib
       - percona-postgresql13-debuginfo
@@ -170,10 +145,24 @@
       - percona-postgresql13-server-debuginfo
       - percona-postgresql-client-common
       - percona-postgresql-common
-  when: ansible_os_family == "RedHat" and
-      (ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9")
+  when: ansible_os_family == "RedHat"
   environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+- name: Determine required PostgreSQL dev package for RHEL
+  set_fact:
+    pg_dev_package: >-
+      {{ 'percona-postgresql-server-dev-all'
+         if (upgrade_to_pg_version | string is version('13.20', '<=', strict=True))
+         else 'percona-postgresql-common-dev' }}
+  when: ansible_os_family == "RedHat"
+
+- name: Install PostgreSQL dev package on RHEL
+  yum:
+    name: "{{ pg_dev_package }}"
+    state: latest
+    update_cache: yes
+  when: ansible_os_family == "RedHat"
 
 - name: Install pg-stat-monitor RHEL
   yum:

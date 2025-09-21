@@ -1896,7 +1896,7 @@ def get_settings(distro_type):
             "postgis_version": "3.3.8",
             "postgis_package_version": "3.3.8",
             "pg_telemetry_version": "1.1",
-            "pg_telemetry_package_version": "1.1.2",
+            "pg_telemetry_package_version": "1.1.3",
         },
         "ppg-14.0": {
             "version": "14.0",
@@ -2527,7 +2527,7 @@ def get_settings(distro_type):
             "postgis_version": "3.3.8",
             "postgis_package_version": "3.3.8",
             "pg_telemetry_version": "1.1",
-            "pg_telemetry_package_version": "1.1.2",
+            "pg_telemetry_package_version": "1.1.3",
         },
         "ppg-15.0": {
             "version": "15.0",
@@ -3001,7 +3001,7 @@ def get_settings(distro_type):
             "postgis_version": "3.3.8",
             "postgis_package_version": "3.3.8",
             "pg_telemetry_version": "1.1",
-            "pg_telemetry_package_version": "1.1.2",
+            "pg_telemetry_package_version": "1.1.3",
         },
         "ppg-16.0": {
             "version": "16.0",
@@ -3343,7 +3343,7 @@ def get_settings(distro_type):
             "postgis_version": "3.3.8",
             "postgis_package_version": "3.3.8",
             "pg_telemetry_version": "1.1",
-            "pg_telemetry_package_version": "1.1.2",
+            "pg_telemetry_package_version": "1.1.3",
         },
         "ppg-17.0": {
             "version": "17.0",
@@ -3465,7 +3465,7 @@ def get_settings(distro_type):
         },
         "ppg-17.5": {
             "version": "17.5",
-            "percona-version": "17.5.2",
+            "percona-version": "17.5.3",
             "deb_pkg_ver": ppg_versions["ppg-17.5"]["deb_pkg_ver"],
             "deb_packages": ppg_versions["ppg-17.5"]["deb_packages"],
             "percona-postgresql-common": "277",
@@ -3543,6 +3543,6 @@ def get_settings(distro_type):
             "postgis_version": "3.3.8",
             "postgis_package_version": "3.3.8",
             "pg_telemetry_version": "1.1",
-            "pg_telemetry_package_version": "1.1.2",
+            "pg_telemetry_package_version": "1.1.3",
         },
     }

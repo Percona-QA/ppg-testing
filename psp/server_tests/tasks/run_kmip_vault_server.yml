@@ -3,7 +3,6 @@
   command: yum install -y yum-utils
   when: ansible_os_family == "RedHat"
 
-
 - name: Install docker RHEL
   become: true
   command: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo

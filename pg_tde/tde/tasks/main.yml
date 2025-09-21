@@ -1,34 +1,147 @@
 ---
-  - name: Set Facts
-    set_fact:
-      major_version: "{{ lookup('env', 'VERSION').split('.')[0].split('-')[1] }}"
-      pg_version_to_install: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
-      cacheable: true
+- name: Extract major version safely
+  ansible.builtin.set_fact:
+    psp_repo: "{{ lookup('env','PSP_REPO') }}"
+    psp_branch: "{{ lookup('env','PSP_BRANCH') }}"
+    telemetry_env:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+    major_version: "{{ lookup('env','VERSION') | regex_replace('ppg-(\\d+).*','\\1') }}"
+    pg_version_to_install: "{{ lookup('env','VERSION') | regex_replace('ppg-','') }}"
+    postgres_group: "{{ 'wheel' if ansible_os_family == 'RedHat' else 'admin' }}"
+    cacheable: true
 
-  - name: Configure repository
-    include_tasks: ../../../../tasks/enable_repo.yml
+- name: Set postgres paths and service name
+  ansible.builtin.set_fact:
+    postgres_conf_path: >-
+      {{ '/etc/postgresql/' ~ major_version ~ '/main/postgresql.conf'
+          if ansible_os_family == 'Debian'
+          else '/var/lib/pgsql/' ~ major_version ~ '/data/postgresql.conf' }}
+    postgres_service_name: >-
+      {{ 'postgresql'
+          if ansible_os_family == 'Debian'
+          else 'postgresql-' ~ major_version }}
+    postgres_socket_dir: >-
+      {{ '/var/run/postgresql'
+          if ansible_os_family == 'Debian'
+          else '/tmp' }}
+    cacheable: true
 
-  # - name: Add user postgres to sudoers
-  #   user:
-  #     name: postgres
-  #     groups: sudo
-  #     append: yes
-  #   when: ansible_os_family == "Debian"
+- name: Configure repository
+  ansible.builtin.include_tasks: ../../../../tasks/enable_repo.yml
 
-  - name: Add postgres to sudoers
-    become: true
-    lineinfile:
-        path: /etc/sudoers
-        state: present
-        line: 'postgres ALL=(ALL) NOPASSWD: ALL'
-        validate: 'visudo -cf %s'
+- name: Ensure postgres user exists
+  ansible.builtin.user:
+    name: postgres
+    shell: /bin/bash
+    uid: 1040
+    group: "{{ postgres_group }}"
+    state: present
 
-  - name: Include Redhat tasks file 
-    include_tasks: 
-      file: "redhat_tasks.yml"
-    when: ansible_os_family == 'RedHat'
+- name: Ensure PostgreSQL directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: postgres
+    group: "{{ postgres_group }}"
+    mode: "0775"
+    recurse: yes
+  loop:
+    - /opt/pgsql
+    - /opt/pgsql/data
 
-  - name: Include Debian tasks file 
-    include_tasks: 
-      file: "debian_tasks.yml"
-    when: ansible_os_family == 'Debian'
+- name: Install OS-specific dependencies
+  ansible.builtin.include_tasks: "{{ ansible_os_family | lower }}_depends.yml"
+
+# =============================
+# Clone Postgres/PSP sources with pg_tde
+# =============================
+- name: Clone Postgres/PSP sources with pg_tde
+  ansible.builtin.git:
+    repo: "{{ psp_repo }}"
+    version: "{{ psp_branch }}"
+    dest: /tmp/postgres
+    track_submodules: true
+    update: yes
+  become_user: postgres
+  register: git_result
+  retries: 3
+  delay: 10
+  until: git_result is succeeded
+  throttle: 1
+
+- name: Update submodules
+  ansible.builtin.command: git submodule update --init --recursive
+  args:
+    chdir: /tmp/postgres
+  become_user: postgres
+
+- name: Configure Postgres/PSP from sources
+  ansible.builtin.command:
+    cmd: ./configure --enable-debug --enable-cassert --enable-tap-tests --with-icu --prefix=/opt/pgsql
+    chdir: /tmp/postgres
+  become_user: postgres
+  register: configure_results
+
+- debug:
+    var: configure_results.stdout_lines
+
+- name: Build Postgres world
+  community.general.make:
+    chdir: /tmp/postgres
+    target: world
+    jobs: "{{ ansible_processor_vcpus | default(4) }}"
+  become_user: postgres
+  environment:
+    TDE_MODE: "1"
+  register: make_results
+  retries: 3
+  delay: 15
+  until: make_results is succeeded
+
+- debug:
+    var: make_results.stdout_lines
+
+# =============================
+# pg_tde test setup
+# =============================
+- name: Remove old multiple extensions test case
+  ansible.builtin.file:
+    path: /tmp/postgres/contrib/pg_tde/t/multiple_extensions.pl
+    state: absent
+  become_user: postgres
+
+- name: Copy pg_tde test files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ pg_tde_dest[item] }}"
+    owner: postgres
+    mode: '0644'
+  loop: "{{ pg_tde_files }}"
+  vars:
+    pg_tde_files:
+      - multiple_extensions.pl
+      - vault_v2_test_1.out
+      - delete_principal_key_1.out
+    pg_tde_dest:
+      multiple_extensions.pl: /tmp/postgres/contrib/pg_tde/t/multiple_extensions.pl
+      vault_v2_test_1.out: /tmp/postgres/contrib/pg_tde/expected/vault_v2_test_1.out
+      delete_principal_key_1.out: /tmp/postgres/contrib/pg_tde/expected/delete_principal_key_1.out
+
+- name: Include KMIP server setup
+  ansible.builtin.include_tasks: run_kmip_vault_server.yml
+
+# =============================
+# Vault ownership fix
+# =============================
+- name: Ensure /tmp/vault_env ownership is postgres
+  ansible.builtin.file:
+    path: /tmp/vault_env
+    owner: postgres
+    group: "{{ postgres_group }}"
+    recurse: true
+
+# =============================
+# OS-specific tasks
+# =============================
+- name: Install OS-specific tasks
+  ansible.builtin.include_tasks: "{{ ansible_os_family | lower }}_tasks.yml"

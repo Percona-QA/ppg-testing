@@ -135,13 +135,13 @@
     group: root
     mode: 0644
 
-- name: create python venv for testing
-  shell: python3 -m venv validation
+- name: Ensure Python virtual environment exists
+  ansible.builtin.command: python3 -m venv validation
   args:
     chdir: /tmp/docker_test
-  become: true
+    creates: /tmp/docker_test/validation
 
-- name: Install bash
+- name: Install bash on Debian
   become: true
   apt:
     name: bash
@@ -149,18 +149,13 @@
     update_cache: yes
   when: ansible_os_family == "Debian"
 
-- name: Copy run.sh
-  copy:
-    src: run.sh
-    dest: /tmp/docker_test/run.sh
-    owner: root
-    group: root
-    mode: 0644
-  when: ansible_os_family == "Debian"
-
-- name: Create python venv and run docker testing
-  script: run.sh
+- name: Create python venv and run docker tests
+  shell: |
+    source validation/bin/activate
+    pip install pytest-testinfra
+    pytest test_docker.py -vv -s -rpfs
   args:
+    executable: /bin/bash
     chdir: /tmp/docker_test
   become: true
   environment:
@@ -170,3 +165,10 @@
   register: results
 
 - debug: var=results.stdout_lines
+
+- name: Show stderr if docker test fails
+  debug:
+    var: results.stderr_lines
+  when:
+    - results is defined
+    - results.rc != 0

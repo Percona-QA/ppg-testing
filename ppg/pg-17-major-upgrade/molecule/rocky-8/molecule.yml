@@ -28,6 +28,7 @@ verifier:
   options:
     verbose: true
     s: true
+    m: upgrade
     junitxml: report.xml
 scenario:
   destroy_sequence:

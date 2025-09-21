@@ -1,97 +1,4 @@
 ---
-  - name: Install pre-packages on Debian
-    apt:
-      name: "{{ packages }}"
-      update_cache: yes
-      state: latest
-    vars:
-      packages:
-        - make
-        - gcc
-        - autoconf
-        - libjson-c-dev
-        - libcurl4-openssl-dev
-        - libreadline6-dev
-        - systemtap-sdt-dev
-        - wget
-        - zlib1g-dev
-        - libssl-dev
-        - libpam0g-dev
-        - bison
-        - flex
-        - libipc-run-perl
-        - libcurl4-openssl-dev
-        - libhttp-server-simple-perl
-        - libtext-trim-perl
-        - python3-dev
-
-  - name: Install Debian Packages
-    apt:
-      name: "{{ packages }}"
-      update_cache: yes
-      state: latest
-    vars:
-      packages:
-        - wget
-        - libtext-trim-perl
-        - libreadline6-dev
-        - systemtap-sdt-dev
-        - zlib1g-dev
-        - libssl-dev
-        - libpam0g-dev
-        - python3
-        - python3-dev
-        - bison
-        - flex
-        - libipc-run-perl
-        - docbook-xsl
-        - docbook-xsl
-        - libxml2
-        - libxml2-utils
-        - libxml2-dev
-        - libxslt-dev
-        - xsltproc
-        - libkrb5-dev
-        - libldap2-dev
-        - libsystemd-dev
-        - gettext
-        - tcl-dev
-        - libperl-dev
-        - pkg-config
-        - clang
-        - llvm
-        - llvm-dev
-        - libselinux1-dev
-        - uuid-dev
-        - liblz4-dev
-        - lcov
-        - libcurl4-openssl-dev
-        - vim
-        - git
-        - make
-        - gcc
-        - autoconf
-        - libjson-c-dev
-        - libhttp-server-simple-perl
-        - python3-pip
-        - python3-venv
-        - python3-pykmip
-
-  - name: Install rename
-    ansible.builtin.shell: sudo DEBIAN_FRONTEND=noninteractive apt install -y rename
-
-  - name: Install IPC::RUN
-    ansible.builtin.shell: yes | sudo /usr/bin/perl -MCPAN -e 'install IPC::RUN'
-
-  - name: Install Text::Trim
-    ansible.builtin.shell: yes | sudo /usr/bin/perl -MCPAN -e 'install Text::Trim'
-
-  - name: Install hashicorp repo and vault
-    shell: |
-      wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-      echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-      sudo apt update && sudo apt install -y vault
-
   - name: install Percona Platform for PostgreSQL deb packages
     apt:
       name: "{{ packages }}"
@@ -100,7 +7,6 @@
     vars:
       postgres_version: "{{ major_version }}"
       packages:
-      - percona-postgresql
       - percona-postgresql-{{ postgres_version }}
       - percona-postgresql-all
       - percona-postgresql-client
@@ -184,58 +90,6 @@
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-  - name: Clone Postgres/PSP sources with pg_tde
-    git:
-      repo: "{{ repo }}"
-      version: "{{ version }}"
-      dest: /tmp/postgres
-      track_submodules: true
-    vars:
-      repo: "{{ lookup('env', 'PSP_REPO') }}"
-      version: "{{ lookup('env', 'PSP_BRANCH') }}"
-    become_user: postgres
-
-  - name: Submodule update
-    command : git submodule update --init --recursive
-    args:
-      chdir: /tmp/postgres
-    become_user: postgres
-
-  - name: Configure Postgres/PSP from sources
-    command: ./configure '--enable-debug' '--enable-cassert' '--enable-tap-tests' '--with-icu' '--prefix=/opt/pgsql'
-    args:
-      chdir: /tmp/postgres
-    become_user: postgres
-    register: results
-
-  - name: Build Postgres/PSP (world) from sources
-    make:
-      chdir: "/tmp/postgres"
-      jobs: 4
-      target: world
-    become_user: postgres
-    environment:
-      TDE_MODE: 1
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  # - name: Install pg_tde from sources
-  #   make:
-  #     target: install
-  #     chdir: "/tmp/pg_tde"
-  #     params:
-  #       USE_PGXS: 1
-
-  # - name: Install pg_tde Debian/Ubuntu Package
-  #   apt:
-  #     name: "{{ packages }}"
-  #     state: latest
-  #     update_cache: yes
-  #   vars:
-  #     packages:
-  #       - percona-postgresql-{{ major_version }}-pg-tde
-
   - name: Add extensions to postgresql.conf for Debian
     lineinfile:
       path: /etc/postgresql/{{ major_version }}/main/postgresql.conf
@@ -252,100 +106,136 @@
       state: started
       enabled: true
 
-  - name: Remove old 005_multiple_extensions.pl to test folder
+  - name: Check if postgres processes are running
+    command: ps aux
+    register: ps_output
+
+  - name: Show postgres processes
+    debug:
+      msg: "{{ ps_output.stdout_lines | select('search', 'postgres') | list }}"
+
+  - name: List postgres socket files
+    shell: ls -l /tmp/.s.PGSQL* || true
+    register: socket_output
+
+  - name: Show postgres socket files
+    debug:
+      var: socket_output.stdout_lines
+
+  - name: Show PostgreSQL unix_socket_directories
+    shell: |
+      psql -d postgres -t -A -c "SHOW unix_socket_directories;"
+    become: true
     become_user: postgres
-    command: rm -fr /tmp/postgres/contrib/pg_tde/t/005_multiple_extensions.pl
+    register: socket_dir
+
+  - name: Print PostgreSQL socket directory
+    debug:
+      var: socket_dir.stdout
+
+  - name: Set stack ulimit for a specific user
+    become: true
+    pam_limits:
+      domain: postgres  # Replace with the target username
+      limit_type: "-"         # Applies to both soft and hard limits
+      limit_item: stack
+      value: 102400            # Desired stack size in KB
     register: results
 
-  - debug: var=regression.stdout_lines
+  - debug: var=results.stdout_lines
 
-  - name: Copy 005_multiple_extensions.pl to test folder
-    copy:
-      src: 005_multiple_extensions.pl
-      dest: /tmp/postgres/contrib/pg_tde/t/005_multiple_extensions.pl
-      owner: postgres
-      group: postgres
-      mode: 0644
+  - name: Get ulimit results
+    become_user: postgres
+    ansible.builtin.shell: ulimit -a
     register: results
 
-  - debug: var=regression.stdout_lines
+  - debug: var=results.stdout_lines
 
-  # installcheck-world Server testsuite
-  - name: Start pg_tde tests only - installcheck
+  - name: Run psql show default_table_access_method
+    shell: |
+      psql -c "show default_table_access_method;"
+    become_user: postgres
+    args:
+      executable: /bin/bash
+    environment:
+      PGHOST: "/var/run/postgresql"
+      PGPORT: "5432"
+      LANG: "C.UTF-8"
+    when: ansible_os_family == 'Debian'
+    register: psql_result
+
+  - name: Show psql output
+    debug:
+      var: psql_result.stdout_lines
+
+  - name: Show psql output
+    debug:
+      var: psql_result.stderr_lines
+
+  - name: Run installcheck with tde
     shell: | 
-      cd /tmp
-      python3 -m venv validation
-      source validation/bin/activate
-      pip install --upgrade pip
-      pip install pykmip
-      export PATH=$PATH:/tmp/validation/bin
-      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/bin/create_certificates.py
-      python3 create_certificates.py
-      cat client_certificate_jane_doe.pem >> client_key_jane_doe.pem
-      mkdir policies
-      cd policies
-      wget https://raw.githubusercontent.com/OpenKMIP/PyKMIP/refs/heads/master/examples/policy.json
-      cd ..
-      pykmip-server -f "/tmp/postgres/contrib/pg_tde/pykmip-server.conf" -l /tmp/kmip-server.log &
-      TV=$(mktemp)
-      { exec >$TV; vault server -dev; } &
-      sleep 10
-      export ROOT_TOKEN=$(cat $TV | grep "Root Token" | cut -d ":" -f 2 | xargs echo -n)
-      echo "Root token: $ROOT_TOKEN" && export ROOT_TOKEN=$ROOT_TOKEN && cd /tmp/postgres/contrib/pg_tde && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck USE_PGXS=1 -k
+      export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
+      export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
+      export VAULT_ADDR=https://127.0.0.1:8200
+      export VAULT_TOKEN=root
+      export PGCTLTIMEOUT=120
+      export PG_TEST_TIMEOUT_DEFAULT=300
+
+      # EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" \
+      # make installcheck USE_PGXS=1 -k \
+      # 2>&1 | tee /tmp/installcheck.log
+
+      make installcheck USE_PGXS=1 -k PROVE_FLAGS='-v -p'
     become_user: postgres
     args:
       executable: /bin/bash
       chdir: "/tmp/postgres/contrib/pg_tde"
     environment:
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
-      TDE_MODE: 1
+      PGHOST: "/var/run/postgresql"
+      PGPORT: "5432"
+      LANG: "C.UTF-8"
+      LC_CTYPE: "C"
+      LC_ALL: "C"
+      PGCTLTIMEOUT: 120
+      PG_TEST_TIMEOUT_DEFAULT: 300
+    ignore_errors: yes
+    when: ansible_os_family == 'Debian'
     register: regression
 
-  - debug: var=regression.stdout_lines
-  - debug: var=regression.stderr_lines
-
-  - stat:
-      path: /tmp/postgres/contrib/pg_tde/regression.out
-    register: tde_diff
-
-  - name: Get pg_tde - regression.out contents
-    command: cat /tmp/postgres/contrib/pg_tde/regression.out
-    register: command_output
-    when: tde_diff.stat.isreg is defined and tde_diff.stat.isreg == True
-
-  - name: Print to console pg_tde - regression.out contents
+  - name: Show stdout of installcheck regression tests
     debug:
-      msg: "{{command_output.stdout_lines}}"
-    when: tde_diff.stat.isreg is defined and tde_diff.stat.isreg == True
+      var: regression.stdout_lines
 
-  - stat:
-      path: /tmp/postgres/contrib/pg_tde/regression.diffs
-    register: tde_diff
+  - debug:
+      var: regression.stderr_lines
 
-  - name: Get pg_tde - regression.diffs contents
-    command: cat /tmp/postgres/contrib/pg_tde/regression.diffs
-    register: command_output
-    when: tde_diff.stat.isreg is defined and tde_diff.stat.isreg == True
-
-  - name: Print to console pg_tde - regression.diffs contents
+  - name: Show stderr if installcheck test fails
     debug:
-      msg: "{{command_output.stdout_lines}}"
-    when: tde_diff.stat.isreg is defined and tde_diff.stat.isreg == True
+      var: regression.stderr_lines
+    when:
+      - regression is defined
+      - regression.rc != 0
 
-  # - name: Get server logfile contents if exists
-  #   command: cat /tmp/postgres/logfile
-  #   register: log_output
-  #   when: regression.rc is defined and regression.rc != 0
+  - name: Show tde regression diffs if tests failed
+    shell: cat /tmp/postgres/contrib/pg_tde/regression.diffs
+    register: diffs_output
+    when:
+      - regression is defined
+      - regression.rc != 0
+    ignore_errors: true
 
-  # - name: Print to console logfile
-  #   debug:
-  #     msg: "{{log_output.stdout_lines}}"
-  #   when: regression.rc is defined and regression.rc != 0
+  - name: Print tde regression diffs
+    debug:
+      msg: "{{ diffs_output.stdout_lines }}"
+    when:
+      - regression is defined
+      - regression.rc != 0
+      - diffs_output is defined
 
-  - debug: var=regression.rc
-    when: regression.rc is defined
-
-  - name: End play if regression has failures
+  - name: Fail the playbook if tests failed in installcheck
     fail:
-      msg: "regression failed"
-    when: regression.rc is defined and (regression.rc != 0 and regression.rc != 2)
+      msg: "All regression tests failed with return code {{ regression.rc }}"
+    when:
+      - regression is defined
+      - regression.rc != 0

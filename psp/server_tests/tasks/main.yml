@@ -16,6 +16,37 @@
       file: "debian_tasks.yml"
     when: ansible_os_family == 'Debian'
 
+  - name: Get ulimit results
+    become_user: postgres
+    ansible.builtin.shell: ulimit -a
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  # - name: set ulimit unlimited
+  #   ansible.builtin.shell: ulimit -s unlimited
+  #   become_user: postgres
+  #   become: true
+  #   register: results
+
+  - name: Set stack ulimit for a specific user
+    become: true
+    pam_limits:
+      domain: postgres  # Replace with the target username
+      limit_type: "-"         # Applies to both soft and hard limits
+      limit_item: stack
+      value: 102400            # Desired stack size in KB
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Get ulimit results
+    become_user: postgres
+    ansible.builtin.shell: ulimit -a
+    register: results
+
+  - debug: var=results.stdout_lines
+
 # =============================
 # Clone Postgres/PSP sources with pg_tde
 # =============================
@@ -75,6 +106,8 @@
   # =============================
   # Initialize Postgres with pg_tde
   # Start the Postgres server with pg_tde enabled
+  # This section is only applicable for installcheck and installcheck-world scenarios.
+  # For check and check-world, following 3 steps don't apply.
   # =============================
   - name: initdb cluster
     become_user: postgres
@@ -84,6 +117,7 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
+    when: testsuite == 'installcheck-world'
     register: results
 
   - debug: var=results.stdout_lines
@@ -100,6 +134,7 @@
       LANG: C.UTF-8
       LC_CTYPE: C
       LC_ALL: C
+    when: testsuite == 'installcheck-world'
     register: results
 
   - debug: var=results.stdout_lines
@@ -114,6 +149,7 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
+    when: testsuite == 'installcheck-world'
     register: results
 
   - debug: var=results.stdout_lines
@@ -123,43 +159,43 @@
   # This is done to avoid checking out all files in the repo
   # and only include the postgresql directory
   # =============================
-  - name: Clone only postgresql directory and copy t files to pg_tde
-    block:
-      - name: Clone Percona-QA repo without checking out files
-        git:
-          repo: https://github.com/Percona-QA/percona-qa.git
-          dest: /tmp/percona-qa
-          bare: no
-          clone: yes
-          update: no
+  # - name: Clone only postgresql directory and copy t files to pg_tde
+  #   block:
+  #     - name: Clone Percona-QA repo without checking out files
+  #       git:
+  #         repo: https://github.com/Percona-QA/percona-qa.git
+  #         dest: /tmp/percona-qa
+  #         bare: no
+  #         clone: yes
+  #         update: no
 
-      - name: Enable sparse checkout
-        command: git sparse-checkout init --cone
-        args:
-          chdir: /tmp/percona-qa
+  #     - name: Enable sparse checkout
+  #       command: git sparse-checkout init --cone
+  #       args:
+  #         chdir: /tmp/percona-qa
 
-      - name: Set sparse-checkout to only include postgresql/t directory
-        command: git sparse-checkout set postgresql/t
-        args:
-          chdir: /tmp/percona-qa
+  #     - name: Set sparse-checkout to only include postgresql/t directory
+  #       command: git sparse-checkout set postgresql/t
+  #       args:
+  #         chdir: /tmp/percona-qa
 
-      - name: Checkout master branch
-        command: git checkout master
-        args:
-          chdir: /tmp/percona-qa
+  #     - name: Checkout master branch
+  #       command: git checkout master
+  #       args:
+  #         chdir: /tmp/percona-qa
 
-      - name: List postgresql directory contents
-        command: ls -R /tmp/percona-qa/postgresql/t
-        register: pgsql_dir_listing
+  #     - name: List postgresql directory contents
+  #       command: ls -R /tmp/percona-qa/postgresql/t
+  #       register: pgsql_dir_listing
 
-      - name: Show postgresql directory tree
-        debug:
-          var: pgsql_dir_listing.stdout_lines
+  #     - name: Show postgresql directory tree
+  #       debug:
+  #         var: pgsql_dir_listing.stdout_lines
 
-      - name: Copy postgresql/t files to pg_tde/t
-        shell: cp -r /tmp/percona-qa/postgresql/t/* /tmp/postgres/contrib/pg_tde/t/
+  #     - name: Copy postgresql/t files to pg_tde/t
+  #       shell: cp -r /tmp/percona-qa/postgresql/t/* /tmp/postgres/contrib/pg_tde/t/
 
-    when: testsuite == 'check-tde'
+  #   when: testsuite == 'check-tde'
 
   # =============================
   # Run pg_tde regression tests
@@ -170,6 +206,8 @@
       export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
       export VAULT_ADDR="https://127.0.0.1:8200"
       export VAULT_TOKEN=root
+      export PGCTLTIMEOUT=120
+      export PG_TEST_TIMEOUT_DEFAULT=300
       cd /tmp/postgres/contrib/pg_tde && make -s check -k
     become_user: postgres
     args:
@@ -181,6 +219,8 @@
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
       INSTALL_DIR: "/opt/pgsql"
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+      PGCTLTIMEOUT: 120
+      PG_TEST_TIMEOUT_DEFAULT: 300
     when: testsuite == 'check-tde'
     ignore_errors: yes
     register: regression
@@ -228,7 +268,9 @@
   # Run server regression tests
   # =============================
   - name: Run server regression tests
-    shell: |
+    shell: | 
+      export PGCTLTIMEOUT=120
+      export PG_TEST_TIMEOUT_DEFAULT=300
       cd /tmp/postgres/ && make -s check -k
     become_user: postgres
     args:
@@ -241,6 +283,8 @@
       INSTALL_DIR: "/opt/pgsql"
       TDE_MODE: 1
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+      PGCTLTIMEOUT: 120
+      PG_TEST_TIMEOUT_DEFAULT: 300
     when: testsuite == 'check-server'
     ignore_errors: yes
     register: regression
@@ -288,11 +332,13 @@
   # Run check-all regression tests
   # =============================
   - name: Run all regression tests
-    shell: |
+    shell: | 
       export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
       export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
       export VAULT_ADDR="https://127.0.0.1:8200"
       export VAULT_TOKEN=root
+      export PGCTLTIMEOUT=120
+      export PG_TEST_TIMEOUT_DEFAULT=300
       cd /tmp/postgres/ && make -s check-world -k
     become_user: postgres
     args:
@@ -304,6 +350,8 @@
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
       INSTALL_DIR: "/opt/pgsql"
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+      PGCTLTIMEOUT: 120
+      PG_TEST_TIMEOUT_DEFAULT: 300
     when: testsuite == 'check-all'
     ignore_errors: yes
     register: regression
@@ -355,7 +403,7 @@
   # Run installcheck-world regression tests with pg_tde
   # =============================
   - name: Run tde_setup_global.sql using psql
-    shell: |
+    shell: | 
       cd /opt/pgsql/bin
       ./psql -d postgres -f /tmp/postgres/ci_scripts/tde_setup_global.sql  -v ON_ERROR_STOP=on
       ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile restart -o '-p 5432'
@@ -383,7 +431,10 @@
       export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
       export VAULT_ADDR=https://127.0.0.1:8200
       export VAULT_TOKEN=root
-      export TDE_MODE=1 && cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world -k
+      export TDE_MODE=1
+      export PGCTLTIMEOUT=120
+      export PG_TEST_TIMEOUT_DEFAULT=300
+      cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world -k
     become_user: postgres
     args:
       executable: /bin/bash
@@ -398,6 +449,8 @@
       LC_CTYPE: C
       LC_ALL: C
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+      PGCTLTIMEOUT: 120
+      PG_TEST_TIMEOUT_DEFAULT: 300
     when: testsuite == 'installcheck-world'
     register: regression
 
@@ -409,14 +462,6 @@
   - name: Show stderr if installcheck-world test fails
     debug:
       var: regression.stderr_lines
-    when:
-      - testsuite == 'installcheck-world'
-      - regression is defined
-      - regression.rc != 0
-
-  - name: Fail the playbook if tests failed in installcheck-world
-    fail:
-      msg: "All regression tests failed with return code {{ regression.rc }}"
     when:
       - testsuite == 'installcheck-world'
       - regression is defined
@@ -438,6 +483,14 @@
       echo "Directory: $(dirname {{ item.path }})"
       cat {{ item.path }}
     loop: "{{ regression_diff_files.files }}"
+    when:
+      - testsuite == 'installcheck-world'
+      - regression is defined
+      - regression.rc != 0
+
+  - name: Fail the playbook if tests failed in installcheck-world
+    fail:
+      msg: "All regression tests failed with return code {{ regression.rc }}"
     when:
       - testsuite == 'installcheck-world'
       - regression is defined

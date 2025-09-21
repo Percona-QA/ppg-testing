@@ -1,0 +1,153 @@
+- name: Install base Perl tools on RHEL
+  yum:
+    name:
+      - perl-CPAN
+      - perl-App-cpanminus
+      - perl-IPC-Run
+    state: present
+
+- name: Install Perl modules via cpanm
+  community.general.cpanm:
+    name: "{{ item }}"
+  loop:
+    - Text::Trim
+    - File::Rename
+    - CGI::Session
+    - HTTP::Server::Simple::CGI
+  ignore_errors: true
+
+- name: Install Development Tools group
+  yum:
+    name: "@Development tools"
+    state: present
+
+- name: Enable llvm-toolset on RHEL 8
+  command: dnf module enable llvm-toolset -y
+  when: ansible_distribution_major_version == "8"
+
+- name: Install LLVM/Clang packages
+  yum:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - llvm-toolset
+    - llvm
+    - llvm-devel
+    - clang
+    - clang-devel
+  when: ansible_distribution_major_version in ["8", "9"]
+
+- name: Show LLVM version
+  command: llvm-config --version
+  register: llvm_ver
+  ignore_errors: true
+
+- debug:
+    msg: "LLVM version: {{ llvm_ver.stdout | default('Not installed') }}"
+
+- name: Show Clang version
+  command: clang --version
+  register: clang_ver
+  ignore_errors: true
+
+- debug:
+    msg: "Clang version: {{ clang_ver.stdout | default('Not installed') }}"
+
+- name: Install common development packages
+  yum:
+    name:
+      - zlib-devel
+      - readline-devel
+      - gcc
+      - lz4
+      - lz4-devel
+      - python3
+      - krb5-devel
+      - openssl-devel
+      - pam-devel
+      - libxml2-devel
+      - libxslt-devel
+      - openldap-devel
+      - libuuid-devel
+      - systemd-devel
+      - tcl-devel
+      - python3-devel
+      - libicu-devel
+      - libzstd
+      - libzstd-devel
+      - vim
+      - git
+      - perl-ExtUtils*
+      - docbook-xsl
+      - perl-Test-Simple
+      - libcurl-devel
+      - make
+      - autoconf
+      - json-c-devel
+      - python3-pip
+      - wget
+      - perl-LWP-Protocol-https
+      - perl-JSON
+    state: present
+    update_cache: yes
+
+- name: Install RHEL 8/9 specific packages
+  yum:
+    name:
+      - lcov
+      - prename
+    state: present
+    update_cache: yes
+  when: ansible_distribution_major_version in ["8", "9"]
+
+- name: Install kernel-modules-extra on RHEL 10
+  dnf:
+    name: "kernel-modules-extra-{{ ansible_kernel }}"
+    state: present
+  when: ansible_distribution_major_version == "10"
+
+- name: Ensure br_netfilter module is loaded (RHEL 10 only)
+  community.general.modprobe:
+    name: br_netfilter
+    state: present
+  when: ansible_distribution_major_version == "10"
+
+- name: Install perl modules for RHEL 9
+  yum:
+    name:
+      - perl-FindBin
+      - perl-Opcode
+    state: present
+    update_cache: yes
+  when: ansible_distribution_major_version == "9"
+
+# Debug: Systemtap check (instead of repeating multiple rpm/yum queries)
+- name: Check for systemtap-sdt-devel
+  yum:
+    name: systemtap-sdt-devel
+    state: present
+  register: systemtap_result
+  ignore_errors: true
+
+- debug:
+    msg: "Systemtap package state: {{ systemtap_result }}"
+
+# ARM-specific tuning
+- name: Check ulimit for postgres on Rocky 8 ARM
+  become_user: postgres
+  command: ulimit -a
+  register: ulimit_result
+  when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
+
+- debug:
+    var: ulimit_result.stdout_lines
+  when: ulimit_result is defined
+
+- name: Set memlock limit for postgres on Rocky 8 ARM
+  community.general.pam_limits:
+    domain: postgres
+    limit_type: '-'
+    limit_item: memlock
+    value: 128
+    comment: 128kb memory lock for postgres
+  when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'

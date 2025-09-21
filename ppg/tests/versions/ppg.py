@@ -603,7 +603,7 @@ def get_ppg_versions(distro_type):
                                           distros=DISTROS, distro_type=distro_type),
             "ppg-16.9": get_pg16_versions(packages=["2:16.9-1", "1:280-1", '280-1'],
                                           distros=DISTROS, distro_type=distro_type),
-            "ppg-17.5": get_pg17_versions(packages=["2:17.5-3", "1:280-1", '280-1'],
+            "ppg-17.5": get_pg17_versions(packages=["2:17.5-3", "1:277-1", '277-1'],
                                           distros=DISTROS, distro_type=distro_type),
             "ppg-13.22": get_pg13_versions(packages=["2:13.22-1", "1:280-1", '280-1'],
                                           distros=DISTROS, distro_type=distro_type),

@@ -6,43 +6,6 @@
   - debug:
       msg: "Value of postgis_rhel_package_name_prefix is : {{ postgis_rhel_package_name_prefix }}"
 
-  - name: setup epel release
-    yum:
-      name: epel-release
-      update_cache: yes
-      state: present
-
-  - name: Clean dnf RHEL8
-    become: true
-    command: dnf clean all -y
-    when: ansible_distribution_major_version == "8"
-
-  - name: Install epel-release package
-    ansible.builtin.dnf:
-      name: epel-release
-      state: present
-    when: ansible_facts['os_family'] == "RedHat"
-
-  - name: Enable powertools on rocky linux 8
-    become: true
-    command: dnf config-manager --set-enabled powertools
-    when: ansible_os_family == "RedHat" and ansible_distribution == "Rocky" and ansible_distribution_major_version == "8"
-
-  - name: Enable ol8_codeready_builder on Oracle linux 8
-    become: true
-    command: dnf config-manager --set-enabled ol8_codeready_builder
-    when: ansible_os_family == "RedHat" and ansible_distribution == "OracleLinux" and ansible_distribution_major_version == "8"
-
-  - name: Enable powertools on rocky linux 9
-    become: true
-    command: dnf config-manager --set-enabled crb
-    when: ansible_os_family == "RedHat" and ansible_distribution == "Rocky" and ansible_distribution_major_version == "9"
-
-  - name: Enable ol9_codeready_builder on Oracle linux 9
-    become: true
-    command: dnf config-manager --set-enabled ol9_codeready_builder
-    when: ansible_os_family == "RedHat" and ansible_distribution == "OracleLinux" and ansible_distribution_major_version == "9"
-
   - name: Disable dnf module for RHEL8
     become: true
     command: dnf module disable postgresql -y
@@ -157,12 +120,10 @@
       - percona-postgresql{{ postgres_version }}-pltcl
       - percona-postgresql{{ postgres_version }}-server
       - percona-postgresql{{ postgres_version }}-test
-      - percona-postgresql{{ postgres_version }}-llvmjit
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
-    when: ansible_distribution_major_version == "8"
 
-  - name: install Percona Platform for PostgreSQL rpm packages for RHEL
+  - name: install required package for RHEL 8
     yum:
       name: "{{ packages }}"
       state: latest
@@ -170,21 +131,10 @@
     vars:
       postgres_version: "{{ major_version }}"
       packages:
-      - percona-postgresql-client-common
-      - percona-postgresql-common
-      - percona-postgresql-common-dev
-      - percona-postgresql{{ postgres_version }}
-      - percona-postgresql{{ postgres_version }}-contrib
-      - percona-postgresql{{ postgres_version }}-devel
-      - percona-postgresql{{ postgres_version }}-libs
-      - percona-postgresql{{ postgres_version }}-plperl
-      - percona-postgresql{{ postgres_version }}-plpython3
-      - percona-postgresql{{ postgres_version }}-pltcl
-      - percona-postgresql{{ postgres_version }}-server
-      - percona-postgresql{{ postgres_version }}-test
+      - percona-postgresql{{ postgres_version }}-llvmjit
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
-    when: ansible_distribution_major_version == "9"
+    when: ansible_distribution_major_version == "8"
 
   - name: Install pgaudit RHEL
     yum:
