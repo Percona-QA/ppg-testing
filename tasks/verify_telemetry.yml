@@ -11,7 +11,6 @@
   set_fact:
     postgresql_service_name: "{{ 'postgresql-' + major_version if ansible_facts['os_family'] == 'RedHat' else 'postgresql' }}"
 
-
 - name: Set PostgreSQL configuration file path based on the operating system
   set_fact:
     postgresql_conf_path: "{{ '/var/lib/pgsql/' + major_version + '/data/postgresql.conf' if ansible_facts['os_family'] == 'RedHat' else '/etc/postgresql/'+ major_version + '/main/postgresql.conf' }}"
@@ -262,19 +261,20 @@
     file_type: file
   register: found_json_files
 
-- name: Fail if no JSON files are found
-  ansible.builtin.fail:
-    msg: "No JSON files found in /usr/local/percona/telemetry/pg/."
-  when: found_json_files.matched == 0
+#Disabling for the Q4-2025 where telemetry is not enabled by default. 
+# - name: Fail if no JSON files are found
+#   ansible.builtin.fail:
+#     msg: "No JSON files found in /usr/local/percona/telemetry/pg/."
+#   when: found_json_files.matched == 0
 
-- name: Check if the JSON files are not empty
-  ansible.builtin.stat:
-    path: "{{ item.path }}"
-  loop: "{{ found_json_files.files }}"
-  register: json_file_stats
+# - name: Check if the JSON files are not empty
+#   ansible.builtin.stat:
+#     path: "{{ item.path }}"
+#   loop: "{{ found_json_files.files }}"
+#   register: json_file_stats
 
-- name: Fail if any JSON file is empty
-  fail:
-    msg: "The following JSON file is empty: {{ item.stat.path }}"
-  loop: "{{ json_file_stats.results }}"
-  when: item.stat.size == 0
+# - name: Fail if any JSON file is empty
+#   fail:
+#     msg: "The following JSON file is empty: {{ item.stat.path }}"
+#   loop: "{{ json_file_stats.results }}"
+#   when: item.stat.size == 0

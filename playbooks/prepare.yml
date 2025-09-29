@@ -5,58 +5,12 @@
   become_method: sudo
   gather_facts: true
   tasks:
-    # - name: Edit mirrorlist for Centos8 repos
-    #   shell: "sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-Linux-*"
-    #   when: ansible_distribution == "CentOS" and ansible_distribution_major_version == "8"
-
-    # - name: Edit baseurl for Centos8 repos
-    #   shell: "sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-Linux-*"
-    #   when: ansible_distribution == "CentOS" and ansible_distribution_major_version == "8"
-
-    # - name: Find all of the files inside /etc/yum.repos.d directory
-    #   find:
-    #     paths: "/etc/yum.repos.d/"
-    #     patterns: "*.repo"
-    #   register: repos
-
-    # - name: Comment 'mirrorlist' in /etc/yum.repos.d/*.repo files
-    #   replace:
-    #     path: "{{ item.path }}"
-    #     regexp: 'mirrorlist'
-    #     replace: '#mirrorlist'
-    #   with_items: "{{ repos.files }}"
-    #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
-
-    # - name: Replace 'baseurl' in /etc/yum.repos.d/*.repo files
-    #   replace:
-    #     path: "{{ item.path }}"
-    #     regexp: '#baseurl=http://mirror.centos.org'
-    #     replace: 'baseurl=http://vault.centos.org'
-    #   with_items: "{{ repos.files }}"
-    #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
-
     - name: setup ca-certificates release
       yum:
         name: ca-certificates
         update_cache: yes
         state: present
       when: ansible_os_family == "RedHat"
-
-    # - name: install GPG key for epel 8
-    #   rpm_key:
-    #     state: present
-    #     key: https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-8
-    #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
-
-    # - name: install GPG key for Percona repos
-    #   rpm_key:
-    #     state: present
-    #     key: https://repo.percona.com/yum/RPM-GPG-KEY-Percona
-    #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
-
-    # - name: setup epel 8 repo
-    #   yum: name=https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm state=present
-    #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
     - name: Enable epel-release on Rhel8 systems using Fedora epel rpm
       become: true
@@ -145,30 +99,10 @@
         - git-all
       when: ansible_os_family == "RedHat" and ansible_distribution_major_version|int == 8
 
-    - name: Setup additional yum packages
-      yum:
-        name: "{{ packages }}"
-        update_cache: yes
-        state: present
-      vars:
-        packages:
-          - yum-utils
-          - centos-release-scl
-      when: ansible_os_family == "RedHat" and ansible_distribution_major_version|int <= 7
-
-    - name: setup devtoolset-7-gcc
-      yum:
-        name: devtoolset-7-gcc*
-        update_cache: yes
-        enablerepo: centos-sclo-rh-testing
-        state: present
-      when: ansible_os_family == "RedHat" and ansible_distribution_major_version|int <= 7
-
-    # - name: Install epel-release package
-    #   ansible.builtin.dnf:
-    #     name: epel-release
-    #     state: present
-    #   when: ansible_facts['os_family'] == "RedHat"
+    - name: Update RedHat-family systems to latest
+      become: true
+      ansible.builtin.shell: dnf update -y
+      when: ansible_os_family == "RedHat"
 
     - name: Enable Powertools on Rocky 8
       become: true
@@ -213,23 +147,25 @@
         dnf config-manager --set-enabled codeready-builder-for-rhel-9-rhui-rpms
       when: ansible_os_family == "RedHat" and ansible_distribution == "RedHat" and ansible_distribution_major_version == "9"
 
-    - name: Enable codeready-builder for RHEL 10
+    - name: Enable CodeReady Builder on RHEL 10
       become: true
-      shell: | 
-        dnf install -y dnf-plugins-core
-        dnf config-manager --set-enabled codeready-builder-for-rhel-10-rhui-rpms
-      when: ansible_os_family == "RedHat" and ansible_distribution == "RedHat" and ansible_distribution_major_version == "10"
+      block:
+        - name: Install dnf plugins
+          ansible.builtin.dnf:
+            name: dnf-plugins-core
+            state: present
+
+        - name: Enable CodeReady Builder repo
+          ansible.builtin.command:
+            cmd: dnf config-manager --set-enabled codeready-builder-for-rhel-10-rhui-rpms
+      when:
+        - ansible_distribution == "RedHat"
+        - ansible_distribution_major_version | int == 10
 
     - name: install acl package on rhel 10
       become: true
       command:  sudo dnf install -y acl
       when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
-
-    - name: Update Oracle Linux 8 and 9 to latest
-      become: true
-      shell: | 
-        sudo dnf update -y 
-      when: ansible_distribution == "OracleLinux"
 
     - name: Setup oracle linux 9 for ssh
       become: true
@@ -240,6 +176,30 @@
         systemctl enable sshd
         systemctl start sshd
       when: ansible_distribution == "OracleLinux" and ansible_distribution_major_version == "9"
+
+    - name: Install additional packages RPM
+      yum:
+        name: "{{ packages }}"
+        state: latest
+        update_cache: yes
+      vars:
+        packages:
+          - openssl-devel
+          - readline-devel
+          - openssl
+          - gcc
+          - gcc-c++
+          - libevent-devel
+          - perl-Pod-Checker
+          - perl-devel
+          - perl-JSON-XS
+          - perl-Test-Simple
+          - perl-IPC-Run
+          - libtool
+          - make
+          - pandoc
+          - pkgconfig
+      when: ansible_os_family == "RedHat"
 
     # - name: Install additional packages RPM
     #   yum:
@@ -262,30 +222,23 @@
     #       - make
     #       - pandoc
     #       - pkgconfig
-    #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version|int == 8
+    #   when: ansible_os_family == "RedHat"
 
-    - name: Install additional packages RPM
-      yum:
-        name: "{{ packages }}"
-        state: latest
-        update_cache: yes
-      vars:
-        packages:
-          - openssl-devel
-          - readline-devel
-          - openssl
-          - gcc
-          - gcc-c++
-          - libevent-devel
-          - perl-Pod-Checker
-          - perl-devel
-          - perl-JSON-XS
-          - perl-Test-Simple
-          - libtool
-          - make
-          - pandoc
-          - pkgconfig
-      when: ansible_os_family == "RedHat"
+    # - name: Install Perl JSON module for EL10+
+    #   yum:
+    #     name: perl-JSON
+    #     state: present
+    #   when:
+    #     - ansible_os_family == "RedHat"
+    #     - ansible_distribution_major_version|int >= 10
+
+    # - name: Install Perl JSON::XS for EL7–9
+    #   yum:
+    #     name: perl-JSON-XS
+    #     state: present
+    #   when:
+    #     - ansible_os_family == "RedHat"
+    #     - ansible_distribution_major_version|int < 10
 
     - name: Install additional packages Debian
       apt:

@@ -1,0 +1,19 @@
+---
+  - name: Set Facts
+    set_fact:
+      use_package_install: "{{ lookup('env', 'PGSM_PACKAGE_INSTALL') }}"
+      major_version: "{{ lookup('env', 'VERSION').split('.')[0].split('-')[1] }}"
+      pg_version_to_install: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
+      cacheable: true
+  - name: Configure repository
+    include_tasks: ../../../../tasks/enable_repo.yml
+
+  - name: Include Redhat tasks file 
+    include_tasks: 
+      file: "redhat_tasks.yml"
+    when: ansible_os_family == 'RedHat'
+
+  - name: Include Debian tasks file 
+    include_tasks: 
+      file: "debian_tasks.yml"
+    when: ansible_os_family == 'Debian'

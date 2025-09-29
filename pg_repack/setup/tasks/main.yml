@@ -47,6 +47,13 @@
       - libz-dev
       - liblz4-dev
       - libcurl4-openssl-dev
+      - build-essential
+      - libpq-dev
+      - libxml2-dev
+      - libreadline-dev
+      - libssl-dev
+      - liblz4-dev
+      - libnuma-dev
 
 - name: install Percona Platform for PostgreSQL deb packages
   apt:

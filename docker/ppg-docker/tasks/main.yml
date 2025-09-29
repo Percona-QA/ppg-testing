@@ -26,12 +26,28 @@
   command: yum -y update
   when: ansible_os_family == "RedHat"
 
-- name: Install yum-utils
-  become: true
-  command: yum install -y yum-utils
-  when: ansible_os_family == "RedHat"
+- name: Ensure required dependencies are installed
+  ansible.builtin.yum:
+    name:
+      - yum-utils
+      - device-mapper-persistent-data
+      - lvm2
+    state: present
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
-- name: Install docker RHEL
+- name: Install kernel-modules-extra on RHEL 10
+  dnf:
+    name: "kernel-modules-extra-{{ ansible_kernel }}"
+    state: present
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+- name: Ensure br_netfilter module is loaded (RHEL 10 only)
+  community.general.modprobe:
+    name: br_netfilter
+    state: present
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+- name: Add Docker CE repository RHEL 8,9
   become: true
   command: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
   when: ansible_os_family == "RedHat"
@@ -41,10 +57,22 @@
   command: yum -y update
   when: ansible_os_family == "RedHat"
 
-- name: Install docker
+- name: Install Docker packages
   become: true
-  command: yum install -y docker-ce docker-ce-cli containerd.io
+  ansible.builtin.yum:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: present
   when: ansible_os_family == "RedHat"
+
+- name: Ensure containerd service is started
+  ansible.builtin.service:
+    name: containerd
+    state: started
+    enabled: yes
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
 - name: Start docker
   become: true

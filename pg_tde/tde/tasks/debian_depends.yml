@@ -1,57 +1,298 @@
-- name: Install Debian Packages
-  apt:
-    name: "{{ packages }}"
-    update_cache: yes
-    state: latest
-  vars:
-    packages:
-    - wget
-    - libtext-trim-perl
-    - libreadline-dev
-    - systemtap-sdt-dev
-    - zlib1g-dev
-    - libssl-dev
-    - libpam0g-dev
-    - python3-dev
-    - bison
-    - flex
-    - libipc-run-perl
-    - docbook-xsl
-    - libxml2
-    - libxml2-utils
-    - libxml2-dev
-    - libxslt-dev
-    - xsltproc
-    - libkrb5-dev
-    - libldap2-dev
-    - libsystemd-dev
-    - gettext
-    - tcl-dev
-    - libperl-dev
-    - pkg-config
-    - clang
-    - llvm
-    - llvm-dev
-    - libselinux1-dev
-    - uuid-dev
-    - liblz4-dev
-    - libcurl4-openssl-dev
-    - vim
-    - git
-    - make
-    - gcc
-    - autoconf
-    - libjson-c-dev
-    - libhttp-server-simple-perl
-    - python3-pykmip
-    - libjson-perl
-    - cpanminus
-    - rename
+  - name: Install Debian Packages
+    apt:
+      name: "{{ packages }}"
+      update_cache: yes
+      state: latest
+    vars:
+      packages:
+        - wget
+        - libtext-trim-perl
+        - libreadline6-dev
+        - systemtap-sdt-dev
+        - zlib1g-dev
+        - libssl-dev
+        - libpam0g-dev
+        - python3-dev
+        - bison
+        - flex
+        - libipc-run-perl
+        - docbook-xsl
+        - docbook-xsl
+        - libxml2
+        - libxml2-utils
+        - libxml2-dev
+        - libxslt-dev
+        - xsltproc
+        - libkrb5-dev
+        - libldap2-dev
+        - libsystemd-dev
+        - gettext
+        - tcl-dev
+        - libperl-dev
+        - pkg-config
+        - clang
+        - llvm
+        - llvm-dev
+        - libselinux1-dev
+        - uuid-dev
+        - liblz4-dev
+        - libcurl4-openssl-dev
+        - vim
+        - git
+        - make
+        - gcc
+        - autoconf
+        - libjson-c-dev
+        - libhttp-server-simple-perl
+        - python3-pykmip
+        - libjson-perl
+        - libicu-dev
+        - libzstd-dev
+        - jq
+        - liburing-dev
+        - libnuma-dev
 
-- name: Install missing Perl modules via CPAN
-  ansible.builtin.cpanm:
-    name: "{{ item }}"
-    notest: true
-  loop:
-    - IPC::Run
-    - Text::Trim
+  - name: Ensure correct lz4 package is installed (Debian/Ubuntu)
+    ansible.builtin.apt:
+      name: "{{ lz4_package }}"
+      state: present
+      update_cache: yes
+    vars:
+      lz4_package: >-
+        {% if ansible_distribution == 'Debian' and (ansible_distribution_major_version | int) < 13 %}
+          liblz4-tool
+        {% elif ansible_distribution == 'Ubuntu' and (ansible_distribution_major_version | int) <= 24 %}
+          liblz4-tool
+        {% else %}
+          lz4
+        {% endif %}
+    when: ansible_os_family == "Debian"
+
+  - name: Install rename
+    ansible.builtin.shell: sudo DEBIAN_FRONTEND=noninteractive apt install -y rename
+  
+  - name: Install IPC::RUN
+    ansible.builtin.shell: yes | sudo /usr/bin/perl -MCPAN -e 'install IPC::RUN'
+
+  - name: Install Text::Trim
+    ansible.builtin.shell: yes | sudo /usr/bin/perl -MCPAN -e 'install Text::Trim'
+
+  - name: Install LLVM toolchain for Debian 11 (Bullseye)
+    when: ansible_distribution == "Debian" and ansible_distribution_major_version|int == 11
+    block:
+
+      - name: Add LLVM APT repository
+        copy:
+          dest: /etc/apt/sources.list.d/llvm.list
+          content: |
+            deb http://apt.llvm.org/bullseye/ llvm-toolchain-bullseye-14 main
+          owner: root
+          group: root
+          mode: "0644"
+
+      - name: Add LLVM GPG key
+        ansible.builtin.shell: |
+          wget -qO - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
+        args:
+          executable: /bin/bash
+        register: add_key
+        changed_when: "'OK' in add_key.stdout"
+
+      - name: Update apt cache
+        apt:
+          update_cache: yes
+
+      - name: Install LLVM packages
+        apt:
+          name:
+            - clang-14
+            - lld-14
+            - llvm-14
+            - llvm-14-dev
+            - llvm-14-linker-tools
+          state: present
+
+  - name: install Percona Platform for PostgreSQL deb packages
+    apt:
+      name: "{{ packages }}"
+      update_cache: yes
+      state: latest
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-postgresql-{{ postgres_version }}
+      - percona-postgresql-all
+      - percona-postgresql-client
+      - percona-postgresql-client-{{ postgres_version }}
+      - percona-postgresql-common
+      - percona-postgresql-contrib
+      - percona-postgresql-doc
+      - percona-postgresql-doc-{{ postgres_version }}
+      - percona-postgresql-plperl-{{ postgres_version }}
+      - percona-postgresql-plpython3-{{ postgres_version }}
+      - percona-postgresql-pltcl-{{ postgres_version }}
+      - percona-postgresql-server-dev-{{ postgres_version }}
+      - percona-postgresql-server-dev-all
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install pg_tde packages Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-pg-tde{{ postgres_version }}
+      - percona-pg-tde{{ postgres_version }}-client
+      - percona-pg-tde{{ postgres_version }}-dbgsym
+
+  - name: Install pgaudit Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+        - percona-postgresql-{{ postgres_version }}-pgaudit
+        - percona-postgresql-{{ postgres_version }}-pgaudit-dbgsym
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install percona-pgaudit{{ postgres_version }}_set_user Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+        - percona-pgaudit{{ postgres_version }}-set-user
+        - percona-pgaudit{{ postgres_version }}-set-user-dbgsym
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install pgrepack Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+        - percona-postgresql-{{ postgres_version }}-repack
+        - percona-postgresql-{{ postgres_version }}-repack-dbgsym
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install percona-postgis Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+        - percona-postgresql-{{ postgres_version }}-postgis-3
+        - percona-postgresql-{{ postgres_version }}-postgis-3-scripts
+        - percona-postgresql-postgis-scripts
+        - percona-postgresql-postgis
+        - percona-postgis
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install pg-stat-monitor Debian/Ubuntu Package
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pg-stat-monitor{{ major_version }}
+        - percona-pg-stat-monitor{{ major_version }}-dbgsym
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Add extensions to postgresql.conf for Debian
+    lineinfile:
+      path: /etc/postgresql/{{ major_version }}/main/postgresql.conf
+      line: shared_preload_libraries = 'pg_tde'
+
+  - name: Stop postgresql service for Debian based
+    service:
+      name: postgresql
+      state: stopped
+
+  - name: Start postgresql service for Debian based
+    service:
+      name: postgresql
+      state: started
+      enabled: true
+
+  - name: Check if postgres processes are running
+    command: ps aux
+    register: ps_output
+
+  - name: Show postgres processes
+    debug:
+      msg: "{{ ps_output.stdout_lines | select('search', 'postgres') | list }}"
+
+  - name: List postgres socket files
+    shell: ls -l /tmp/.s.PGSQL* || true
+    register: socket_output
+
+  - name: Show postgres socket files
+    debug:
+      var: socket_output.stdout_lines
+
+  - name: Show PostgreSQL unix_socket_directories
+    shell: |
+      psql -d postgres -t -A -c "SHOW unix_socket_directories;"
+    become: true
+    become_user: postgres
+    register: socket_dir
+
+  - name: Print PostgreSQL socket directory
+    debug:
+      var: socket_dir.stdout
+
+  - name: Set stack ulimit for a specific user
+    become: true
+    pam_limits:
+      domain: postgres  # Replace with the target username
+      limit_type: "-"         # Applies to both soft and hard limits
+      limit_item: stack
+      value: 102400            # Desired stack size in KB
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Get ulimit results
+    become_user: postgres
+    ansible.builtin.shell: ulimit -a
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Run psql show default_table_access_method
+    shell: |
+      psql -c "show default_table_access_method;"
+    become_user: postgres
+    args:
+      executable: /bin/bash
+    environment:
+      PGHOST: "/var/run/postgresql"
+      PGPORT: "5432"
+      LANG: "C.UTF-8"
+    when: ansible_os_family == 'Debian'
+    register: psql_result
+
+  - name: Show psql output
+    debug:
+      var: psql_result.stdout_lines
+
+  - name: Show psql output
+    debug:
+      var: psql_result.stderr_lines

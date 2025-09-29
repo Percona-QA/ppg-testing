@@ -1,0 +1,41 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: ec2
+platforms:
+  - name: rhel8-arm-${BUILD_NUMBER}-${JOB_NAME}
+    region: eu-central-1
+    image: ami-05aab2a160c4828b7
+    vpc_subnet_id: subnet-0fad4db6fdd8025b6
+    instance_type: t4g.large
+    ssh_user: ec2-user
+    root_device_name: /dev/sda1
+    instance_tags:
+      iit-billing-tag: jenkins-pg-molecule-rhel
+provisioner:
+  name: ansible
+  log: True
+  playbooks:
+    create: ../../../../playbooks/create.yml
+    destroy: ../../../../playbooks/destroy.yml
+    prepare: ../../../../playbooks/prepare.yml
+    converge: ../../playbooks/playbook.yml
+verifier:
+  name: testinfra
+  directory: ../../../tests/tests_ppg
+  options:
+    verbose: true
+    s: true
+    m: upgrade
+    junitxml: report.xml
+scenario:
+  destroy_sequence:
+    - destroy
+  test_sequence:
+    - destroy
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy

@@ -9,6 +9,26 @@
     command: dnf module disable postgresql -y
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
+  - name: Install liburing debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+    vars:
+      packages:
+        - liburing-dev
+        - libnuma1
+        - libnuma-dev
+    when: ansible_os_family == "Debian"
+
+  - name: Install liburing packages rhel
+    yum:
+      name:
+        - liburing
+        - liburing-devel
+      state: latest
+      update_cache: yes
+    when: ansible_os_family == "RedHat"
+
   - name: Remove the tarball destination directory if it exists
     become: true
     ansible.builtin.command:

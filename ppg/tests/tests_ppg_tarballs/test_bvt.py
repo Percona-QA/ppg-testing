@@ -42,22 +42,26 @@ BINARIES = pg_versions['binaries']
 
 os.environ['PATH'] = f"{PG_PATH}/bin:{INSTALL_PATH}/percona-pgbouncer/bin/:{INSTALL_PATH}/percona-haproxy/sbin:{INSTALL_PATH}/percona-patroni/bin:{INSTALL_PATH}/percona-pgbackrest/bin:{INSTALL_PATH}/percona-pgbadger:{INSTALL_PATH}/percona-pgpool-II/bin:" + os.environ['PATH']
 
+
 @pytest.fixture(scope='session')
 def get_server_bin_path(scope='session'):
     server_path=os.path.join(PG_PATH,'bin')
     print('Bin Path: ' + server_path)
     return server_path
 
+
 @pytest.fixture(scope='session')
 def get_psql_binary_path(scope='session'):
     server_path=os.path.join(PG_PATH,'bin','psql')
     return server_path
+
 
 @pytest.fixture(scope='session')
 def getSqlCmd_with_param(get_psql_binary_path):
     rcmd = f'{get_psql_binary_path} -U {USERNAME} -p {PORT} -d {DBNAME} '
     print('Sql Command with Param: ' + rcmd)
     return rcmd
+
 
 @pytest.fixture()
 def start_stop_postgresql(host,get_server_bin_path):
@@ -70,6 +74,7 @@ def start_stop_postgresql(host,get_server_bin_path):
         assert result.rc == 0
         cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} status"
         return host.run(cmd)
+
 
 @pytest.fixture()
 def postgresql_binary(host,get_server_bin_path):
@@ -84,6 +89,7 @@ def postgresql_binary(host,get_server_bin_path):
 def postgresql_query_version(host,get_psql_binary_path):
     with host.sudo("postgres"):
         return host.run(get_psql_binary_path + " -c   'SELECT version()' | awk 'NR==3{print $2}'")
+
 
 @pytest.fixture()
 def restart_postgresql(host,get_server_bin_path):
@@ -118,6 +124,7 @@ def insert_data(host, get_server_bin_path, get_psql_binary_path):
         result = host.check_output(select)
     yield result.strip("\n")
 
+
 def test_psql_client_version(host):
     result = host.run(PG_PATH+'/bin/psql --version')
     print(result)
@@ -132,6 +139,7 @@ def test_psql_client_version(host):
 #     pkg = host.package(package)
 #     assert pkg.is_installed
 #     assert pkg.version in pg_versions['deb_pkg_ver']
+
 
 def test_postgres_binary(postgresql_binary):
     assert postgresql_binary.exists
@@ -172,6 +180,7 @@ def test_postgres_client_version(host, get_psql_binary_path):
     result = host.check_output(cmd)
     assert settings.MAJOR_VER in result.strip("\n"), result.stdout
 
+
 def test_insert_data(insert_data):
     assert insert_data == "100000", insert_data
 
@@ -200,10 +209,11 @@ def test_extenstions_list(extension_list, host, extension):
         if extension in ['plpythonu', "plpython2u", 'jsonb_plpython2u', 'ltree_plpython2u', 'jsonb_plpythonu',
                             'ltree_plpythonu', 'hstore_plpythonu', 'hstore_plpython2u']:
             pytest.skip("Skipping extension " + extension + " for DEB based in pg: " + os.getenv("VERSION"))
-    # Skip adminpack extension for PostgreSQL 17
-    if settings.MAJOR_VER in ["17"] and extension == 'adminpack':
+    # Skip adminpack extension for PostgreSQL 17,18 
+    if settings.MAJOR_VER in ["17","18"] and extension == 'adminpack':
         pytest.skip("Skipping adminpack extension as it is dropped in PostgreSQL 17")
     assert extension in extension_list
+
 
 @pytest.mark.parametrize("extension", EXTENSIONS)
 def test_enable_extension(host, get_psql_binary_path , extension):
@@ -231,8 +241,8 @@ def test_enable_extension(host, get_psql_binary_path , extension):
         'postgis_topology-3','address_standardizer_data_us','postgis_tiger_geocoder','postgis_raster','postgis_topology',
         'postgis_sfcgal','address_standardizer-3','postgis-3','address_standardizer','postgis','address_standardizer_data_us-3']:
             pytest.skip("Skipping extension " + extension + " due to multiple dependencies. Already being checked in test_tools.py.")
-    # Skip adminpack extension for PostgreSQL 17
-    if settings.MAJOR_VER in ["17"] and extension == 'adminpack':
+    # Skip adminpack extension for PostgreSQL 17,18
+    if settings.MAJOR_VER in ["17","18"] and extension == 'adminpack':
         pytest.skip("Skipping adminpack extension as it is dropped in PostgreSQL 17")
     with host.sudo("postgres"):
         install_extension = host.run(get_psql_binary_path + " -c 'CREATE EXTENSION IF NOT EXISTS \"{}\";'".format(extension))
@@ -243,6 +253,7 @@ def test_enable_extension(host, get_psql_binary_path , extension):
             extensions = host.run(get_psql_binary_path + " -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $1}'")
         assert extensions.rc == 0, extensions.stderr
         assert extension in set(extensions.stdout.split()), extensions.stdout
+
 
 @pytest.mark.parametrize("extension", EXTENSIONS[::-1])
 def test_drop_extension(host,get_psql_binary_path, extension):
@@ -270,8 +281,8 @@ def test_drop_extension(host,get_psql_binary_path, extension):
         'postgis_topology-3','address_standardizer_data_us','postgis_tiger_geocoder','postgis_raster','postgis_topology',
         'postgis_sfcgal','address_standardizer-3','postgis-3','address_standardizer','postgis','address_standardizer_data_us-3']:
             pytest.skip("Skipping extension " + extension + " due to multiple dependencies. Already being checked in test_tools.py.")
-    # Skip adminpack extension for PostgreSQL 17
-    if settings.MAJOR_VER in ["17"] and extension == 'adminpack':
+    # Skip adminpack extension for PostgreSQL 17, 18
+    if settings.MAJOR_VER in ["17","18"] and extension == 'adminpack':
         pytest.skip("Skipping adminpack extension as it is dropped in PostgreSQL 17")
     with host.sudo("postgres"):
         drop_extension = host.run(get_psql_binary_path + " -c 'DROP EXTENSION if exists \"{}\" CASCADE;'".format(extension))
@@ -283,6 +294,7 @@ def test_drop_extension(host,get_psql_binary_path, extension):
         assert extensions.rc == 0, extensions.stderr
         assert extension not in set(extensions.stdout.split()), extensions.stdout
 
+
 @pytest.mark.upgrade
 def test_plpgsql_extension(host,get_psql_binary_path):
     with host.sudo("postgres"):
@@ -291,6 +303,7 @@ def test_plpgsql_extension(host,get_psql_binary_path):
             extensions = host.run(get_psql_binary_path + " -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $1}'")
         assert extensions.rc == 0, extensions.stderr
         assert "plpgsql" in set(extensions.stdout.split()), extensions.stdout
+
 
 @pytest.mark.parametrize("file", DEB_FILES)
 def test_deb_files(host, file):
@@ -303,6 +316,7 @@ def test_deb_files(host, file):
         assert f.size > 0
         assert f.content_string != ""
         assert f.user == "postgres"
+
 
 @pytest.mark.parametrize("file", RHEL_FILES)
 def test_rpm_files(file, host):
@@ -326,7 +340,7 @@ def test_language(host,get_psql_binary_path, language):
         # if dist.lower() in ["redhat", "centos", "rhel", "rocky", "ol"]:
         #     if "python3" in language:
         #         pytest.skip("Skipping python3 language for Centos or RHEL")
-        if dist.lower() in rpm_dists and language in ['plpythonu', "plpython2u"] and settings.MAJOR_VER in ["12", "13" , "14", "15", "16","17"]:
+        if dist.lower() in rpm_dists and language in ['plpythonu', "plpython2u"]:
             pytest.skip("Skipping python2 extensions for RHEL on Major version 16")
         if dist.lower() in deb_dists and language in ['plpythonu', "plpython2u"]:
             pytest.skip("Skipping python2 extensions for DEB based")
@@ -344,6 +358,7 @@ def test_language(host,get_psql_binary_path, language):
             assert drop_lang.rc == 0, drop_lang.stderr
             assert drop_lang.stdout.strip("\n") in ["DROP LANGUAGE", "DROP EXTENSION"], lang.stdout
 
+
 @pytest.mark.upgrade
 def test_postgres_client_string(host, get_psql_binary_path):
     if settings.MAJOR_VER in ["11"]:
@@ -353,6 +368,7 @@ def test_postgres_client_string(host, get_psql_binary_path):
     else:
         assert f"psql (PostgreSQL) {pg_versions['version']}" in host.check_output(f"{get_psql_binary_path}  -V")
 
+
 # def test_start_stop_postgresql(start_stop_postgresql):
 #     assert start_stop_postgresql.rc == 0, start_stop_postgresql.rc
 #     assert "server is running" in start_stop_postgresql.stdout, start_stop_postgresql.stdout
@@ -361,3 +377,17 @@ def test_postgres_client_string(host, get_psql_binary_path):
 # def test_restart_postgresql(restart_postgresql):
 #     assert restart_postgresql.rc == 0, restart_postgresql.stderr
 #     assert "server is running" in restart_postgresql.stdout, restart_postgresql.stdout
+
+
+def test_build_with_liburing(host, get_server_bin_path):
+    if settings.MAJOR_VER not in ["18"]:
+        pytest.skip("Skipping, test only for PostgreSQL 18 version")
+
+    distribution = host.system_info.distribution.lower()
+    if distribution in ["redhat", "centos", "rhel", "rocky", "ol"] and \
+    host.system_info.release.startswith("8"):
+        pytest.skip(f"liburing not supported on {distribution} 8 for postgres {settings.MAJOR_VER}")
+
+    cmd = f"{get_server_bin_path}/pg_config --configure"
+    output = host.check_output(cmd)
+    assert '--with-liburing' in output, "PostgreSQL 18 was built without --with-liburing"
