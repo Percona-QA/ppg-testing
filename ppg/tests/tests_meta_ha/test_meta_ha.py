@@ -21,6 +21,7 @@ def test_deb_package_is_installed(host, package):
     pkg = host.package(package)
     assert pkg.is_installed
 
+
 @pytest.mark.upgrade
 @pytest.mark.parametrize("package", RPM_PACKAGES)
 def test_rpm_package_is_installed(host, package):

@@ -47,6 +47,26 @@
         - libhttp-server-simple-perl
         - python3-pykmip
         - libjson-perl
+        - libicu-dev
+        - libzstd-dev
+        - jq
+        - liburing-dev
+
+  - name: Ensure correct lz4 package is installed (Debian/Ubuntu)
+    ansible.builtin.apt:
+      name: "{{ lz4_package }}"
+      state: present
+      update_cache: yes
+    vars:
+      lz4_package: >-
+        {% if ansible_distribution == 'Debian' and (ansible_distribution_major_version | int) < 13 %}
+          liblz4-tool
+        {% elif ansible_distribution == 'Ubuntu' and (ansible_distribution_major_version | int) <= 24 %}
+          liblz4-tool
+        {% else %}
+          lz4
+        {% endif %}
+    when: ansible_os_family == "Debian"
 
   - name: Install rename
     ansible.builtin.shell: sudo DEBIAN_FRONTEND=noninteractive apt install -y rename
@@ -83,9 +103,9 @@
   - name: Include KMIP server setup playbook
     include_tasks: run_kmip_vault_server.yml
 
-  - name: Change ownership of /tmp/vault_env to postgres
+  - name: Change ownership of /tmp/bao_env to postgres
     ansible.builtin.file:
-      path: /tmp/vault_env
+      path: /tmp/bao_env
       owner: postgres
       group: admin
       recurse: true
@@ -240,12 +260,12 @@
   # - name: Run server-check-world
   #   shell: | 
   #     export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
-  #     export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
+  #     export BAO_CACERT_FILE=/tmp/vault_env/vault_ca.crt
   #     export VAULT_ADDR=https://127.0.0.1:8200
   #     export VAULT_TOKEN=root
 
   #     echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
-  #     echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
+  #     echo "Using Vault CA cert file: $BAO_CACERT_FILE"
   #     cd /tmp/postgres && make -s check-world
   #   become_user: postgres
   #   args:
@@ -275,12 +295,12 @@
   #     psql -c "show default_table_access_method ;"
 
   #     export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
-  #     export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
+  #     export BAO_CACERT_FILE=/tmp/vault_env/vault_ca.crt
   #     export VAULT_ADDR=https://127.0.0.1:8200
   #     export VAULT_TOKEN=root
 
   #     echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
-  #     echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
+  #     echo "Using Vault CA cert file: $BAO_CACERT_FILE"
   #     cd /tmp/postgres/contrib/pg_tde && make -s check -k
   #   become_user: postgres
   #   args:
@@ -330,12 +350,12 @@
   #     psql -c "show default_table_access_method ;"
 
   #     export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
-  #     export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
+  #     export BAO_CACERT_FILE=/tmp/vault_env/vault_ca.crt
   #     export VAULT_ADDR=https://127.0.0.1:8200
   #     export VAULT_TOKEN=root
 
   #     echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
-  #     echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
+  #     echo "Using Vault CA cert file: $BAO_CACERT_FILE"
   #     export TDE_MODE=1 && cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world -k
   #   become_user: postgres
   #   args:

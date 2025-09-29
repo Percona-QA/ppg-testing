@@ -1,0 +1,210 @@
+---
+- name: Configure repository
+  include_tasks: ../../../tasks/install_percona_release.yml
+
+- name: Setting facts so that they will be persisted in the fact cache
+  ansible.builtin.set_fact:
+    pg_version_to_install: "{{ lookup('env', 'FROM_VERSION') | replace('ppg-','') }}"
+    upgrade_to_pg_version: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
+
+- name: Setup initial (old) repository
+  command: percona-release enable {{ pg_version }} {{ repo }}
+  vars:
+    repo: "{{ lookup('env', 'FROM_REPO') }}"
+    pg_version: "{{ lookup('env', 'FROM_VERSION') }}"
+
+- name: install Percona Platform for PostgreSQL 18 packages
+  include_tasks: ../../../../tasks/install_ppg18.yml
+
+- name: Initialize Postgres RHEL
+  command: /usr/pgsql-18/bin/postgresql-18-setup initdb
+  environment:
+    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  when: ansible_os_family == "RedHat"
+
+- name: Install PPG tools
+  include_tasks: ../../../../tasks/install_ppg18_tools.yml
+
+- name: Start Postgres RHEL
+  service:
+    name: postgresql-18
+    state: started
+    enabled: true
+  when: ansible_os_family == "RedHat"
+
+- name: Start postgresql service for Debian based
+  service:
+    name: postgresql
+    state: started
+    enabled: true
+  when: ansible_os_family == "Debian"
+
+- name: Disable old repository
+  command: percona-release disable {{ pg_version }} {{ repo }}
+  vars:
+    repo: "{{ lookup('env', 'FROM_REPO') }}"
+    pg_version: "{{ lookup('env', 'FROM_VERSION') }}"
+
+- name: Setup new repository
+  command: percona-release enable {{ pg_version }} {{ repo }}
+  vars:
+    repo: "{{ lookup('env', 'TO_REPO') }}"
+    pg_version: "{{ lookup('env', 'VERSION') }}"
+
+- name: install Percona Platform for PostgreSQL deb packages
+  apt:
+    name: "{{ packages }}"
+    update_cache: yes
+    state: latest
+  vars:
+    packages:
+      - percona-postgresql
+      - percona-postgresql-18
+      - percona-postgresql-all
+      - percona-postgresql-client
+      - percona-postgresql-client-18
+      - percona-postgresql-common
+      - percona-postgresql-contrib
+      - percona-postgresql-doc
+      - percona-postgresql-doc-18
+      - percona-postgresql-plperl-18
+      - percona-postgresql-plpython3-18
+      - percona-postgresql-pltcl-18
+      - percona-postgresql-server-dev-18
+      - percona-postgresql-server-dev-all
+      - percona-postgresql-18-dbgsym
+      - percona-postgresql-client-18-dbgsym
+      - percona-postgresql-plperl-18-dbgsym
+      - percona-postgresql-plpython3-18-dbgsym
+      - percona-postgresql-pltcl-18-dbgsym
+      - postgresql-client-common
+      - postgresql-common
+
+  when: ansible_os_family == "Debian"
+  environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+- name: install Percona Platform for PostgreSQL deb packages
+  apt:
+    name: "{{ packages }}"
+    update_cache: yes
+    state: latest
+  vars:
+    packages:
+    - percona-postgresql-plpython3-18
+    - percona-postgresql-plpython3-18-dbgsym
+  when:
+    - ansible_os_family == "Debian"
+
+#Remove conflicting package to make installation move on
+- name: Remove conflicting percona-postgresql-common-dev
+  ansible.builtin.package:
+    name: percona-postgresql-common-dev
+    state: absent
+  when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('18.5', '>=', strict=True))
+
+- name: install Percona Platform for PostgreSQL rpm packages for RHEL
+  yum:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+        - percona-postgresql-client-common
+        - percona-postgresql-common
+        - percona-postgresql18
+        - percona-postgresql18-contrib
+        - percona-postgresql18-debuginfo
+        - percona-postgresql18-devel
+        - percona-postgresql18-docs
+        - percona-postgresql18-libs
+        - percona-postgresql18-llvmjit
+        - percona-postgresql18-plpython3
+        - percona-postgresql18-plperl
+        - percona-postgresql18-pltcl
+        - percona-postgresql18-server
+        - percona-postgresql18-test
+        - percona-postgresql18-contrib-debuginfo
+        - percona-postgresql18-debuginfo
+        - percona-postgresql18-debugsource
+        - percona-postgresql18-devel-debuginfo
+        - percona-postgresql18-libs-debuginfo
+        - percona-postgresql18-plperl-debuginfo
+        - percona-postgresql18-pltcl-debuginfo
+        - percona-postgresql18-plpython3-debuginfo
+        - percona-postgresql18-server-debuginfo
+  when: ansible_os_family == "RedHat"
+  environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+- name: Determine required PostgreSQL dev package for RHEL
+  set_fact:
+    pg_dev_package: >-
+      {{ 'percona-postgresql-server-dev-all'
+         if (upgrade_to_pg_version | string is version('18.4', '<=', strict=True))
+         else 'percona-postgresql-common-dev' }}
+  when: ansible_os_family == "RedHat"
+
+- name: Install PostgreSQL dev package on RHEL
+  yum:
+    name: "{{ pg_dev_package }}"
+    state: latest
+    update_cache: yes
+  when: ansible_os_family == "RedHat"
+
+# - name: Install postgresql-server-dev-all RHEL
+#   yum:
+#     name: "{{ packages }}"
+#     state: latest
+#     update_cache: yes
+#   vars:
+#     packages:
+#     - percona-postgresql-server-dev-all
+#   when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('18.4', '<=', strict=True))
+
+# - name: Install postgresql-common-dev RHEL
+#   yum:
+#     name: "{{ packages }}"
+#     state: latest
+#     update_cache: yes
+#   vars:
+#     packages:
+#     - percona-postgresql-common-dev
+#   when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('18.5', '>=', strict=True))
+
+- name: Stop postgresql service for RHEL based
+  service:
+    name: postgresql-18
+    state: stopped
+  when: ansible_os_family == "RedHat"
+
+- name: Stop postgresql service for Debian based
+  service:
+    name: postgresql
+    state: stopped
+  when: ansible_os_family == "Debian"
+
+- pause:
+    minutes: 1
+
+- name: Start postgresql service for RHEL based
+  service:
+    name: postgresql-18
+    state: started
+    enabled: true
+  when: ansible_os_family == "RedHat"
+
+- name: Start postgresql service for Debian based
+  service:
+    name: postgresql
+    state: started
+    enabled: true
+  when: ansible_os_family == "Debian"
+
+- name: Display ppg version
+  become_user: postgres
+  shell: psql -c "select version()"
+  register: results
+
+- debug: var=results.stdout_lines
+

@@ -4,7 +4,7 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: ujammy-arm64-${BUILD_NUMBER}-${JOB_NAME}
+  - name: ujammy-arm-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
     image: ami-0424722f9acea213b
     vpc_subnet_id: subnet-0fad4db6fdd8025b6

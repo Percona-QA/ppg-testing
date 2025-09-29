@@ -96,91 +96,242 @@
   args:
     executable: /bin/bash
 
-- name: Create Vault env dir
-  ansible.builtin.file:
-    path: /tmp/vault_env
-    state: directory
-    mode: '0755'
+# - name: Create Vault env dir
+#   ansible.builtin.file:
+#     path: /tmp/vault_env
+#     state: directory
+#     mode: '0755'
 
-# - name: Run Vault container with TLS enabled in dev mode
-#   community.docker.docker_container:
-#     name: vault
-#     image: hashicorp/vault:latest
+# # - name: Run Vault container with TLS enabled in dev mode
+# #   community.docker.docker_container:
+# #     name: vault
+# #     image: hashicorp/vault:latest
+# #     state: started
+# #     restart_policy: unless-stopped
+# #     ports:
+# #       - "8200:8200"
+# #     env:
+# #       VAULT_DEV_ROOT_TOKEN_ID: root
+# #       BAO_ADDR: https://0.0.0.0:8200
+# #     capabilities:
+# #       - IPC_LOCK
+# #     command: >
+# #       vault server -dev
+# #       -dev-tls
+# #       -dev-listen-address=0.0.0.0:8200
+# #     volumes:
+# #       - /tmp/vault_env:/vault/env  # Shared volume for environment output (optional)
+
+# - name: Run Vault container (fallback)
+#   become: true
+#   ansible.builtin.shell: |
+    # docker run -d --name vault \
+    #   --cap-add=IPC_LOCK \
+    #   -e VAULT_DEV_ROOT_TOKEN_ID=root \
+    #   -e BAO_ADDR=https://0.0.0.0:8200 \
+    #   -p 8200:8200 \
+    #   -v /tmp/vault_env:/vault/env \
+    #   hashicorp/vault:latest \
+    #   vault server -dev -dev-tls -dev-listen-address=0.0.0.0:8200
+
+
+# - name: Wait for Vault with TLS to start
+#   ansible.builtin.wait_for:
+#     port: 8200
+#     host: 127.0.0.1
+#     delay: 5
+#     timeout: 30
 #     state: started
-#     restart_policy: unless-stopped
-#     ports:
-#       - "8200:8200"
-#     env:
-#       VAULT_DEV_ROOT_TOKEN_ID: root
-#       VAULT_ADDR: https://0.0.0.0:8200
-#     capabilities:
-#       - IPC_LOCK
-#     command: >
-#       vault server -dev
-#       -dev-tls
-#       -dev-listen-address=0.0.0.0:8200
-#     volumes:
-#       - /tmp/vault_env:/vault/env  # Shared volume for environment output (optional)
 
-- name: Run Vault container (fallback)
-  become: true
-  ansible.builtin.shell: |
-    docker run -d --name vault \
-      --cap-add=IPC_LOCK \
-      -e VAULT_DEV_ROOT_TOKEN_ID=root \
-      -e VAULT_ADDR=https://0.0.0.0:8200 \
-      -p 8200:8200 \
-      -v /tmp/vault_env:/vault/env \
-      hashicorp/vault:latest \
-      vault server -dev -dev-tls -dev-listen-address=0.0.0.0:8200
+# - name: Extract Vault root token from logs
+#   become: true
+#   ansible.builtin.shell: |
+#     docker logs vault 2>&1 | grep 'Root Token:' | tail -1 | awk -F': ' '{print $2}' | xargs
+#   register: vault_root_token
+#   changed_when: false
 
+# - name: Save Vault root token to file
+#   copy:
+#     dest: /tmp/vault_env/vault_token.txt
+#     content: "{{ vault_root_token.stdout }}"
+#     mode: '0600'
 
-- name: Wait for Vault with TLS to start
-  ansible.builtin.wait_for:
-    port: 8200
-    host: 127.0.0.1
-    delay: 5
-    timeout: 30
-    state: started
+# - name: Extract CA cert path from Vault container logs
+#   shell: docker logs vault 2>&1 | grep BAO_CACERT | tail -1 | awk -F"'" '{print $2}'
+#   register: ca_cert_path_output
+#   changed_when: false
+#   become: true
 
+# - name: Set fact with parsed CA cert path
+#   set_fact:
+#     vault_ca_cert_path: "{{ ca_cert_path_output.stdout }}"
 
-- name: Extract Vault root token from logs
-  become: true
-  ansible.builtin.shell: |
-    docker logs vault 2>&1 | grep 'Root Token:' | tail -1 | awk -F': ' '{print $2}' | xargs
-  register: vault_root_token
-  changed_when: false
+# - name: Debug CA cert path
+#   debug:
+#     msg: "Vault CA cert path inside container: {{ vault_ca_cert_path }}"
 
-- name: Save Vault root token to file
-  copy:
-    dest: /tmp/vault_env/vault_token.txt
-    content: "{{ vault_root_token.stdout }}"
-    mode: '0600'
+# - name: Copy Vault CA cert from container
+#   ansible.builtin.shell: |
+#     docker cp vault:{{ vault_ca_cert_path }} /tmp/vault_env/vault_ca.crt
+#   args:
+#     executable: /bin/bash
+#   become: true
 
-- name: Extract CA cert path from Vault container logs
-  shell: docker logs vault 2>&1 | grep VAULT_CACERT | tail -1 | awk -F"'" '{print $2}'
-  register: ca_cert_path_output
-  changed_when: false
-  become: true
+# - name: Show Vault debug info
+#   debug:
+#     msg:
+#       - "Vault Root Token: {{ vault_root_token.stdout }}"
+#       - "Vault CA cert saved at: /tmp/vault_env/vault_ca.crt"
 
-- name: Set fact with parsed CA cert path
-  set_fact:
-    vault_ca_cert_path: "{{ ca_cert_path_output.stdout }}"
+# -----------------------
+# - name: Create Vault env dir
+#   ansible.builtin.file:
+#     path: /tmp/bao_env
+#     state: directory
+#     mode: '0755'
 
-- name: Debug CA cert path
-  debug:
-    msg: "Vault CA cert path inside container: {{ vault_ca_cert_path }}"
+# - name: Run openbao container (fallback)
+#   become: true
+#   ansible.builtin.shell: |
+#     docker run -d --name bao \
+#       --cap-add=IPC_LOCK \
+#       -e VAULT_DEV_ROOT_TOKEN_ID=root \
+#       -e BAO_ADDR=https://0.0.0.0:8200 \
+#       -p 8200:8200 \
+#       -v /tmp/bao_env:/bao/env \
+#       openbao/openbao \
+#       bao server -dev -dev-tls -dev-listen-address=0.0.0.0:8200
 
-- name: Copy Vault CA cert from container
-  ansible.builtin.shell: |
-    docker cp vault:{{ vault_ca_cert_path }} /tmp/vault_env/vault_ca.crt
-  args:
-    executable: /bin/bash
-  become: true
+# - name: Wait for Vault with TLS to start
+#   ansible.builtin.wait_for:
+#     port: 8200
+#     host: 127.0.0.1
+#     delay: 5
+#     timeout: 30
+#     state: started
 
-- name: Show Vault debug info
-  debug:
+# - name: Extract Vault root token from logs
+#   become: true
+#   ansible.builtin.shell: |
+#     docker logs bao 2>&1 | grep 'Root Token:' | tail -1 | awk -F': ' '{print $2}' | xargs
+#   register: bao_root_token
+#   changed_when: false
+
+# - name: Save Vault root token to file
+#   copy:
+#     dest: /tmp/bao_env/bao_token.txt
+#     content: "{{ bao_root_token.stdout }}"
+#     mode: '0600'
+
+# - name: Extract CA cert path from Vault container logs
+#   shell: docker logs bao 2>&1 | grep BAO_CACERT | tail -1 | awk -F"'" '{print $2}'
+#   register: ca_cert_path_output
+#   changed_when: false
+#   become: true
+
+# - name: Set fact with parsed CA cert path
+#   set_fact:
+#     bao_ca_cert_path: "{{ ca_cert_path_output.stdout }}"
+
+# - name: Debug CA cert path
+#   debug:
+#     msg: "Vault CA cert path inside container: {{ bao_ca_cert_path }}"
+
+# - name: Copy Vault CA cert from container
+#   ansible.builtin.shell: |
+#     docker cp bao:{{ bao_ca_cert_path }} /tmp/bao_env/bao_ca.crt
+#   args:
+#     executable: /bin/bash
+#   become: true
+
+# - name: Show Vault debug info
+#   debug:
+#     msg:
+#       - "Vault Root Token: {{ bao_root_token.stdout }}"
+#       - "Vault CA cert saved at: /tmp/bao_env/bao_ca.crt"
+
+# - name: Create namespace "pgns" inside Bao container
+#   community.docker.docker_container_exec:
+#     container: bao
+#     command: |
+#       bash -c "export VAULT_SKIP_VERIFY=true && bao namespace create 'pgns'"
+#   register: create_ns
+#   ignore_errors: true
+
+# - name: Enable kv-v2 secrets in namespace "pgns"
+#   community.docker.docker_container_exec:
+#     container: bao
+#     command: |
+#       bash -c "export VAULT_SKIP_VERIFY=true && bao secrets enable -ns=pgns -path=secret -description='Production Secrets' kv-v2"
+#   register: enable_kv
+#   ignore_errors: true
+
+# - name: Debug namespace creation output
+#   debug:
+#     var: create_ns.stdout_lines
+
+# - name: Debug kv enable output
+#   debug:
+#     var: enable_kv.stdout_lines
+
+- name: Set Bao version and base URL facts
+  ansible.builtin.set_fact:
+    bao_version: "2.4.3"
+    bao_base_url: "https://github.com/openbao/openbao/releases/download/v2.4.3"
+
+- name: Detect architecture
+  ansible.builtin.set_fact:
+    arch: >-
+      {% if ansible_architecture in ['x86_64', 'amd64'] %}amd64
+      {% elif ansible_architecture in ['aarch64', 'arm64'] %}arm64
+      {% else %}unsupported{% endif %}
+
+- name: Fail if architecture is unsupported
+  ansible.builtin.fail:
+    msg: "Unsupported architecture: {{ ansible_architecture }}"
+  when: arch == "unsupported"
+
+- name: Debug Bao URL and file (for safety)
+  ansible.builtin.set_fact:
+    OS_ARCH: "{{ arch | trim }}"
+
+- name: Set Bao package extension fact
+  ansible.builtin.set_fact:
+    bao_pkg_ext: "{{ 'deb' if ansible_os_family == 'Debian' else 'rpm' }}"
+
+- name: Set Bao package URL and filename facts
+  ansible.builtin.set_fact:
+    bao_pkg_file: "/tmp/bao_{{ bao_version }}_linux_{{ OS_ARCH }}.{{ bao_pkg_ext }}"
+    bao_pkg_url: "{{ bao_base_url }}/bao_{{ bao_version }}_linux_{{ OS_ARCH }}.{{ bao_pkg_ext }}"
+
+- name: Debug Bao URL and file (for safety)
+  ansible.builtin.debug:
     msg:
-      - "Vault Root Token: {{ vault_root_token.stdout }}"
-      - "Vault CA cert saved at: /tmp/vault_env/vault_ca.crt"
+      - "URL: '{{ bao_pkg_url }}'"
+      - "File: '{{ bao_pkg_file }}'"
 
+- name: Download OpenBao package
+  ansible.builtin.get_url:
+    url: "{{ bao_pkg_url | trim }}"
+    dest: "{{ bao_pkg_file | trim }}"
+    mode: '0644'
+
+- name: Install OpenBao on Debian-based systems
+  ansible.builtin.apt:
+    deb: "{{ bao_pkg_file | trim }}"
+  when: ansible_os_family == "Debian"
+
+- name: Install OpenBao on RHEL-based systems
+  ansible.builtin.dnf:
+    name: "{{ bao_pkg_file | trim }}"
+    disable_gpg_check: true
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Verify Bao installation
+  ansible.builtin.command: bao version
+  register: bao_version_out
+  changed_when: false
+
+- debug:
+    msg: "✅ Installed {{ bao_version_out.stdout }}"

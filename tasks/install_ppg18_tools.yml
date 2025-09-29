@@ -1,0 +1,754 @@
+---
+  - name: Setting facts so that they will be persisted in the fact cache
+    ansible.builtin.set_fact:
+      pgaudit_rhel_package_name: "percona-pgaudit"
+      postgis_rhel_package_name_prefix: "percona-postgis35"
+
+  - name: Setting facts so that they will be persisted in the fact cache
+    ansible.builtin.set_fact:
+      pgaudit_rhel_package_name: "percona-pgaudit18"
+      postgis_rhel_package_name_prefix: "percona-postgis35_18"
+    when: (pg_version_to_install | string is version('18.0', '>=', strict=True))
+
+  - debug:
+      msg: "Value of pgaudit_rhel_package_name is : {{ pgaudit_rhel_package_name }}"
+
+  - debug:
+      msg: "Value of postgis_rhel_package_name_prefix is : {{ postgis_rhel_package_name_prefix }}"
+
+  - name: Install additional tools for pgbackrest test Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+    vars:
+      packages:
+        - libxml-checker-perl
+        - libyaml-perl
+        - texlive-latex-base
+        - texlive-latex-extra
+        - texlive-fonts-recommended
+        - lcov
+        - rsync
+        - zlib1g-dev
+        - libssl-dev
+        - libxml2-dev
+        - libpq-dev
+        - pkg-config
+        - valgrind
+        - liblz4-dev
+        - zstd
+        - libzstd-dev
+        - bzip2
+        - libbz2-dev
+#        - libsharyanto-string-util-perl
+        - libipc-run-perl
+        - libtext-csv-xs-perl
+    when: ansible_os_family == "Debian"
+
+  - name: Ensure correct lz4 package is installed (Debian/Ubuntu)
+    ansible.builtin.apt:
+      name: "{{ lz4_package }}"
+      state: present
+      update_cache: yes
+    vars:
+      lz4_package: >-
+        {% if ansible_distribution == 'Debian' and (ansible_distribution_major_version | int) < 13 %}
+          liblz4-tool
+        {% elif ansible_distribution == 'Ubuntu' and (ansible_distribution_major_version | int) <= 24 %}
+          liblz4-tool
+        {% else %}
+          lz4
+        {% endif %}
+    when: ansible_os_family == "Debian"
+
+  - name: Install pgaudit Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-postgresql-18-pgaudit
+        - percona-postgresql-18-pgaudit-dbgsym
+    when: ansible_os_family == "Debian"
+
+  - name: Install pgaudit RHEL
+    yum:
+      name: "{{ pgaudit_rhel_package_name }}"
+      state: latest
+      update_cache: yes
+    when: ansible_os_family == "RedHat"
+
+  - name: Install pgbackrest Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pgbackrest
+        - percona-pgbackrest-doc
+        - percona-pgbackrest-dbgsym
+    when: ansible_os_family == "Debian"
+
+  - name: Install pgbackrest RHEL
+    yum:
+      name: percona-pgbackrest
+      state: latest
+      update_cache: yes
+    when: ansible_os_family == "RedHat"
+
+  - name: Create pgbackrest directory
+    file:
+      path: /etc/pgbackrest/
+      state: directory
+
+  - name: Create pgbackrest configuration Debian
+    blockinfile:
+      path: /etc/pgbackrest/pgbackrest.conf
+      create: yes
+      block: |
+        [global]
+        repo1-path=/var/lib/pgbackrest
+
+        [testing]
+        pg1-path=/var/lib/postgresql/18/main
+        pg1-port=5432
+    when: ansible_os_family == "Debian"
+
+  - name: Create pgbackrest configuration RHEL
+    blockinfile:
+      path: /etc/pgbackrest/pgbackrest.conf
+      create: yes
+      block: |
+        [global]
+        repo1-path=/var/lib/pgbackrest
+
+        [testing]
+        pg1-path=/var/lib/pgsql/18/data
+        pg1-port=5432
+    when: ansible_os_family == "RedHat"
+
+  - name: Configure backup config for Debian
+    blockinfile:
+      path: /etc/postgresql/18/main/postgresql.conf
+      block: |
+        archive_mode = on
+        archive_command = 'pgbackrest --stanza=testing archive-push %p'
+        max_wal_senders = 10
+        wal_level = logical
+    when: ansible_os_family == "Debian"
+
+  - name: Configure backup config for RHEL
+    blockinfile:
+      path: /var/lib/pgsql/18/data/postgresql.conf
+      block: |
+        archive_mode = on
+        archive_command = 'pgbackrest --stanza=testing archive-push %p'
+        max_wal_senders = 10
+        wal_level = logical
+    when: ansible_os_family == "RedHat"
+
+  - name: Restart Postgres RHEL
+    service:
+      name: postgresql-18
+      state: restarted
+    when: ansible_os_family == "RedHat"
+
+  - name: Restart Postgres Debian
+    command: sudo systemctl restart postgresql
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_os_family == "Debian"
+
+  - name: Install pgrepack Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-postgresql-18-repack
+        - percona-postgresql-18-repack-dbgsym
+    when: ansible_os_family == "Debian"
+
+  - name: Install pgrepack RHEL
+    yum:
+      name: percona-pg_repack18
+      state: latest
+      update_cache: yes
+    when: ansible_os_family == "RedHat"
+
+  - name: Install patroni RPM
+    yum:
+      name: percona-patroni
+      state: latest
+      update_cache: yes
+    when: ansible_os_family == "RedHat"
+
+  - name: Install python3-pip
+    yum:
+      name: python3-pip
+      state: latest
+      update_cache: yes
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9"
+
+  # - name: Install python3 module - patroni[etcd]
+  #   become: true
+  #   command: python3 -m pip install patroni[etcd]
+  #   when: ansible_os_family == "RedHat"
+
+  - name: Install patroni debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-patroni
+        - percona-patroni-doc
+    when: ansible_os_family == "Debian"
+
+  - name: Install pg-stat-monitor RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pg_stat_monitor18
+        - percona-pg_stat_monitor18-debuginfo
+    when: ansible_os_family == "RedHat"
+
+  - name: Install pg-stat-monitor debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pg-stat-monitor18
+        - percona-pg-stat-monitor18-dbgsym
+    when: ansible_os_family == "Debian"
+
+  - name: Install pgbadger RHEL
+    yum:
+      name: percona-pgbadger
+      state: latest
+      update_cache: yes
+    when: ansible_os_family == "RedHat"
+
+  - name: Install pgbadger Debian
+    apt:
+      name: percona-pgbadger
+      state: latest
+      update_cache: yes
+    when: ansible_os_family == "Debian"
+
+  - name: Install CPAN
+    become: true
+    command: yum -y install perl-CPAN
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9"
+
+  - name: Install perl-App-cpanminus
+    become: true
+    command: yum -y install perl-App-cpanminus
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9"
+
+  - name: Install perl module Benchmark
+    become: true
+    command: cpanm Benchmark
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9"
+
+  - name: Install percona-pgaudit18_set_user RHEL
+    yum:
+      name: percona-pgaudit18_set_user
+      state: latest
+      update_cache: yes
+    when: ansible_os_family == "RedHat"
+
+  - name: Install percona-pgaudit18_set_user Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pgaudit18-set-user
+        - percona-pgaudit18-set-user-dbgsym
+    when: ansible_os_family == "Debian"
+
+  - name: Install percona-pgbouncer RHEL
+    yum:
+      name: percona-pgbouncer
+      state: latest
+      update_cache: yes
+    when: ansible_os_family == "RedHat"
+
+  - name: Install percona-pgbouncer Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pgbouncer
+        - percona-pgbouncer-dbgsym
+    when: ansible_os_family == "Debian"
+
+  - name: Install percona-pgpool RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pgpool-II-pg18
+        - percona-pgpool-II-pg18-extensions
+    when: ansible_os_family == "RedHat"
+
+  - name: Install percona-pgpool Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pgpool2
+        - libpgpool2
+    when: ansible_os_family == "Debian"
+
+  - name: Enable llvm-toolset for RHEL8 to install PostGIS
+    become: true
+    command: dnf module enable llvm-toolset -y
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+
+  - name: Install percona-postgis RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - "{{postgis_rhel_package_name_prefix}}"
+      - "{{postgis_rhel_package_name_prefix}}-client"
+      - "{{postgis_rhel_package_name_prefix}}-client-debuginfo"
+      - "{{postgis_rhel_package_name_prefix}}-debuginfo"
+      - "{{postgis_rhel_package_name_prefix}}-devel"
+      - "{{postgis_rhel_package_name_prefix}}-docs"
+      - "{{postgis_rhel_package_name_prefix}}-gui"
+      - "{{postgis_rhel_package_name_prefix}}-gui-debuginfo"
+      - "{{postgis_rhel_package_name_prefix}}-llvmjit"
+      - "{{postgis_rhel_package_name_prefix}}-utils"
+    when: ansible_os_family == "RedHat"
+
+  - name: Install percona-postgis Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-postgresql-18-postgis-3
+        - percona-postgresql-18-postgis-3-scripts
+        - percona-postgresql-postgis-scripts
+        - percona-postgresql-postgis
+        - percona-postgis
+    when: ansible_os_family == "Debian"
+
+  - name: Install percona-postgis libsfcgal1 on Ubuntu-18
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - libsfcgal1
+    when: ansible_os_family == "Debian" and ansible_distribution_major_version == "18"
+
+  - name: Install percona-wal2json18 RHEL
+    yum:
+      name: percona-wal2json18
+      state: latest
+      update_cache: yes
+    when: ansible_os_family == "RedHat"
+
+  - name: Install percona-wal2json18 Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-postgresql-18-wal2json
+        - percona-postgresql-18-wal2json-dbgsym
+    when: ansible_os_family == "Debian"
+
+  - name: Install percona-pg_gather RHEL
+    yum:
+      name: percona-pg_gather
+      state: latest
+      update_cache: yes
+    when: ansible_os_family == "RedHat"
+
+  - name: Install percona-pg_gather Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pg-gather
+    when: ansible_os_family == "Debian"
+
+  - name: Add extensions to postgresql.conf for Debian
+    lineinfile:
+      path: /etc/postgresql/18/main/postgresql.conf
+      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
+    when: (ansible_os_family == "Debian")
+
+  - name: Add extensions to postgresql.conf for RHEL
+    lineinfile:
+      path: /var/lib/pgsql/18/data/postgresql.conf
+      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
+    when: (ansible_os_family == "RedHat")
+
+  - name: Remove pg_hba.conf debian
+    file:
+      path: /var/lib/pgsql/18/data/pg_hba.conf
+      state: absent
+    when: ansible_os_family == "RedHat"
+
+  - name: Remove pg_hba.conf debian
+    file:
+      path: /etc/postgresql/18/main/pg_hba.conf
+      state: absent
+    when: ansible_os_family == "Debian"
+
+  - name: Edit pg_hba.conf RHEL
+    blockinfile:
+      path: /var/lib/pgsql/18/data/pg_hba.conf
+      create: yes
+      owner: postgres
+      block: |
+        local   all             all                                     trust
+        host    all             all             127.0.0.1/32            trust
+        host    all             all             ::1/128                 trust
+        local   replication     all                                     trust
+        host    replication     all             127.0.0.1/32            trust
+        host    replication     all             ::1/128                 trust
+    when: ansible_os_family == "RedHat"
+
+  - name: Edit pg_hba.conf Debian
+    blockinfile:
+      create: yes
+      owner: postgres
+      path: /etc/postgresql/18/main/pg_hba.conf
+      block: |
+        local   all             all                                     trust
+        host    all             all             127.0.0.1/32            trust
+        host    all             all             ::1/128                 trust
+        local   replication     all                                     trust
+        host    replication     all             127.0.0.1/32            trust
+        host    replication     all             ::1/128                 trust
+    when: ansible_os_family == "Debian"
+
+  - name: Restart Postgres RHEL
+    service:
+      name: postgresql-18
+      state: restarted
+    when: ansible_os_family == "RedHat"
+    register: out
+
+  - name: Restart Postgres Debian
+    command: sudo systemctl restart postgresql
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_os_family == "Debian"
+
+  - name: Start patroni
+    service:
+      name: patroni
+      state: started
+      enabled: yes
+
+  - name: Install etcd packages RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - etcd
+      - percona-haproxy
+      - python3-etcd
+    when: ansible_os_family == "RedHat"
+
+  - name: Restart etcd RHEL
+    service:
+      name: etcd
+      state: restarted
+      enabled: yes
+    when: ansible_os_family == "RedHat"
+
+  - name: Install pgvector packages RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-pgvector_18
+      - percona-pgvector_18-debuginfo
+      - percona-pgvector_18-debugsource
+      - percona-pgvector_18-llvmjit
+    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('18.2', '>=', strict=True))
+
+  - name: Install pgvector packages Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgresql-18-pgvector
+    when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('18.2', '>=', strict=True))
+
+  - name: Install patroni related packages Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - etcd
+        - percona-haproxy
+    when: ansible_os_family == "Debian"
+
+  # - name: Install patroni related dependency on Debian 13
+  #   apt:
+  #     name: "{{ packages }}"
+  #     state: latest
+  #     update_cache: yes
+  #   vars:
+  #     packages:
+  #       - python3-etcd
+  #   when: ansible_os_family == "Debian" and ansible_distribution_major_version == "13"
+
+# when: (ansible_distribution == "Ubuntu") or
+#       (ansible_os_family == "Debian" and ansible_lsb.major_release|int <= 11)
+
+  # - name: Install patroni related packages Debian 12
+  #   apt:
+  #     name: "{{ packages }}"
+  #     state: latest
+  #     update_cache: yes
+  #   vars:
+  #     packages:
+  #       - etcd-server
+  #       - etcd-client
+  #       - percona-haproxy
+  #   when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int >= 12)
+
+  - name: Create /etc/patroni directory
+    file:
+      path: /etc/patroni
+      state: directory
+
+  - name: Create test patroni directory RHEL
+    file:
+      path: /var/lib/pgsql/patroni_test/
+      state: directory
+      owner: postgres
+      group: postgres
+    when: ansible_os_family == "RedHat"
+
+  - name: Create test patroni directory Debian
+    file:
+      path: /var/lib/postgresql/patroni_test/
+      state: directory
+      owner: postgres
+      group: postgres
+    when: ansible_os_family == "Debian"
+
+  - name: Copy postgresql0.yml for patroni service Debian
+    copy:
+      src: postgresql0_deb.yml
+      dest: /var/lib/postgresql/patroni_test/postgresql0.yml
+      owner: postgres
+      group: postgres
+      mode: 0644
+    when: ansible_os_family == "Debian"
+
+  - name: Copy postgresql1.yml for patroni service Debian
+    copy:
+      src: postgresql1_deb.yml
+      dest: /var/lib/postgresql/patroni_test/postgresql1.yml
+      owner: postgres
+      group: postgres
+      mode: 0644
+    when: ansible_os_family == "Debian"
+
+  - name: Copy postgresql2.yml for patroni service Debian
+    copy:
+      src: postgresql2_deb.yml
+      dest: /var/lib/postgresql/patroni_test/postgresql2.yml
+      owner: postgres
+      group: postgres
+      mode: 0644
+    when: ansible_os_family == "Debian"
+
+  - name: Copy postgresql0.yml for patroni service RHEL
+    copy:
+      src: postgresql0.yml
+      dest: /var/lib/pgsql/patroni_test/postgresql0.yml
+      owner: postgres
+      group: postgres
+      mode: 0644
+    when: ansible_os_family == "RedHat"
+
+  - name: Copy postgresql1.yml for patroni service RHEL
+    copy:
+      src: postgresql1.yml
+      dest: /var/lib/pgsql/patroni_test/postgresql1.yml
+      owner: postgres
+      group: postgres
+      mode: 0644
+    when: ansible_os_family == "RedHat"
+
+  - name: Copy postgresql2.yml for patroni service RHEL
+    copy:
+      src: postgresql2.yml
+      dest: /var/lib/pgsql/patroni_test/postgresql2.yml
+      owner: postgres
+      group: postgres
+      mode: 0644
+    when: ansible_os_family == "RedHat"
+
+  - name: Copy patroni0 service file Debian
+    copy:
+      src: patroni0_deb.service
+      dest: /lib/systemd/system/patroni0.service
+      owner: root
+      group: root
+      mode: 0644
+    when: ansible_os_family == "Debian"
+
+  - name: Copy patroni1 service file Debian
+    copy:
+      src: patroni1_deb.service
+      dest: /lib/systemd/system/patroni1.service
+      owner: root
+      group: root
+      mode: 0644
+    when: ansible_os_family == "Debian"
+
+  - name: Copy patroni2 service file Debian
+    copy:
+      src: patroni2_deb.service
+      dest: /lib/systemd/system/patroni2.service
+      owner: root
+      group: root
+      mode: 0644
+    when: ansible_os_family == "Debian"
+
+  - name: Copy patroni0 service file RHEL
+    copy:
+      src: patroni0.service
+      dest: /usr/lib/systemd/system/patroni0.service
+      owner: root
+      group: root
+      mode: 0644
+    when: ansible_os_family == "RedHat"
+
+  - name: Copy patroni1 service file RHEL
+    copy:
+      src: patroni1.service
+      dest: /usr/lib/systemd/system/patroni1.service
+      owner: root
+      group: root
+      mode: 0644
+    when: ansible_os_family == "RedHat"
+
+  - name: Copy patroni2 service file RHEL
+    copy:
+      src: patroni2.service
+      dest: /usr/lib/systemd/system/patroni2.service
+      owner: root
+      group: root
+      mode: 0644
+    when: ansible_os_family == "RedHat"
+
+  - name: Start etcd
+    service:
+      name: etcd
+      state: started
+      enabled: yes
+
+  - name: Start patroni0
+    service:
+      name: patroni0
+      state: started
+      enabled: yes
+
+  - name: Start patroni1
+    service:
+      name: patroni1
+      state: started
+      enabled: yes
+
+  - name: Start patroni2
+    service:
+      name: patroni2
+      state: started
+      enabled: yes
+
+  - name: Copy haproxy.cfg
+    copy:
+      src: haproxy.cfg
+      dest: /etc/haproxy/haproxy.cfg
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: Start haproxy
+    shell: haproxy -f  /etc/haproxy/haproxy.cfg -D
+
+  - name: Start pgpool service
+    service:
+      name: pgpool
+      state: started
+      enabled: yes
+    when: ansible_os_family == "RedHat"
+
+  - name: Start pgpool service
+    service:
+      name: percona-pgpool2
+      state: started
+      enabled: yes
+    when: ansible_os_family == "Debian"
+
+  - name: Add user postgres to sudoers
+    user:
+      name: postgres
+      groups: sudo
+      append: yes
+    when: ansible_os_family == "Debian"
+
+  # - name: Remove dpkg package if present on RedHat
+  #   yum:
+  #     name: dpkg
+  #     state: absent
+  #   ignore_errors: true
+  #   when: ansible_os_family == "RedHat" and
+  #     (ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9")
+
+  - name: Pause for 1 minutes
+    ansible.builtin.pause:
+      minutes: 1

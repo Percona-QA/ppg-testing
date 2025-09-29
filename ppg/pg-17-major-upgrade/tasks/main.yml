@@ -16,6 +16,12 @@
     pg_version_to_install: "{{ lookup('env', 'FROM_VERSION') | replace('ppg-','') }}"
     upgrade_to_pg_version: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
 
+- name: End play on Debian 13
+  meta: end_play
+  when: ansible_distribution == "Debian" and
+   ansible_distribution_major_version == "13" and
+   pg_version_to_install | string is version('16.10', '<=', strict=True)
+
 - name: End play on Ubuntu 24
   meta: end_play
   when: ansible_distribution == "Ubuntu" and

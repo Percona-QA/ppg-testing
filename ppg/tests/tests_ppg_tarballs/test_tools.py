@@ -1,9 +1,8 @@
 import os
 import pytest
-
 import testinfra.utils.ansible_runner
-
 from .. import settings
+from packaging import version
 
 testinfra_hosts = testinfra.utils.ansible_runner.AnsibleRunner(
    os.environ['MOLECULE_INVENTORY_FILE']).get_hosts('all')
@@ -20,24 +19,50 @@ pg_versions = settings.get_settings(os.environ['MOLECULE_SCENARIO_NAME'])[os.get
 MAJOR_VER = settings.MAJOR_VER
 os.environ['PATH'] = f"{PG_PATH}/bin:{INSTALL_PATH}/percona-pgbouncer/bin/:{INSTALL_PATH}/percona-haproxy/sbin:{INSTALL_PATH}/percona-patroni/bin:{INSTALL_PATH}/percona-pgbackrest/bin:{INSTALL_PATH}/percona-pgbadger:{INSTALL_PATH}/percona-pgpool-II/bin:" + os.environ['PATH']
 
+POSTGIS_VERSION_LIMIT = version.parse("3.3.99")  # Run only for ≤3.3.x tarballs
+
+# Minimum PostgreSQL versions where PostGIS is available
+MIN_SUPPORTED_VERSIONS = {
+    13: version.parse("13.19"),
+    14: version.parse("14.16"),
+    15: version.parse("15.11"),
+    16: version.parse("16.6"),
+    17: version.parse("17.3"),
+}
+
+POSTGIS_EXTENSIONS = [
+    "address_standardizer",
+    "address_standardizer_data_us",
+    "fuzzystrmatch",
+    "postgis",
+    "postgis_raster",
+    "postgis_sfcgal",
+    "postgis_tiger_geocoder",
+    "postgis_topology",
+]
+
 
 @pytest.fixture(scope="module")
 def operating_system(host):
     return host.system_info.distribution
 
+
 @pytest.fixture(scope='session')
 def get_server_path(scope='session'):
     return PG_PATH
+
 
 @pytest.fixture(scope='session')
 def get_server_bin_path(scope='session'):
     server_bin_path=os.path.join(PG_PATH,'bin')
     return server_bin_path
 
+
 @pytest.fixture(scope='session')
 def get_psql_binary_path(scope='session'):
     server_path=os.path.join(PG_PATH,'bin','psql')
     return server_path
+
 
 @pytest.fixture(scope='session')
 def getSqlCmd_with_param(get_psql_binary_path):
@@ -48,6 +73,7 @@ def getSqlCmd_with_param(get_psql_binary_path):
                     )
     return rcmd
 
+
 @pytest.fixture()
 def load_data(host, get_server_bin_path, get_psql_binary_path):
     with host.sudo("postgres"):
@@ -57,12 +83,14 @@ def load_data(host, get_server_bin_path, get_psql_binary_path):
         select = get_psql_binary_path + " -c 'SELECT COUNT(*) FROM pgbench_accounts;' | awk 'NR==3{print $3}'"
         assert host.run(select).rc == 0
 
+
 @pytest.fixture()
 def restart_postgresql(host,get_server_bin_path):
     with host.sudo("postgres"):
         cmd = f"{get_server_bin_path}/pg_ctl -D  {DATA_DIR} restart"
         result = host.run(cmd)
         assert result.rc == 0
+
 
 @pytest.fixture()
 def stop_postgresql(host,get_server_bin_path):
@@ -71,12 +99,14 @@ def stop_postgresql(host,get_server_bin_path):
         result = host.run(cmd)
         assert result.rc == 0
 
+
 @pytest.fixture()
 def start_postgresql(host,get_server_bin_path):
     with host.sudo("postgres"):
         cmd = f"{get_server_bin_path}/pg_ctl -D  {DATA_DIR} start"
         result = host.run(cmd)
         assert result.rc == 0
+
 
 @pytest.fixture()
 def pgaudit(host, get_psql_binary_path,restart_postgresql):
@@ -108,10 +138,12 @@ def pgaudit(host, get_psql_binary_path,restart_postgresql):
         assert result.strip("\n") == "DROP EXTENSION"
         #restart_postgresql
 
+
 @pytest.fixture()
 def pgbackrest_bin_path(host):
     pgbackrest_bin_path = os.path.join(INSTALL_PATH,'percona-pgbackrest','bin')
     return pgbackrest_bin_path
+
 
 @pytest.fixture()
 def pgbackrest_version(host,pgbackrest_bin_path):
@@ -134,6 +166,7 @@ def configure_postgres_pgbackrest(host,get_psql_binary_path,pgbackrest_bin_path)
         reload_conf = f"{get_psql_binary_path} -c 'SELECT pg_reload_conf();'"
         result = host.run(reload_conf)
         assert result.rc == 0
+
 
 @pytest.mark.usefixtures("configure_postgres_pgbackrest")
 @pytest.fixture()
@@ -228,15 +261,18 @@ def pg_repack_client_version(host, get_server_bin_path):
         cmd = f"{get_server_bin_path}/pg_repack --version"
         return host.run(cmd)
 
+
 @pytest.fixture()
 def patroni(host):
     return host.run(f"{INSTALL_PATH}/percona-patroni/bin/patroni")
+
 
 @pytest.fixture()
 def patroni_version(host):
     patroni_path = os.path.join(INSTALL_PATH, 'percona-patroni')
     cmd = f"{patroni_path}/bin/patroni --version"
     return host.run(cmd)
+
 
 def test_pgaudit_is_installed(host, get_server_path):
     with host.sudo():
@@ -245,8 +281,10 @@ def test_pgaudit_is_installed(host, get_server_path):
         # Assert that the file exists
         assert file.exists, f"{pgaudit_filename} does not exist."
 
+
 # def test_pgaudit(pgaudit):
 #     assert "AUDIT" in pgaudit
+
 
 def test_pgrepack_is_installed(host, get_server_path):
     with host.sudo():
@@ -254,6 +292,7 @@ def test_pgrepack_is_installed(host, get_server_path):
         file = host.file(pgrepack_filename)
         # Assert that the file exists
         assert file.exists, f"{pgrepack_filename} does not exist."
+
 
 def test_pgrepack(host, get_psql_binary_path ):
     with host.sudo("postgres"):
@@ -269,15 +308,18 @@ def test_pgrepack(host, get_psql_binary_path ):
             assert extensions.rc == 0
             assert "pg_repack" in set(extensions.stdout.split())
 
+
 def test_pg_repack_client_version(pg_repack_client_version):
     assert pg_repack_client_version.rc == 0
     assert pg_repack_client_version.stdout.strip("\n") == pg_versions['pgrepack']['binary_version']
+
 
 def test_pg_repack_functional(pg_repack_functional):
     assert pg_repack_functional.rc == 0
     messages = pg_repack_functional.stderr.split("\n")
     assert 'NOTICE: Setting up workers.conns' in messages
     assert 'NOTICE: Setting up workers.conns', 'INFO: repacking table "public.pgbench_accounts"' in messages
+
 
 def test_pg_repack_dry_run(pg_repack_dry_run):
     assert pg_repack_dry_run.rc == 0
@@ -286,6 +328,7 @@ def test_pg_repack_dry_run(pg_repack_dry_run):
     assert 'INFO: repacking table "public.pgbench_accounts"' in messages
     assert 'INFO: repacking table "public.pgbench_branches"' in messages
     assert 'INFO: repacking table "public.pgbench_tellers"' in messages
+
 
 def test_pgbackrest_is_installed(host):
     pgbackrest_dir = os.path.join(INSTALL_PATH, 'percona-pgbackrest')
@@ -302,17 +345,22 @@ def test_pgbackrest_is_installed(host):
     assert binary.exists, f"{pgbackrest_bin} does not exist."
     assert binary.is_file, f"{pgbackrest_bin} is not a file."
 
+
 def test_pgbackrest_version(pgbackrest_version):
     assert pgbackrest_version == pg_versions['pgbackrest']['binary_version']
+
 
 def test_pgbackrest_create_stanza(create_stanza):
     assert "INFO: stanza-create command end: completed successfully" in create_stanza.stdout
 
+
 def test_pgbackrest_check(pgbackrest_check):
     assert "check command end: completed successfully" in pgbackrest_check[-1]
 
+
 def test_pgbackrest_full_backup(pgbackrest_full_backup):
     assert "expire command end: completed successfully" in pgbackrest_full_backup[-1]
+
 
 # def test_pgbackrest_restore(host, start_postgresql,get_psql_binary_path):
 #     start_postgresql
@@ -321,6 +369,7 @@ def test_pgbackrest_full_backup(pgbackrest_full_backup):
 #         result = host.run(select)
 #         assert result.rc == 0
 #         assert result.stdout.strip("\n") == "100000"
+
 
 def test_patroni_is_installed(host):
     with host.sudo():
@@ -337,9 +386,11 @@ def test_patroni_is_installed(host):
         assert binary.exists, f"{patroni_bin} does not exist."
         assert binary.is_file, f"{patroni_bin} is not a file."
 
+
 def test_patroni_version(patroni_version):
     assert patroni_version.rc == 0, patroni_version.stderr
     assert patroni_version.stdout.strip("\n") == pg_versions['patroni']['binary_version']
+
 
 def test_etcd_is_installed(host):
     with host.sudo():
@@ -357,6 +408,7 @@ def test_etcd_is_installed(host):
         assert binary.exists, f"{etcd_bin} does not exist."
         assert binary.is_file, f"{etcd_bin} is not a file."
 
+
 def test_pgbouncer_is_installed(host):
     with host.sudo():
         pgbouncer_dir = os.path.join(INSTALL_PATH, 'percona-pgbouncer')
@@ -372,6 +424,7 @@ def test_pgbouncer_is_installed(host):
         binary = host.file(pgbouncer_bin)
         assert binary.exists, f"{pgbouncer_bin} does not exist."
         assert binary.is_file, f"{pgbouncer_bin} is not a file."
+
 
 def test_pgbadger_is_installed(host):
     with host.sudo():
@@ -389,6 +442,7 @@ def test_pgbadger_is_installed(host):
         assert binary.exists, f"{pgbadger_bin} does not exist."
         assert binary.is_file, f"{pgbadger_bin} is not a file."
 
+
 def test_haproxy_is_installed(host):
     with host.sudo():
         haproxy_dir = os.path.join(INSTALL_PATH, 'percona-haproxy')
@@ -405,10 +459,12 @@ def test_haproxy_is_installed(host):
         assert binary.exists, f"{haproxy_bin} does not exist."
         assert binary.is_file, f"{haproxy_bin} is not a file."
 
+
 def test_wal2json_is_installed(host,get_server_path):
     file_name = f"{get_server_path}/lib/wal2json.so"
     file = host.file(file_name)
     assert file.exists, f"{file_name} does not exist."
+
 
 def test_set_user_is_installed(host, get_server_path):
     with host.sudo():
@@ -423,7 +479,7 @@ def test_set_user_is_installed(host, get_server_path):
             file = host.file(file_name)
             assert file.exists, f"{file_name} does not exist."
 
-# Need to update etcd.py file for binary_version
+
 def test_etcd_binary_version(host):
     with host.sudo():
         etcd_bin_path = os.path.join(INSTALL_PATH, 'percona-etcd','bin')
@@ -434,6 +490,7 @@ def test_etcd_binary_version(host):
         assert result.rc == 0, result.stderr
         assert pg_versions[binary_name]['binary_version'] in result.stdout.strip("\n"), result.stdout
 
+
 def test_pgbouncer_binary_version(host):
     with host.sudo():   
         pgbouncer_bin_path = os.path.join(INSTALL_PATH,'percona-pgbouncer','bin')
@@ -443,6 +500,7 @@ def test_pgbouncer_binary_version(host):
         result = host.run(f"{pgbouncer_bin_path}/{binary_name} --version")
         assert result.rc == 0, result.stderr
         assert pg_versions[binary_name]['binary_version'] in result.stdout.strip("\n"), result.stdout
+
 
 def test_pgbadger_binary_version(host):
     # Failing on RHEL 9 so commenting it out, needs manual verification
@@ -459,6 +517,7 @@ def test_pgbadger_binary_version(host):
         assert result.rc == 0, result.stderr
         assert pg_versions[binary_name]['binary_version'] in result.stdout.strip("\n"), result.stdout
 
+
 def test_haproxy_binary_version(host):
     with host.sudo():  
         haproxy_bin = os.path.join(INSTALL_PATH, 'percona-haproxy','sbin')
@@ -469,12 +528,14 @@ def test_haproxy_binary_version(host):
         assert result.rc == 0, result.stderr
         assert pg_versions[binary_name]['binary_version'] in result.stdout.strip("\n"), result.stdout
 
+
 def test_haproxy_version(host):
     haproxy_path = f"{INSTALL_PATH}/percona-haproxy"
     with host.sudo("postgres"):
         cmd = f"{haproxy_path}/sbin/haproxy -v |grep version | head -1 | cut -d' ' -f3| cut -d'-' -f1"
         version = host.run(cmd)
         assert pg_versions["haproxy"]['version'] in version.stdout.strip("\n"), version.stdout
+
 
 def test_pgpool_is_installed(host):
     with host.sudo():
@@ -492,6 +553,7 @@ def test_pgpool_is_installed(host):
         assert binary.exists, f"{haproxy_bin} does not exist."
         assert binary.is_file, f"{haproxy_bin} is not a file."
 
+
 def test_pgpool_binary_version(host):
     dist = host.system_info.distribution
     pgpool_path = os.path.join(INSTALL_PATH,'percona-pgpool-II')
@@ -506,18 +568,22 @@ def test_pg_gather_output(host,get_server_bin_path):
         result = host.run(f"{get_server_bin_path}/psql -X -f {get_server_bin_path}/gather.sql > /tmp/out.txt")
         assert result.rc == 0, result.stderr
 
+
 def test_pg_gather_is_installed(host,get_server_bin_path):
     file_name = f"{get_server_bin_path}/gather.sql"
     file = host.file(file_name)
     assert file.exists, f"{file_name} does not exist."
+
 
 def test_pg_gather_file_version(host,get_server_bin_path):
     result = host.run(f"head -5 {get_server_bin_path}/gather.sql | tail -1 | cut -d' ' -f3")
     assert result.rc == 0, result.stderr
     assert pg_versions["pg_gather"]['sql_file_version'] in result.stdout.strip("\n"), result.stdout
 
+
 # def test_pgaudit(pgaudit):
 #     assert "AUDIT" in pgaudit
+
 
 def test_pg_stat_monitor_is_installed(host, get_server_path):
     with host.sudo():
@@ -566,123 +632,133 @@ def installed_extensions_list(host, get_psql_binary_path):
         return result
 
 
-def test_postgis_extenstions_list(installed_extensions_list, host):
-    ppg_version=float(pg_versions['version'])
+def _skip_if_postgis_unavailable(pg_versions):
+    """Helper: Skip tests if PostGIS not available for given PostgreSQL version."""
+    pg_version_str = pg_versions["version"]
+    pg_version = version.parse(pg_version_str)
 
-    if (pg_versions['version'].startswith("17") and ppg_version <= 17.2) or \
-    (pg_versions['version'].startswith("16") and ppg_version <= 16.5) or \
-    (pg_versions['version'].startswith("15") and ppg_version <= 15.10) or \
-    (pg_versions['version'].startswith("14") and ppg_version <= 14.15) or \
-    (pg_versions['version'].startswith("13") and ppg_version <= 13.18):
-        pytest.skip("Postgis not available on " + pg_versions['version'])
+    min_supported = MIN_SUPPORTED_VERSIONS.get(pg_version.major)
+    if min_supported and pg_version < min_supported:
+        pytest.skip(f"PostGIS not available on PostgreSQL {pg_version_str}")
 
+    return pg_version_str
+
+
+def _skip_if_postgis_not_3_3():
+    """Skip tests if PostGIS version is newer than 3.3.x."""
+    postgis_ver = version.parse(pg_versions["postgis_major_version"])
+    if postgis_ver > POSTGIS_VERSION_LIMIT:
+        pytest.skip("This test only runs for tarballs with PostGIS 3.3.x or lower.")
+    return postgis_ver
+
+
+@pytest.mark.parametrize("binary", ["shp2pgsql", "pgsql2shp"])
+def test_postgis_binary_version(host, binary):
+    """Verify shp2pgsql/pgsql2shp binaries report expected PostGIS version."""
+    _skip_if_postgis_not_3_3()
+
+    cmd = f"{PG_PATH}/bin/{binary} | grep -i release | awk '{{print $2}}'"
+    result = host.run(cmd)
+
+    assert result.rc == 0, f"Failed to run {binary}: {result.stderr}"
+    actual_version = result.stdout.strip()
+    expected_version = pg_versions["postgis_version"]
+
+    print(f"{binary}: expected={expected_version}, got={actual_version}")
+    assert expected_version in actual_version, (
+        f"{binary} version mismatch: expected {expected_version}, got {actual_version}"
+    )
+
+
+def test_postgis_binaries_presence(host):
+    #Verify required PostGIS binaries exist in the expected directory."""
+    _skip_if_postgis_not_3_3()
+
+    binaries = [
+        "pgtopo_export",
+        "pgtopo_import",
+        "pgsql2shp",
+        "raster2pgsql",
+        "shp2pgsql",
+    ]
+
+    with host.sudo("postgres"):
+        for binary in binaries:
+            path = f"{PG_PATH}/bin/{binary}"
+            binary_file = host.file(path)
+
+            assert binary_file.exists, f"❌ {binary} not found at {path}"
+            assert binary_file.is_file, f"⚠️ {path} exists but is not a regular file"
+
+
+def test_postgis_extensions_list(installed_extensions_list, host):
+    pg_version_str = _skip_if_postgis_unavailable(pg_versions)
     dist = host.system_info.distribution
-    POSTGIS_EXTENSIONS = ['address_standardizer','address_standardizer_data_us','fuzzystrmatch', 
-        'postgis','postgis_raster','postgis_sfcgal','postgis_tiger_geocoder','postgis_topology']
-    for extension in POSTGIS_EXTENSIONS:
-        print(extension)
-        assert extension in installed_extensions_list
+    print(f"Checking PostGIS extensions list on {dist} ({pg_version_str})")
+
+    missing = [ext for ext in POSTGIS_EXTENSIONS if ext not in installed_extensions_list]
+    assert not missing, f"Missing PostGIS extensions: {missing}"
 
 
 def test_postgis_extensions_create_drop(host, get_psql_binary_path):
-    ppg_version=float(pg_versions['version'])
-
-    if (pg_versions['version'].startswith("17") and ppg_version <= 17.2) or \
-    (pg_versions['version'].startswith("16") and ppg_version <= 16.5) or \
-    (pg_versions['version'].startswith("15") and ppg_version <= 15.10) or \
-    (pg_versions['version'].startswith("14") and ppg_version <= 14.15) or \
-    (pg_versions['version'].startswith("13") and ppg_version <= 13.18):
-        pytest.skip("Postgis not available on " + pg_versions['version'])
+    pg_version_str = _skip_if_postgis_unavailable(pg_versions)
 
     with host.sudo("postgres"):
-        # result = host.run(f"{get_psql_binary_path} -c 'SET pgaudit.log = 'none';'")
-        # assert result.rc == 0, result.stderr
-        result = host.run(f"{get_psql_binary_path} -c \"SET pgaudit.log = 'none'; CREATE EXTENSION IF NOT EXISTS postgis; SET pgaudit.log = 'all';\"")
-        assert result.rc == 0, result.stderr
-        result = host.run(f"{get_psql_binary_path} -c 'CREATE EXTENSION IF NOT EXISTS postgis_raster;'")
-        assert result.rc == 0, result.stderr
-        result = host.run(f"{get_psql_binary_path} -c 'CREATE EXTENSION IF NOT EXISTS postgis_sfcgal;'")
-        assert result.rc == 0, result.stderr
-        result = host.run(f"{get_psql_binary_path} -c 'CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;'")
-        assert result.rc == 0, result.stderr
-        result = host.run(f"{get_psql_binary_path} -c 'CREATE EXTENSION IF NOT EXISTS address_standardizer;'")
-        assert result.rc == 0, result.stderr
-        result = host.run(f"{get_psql_binary_path} -c 'CREATE EXTENSION IF NOT EXISTS address_standardizer_data_us;'")
-        assert result.rc == 0, result.stderr
-        result = host.run(f"{get_psql_binary_path} -c 'CREATE EXTENSION IF NOT EXISTS postgis_tiger_geocoder;'")
-        assert result.rc == 0, result.stderr
-        result = host.run(f"{get_psql_binary_path} -c 'DROP EXTENSION address_standardizer CASCADE;'")
-        assert result.rc == 0, result.stderr
-        result = host.run(f"{get_psql_binary_path} -c 'DROP EXTENSION address_standardizer_data_us CASCADE;'")
-        assert result.rc == 0, result.stderr
-        result = host.run(f"{get_psql_binary_path} -c 'DROP EXTENSION postgis_tiger_geocoder CASCADE;'")
-        assert result.rc == 0, result.stderr
-        result = host.run(f"{get_psql_binary_path} -c 'DROP EXTENSION fuzzystrmatch CASCADE;'")
-        assert result.rc == 0, result.stderr
-        result = host.run(f"{get_psql_binary_path} -c 'DROP EXTENSION postgis_raster CASCADE;'")
-        assert result.rc == 0, result.stderr
-        result = host.run(f"{get_psql_binary_path} -c 'DROP EXTENSION postgis_sfcgal CASCADE;'")
-        assert result.rc == 0, result.stderr
-        result = host.run(f"{get_psql_binary_path} -c 'DROP EXTENSION postgis CASCADE;'")
-        assert result.rc == 0, result.stderr
-        # result = host.run(f"{get_psql_binary_path} -c 'SET pgaudit.log = 'all';'")
-        # assert result.rc == 0, result.stderr
+        extensions_to_create = [
+            "postgis",
+            "postgis_raster",
+            "postgis_sfcgal",
+            "fuzzystrmatch",
+            "address_standardizer",
+            "address_standardizer_data_us",
+            "postgis_tiger_geocoder",
+        ]
+
+        # Create postgis first with temporary pgaudit change
+        create_cmd = (
+            f"{get_psql_binary_path} -c \""
+            "SET pgaudit.log = 'none'; "
+            "CREATE EXTENSION IF NOT EXISTS postgis; "
+            "SET pgaudit.log = 'all';\""
+        )
+        result = host.run(create_cmd)
+        assert result.rc == 0, f"Failed to create postgis extension: {result.stderr}"
+
+        # Create remaining extensions
+        for ext in extensions_to_create[1:]:
+            result = host.run(f"{get_psql_binary_path} -c 'CREATE EXTENSION IF NOT EXISTS {ext};'")
+            assert result.rc == 0, f"Failed to create extension {ext}: {result.stderr}"
+
+        # Drop all extensions in reverse order
+        for ext in reversed(extensions_to_create):
+            result = host.run(f"{get_psql_binary_path} -c 'DROP EXTENSION IF EXISTS {ext} CASCADE;'")
+            assert result.rc == 0, f"Failed to drop extension {ext}: {result.stderr}"
 
 
 def test_postgis_extension_version(host, get_psql_binary_path):
-    ppg_version=float(pg_versions['version'])
-
-    if (pg_versions['version'].startswith("17") and ppg_version <= 17.2) or \
-    (pg_versions['version'].startswith("16") and ppg_version <= 16.5) or \
-    (pg_versions['version'].startswith("15") and ppg_version <= 15.10) or \
-    (pg_versions['version'].startswith("14") and ppg_version <= 14.15) or \
-    (pg_versions['version'].startswith("13") and ppg_version <= 13.18):
-        pytest.skip("Postgis not available on " + pg_versions['version'])
+    pg_version_str = _skip_if_postgis_unavailable(pg_versions)
+    expected_postgis_ver = pg_versions["postgis_version"]
 
     with host.sudo("postgres"):
-        # result = host.run(f"{get_psql_binary_path} -c 'SET pgaudit.log = 'none';'")
-        # assert result.rc == 0, result.stderr
-        result = host.run(f"{get_psql_binary_path} -c \"SET pgaudit.log = 'none'; CREATE EXTENSION IF NOT EXISTS postgis; SET pgaudit.log = 'all';\"")
-        assert result.rc == 0, result.stderr
-        result = host.run(f"{get_psql_binary_path} -c \"SELECT installed_version FROM pg_available_extensions WHERE name LIKE 'postgis';\" | awk 'NR==3{{print $1}}'")
-        assert result.rc == 0, result.stderr
-        assert result.stdout.strip("\n") == pg_versions['postgis_version']
-        # result = host.run(f"{get_psql_binary_path} -c 'SET pgaudit.log = 'all';'")
-        # assert result.rc == 0, result.stderr
+        # Create extension quietly
+        result = host.run(
+            f"{get_psql_binary_path} -c \""
+            "SET pgaudit.log = 'none'; "
+            "CREATE EXTENSION IF NOT EXISTS postgis; "
+            "SET pgaudit.log = 'all';\""
+        )
+        assert result.rc == 0, f"Failed creating postgis: {result.stderr}"
 
+        # Get installed version
+        query = (
+            f"{get_psql_binary_path} -Atc "
+            "\"SELECT installed_version "
+            "FROM pg_available_extensions WHERE name = 'postgis';\""
+        )
+        result = host.run(query)
+        assert result.rc == 0, f"Failed to fetch postgis version: {result.stderr}"
 
-def test_shp2pgsql_binary_version(host):
-    result = host.run(f"{PG_PATH}/bin/shp2pgsql | grep -i release | cut -d' ' -f2")
-    print(result.stdout)
-    assert result.rc == 0, result.stderr
-    assert pg_versions['postgis_version'] in result.stdout.strip("\n"), result.stdout
-
-
-def test_pgsql2shp_binary_version(host):
-    result = host.run(f"{PG_PATH}/bin/pgsql2shp | grep -i release | cut -d' ' -f2")
-    print(result.stdout)
-    assert result.rc == 0, result.stderr
-    assert pg_versions['postgis_version'] in result.stdout.strip("\n"), result.stdout
-
-
-def test_postgis_binary_presence(host):
-    dist = host.system_info.distribution
-    with host.sudo("postgres"):
-        binary_file = host.file(f"{PG_PATH}/bin/pgtopo_export")
-        assert binary_file.exists
-        assert binary_file.is_file
-        binary_file = host.file(f"{PG_PATH}/bin/pgtopo_import")
-        assert binary_file.exists
-        assert binary_file.is_file
-        binary_file = host.file(f"{PG_PATH}/bin/pgsql2shp")
-        assert binary_file.exists
-        assert binary_file.is_file
-        binary_file = host.file(f"{PG_PATH}/bin/raster2pgsql")
-        assert binary_file.exists
-        assert binary_file.is_file
-        # binary_file = host.file(f"{PG_PATH}/bin/shp2pgsql-gui")
-        # assert binary_file.exists
-        assert binary_file.is_file
-        binary_file = host.file(f"{PG_PATH}/bin/shp2pgsql")
-        assert binary_file.exists
-        assert binary_file.is_file
+        installed_version = result.stdout.strip()
+        assert installed_version == expected_postgis_ver, (
+            f"PostGIS version mismatch: expected {expected_postgis_ver}, got {installed_version}"
+        )

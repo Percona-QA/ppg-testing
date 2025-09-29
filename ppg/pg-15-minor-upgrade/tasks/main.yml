@@ -19,6 +19,12 @@
    ansible_distribution_major_version == "12" and
    pg_version_to_install | string is version('15.3', '<=', strict=True)
 
+- name: End play on Debian 13
+  meta: end_play
+  when: ansible_distribution == "Debian" and
+   ansible_distribution_major_version == "13" and
+   pg_version_to_install | string is version('15.14', '<=', strict=True)
+
 - name: End play on Ubuntu 24
   meta: end_play
   when: ansible_distribution == "Ubuntu" and

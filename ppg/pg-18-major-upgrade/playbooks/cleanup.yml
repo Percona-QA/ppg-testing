@@ -1,0 +1,124 @@
+---
+- name: Fix broken
+  hosts: all
+  become: true
+  become_method: sudo
+  tasks:
+    - name: Fix Postgresql-16 deb packages
+      apt:
+        name: "{{ packages }}"
+        state: fixed
+        update_cache: true
+      vars:
+        packages:
+          - percona-postgresql-16
+          - percona-postgresql-16-dbgsym
+          - percona-postgresql-client-16
+          - percona-postgresql-doc-16
+          - percona-postgresql-plperl-16
+          - percona-postgresql-plpython3-16
+          - percona-postgresql-pltcl-16
+          - percona-postgresql-server-dev-16
+          - percona-postgresql-client-16-dbgsym
+          - percona-postgresql-plperl-16-dbgsym
+          - percona-postgresql-plpython3-16-dbgsym
+          - percona-postgresql-pltcl-16-dbgsym
+          - percona-pg-stat-monitor16
+          - percona-pgaudit16-set-user
+          - percona-postgresql-16-wal2json
+      when: ansible_os_family == "Debian"
+
+- name: Cleanup
+  hosts: all
+  become: true
+  become_method: sudo
+  tasks:
+    - name: remove Postgresql deb packages
+      apt:
+        name: "{{ packages }}"
+        state: absent
+        update_cache: true
+      vars:
+        packages:
+          - percona-postgresql-16
+          - percona-postgresql-16-dbgsym
+          - percona-postgresql-client-16
+          - percona-postgresql-doc-16
+          - percona-postgresql-plperl-16
+          - percona-postgresql-plpython3-16
+          - percona-postgresql-pltcl-16
+          - percona-postgresql-server-dev-16
+          - percona-postgresql-client-16-dbgsym
+          - percona-postgresql-plperl-16-dbgsym
+          - percona-postgresql-plpython3-16-dbgsym
+          - percona-postgresql-pltcl-16-dbgsym
+          - percona-pg-stat-monitor16
+          - percona-pgaudit16-set-user
+          - percona-postgresql-16-wal2json
+      ignore_errors: true
+      when: ansible_os_family == "Debian"
+
+    # - name: Remove Percona Platform for PostgreSQL deb packages
+    #   apt:
+    #     name: "{{ packages }}"
+    #     state: absent
+    #   vars:
+    #     packages:
+    #     - percona-postgresql-plpython-16
+    #     - percona-postgresql-plpython-16-dbgsym
+    #     - percona-postgresql-server-dev-16-dbgsym
+    #   when:
+    #     - ansible_os_family == "Debian"
+    #     - lookup('env', 'PG_VERSION') == "ppg-16.5"
+
+    - name: remove Postgresql rpm packages
+      yum:
+        name: "{{ packages }}"
+        state: absent
+      vars:
+        packages:
+          - percona-postgresql16
+          - percona-postgresql16
+          - percona-postgresql16-contrib
+          - percona-postgresql16-debuginfo
+          - percona-postgresql16-devel
+          - percona-postgresql16-docs
+          - percona-postgresql16-libs
+          - percona-postgresql16-llvmjit
+          - percona-postgresql16-plperl
+          - percona-postgresql16-plpython
+          - percona-postgresql16-pltcl
+          - percona-postgresql16-server
+          - percona-postgresql16-test
+          - percona-postgresql16-debuginfo
+          - percona-postgresql16-debugsource
+          - percona-postgresql16-devel-debuginfo
+          - percona-postgresql16-libs-debuginfo
+          - percona-postgresql16-plperl-debuginfo
+          - percona-postgresql16-plpython-debuginfo
+          - percona-postgresql16-plpython3-debuginfo
+          - percona-postgresql16-pltcl-debuginfo
+          - percona-postgresql16-server-debuginfo
+      when: ansible_os_family == "RedHat"
+
+    # - name: remove pgaudit deb packages
+    #   apt:
+    #     name: percona-postgresql-16-pgaudit
+    #     state: absent
+    #   when: ansible_os_family == "Debian"
+
+    # - name: remove pg_repack deb packages
+    #   apt:
+    #     name: "{{ packages }}"
+    #     state: absent
+    #   vars:
+    #     packages:
+    #       - percona-postgresql-16-repack
+    #       - percona-postgresql-16-repack-dbgsym
+    #   when: ansible_os_family == "Debian"
+
+    - name: remove pg_repack rpm packages
+      yum:
+        name: percona-pg_repack16
+        state: absent
+      when: ansible_os_family == "RedHat"

@@ -3,8 +3,19 @@
     set_fact:
       testsuite: "{{ lookup('env', 'TESTSUITE') }}"
       percona_server_version: "{{ lookup('env', 'PERCONA_SERVER_VERSION') }}"
-      major_version: "{{ lookup('env', 'VERSION').split('.') }}"
+      major_version: "{{ lookup('env', 'VERSION').split('.')[0] }}"
+      io_method: "{{ lookup('env', 'IO_METHOD') }}"
       cacheable: true
+
+  - name: End play on RHEL 8 and Rocky 8 for pg-18>= and io_uring, as uring not supported
+    meta: end_play
+    when:
+      - (major_version | int) >= 18
+      - io_method in ['io_uring']
+      - >
+        (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'Rocky' and ansible_facts['distribution_major_version'] | int == 8)
+        or
+        (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'RedHat' and ansible_facts['distribution_major_version'] | int == 8)
 
   - name: Include Redhat tasks file 
     include_tasks: 
@@ -23,6 +34,62 @@
 
   - debug: var=results.stdout_lines
 
+# when:
+#       - ansible_distribution == "Debian"
+#       - ansible_distribution_major_version == "13"
+#       - ansible_architecture == "aarch64"
+
+  - name: Ensure at least 4 GB swap is configured
+    become: true
+    block:
+      - name: Check if swap is already enabled
+        ansible.builtin.command: swapon --noheadings --show=SIZE
+        register: swap_status
+        changed_when: false
+        failed_when: false
+
+      - name: Set fact for existing swap size in MB
+        ansible.builtin.set_fact:
+          swap_size_mb: >-
+            {{ ((swap_status.stdout | regex_findall('\\d+') | map('int') | sum) / 1048576) | int }}
+
+      - name: Create 4G swap file if not present or too small
+        ansible.builtin.command: fallocate -l 4G /swapfile
+        args:
+          creates: /swapfile
+        when: (swap_size_mb | int) < 3000
+
+      - name: Secure swap file permissions
+        ansible.builtin.file:
+          path: /swapfile
+          owner: root
+          group: root
+          mode: '0600'
+        when: (swap_size_mb | int) < 3000
+
+      - name: Format swap file
+        ansible.builtin.command: mkswap /swapfile
+        when: (swap_size_mb | int) < 3000
+
+      - name: Enable swap
+        ansible.builtin.command: swapon /swapfile
+        when: (swap_size_mb | int) < 3000
+
+      - name: Persist swap in /etc/fstab
+        ansible.builtin.lineinfile:
+          path: /etc/fstab
+          line: '/swapfile none swap sw 0 0'
+          state: present
+        when: (swap_size_mb | int) < 3000
+
+  - name: Verify swap is active
+    ansible.builtin.command: free -h
+    register: swap_info
+    changed_when: false
+
+  - ansible.builtin.debug:
+      msg: "Swap configured successfully. Current memory: {{ swap_info.stdout_lines }}"
+
   # - name: set ulimit unlimited
   #   ansible.builtin.shell: ulimit -s unlimited
   #   become_user: postgres
@@ -40,6 +107,138 @@
 
   - debug: var=results.stdout_lines
 
+  - name: Check if io_uring is disabled
+    command: cat /proc/sys/kernel/io_uring_disabled
+    register: uring_disabled
+    ignore_errors: true
+    when:
+      - (major_version | int) >= 18
+      - io_method in ['io_uring']
+      - ansible_os_family == 'RedHat'
+
+  - debug: var=uring_disabled.stdout_lines
+    when:
+      - (major_version | int) >= 18
+      - io_method in ['io_uring']
+      - ansible_os_family == 'RedHat'
+
+  - name: Enable io_uring if possible
+    when: uring_disabled.stdout is defined and uring_disabled.stdout | int > 0
+    become: true
+    sysctl:
+      name: kernel.io_uring_disabled
+      value: 0
+      state: present
+    when:
+      - (major_version | int) >= 18
+      - io_method in ['io_uring']
+      - ansible_os_family == 'RedHat'
+
+  - name: Check kernel version
+    command: uname -r
+    register: kernel_version
+    changed_when: false
+    when:
+      - (major_version | int) >= 18
+      - io_method in ['io_uring']
+      - ansible_os_family == 'RedHat'
+
+  - debug:
+      msg: "Kernel version is {{ kernel_version.stdout }}"
+    when:
+      - (major_version | int) >= 18
+      - io_method in ['io_uring']
+      - ansible_os_family == 'RedHat'
+
+  - name: Print all facts
+    debug:
+      var: ansible_facts
+
+  # - name: Decide io_method based on kernel and io_uring availability
+  #   set_fact:
+  #     io_method: >-
+  #       {% if (uring_disabled.stdout | default('1') | int == 0)
+  #         and (kernel_version.stdout | default('0.0') is version('5.10', '>=')) %}
+  #       io_uring
+  #       {% else %}
+  #       sync
+  #       {% endif %}
+  #   when:
+  #     - (major_version | int) >= 18
+  #     - io_method in ['io_uring']
+  #     - ansible_os_family == 'RedHat'
+
+  # - name: Print all facts
+  #   debug:
+  #     var: ansible_facts
+
+  # - name: Allow core dumps for postgres user
+  #   become: true
+  #   copy:
+  #     dest: /etc/security/limits.d/postgres-core.conf
+  #     content: |
+  #       postgres soft core unlimited
+  #       postgres hard core unlimited
+  #     owner: root
+  #     group: root
+  #     mode: '0644'
+
+  # - name: Ensure pam_limits is enabled in login
+  #   become: true
+  #   lineinfile:
+  #     path: /etc/pam.d/common-session
+  #     line: "session required pam_limits.so"
+  #     state: present
+
+  - name: Ensure postgres user has unlimited core dump limit
+    become: true
+    community.general.pam_limits:
+      domain: postgres
+      limit_item: core
+      limit_type: "{{ item }}"
+      value: unlimited
+    loop:
+      - soft
+      - hard
+
+  # - name: Ensure postgres has unlimited core dump limit
+  #   become: true
+  #   copy:
+  #     dest: /etc/security/limits.d/postgres.conf
+  #     content: |
+  #       postgres  soft  core  unlimited
+  #       postgres  hard  core  unlimited
+
+  # - name: Ensure pam_limits is enabled for Debian-based systems
+  #   become: true
+  #   block:
+  #     - name: Enable pam_limits in common-session
+  #       lineinfile:
+  #         path: /etc/pam.d/common-session
+  #         line: "session required pam_limits.so"
+  #         insertafter: EOF
+  #     - name: Enable pam_limits in common-session-noninteractive
+  #       lineinfile:
+  #         path: /etc/pam.d/common-session-noninteractive
+  #         line: "session required pam_limits.so"
+  #         insertafter: EOF
+  #   when: ansible_facts['os_family'] == 'Debian'
+
+  # - name: Ensure pam_limits is enabled for RHEL-based systems
+  #   become: true
+  #   block:
+  #     - name: Enable pam_limits in system-auth
+  #       lineinfile:
+  #         path: /etc/pam.d/system-auth
+  #         line: "session required pam_limits.so"
+  #         insertafter: EOF
+  #     - name: Enable pam_limits in password-auth
+  #       lineinfile:
+  #         path: /etc/pam.d/password-auth
+  #         line: "session required pam_limits.so"
+  #         insertafter: EOF
+  #   when: ansible_facts['os_family'] == 'RedHat'
+
   - name: Get ulimit results
     become_user: postgres
     ansible.builtin.shell: ulimit -a
@@ -47,10 +246,14 @@
 
   - debug: var=results.stdout_lines
 
+  # - name: End play for this host if condition fails
+  #   meta: end_host
+  #   when: true
+
 # =============================
 # Clone Postgres/PSP sources with pg_tde
 # =============================
-  - name: Clone Postgres/PSP sources with pg_tde
+  - name: Clone Postgres/PSP sources
     git:
       repo: "{{ repo }}"
       version: "{{ version }}"
@@ -60,18 +263,84 @@
       repo: "{{ lookup('env', 'PSP_REPO') }}"
       version: "{{ lookup('env', 'PSP_BRANCH') }}"
     become_user: postgres
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Clone pg_tde sources
+    git:
+      repo: "{{ repo }}"
+      version: "{{ version }}"
+      dest: /tmp/pg_tde
+      track_submodules: true
+    vars:
+      repo: "https://github.com/percona/pg_tde.git"
+      version: "{{ lookup('env', 'TDE_BRANCH') }}"
+    become_user: postgres
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  # - name: Clone pg_tde sources
+  #   git:
+  #     repo: "{{ repo }}"
+  #     version: "{{ version }}"
+  #     dest: /tmp/pg_tde
+  #     track_submodules: true
+  #   vars:
+  #     repo: "{{ lookup('env', 'PSP_REPO') }}"
+  #     version: "{{ lookup('env', 'PSP_BRANCH') }}"
+  #   become_user: postgres
 
   - name: Submodule update
     command : git submodule update --init --recursive
     args:
-      chdir: /tmp/postgres
+      chdir: /tmp/pg_tde
+      executable: /bin/bash
     become_user: postgres
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
+    register: results
 
-  - name: Configure Postgres/PSP from sources
-    command: ./configure '--enable-debug' '--enable-cassert' '--enable-tap-tests' '--with-icu' '--prefix=/opt/pgsql'
+  - debug: var=results.stdout_lines
+
+  - name: Configure Postgres/PSP from sources with liburing for supported OS. 
+    command: >
+      ./configure
+      --enable-debug
+      --enable-cassert
+      --enable-tap-tests
+      --with-icu
+      --prefix=/opt/pgsql
+      --with-liburing
     args:
       chdir: /tmp/postgres
+      executable: /bin/bash
+    become: true
     become_user: postgres
+    when:
+      - (major_version | int) >= 18
+      - io_method in ['io_uring']
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Configure Postgres/PSP from sources
+    command: >
+      ./configure
+      --enable-debug
+      --enable-cassert
+      --enable-tap-tests
+      --with-icu
+      --prefix=/opt/pgsql
+    args:
+      chdir: /tmp/postgres
+      executable: /bin/bash
+    become_user: postgres
+    when:
+      - io_method in ['worker', 'sync']
     register: results
 
   - debug: var=results.stdout_lines
@@ -80,6 +349,19 @@
     ansible.builtin.command: make install-world -j
     args:
       chdir: /tmp/postgres
+      executable: /bin/bash
+    become_user: postgres
+    environment:
+      TDE_MODE: 1
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Run make install for Injection points, as this extension is not built by default
+    ansible.builtin.command: make install -j -s -C src/test/modules/injection_points
+    args:
+      chdir: /tmp/postgres
+      executable: /bin/bash
     become_user: postgres
     environment:
       TDE_MODE: 1
@@ -93,15 +375,17 @@
 
   - name: Remove multiple extensions tap test case from pg_tde
     become_user: postgres
-    command: rm -f /tmp/postgres/contrib/pg_tde/t/005_multiple_extensions.pl
+    command: rm -f /tmp/pg_tde/t/005_multiple_extensions.pl
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
     register: results
 
   - debug: var=results.stdout_lines
 
-  - name: Copy Vault_v2 test output file
-    ansible.builtin.copy:
-      src: ../../files/vault_v2_test_1.out
-      dest: /tmp/postgres/contrib/pg_tde/expected/vault_v2_test_1.out
+  # - name: Copy Vault_v2 test output file
+  #   ansible.builtin.copy:
+  #     src: ../../files/vault_v2_test_1.out
+  #     dest: /tmp/pg_tde/expected/vault_v2_test_1.out
 
   # =============================
   # Initialize Postgres with pg_tde
@@ -109,24 +393,127 @@
   # This section is only applicable for installcheck and installcheck-world scenarios.
   # For check and check-world, following 3 steps don't apply.
   # =============================
+  # - name: initdb cluster
+  #   become_user: postgres
+  #   command: ./initdb -D /opt/pgsql/data --set shared_preload_libraries=pg_tde
+  #   args:
+  #     chdir: /opt/pgsql/bin
+  #    executable: /bin/bash
+  #   environment:
+  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
+  #   when: testsuite == 'installcheck-world'
+  #   register: results
+
+  # - debug: var=results.stdout_lines
+
   - name: initdb cluster
     become_user: postgres
-    command: ./initdb -D /opt/pgsql/data --set shared_preload_libraries=pg_tde
+    command: ./initdb -D /opt/pgsql/data
     args:
       chdir: /opt/pgsql/bin
+      executable: /bin/bash
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: testsuite == 'installcheck-world'
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
     register: results
 
   - debug: var=results.stdout_lines
 
-  - name: Start Server
+  - name: Build & Install pg_tde
+    become: true
     become_user: postgres
-    command: ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
+    ansible.builtin.command: >
+      make PG_CONFIG=/opt/pgsql/bin/pg_config install
+    args:
+      chdir: /tmp/pg_tde
+      executable: /bin/bash
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      TDE_MODE: "1"
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Add pg_tde to postgresql.conf
+    lineinfile:
+      path: /opt/pgsql/data/postgresql.conf
+      line: shared_preload_libraries = 'pg_tde'
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
+
+  - name: Comment out any line containing 'io_method'
+    ansible.builtin.replace:
+      path: /opt/pgsql/data/postgresql.conf
+      regexp: '^(?!#)(.*io_method.*)$'
+      replace: '# \1'
+    when:
+      - (major_version | int) >= 18
+      - testsuite in ['installcheck-world', 'check-tde']
+
+  - name: Update io_method in postgresql.conf for pg-18
+    ansible.builtin.lineinfile:
+      path: /opt/pgsql/data/postgresql.conf
+      line: "io_method = {{ io_method }}"
+    when:
+      - (major_version | int) >= 18
+      - testsuite in ['installcheck-world', 'check-tde']
+
+  # - name: Start Server
+  #   become: true
+  #   become_user: postgres
+  #   shell: |
+  #     ulimit -a
+  #     ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
+  #   args:
+  #     chdir: /opt/pgsql/bin
+  #   environment:
+  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
+  #     TDE_MODE: 1
+  #     LANG: C.UTF-8
+  #     LC_CTYPE: C
+  #     LC_ALL: C
+  #   when: testsuite == 'installcheck-world' or testsuite == 'check-tde'
+  #   register: results
+
+  # - debug: var=results.stdout_lines
+
+  - name: Start PostgreSQL Server (with retry and log dump on failure)
+    become: true
+    become_user: postgres
+    shell: |
+      set -euo pipefail
+
+      LOGFILE="/tmp/postgres/logfile"
+      mkdir -p "$(dirname "$LOGFILE")"
+
+      echo ">>> Checking limits..."
+      ulimit -a
+
+      echo ">>> Attempting to start PostgreSQL..."
+      if ! ./pg_ctl -D /opt/pgsql/data -l "$LOGFILE" start -o '-p 5432'; then
+        echo "❌ First attempt failed. Waiting 5 seconds before retry..."
+        sleep 5
+        echo ">>> Retrying PostgreSQL start..."
+        if ! ./pg_ctl -D /opt/pgsql/data -l "$LOGFILE" start -o '-p 5432'; then
+          echo "❌ PostgreSQL failed to start after retry!"
+          echo ">>> Printing server log ($LOGFILE):"
+          echo "------------------------------------------------------------"
+          cat "$LOGFILE" || echo "⚠️  Log file not found."
+          echo "------------------------------------------------------------"
+          exit 1
+        fi
+      fi
+
+      echo "✅ PostgreSQL started successfully!"
     args:
       chdir: /opt/pgsql/bin
+      executable: /bin/bash
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
@@ -134,7 +521,25 @@
       LANG: C.UTF-8
       LC_CTYPE: C
       LC_ALL: C
-    when: testsuite == 'installcheck-world'
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
+    register: pg_start_result
+    ignore_errors: true  # Let Ansible continue to handle fail condition below
+
+  - name: Display PostgreSQL start output
+    debug:
+      var: pg_start_result.stdout_lines
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
+
+  - debug: var=results.stdout_lines
+
+  - name: Fail play if PostgreSQL failed to start
+    fail:
+      msg: "❌ PostgreSQL server failed to start after retry. Check /tmp/postgres/logfile for details."
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
+      - pg_start_result.rc != 0
     register: results
 
   - debug: var=results.stdout_lines
@@ -149,7 +554,8 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when: testsuite == 'installcheck-world'
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
     register: results
 
   - debug: var=results.stdout_lines
@@ -173,6 +579,7 @@
   #       command: git sparse-checkout init --cone
   #       args:
   #         chdir: /tmp/percona-qa
+  #         executable: /bin/bash
 
   #     - name: Set sparse-checkout to only include postgresql/t directory
   #       command: git sparse-checkout set postgresql/t
@@ -183,7 +590,7 @@
   #       command: git checkout master
   #       args:
   #         chdir: /tmp/percona-qa
-
+  #         executable: /bin/bash
   #     - name: List postgresql directory contents
   #       command: ls -R /tmp/percona-qa/postgresql/t
   #       register: pgsql_dir_listing
@@ -193,7 +600,7 @@
   #         var: pgsql_dir_listing.stdout_lines
 
   #     - name: Copy postgresql/t files to pg_tde/t
-  #       shell: cp -r /tmp/percona-qa/postgresql/t/* /tmp/postgres/contrib/pg_tde/t/
+  #       shell: cp -r /tmp/percona-qa/postgresql/t/* /tmp/pg_tde/t/
 
   #   when: testsuite == 'check-tde'
 
@@ -202,21 +609,43 @@
   # =============================
   - name: Run check tde tests
     shell: | 
-      export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
-      export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
-      export VAULT_ADDR="https://127.0.0.1:8200"
-      export VAULT_TOKEN=root
+      # export VAULT_ROOT_TOKEN_FILE=/tmp/bao_env/bao_token.txt
+      # export VAULT_CACERT_FILE=/tmp/bao_env/bao_ca.crt
+
+      # export VAULT_ADDR="https://127.0.0.1:8200"
+      # export VAULT_TOKEN=root
+      echo $VAULT_ADDR
+
+      CLUSTER_INFO=$(mktemp)
+      bao server -dev -dev-tls -dev-cluster-json="$CLUSTER_INFO" > /dev/null &
+      sleep 10
+      export VAULT_ROOT_TOKEN_FILE=$(mktemp)
+      jq -r .root_token "$CLUSTER_INFO" > "$VAULT_ROOT_TOKEN_FILE"
+      export VAULT_CACERT_FILE=$(jq -r .ca_cert_path "$CLUSTER_INFO")
+      rm "$CLUSTER_INFO"
+
+      ## We need to enable key/value version 1 engine for just for tests
+      bao secrets enable -ca-cert="$VAULT_CACERT_FILE" -path=kv-v1 -version=1 kv
+
+      ## Create a test namespace for the tests to test namespace support
+      echo $VAULT_ADDR
+      export VAULT_SKIP_VERIFY=true
+      bao status
+      bao namespace create "pgns"
+      bao secrets enable -ns=pgns -path=secret -description="Production Secrets" kv-v2
+      bao status
+
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
-      cd /tmp/postgres/contrib/pg_tde && make -s check -k
+      cd /tmp/pg_tde && make -s installcheck -k
     become_user: postgres
     args:
       executable: /bin/bash
-      chdir: "/tmp/postgres/contrib/pg_tde"
+      chdir: "/tmp/pg_tde"
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      PG_TEST_PORT_DIR: "/tmp/pg_tde"
+      PG_TEST_PORT_DIR: "/tmp/pg_tde_port"
       INSTALL_DIR: "/opt/pgsql"
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
       PGCTLTIMEOUT: 120
@@ -239,7 +668,7 @@
       - regression.rc != 0
 
   - name: Show tde regression diffs if tests failed
-    shell: cat /tmp/postgres/contrib/pg_tde/regression.diffs
+    shell: cat /tmp/pg_tde/regression.diffs
     register: diffs_output
     when:
       - testsuite == 'check-tde'
@@ -271,7 +700,7 @@
     shell: | 
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
-      cd /tmp/postgres/ && make -s check -k
+      cd /tmp/postgres/ && make -s check-world -k
     become_user: postgres
     args:
       executable: /bin/bash
@@ -279,9 +708,7 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      PG_TEST_PORT_DIR: "/tmp/pg_tde"
-      INSTALL_DIR: "/opt/pgsql"
-      TDE_MODE: 1
+      PG_TEST_PORT_DIR: "/tmp/pg_tde_port"
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
       PGCTLTIMEOUT: 120
       PG_TEST_TIMEOUT_DEFAULT: 300
@@ -333,8 +760,9 @@
   # =============================
   - name: Run all regression tests
     shell: | 
-      export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
-      export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
+      export VAULT_SKIP_VERIFY=true
+      export VAULT_ROOT_TOKEN_FILE=/tmp/bao_env/bao_token.txt
+      export VAULT_CACERT_FILE=/tmp/bao_env/bao_ca.crt
       export VAULT_ADDR="https://127.0.0.1:8200"
       export VAULT_TOKEN=root
       export PGCTLTIMEOUT=120
@@ -347,7 +775,7 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      PG_TEST_PORT_DIR: "/tmp/pg_tde"
+      PG_TEST_PORT_DIR: "/tmp/pg_tde_port"
       INSTALL_DIR: "/opt/pgsql"
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
       PGCTLTIMEOUT: 120
@@ -405,6 +833,12 @@
   - name: Run tde_setup_global.sql using psql
     shell: | 
       cd /opt/pgsql/bin
+      cp pg_tde_basebackup pg_basebackup
+      cp pg_tde_checksums pg_checksums
+      cp pg_tde_resetwal pg_resetwal
+      cp pg_tde_rewind pg_rewind
+      cp pg_tde_waldump pg_waldump
+
       ./psql -d postgres -f /tmp/postgres/ci_scripts/tde_setup_global.sql  -v ON_ERROR_STOP=on
       ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile restart -o '-p 5432'
     become: true
@@ -412,7 +846,7 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      PG_TEST_PORT_DIR: "/tmp/pg_tde"
+      PG_TEST_PORT_DIR: "/tmp/pg_tde_port"
       INSTALL_DIR: "/opt/pgsql"
       TDE_MODE: "1"
       LANG: "C.UTF-8"
@@ -422,27 +856,29 @@
     ignore_errors: yes
     when: testsuite == 'installcheck-world'
 
-  - name: Run installcheck-world with tde
+  - name: Run installcheck-world with tde (as root shell, sudo inside)
+    become: true
+    become_user: postgres
     ignore_errors: yes
     shell: |
+      ulimit -a
       psql -c "show default_table_access_method ;"
-
-      export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
-      export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
-      export VAULT_ADDR=https://127.0.0.1:8200
-      export VAULT_TOKEN=root
+      # export VAULT_SKIP_VERIFY=true
+      # export VAULT_ROOT_TOKEN_FILE=/tmp/bao_env/bao_token.txt
+      # export VAULT_CACERT_FILE=/tmp/bao_env/bao_ca.crt
+      # export VAULT_ADDR=https://127.0.0.1:8200
+      # export VAULT_TOKEN=root
       export TDE_MODE=1
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
-      cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world -k
-    become_user: postgres
+      cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/pg_tde/ci_scripts/tde_setup.sql" make -s installcheck-world -k PROVE_FLAGS="-e 'perl -I/tmp/pg_tde/ci_scripts/perl -I/tmp/postgres/src/test/perl -MPostgreSQL::Test::TdeCluster'"
     args:
       executable: /bin/bash
       chdir: "/tmp/postgres/"
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      PG_TEST_PORT_DIR: "/tmp/pg_tde"
+      PG_TEST_PORT_DIR: "/tmp/pg_tde_port"
       INSTALL_DIR: "/opt/pgsql"
       TDE_MODE: 1
       LANG: C.UTF-8
@@ -453,6 +889,38 @@
       PG_TEST_TIMEOUT_DEFAULT: 300
     when: testsuite == 'installcheck-world'
     register: regression
+
+  # - name: Run installcheck-world with tde
+  #   become: true
+  #   ignore_errors: yes
+  #   shell: |
+  #     psql -c "show default_table_access_method ;"
+  #     export VAULT_ROOT_TOKEN_FILE=/tmp/bao_env/bao_token.txt
+  #     export VAULT_CACERT_FILE=/tmp/bao_env/bao_ca.crt
+  #     export VAULT_ADDR=https://127.0.0.1:8200
+  #     export VAULT_TOKEN=root
+  #     export TDE_MODE=1
+  #     export PGCTLTIMEOUT=120
+  #     export PG_TEST_TIMEOUT_DEFAULT=300
+  #     cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/pg_tde/ci_scripts/tde_setup.sql" make -s installcheck-world -k
+  #   become_user: postgres
+  #   args:
+  #     executable: /bin/bash
+  #     chdir: "/tmp/postgres/"
+  #   environment:
+  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
+  #     PG_TEST_PORT_DIR: "/tmp/pg_tde_port"
+  #     INSTALL_DIR: "/opt/pgsql"
+  #     TDE_MODE: 1
+  #     LANG: C.UTF-8
+  #     LC_CTYPE: C
+  #     LC_ALL: C
+  #     PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
+  #     PGCTLTIMEOUT: 120
+  #     PG_TEST_TIMEOUT_DEFAULT: 300
+  #   when: testsuite == 'installcheck-world'
+  #   register: regression
 
   - name: Show stdout of installcheck-world regression tests
     debug:

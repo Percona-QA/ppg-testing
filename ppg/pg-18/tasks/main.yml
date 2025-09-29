@@ -1,0 +1,54 @@
+---
+- name: Setting facts so that they will be persisted in the fact cache
+  ansible.builtin.set_fact:
+    pg_version_to_install: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
+
+- name: Configure repository
+  include_tasks: ../../../../tasks/enable_repo.yml
+
+- name: install Percona Platform for PostgreSQL 18 packages
+  include_tasks: ../../../../tasks/install_ppg18.yml
+
+- name: Initialize Postgres RHEL
+  command: /usr/pgsql-18/bin/postgresql-18-setup initdb
+  environment:
+    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  when: ansible_os_family == "RedHat"
+
+- name: Start Postgres RHEL
+  service:
+    name: postgresql-18
+    state: started
+    enabled: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Install PPG tools
+  include_tasks: ../../../../tasks/install_ppg18_tools.yml
+
+# =========Telemetry testcases
+- name: Verify telemetry installation
+  include_tasks: ../../../../tasks/verify_telemetry.yml
+
+- name: Install GCC Deb
+  apt:
+    name: gcc
+  when: ansible_os_family == "Debian"
+
+- name: Install GCC RHEL
+  yum:
+    name: gcc
+  when: ansible_os_family == "RedHat"
+
+- name: Create temporary directory for compilation
+  command: mkdir /tmp/libpq_command_temp_dir
+
+- name: Copy libpq source file
+  copy:
+    src: ../../common/files/lib_version.c
+    dest: /tmp/libpq_command_temp_dir
+
+- name: Delete dpkg-query for RHEL
+  yum:
+    name: dpkg
+    state: absent
+  when: ansible_os_family == "RedHat"

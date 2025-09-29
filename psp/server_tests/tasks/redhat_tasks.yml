@@ -31,7 +31,13 @@
       state: directory
       owner: postgres
       group: wheel
-      mode: 0775      
+      mode: 0775
+
+  - name: Ensure cpanminus is installed
+    become: true
+    ansible.builtin.package:
+      name: cpanminus
+      state: present
 
   - name: Install perl-CPAN and perl-App-cpanminus on Red Hat
     become: true
@@ -153,6 +159,9 @@
       - wget
       - perl-LWP-Protocol-https
       - perl-JSON
+      - jq
+      - liburing
+      - liburing-devel
 
   - name: install packages specific to rhel 8 and 9
     yum:
@@ -164,16 +173,6 @@
       - lcov
       - prename
     when: ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
-
-  # - name: install packages specific to rhel 10
-  #   yum:
-  #     name: "{{ packages }}"
-  #     state: latest
-  #     update_cache: yes
-  #   vars:
-  #     packages:
-  #     - kernel-modules-extra
-  #   when: ansible_distribution_major_version == "10"
 
   - name: Install kernel-modules-extra on RHEL 10
     become: true
@@ -194,13 +193,30 @@
     command: cpanm File::Rename
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
-  - name: Install cpanm CGI::Session
-    become: true
-    command: cpanm CGI::Session
+  # - name: Install HTTP::Server::Simple::CGI Perl module
+  #   become: true
+  #   ansible.builtin.command: >
+  #     cpanm --notest --quiet HTTP::Server::Simple::CGI
+  #   args:
+  #     creates: /usr/local/share/perl5/HTTP/Server/Simple/CGI.pm
 
-  - name: Install HTTP::Server::Simple::CGI
+  # - name: Install cpanm CGI::Session
+  #   become: true
+  #   command: cpanm CGI::Session
+
+  # - name: Install HTTP::Server::Simple::CGI
+  #   become: true
+  #   command: cpanm HTTP::Server::Simple::CGI
+
+  - name: Install required Perl modules
     become: true
-    command: cpanm HTTP::Server::Simple::CGI
+    ansible.builtin.command: >
+      cpanm --notest --quiet {{ item }}
+    args:
+      creates: "/usr/local/share/perl5/{{ item | replace('::', '/') }}.pm"
+    loop:
+      - CGI::Session
+      - HTTP::Server::Simple::CGI
 
   - name: Debug 3
     command: rpm -qi systemtap-sdt-devel
@@ -288,9 +304,9 @@
   - name: Include KMIP server setup playbook
     include_tasks: run_kmip_vault_server.yml
 
-  - name: Change ownership of /tmp/vault_env to postgres
+  - name: Change ownership of /tmp/bao_env to postgres
     ansible.builtin.file:
-      path: /tmp/vault_env
+      path: /tmp/bao_env
       owner: postgres
       group: wheel
       recurse: true
@@ -493,12 +509,12 @@
   #   shell: | 
   #     set -e
   #     export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
-  #     export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
+  #     export BAO_CACERT_FILE=/tmp/vault_env/vault_ca.crt
   #     export VAULT_ADDR=https://127.0.0.1:8200
   #     export VAULT_TOKEN=root
 
   #     echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
-  #     echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
+  #     echo "Using Vault CA cert file: $BAO_CACERT_FILE"
   #     cd /tmp/postgres && make -s check-world
   #   become_user: postgres
   #   args:
@@ -527,12 +543,12 @@
   #     ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
 
   #     export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
-  #     export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
+  #     export BAO_CACERT_FILE=/tmp/vault_env/vault_ca.crt
   #     export VAULT_ADDR=https://127.0.0.1:8200
   #     export VAULT_TOKEN=root
 
   #     echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
-  #     echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
+  #     echo "Using Vault CA cert file: $BAO_CACERT_FILE"
   #     cd /tmp/postgres/contrib/pg_tde && make -s check -k
   #   become_user: postgres
   #   args:
@@ -585,12 +601,12 @@
   #     psql -c "show default_table_access_method ;"
 
   #     export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
-  #     export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
+  #     export BAO_CACERT_FILE=/tmp/vault_env/vault_ca.crt
   #     export VAULT_ADDR=https://127.0.0.1:8200
   #     export VAULT_TOKEN=root
 
   #     echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
-  #     echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
+  #     echo "Using Vault CA cert file: $BAO_CACERT_FILE"
   #     export TDE_MODE=1 && cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world -k
   #   become_user: postgres
   #   args:

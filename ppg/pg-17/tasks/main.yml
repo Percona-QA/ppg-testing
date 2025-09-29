@@ -10,6 +10,14 @@
    ansible_distribution_major_version == "10" and
    pg_version_to_install | string is version('17.5', '<=', strict=True)
 
+#Uncomment once Debain-13 is integrated and stable on 17.6 using testing repo
+# - name: End play on Debian 13 and 17.6 and older versions
+#   fail:
+#     msg: "Stopping execution on Debian 13 because 17.6 and below are not supported."
+#   when: ansible_os_family == "Debian" and
+#    ansible_distribution_major_version == "13" and
+#    pg_version_to_install | string is version('17.6', '<=', strict=True)
+
 - name: Configure repository
   include_tasks: ../../../../tasks/enable_repo.yml
 

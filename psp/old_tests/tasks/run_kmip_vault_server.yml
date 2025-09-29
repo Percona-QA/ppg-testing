@@ -1,0 +1,186 @@
+- name: yum install -y yum-utils
+  become: true
+  command: yum install -y yum-utils
+  when: ansible_os_family == "RedHat"
+
+- name: Install docker RHEL
+  become: true
+  command: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+  when: ansible_os_family == "RedHat"
+
+- name: Yum update
+  become: true
+  command: yum -y update
+  when: ansible_os_family == "RedHat"
+
+- name: Ensure Docker SDK for Python is installed
+  ansible.builtin.pip:
+    name:
+      - docker
+      - requests
+    executable: pip3
+  become: true
+  when: ansible_os_family == "RedHat"
+
+- name: Install docker
+  become: true
+  command: yum install -y docker-ce docker-ce-cli containerd.io
+  when: ansible_os_family == "RedHat"
+
+- name: Start docker
+  become: true
+  service:
+    name: docker
+    state: started
+    enabled: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Install docker.io Deb
+  become: true
+  apt:
+    name: docker.io
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: show docker version
+  command: docker -v
+  register: docker_version_result
+
+- debug:
+    var: docker_version_result.stdout
+
+- name: Create KMIP build directory
+  ansible.builtin.file:
+    path: /tmp/kmip_server
+    state: directory
+    mode: '0755'
+
+- name: Copy KMIP Dockerfile
+  ansible.builtin.copy:
+    src: ../../files/kmip/Dockerfile
+    dest: /tmp/kmip_server/Dockerfile
+
+- name: Copy KMIP entrypoint.sh
+  ansible.builtin.copy:
+    src: ../../files/kmip/entrypoint.sh
+    dest: /tmp/kmip_server/entrypoint.sh
+    mode: '0755'
+
+- name: Build KMIP Docker image using CLI
+  become: true
+  ansible.builtin.shell: |
+    docker build -t kmip-server .
+  args:
+    chdir: /tmp/kmip_server
+
+- name: Run KMIP Docker container using CLI
+  become: true
+  ansible.builtin.shell: |
+    docker run -d --name kmip -p 5696:5696 \
+      --restart unless-stopped \
+      kmip-server
+
+- name: Wait for KMIP server to listen on port 5696
+  ansible.builtin.wait_for:
+    port: 5696
+    host: 0.0.0.0
+    delay: 5
+    timeout: 60
+    state: started
+
+- name: Copy KMIP certificates from container to host
+  ansible.builtin.shell: |
+    docker cp kmip:/opt/certs/server_certificate.pem /tmp/
+    docker cp kmip:/opt/certs/client_key_jane_doe.pem /tmp/
+    docker cp kmip:/opt/certs/client_certificate_jane_doe.pem /tmp/
+  args:
+    executable: /bin/bash
+
+- name: Create Vault env dir
+  ansible.builtin.file:
+    path: /tmp/vault_env
+    state: directory
+    mode: '0755'
+
+# - name: Run Vault container with TLS enabled in dev mode
+#   community.docker.docker_container:
+#     name: vault
+#     image: hashicorp/vault:latest
+#     state: started
+#     restart_policy: unless-stopped
+#     ports:
+#       - "8200:8200"
+#     env:
+#       VAULT_DEV_ROOT_TOKEN_ID: root
+#       VAULT_ADDR: https://0.0.0.0:8200
+#     capabilities:
+#       - IPC_LOCK
+#     command: >
+#       vault server -dev
+#       -dev-tls
+#       -dev-listen-address=0.0.0.0:8200
+#     volumes:
+#       - /tmp/vault_env:/vault/env  # Shared volume for environment output (optional)
+
+- name: Run Vault container (fallback)
+  become: true
+  ansible.builtin.shell: |
+    docker run -d --name vault \
+      --cap-add=IPC_LOCK \
+      -e VAULT_DEV_ROOT_TOKEN_ID=root \
+      -e VAULT_ADDR=https://0.0.0.0:8200 \
+      -p 8200:8200 \
+      -v /tmp/vault_env:/vault/env \
+      hashicorp/vault:latest \
+      vault server -dev -dev-tls -dev-listen-address=0.0.0.0:8200
+
+
+- name: Wait for Vault with TLS to start
+  ansible.builtin.wait_for:
+    port: 8200
+    host: 127.0.0.1
+    delay: 5
+    timeout: 30
+    state: started
+
+
+- name: Extract Vault root token from logs
+  become: true
+  ansible.builtin.shell: |
+    docker logs vault 2>&1 | grep 'Root Token:' | tail -1 | awk -F': ' '{print $2}' | xargs
+  register: vault_root_token
+  changed_when: false
+
+- name: Save Vault root token to file
+  copy:
+    dest: /tmp/vault_env/vault_token.txt
+    content: "{{ vault_root_token.stdout }}"
+    mode: '0600'
+
+- name: Extract CA cert path from Vault container logs
+  shell: docker logs vault 2>&1 | grep VAULT_CACERT | tail -1 | awk -F"'" '{print $2}'
+  register: ca_cert_path_output
+  changed_when: false
+  become: true
+
+- name: Set fact with parsed CA cert path
+  set_fact:
+    vault_ca_cert_path: "{{ ca_cert_path_output.stdout }}"
+
+- name: Debug CA cert path
+  debug:
+    msg: "Vault CA cert path inside container: {{ vault_ca_cert_path }}"
+
+- name: Copy Vault CA cert from container
+  ansible.builtin.shell: |
+    docker cp vault:{{ vault_ca_cert_path }} /tmp/vault_env/vault_ca.crt
+  args:
+    executable: /bin/bash
+  become: true
+
+- name: Show Vault debug info
+  debug:
+    msg:
+      - "Vault Root Token: {{ vault_root_token.stdout }}"
+      - "Vault CA cert saved at: /tmp/vault_env/vault_ca.crt"
+

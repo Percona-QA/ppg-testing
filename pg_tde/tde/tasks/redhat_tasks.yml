@@ -202,6 +202,30 @@
 
   - debug: var=results.stdout_lines
 
+  - name: Allow postgres user to create core dumps
+    community.general.pam_limits:
+      domain: postgres
+      limit_type: hard
+      limit_item: core
+      value: unlimited
+    register: results
+    when: ansible_distribution_major_version == "10"
+
+  - debug: var=results.stdout_lines
+    when: ansible_distribution_major_version == "10"
+
+  - name: Allow postgres user to create core dumps (soft)
+    community.general.pam_limits:
+      domain: postgres
+      limit_type: soft
+      limit_item: core
+      value: unlimited
+    register: results
+    when: ansible_distribution_major_version == "10"
+
+  - debug: var=results.stdout_lines
+    when: ansible_distribution_major_version == "10"
+
   - name: Get ulimit results
     become_user: postgres
     ansible.builtin.shell: ulimit -a
