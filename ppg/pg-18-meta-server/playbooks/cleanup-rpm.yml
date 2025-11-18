@@ -12,9 +12,9 @@
         packages:
           - percona-postgresql-client-common
           - percona-postgresql-common
-          - percona-postgresql17
-          - percona-wal2json17
-          - percona-pg-stat-monitor17
+          - percona-postgresql18
+          - percona-wal2json18
+          - percona-pg-stat-monitor18
           - percona-pgaudit
-          - percona-pg_repack17
+          - percona-pg_repack18
       when: ansible_os_family == "RedHat"

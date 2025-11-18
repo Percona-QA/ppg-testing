@@ -10,36 +10,36 @@
         state: absent
       vars:
         packages:
-          - percona-postgresql-17
+          - percona-postgresql-18
           - percona-postgresql-all
-          - percona-postgresql-client-17
+          - percona-postgresql-client-18
           - percona-postgresql-contrib
           - percona-postgresql-doc
-          - percona-postgresql-doc-17
-          - percona-postgresql-plperl-17
-          - percona-postgresql-plpython3-17
-          - percona-postgresql-pltcl-17
-          - percona-postgresql-server-dev-17
+          - percona-postgresql-doc-18
+          - percona-postgresql-plperl-18
+          - percona-postgresql-plpython3-18
+          - percona-postgresql-pltcl-18
+          - percona-postgresql-server-dev-18
           - percona-postgresql-server-dev-all
-          - percona-postgresql-17-dbgsym
-          - percona-postgresql-client-17-dbgsym
-          - percona-postgresql-plperl-17-dbgsym
-          - percona-postgresql-plpython3-17-dbgsym
-          - percona-postgresql-pltcl-17-dbgsym
-          - percona-postgresql-17-pgaudit
-          - percona-postgresql-17-repack
-          - percona-postgresql-17-repack-dbgsym
+          - percona-postgresql-18-dbgsym
+          - percona-postgresql-client-18-dbgsym
+          - percona-postgresql-plperl-18-dbgsym
+          - percona-postgresql-plpython3-18-dbgsym
+          - percona-postgresql-pltcl-18-dbgsym
+          - percona-postgresql-18-pgaudit
+          - percona-postgresql-18-repack
+          - percona-postgresql-18-repack-dbgsym
           - percona-pgbackrest
           - percona-pgbackrest-doc
           - percona-patroni
           - percona-patroni-dbgsym
           - percona-pgbadger
           - percona-pgbouncer
-          - percona-pgaudit17-set-user
-          - percona-pgaudit17-set-user-dbgsym
+          - percona-pgaudit18-set-user
+          - percona-pgaudit18-set-user-dbgsym
           - percona-pgbouncer-dbgsym
-          - percona-postgresql-17-wal2json
-          - percona-postgresql-17-wal2json-dbgsym
+          - percona-postgresql-18-wal2json
+          - percona-postgresql-18-wal2json-dbgsym
       when: ansible_distribution == "Debian"
 
     - name: remove patroni ubuntu

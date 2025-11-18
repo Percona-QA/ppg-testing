@@ -6,4 +6,4 @@
   vars:
     pg_version: "{{ lookup('env', 'VERSION') }}"
   roles:
-    - role: pg-17-minor-upgrade
+    - role: pg-18-minor-upgrade

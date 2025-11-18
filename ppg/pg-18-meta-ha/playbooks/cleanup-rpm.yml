@@ -10,6 +10,6 @@
         state: absent
       vars:
         packages:
-          - percona-postgresql17
+          - percona-postgresql18
           - percona-patroni
       when: ansible_os_family == "RedHat"

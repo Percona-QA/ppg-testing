@@ -10,6 +10,6 @@
         state: absent
       vars:
         packages:
-          - percona-postgresql-17
+          - percona-postgresql-18
           - percona-patroni
       when: ansible_distribution == "Debian"

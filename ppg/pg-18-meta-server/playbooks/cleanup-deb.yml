@@ -10,9 +10,9 @@
         state: absent
       vars:
         packages:
-          - percona-postgresql-17
-          - percona-postgresql-17-pgaudit
-          - percona-postgresql-17-repack
-          - percona-postgresql-17-wal2json
-          - percona-pg-stat-monitor17
+          - percona-postgresql-18
+          - percona-postgresql-18-pgaudit
+          - percona-postgresql-18-repack
+          - percona-postgresql-18-wal2json
+          - percona-pg-stat-monitor18
       when: ansible_distribution == "Debian"
