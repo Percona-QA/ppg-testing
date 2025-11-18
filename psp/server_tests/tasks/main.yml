@@ -34,11 +34,6 @@
 
   - debug: var=results.stdout_lines
 
-# when:
-#       - ansible_distribution == "Debian"
-#       - ansible_distribution_major_version == "13"
-#       - ansible_architecture == "aarch64"
-
   - name: Ensure at least 4 GB swap is configured
     become: true
     block:
@@ -154,42 +149,6 @@
     debug:
       var: ansible_facts
 
-  # - name: Decide io_method based on kernel and io_uring availability
-  #   set_fact:
-  #     io_method: >-
-  #       {% if (uring_disabled.stdout | default('1') | int == 0)
-  #         and (kernel_version.stdout | default('0.0') is version('5.10', '>=')) %}
-  #       io_uring
-  #       {% else %}
-  #       sync
-  #       {% endif %}
-  #   when:
-  #     - (major_version | int) >= 18
-  #     - io_method in ['io_uring']
-  #     - ansible_os_family == 'RedHat'
-
-  # - name: Print all facts
-  #   debug:
-  #     var: ansible_facts
-
-  # - name: Allow core dumps for postgres user
-  #   become: true
-  #   copy:
-  #     dest: /etc/security/limits.d/postgres-core.conf
-  #     content: |
-  #       postgres soft core unlimited
-  #       postgres hard core unlimited
-  #     owner: root
-  #     group: root
-  #     mode: '0644'
-
-  # - name: Ensure pam_limits is enabled in login
-  #   become: true
-  #   lineinfile:
-  #     path: /etc/pam.d/common-session
-  #     line: "session required pam_limits.so"
-  #     state: present
-
   - name: Ensure postgres user has unlimited core dump limit
     become: true
     community.general.pam_limits:
@@ -283,16 +242,15 @@
 
   - debug: var=results.stdout_lines
 
-  # - name: Clone pg_tde sources
-  #   git:
-  #     repo: "{{ repo }}"
-  #     version: "{{ version }}"
-  #     dest: /tmp/pg_tde
-  #     track_submodules: true
-  #   vars:
-  #     repo: "{{ lookup('env', 'PSP_REPO') }}"
-  #     version: "{{ lookup('env', 'PSP_BRANCH') }}"
-  #   become_user: postgres
+  - name: Remove vault_v2_test from Makefile
+    ansible.builtin.lineinfile:
+      path: /tmp/pg_tde/Makefile
+      regexp: '.*vault_v2_test.*'
+      state: absent
+    when: 
+      - ansible_os_family == 'Debian'
+      - ansible_distribution == 'Debian'
+      - (ansible_distribution_major_version | int) == 13 
 
   - name: Submodule update
     command : git submodule update --init --recursive
@@ -889,38 +847,6 @@
       PG_TEST_TIMEOUT_DEFAULT: 300
     when: testsuite == 'installcheck-world'
     register: regression
-
-  # - name: Run installcheck-world with tde
-  #   become: true
-  #   ignore_errors: yes
-  #   shell: |
-  #     psql -c "show default_table_access_method ;"
-  #     export VAULT_ROOT_TOKEN_FILE=/tmp/bao_env/bao_token.txt
-  #     export VAULT_CACERT_FILE=/tmp/bao_env/bao_ca.crt
-  #     export VAULT_ADDR=https://127.0.0.1:8200
-  #     export VAULT_TOKEN=root
-  #     export TDE_MODE=1
-  #     export PGCTLTIMEOUT=120
-  #     export PG_TEST_TIMEOUT_DEFAULT=300
-  #     cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/pg_tde/ci_scripts/tde_setup.sql" make -s installcheck-world -k
-  #   become_user: postgres
-  #   args:
-  #     executable: /bin/bash
-  #     chdir: "/tmp/postgres/"
-  #   environment:
-  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
-  #     PG_TEST_PORT_DIR: "/tmp/pg_tde_port"
-  #     INSTALL_DIR: "/opt/pgsql"
-  #     TDE_MODE: 1
-  #     LANG: C.UTF-8
-  #     LC_CTYPE: C
-  #     LC_ALL: C
-  #     PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
-  #     PGCTLTIMEOUT: 120
-  #     PG_TEST_TIMEOUT_DEFAULT: 300
-  #   when: testsuite == 'installcheck-world'
-  #   register: regression
 
   - name: Show stdout of installcheck-world regression tests
     debug:
