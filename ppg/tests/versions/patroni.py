@@ -103,4 +103,10 @@ patroni = {
     "ppg-15.14": {"version": "4.0.6","binary_version": "patroni 4.0.6"},
     "ppg-16.10": {"version": "4.0.6","binary_version": "patroni 4.0.6"},
     "ppg-17.6": {"version": "4.0.6","binary_version": "patroni 4.0.6"},
+    "ppg-13.23": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
+    "ppg-14.20": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
+    "ppg-15.15": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
+    "ppg-16.11": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
+    "ppg-17.7": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
+    "ppg-18.1": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
 }
