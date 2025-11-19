@@ -572,11 +572,21 @@
   #   become: yes
   #   when: ansible_os_family == "Debian"
 
-  - name: Start patroni
-    service:
+  # - name: Start patroni
+  #   service:
+  #     name: patroni
+  #     state: started
+  #     enabled: yes
+
+  - name: Enable and start patroni with wait
+    ansible.builtin.systemd:
       name: patroni
       state: started
       enabled: yes
+      daemon_reload: yes
+    async: 180
+    poll: 5
+    become: yes
 
   # - name: Install patroni related dependency on Debian 13
   #   apt:
