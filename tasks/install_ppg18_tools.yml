@@ -559,18 +559,18 @@
       mode: 0644
     when: ansible_os_family == "Debian"
 
-  - name: Change systemd Type from notify to simple for Patroni
-    ansible.builtin.replace:
-      path: /usr/lib/systemd/system/patroni.service
-      regexp: '^Type=notify'
-      replace: 'Type=simple'
-    become: yes
-    when: ansible_os_family == "Debian"
+  # - name: Change systemd Type from notify to simple for Patroni
+  #   ansible.builtin.replace:
+  #     path: /usr/lib/systemd/system/patroni.service
+  #     regexp: '^Type=notify'
+  #     replace: 'Type=simple'
+  #   become: yes
+  #   when: ansible_os_family == "Debian"
 
-  - name: Reload systemd daemon
-    ansible.builtin.command: systemctl daemon-reload
-    become: yes
-    when: ansible_os_family == "Debian"
+  # - name: Reload systemd daemon
+  #   ansible.builtin.command: systemctl daemon-reload
+  #   become: yes
+  #   when: ansible_os_family == "Debian"
 
   - name: Start patroni
     service:
