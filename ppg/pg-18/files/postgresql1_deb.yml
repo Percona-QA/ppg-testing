@@ -94,7 +94,7 @@ postgresql:
   listen: 127.0.0.1:5434
   connect_address: 127.0.0.1:5434
   data_dir: /var/lib/postgresql/patroni_test/data/postgresql1
-  bin_dir: /usr/lib/postgresql/17/bin/
+  bin_dir: /usr/lib/postgresql/18/bin/
 #  config_dir:
   pgpass: /var/lib/postgresql/patroni_test/pgpass1
   authentication:
