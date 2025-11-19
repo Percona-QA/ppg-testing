@@ -477,6 +477,12 @@
       path: /etc/patroni
       state: directory
 
+  - name: Check if patroni.yml exists
+    ansible.builtin.stat:
+      path: /etc/patroni/patroni.yml
+    register: patroni_cfg_stat
+    become: yes
+
   - name: Copy Patroni sample config to active config if not present
     ansible.builtin.copy:
       src: /etc/patroni/patroni.yml.sample
@@ -488,7 +494,7 @@
     become: yes
     when:
       - ansible_os_family == "Debian"
-      - not ansible_facts['files'].get('/etc/patroni/patroni.yml', {}).exists
+      - not patroni_cfg_stat.stat.exists
 
   - name: Start patroni
     service:
