@@ -43,6 +43,7 @@
 #        - libsharyanto-string-util-perl
         - libipc-run-perl
         - libtext-csv-xs-perl
+        - python3-systemd
     when: ansible_os_family == "Debian"
 
   - name: Ensure correct lz4 package is installed (Debian/Ubuntu)
