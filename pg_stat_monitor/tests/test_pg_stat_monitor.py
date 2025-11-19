@@ -22,20 +22,16 @@ def test_pg_stat_monitor(host):
         print("Contents of /tmp/pg_stat_monitor:")
         print(files_result.stdout)
 
-        logs_result = host.run("ls -l /tmp/pg_stat_monitor/logs")
-        print("Contents of /tmp/pg_stat_monitor/logs:")
-        print(logs_result.stdout)
-
         tmp_check_result = host.run("ls -l /tmp/pg_stat_monitor/tmp_check")
         print("Contents of /tmp/pg_stat_monitor/tmp_check:")
         print(tmp_check_result.stdout)
 
-        tmp_result_logs = host.run("ls -l /tmp/pg_stat_monitor/tmp_check/logs")
-        print("Contents of /tmp/pg_stat_monitor/tmp_check/logs:")
+        tmp_result_logs = host.run("ls -l /tmp/pg_stat_monitor/tmp_check/log")
+        print("Contents of /tmp/pg_stat_monitor/tmp_check/log:")
         print(tmp_result_logs.stdout)
 
-        cat_logs_result = host.run("cat /tmp/pg_stat_monitor/logs/*.log")
-        print("Contents of /tmp/pg_stat_monitor/logs/.log_file:")
+        cat_logs_result = host.run("cat /tmp/pg_stat_monitor/log/*.log")
+        print("Contents of /tmp/pg_stat_monitor/log/.log_file:")
         print(cat_logs_result.stdout)
 
         if result.rc != 0:
