@@ -34,6 +34,38 @@ def test_pg_stat_monitor(host):
         print("Contents of /tmp/pg_stat_monitor/tmp_check/log/.log_file:")
         print(cat_logs_result.stdout)
 
+
+        print("-------------------------------- MISC TEST RESULTS --------------------------------")
+
+        misc_result_log = host.run("cat /tmp/pg_stat_monitor/tmp_check/log/021_misc_1_pgsm_regression.log")
+        print("Contents of /tmp/pg_stat_monitor/tmp_check/log/021_misc_1_pgsm_regression.log:")
+        print(misc_result_log.stdout)
+
+        misc_result_regression_diffs = host.run("cat /tmp/pg_stat_monitor/tmp_check/log/regress_log_021_misc_1")
+        print("Contents of /tmp/pg_stat_monitor/tmp_check/log/regress_log_021_misc_1:")
+        print(misc_result_regression_diffs.stdout)
+
+        misc_debug_result = host.run("cat /tmp/pg_stat_monitor/t/results/021_misc_1.out")
+        print("Contents of /tmp/pg_stat_monitor/t/results/021_misc_1.out:")
+        print(misc_debug_result.stdout)
+
+        print("-------------------------------- HISTOGRAM TEST RESULTS --------------------------------")
+
+        histogram_result_log = host.run("cat /tmp/pg_stat_monitor/tmp_check/log/030_histogram_pgsm_regression.log")
+        print("Contents of /tmp/pg_stat_monitor/tmp_check/log/030_histogram_pgsm_regression.log:")
+        print(histogram_result_log.stdout)
+
+        histogram_result_regression_diffs = host.run("cat /tmp/pg_stat_monitor/tmp_check/log/regress_log_030_histogram")
+        print("Contents of /tmp/pg_stat_monitor/tmp_check/log/regress_log_030_histogram:")
+        print(histogram_result_regression_diffs.stdout)
+
+        histogram_debug_result = host.run("cat /tmp/pg_stat_monitor/t/results/030_histogram.out.debug")
+        print("Contents of /tmp/pg_stat_monitor/t/results/030_histogram.out.debug:")
+        print(histogram_debug_result.stdout)
+
+        print("-------------------------------- END --------------------------------")
+
+
         if result.rc != 0:
-            print(host.file("/tmp/pg_stat_monitor/regression.diffs").content_string)
+            # print(host.file("/tmp/pg_stat_monitor/regression.diffs").content_string)
             raise AssertionError
