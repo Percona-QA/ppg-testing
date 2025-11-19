@@ -472,36 +472,6 @@
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     when: ansible_os_family == "Debian"
 
-  - name: Create /etc/patroni directory
-    file:
-      path: /etc/patroni
-      state: directory
-
-  - name: Check if patroni.yml exists
-    ansible.builtin.stat:
-      path: /etc/patroni/patroni.yml
-    register: patroni_cfg_stat
-    become: yes
-
-  - name: Copy Patroni sample config to active config if not present
-    ansible.builtin.copy:
-      src: /etc/patroni/patroni.yml.sample
-      dest: /etc/patroni/patroni.yml
-      remote_src: yes
-      owner: postgres
-      group: postgres
-      mode: '0644'
-    become: yes
-    when:
-      - ansible_os_family == "Debian"
-      - not patroni_cfg_stat.stat.exists
-
-  - name: Start patroni
-    service:
-      name: patroni
-      state: started
-      enabled: yes
-
   - name: Install etcd packages RHEL
     yum:
       name: "{{ packages }}"
@@ -554,6 +524,37 @@
         - etcd
         - percona-haproxy
     when: ansible_os_family == "Debian"
+
+
+  - name: Create /etc/patroni directory
+    file:
+      path: /etc/patroni
+      state: directory
+
+  - name: Check if patroni.yml exists
+    ansible.builtin.stat:
+      path: /etc/patroni/patroni.yml
+    register: patroni_cfg_stat
+    become: yes
+
+  - name: Copy Patroni sample config to active config if not present
+    ansible.builtin.copy:
+      src: /etc/patroni/patroni.yml.sample
+      dest: /etc/patroni/patroni.yml
+      remote_src: yes
+      owner: postgres
+      group: postgres
+      mode: '0644'
+    become: yes
+    when:
+      - ansible_os_family == "Debian"
+      - not patroni_cfg_stat.stat.exists
+
+  - name: Start patroni
+    service:
+      name: patroni
+      state: started
+      enabled: yes
 
   # - name: Install patroni related dependency on Debian 13
   #   apt:
