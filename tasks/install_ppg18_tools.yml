@@ -472,6 +472,24 @@
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     when: ansible_os_family == "Debian"
 
+  - name: Create /etc/patroni directory
+    file:
+      path: /etc/patroni
+      state: directory
+
+  - name: Copy Patroni sample config to active config if not present
+    ansible.builtin.copy:
+      src: /etc/patroni/patroni.yml.sample
+      dest: /etc/patroni/patroni.yml
+      remote_src: yes
+      owner: postgres
+      group: postgres
+      mode: '0644'
+    become: yes
+    when:
+      - ansible_os_family == "Debian"
+      - not ansible_facts['files'].get('/etc/patroni/patroni.yml', {}).exists
+
   - name: Start patroni
     service:
       name: patroni
@@ -555,11 +573,6 @@
   #       - etcd-client
   #       - percona-haproxy
   #   when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int >= 12)
-
-  - name: Create /etc/patroni directory
-    file:
-      path: /etc/patroni
-      state: directory
 
   - name: Create test patroni directory RHEL
     file:
