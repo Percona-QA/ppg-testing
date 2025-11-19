@@ -508,7 +508,7 @@
       - percona-pgvector_18-debuginfo
       - percona-pgvector_18-debugsource
       - percona-pgvector_18-llvmjit
-    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('18.2', '>=', strict=True))
+    when: ansible_os_family == "RedHat"
 
   - name: Install pgvector packages Debian
     apt:
@@ -518,7 +518,7 @@
     vars:
       packages:
       - percona-postgresql-18-pgvector
-    when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('18.2', '>=', strict=True))
+    when: ansible_os_family == "Debian"
 
   - name: Install patroni related packages Debian
     apt:

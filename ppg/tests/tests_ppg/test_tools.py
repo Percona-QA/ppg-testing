@@ -804,6 +804,8 @@ def test_pgvector(host):
 
 
 def test_pg_telemetry_package_version(host):
+    if settings.MAJOR_VER in ["18"]:
+        pytest.skip("Telemetry not supported on PSP 18 and onwards.")
     dist = host.system_info.distribution
     if dist.lower() in ["ubuntu", "debian"]:
         pg_telemetry = host.package(f"percona-pg-telemetry{MAJOR_VER}")
@@ -813,6 +815,8 @@ def test_pg_telemetry_package_version(host):
 
 
 def test_pg_telemetry_extension_version(host):
+    if settings.MAJOR_VER in ["18"]:
+        pytest.skip("Telemetry not supported on PSP 18 and onwards.")
     with host.sudo("postgres"):
         result = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS percona_pg_telemetry;'")
         assert result.rc == 0, result.stderr
