@@ -13,8 +13,19 @@ MAJOR_VER = settings.MAJOR_VER
 
 POSTGIS_VERSION_LIMIT = version.parse("3.3.99")  # Run only for ≤3.3.x tarballs
 
+
+# Minimum PostgreSQL versions where pg_gather install location changed
+PG_GATHER_MIN_VERSIONS = {
+    13: version.parse("13.23"),
+    14: version.parse("14.20"),
+    15: version.parse("15.15"),
+    16: version.parse("16.11"),
+    17: version.parse("17.7"),
+    18: version.parse("18.1"),
+}
+
 # Minimum PostgreSQL versions where PostGIS is available
-MIN_SUPPORTED_VERSIONS = {
+POSTGIS_MIN_SUPPORTED_VERSIONS = {
     13: version.parse("13.19"),
     14: version.parse("14.16"),
     15: version.parse("15.11"),
@@ -429,7 +440,7 @@ def _skip_if_postgis_unavailable(pg_versions):
     pg_version_str = pg_versions["version"]
     pg_version = version.parse(pg_version_str)
 
-    min_supported = MIN_SUPPORTED_VERSIONS.get(pg_version.major)
+    min_supported = POSTGIS_MIN_SUPPORTED_VERSIONS.get(pg_version.major)
     if min_supported and pg_version < min_supported:
         pytest.skip(f"PostGIS not available on PostgreSQL {pg_version_str}")
 
@@ -736,10 +747,115 @@ def test_pgpool_service(host):
             assert service.is_enabled
 
 
+def _is_old_gather_version(pg_version):
+    """Return True if gather.sql should be read from /usr/bin for old PG versions."""
+    min_supported = PG_GATHER_MIN_VERSIONS.get(pg_version.major)
+    return bool(min_supported and pg_version < min_supported)
+
+
+def _gather_sql_path(dist, major_version):
+    """Return correct gather.sql path for new PG versions."""
+    if dist.lower() in {"ubuntu", "debian"}:
+        return f"/usr/share/postgresql/{major_version}/contrib/gather.sql"
+    return f"/usr/pgsql-{major_version}/share/contrib/gather.sql"
+
+
 def test_pg_gather_output(host):
+    dist = host.system_info.distribution
+
+    pg_version_str = pg_versions["version"]
+    pg_version = version.parse(pg_version_str)
+
     with host.sudo("postgres"):
-        result = host.run("cd && psql -X -f /usr/bin/gather.sql > out.txt")
-        assert result.rc == 0, result.stderr
+        if _is_old_gather_version(pg_version):
+            sql_path = "/usr/bin/gather.sql"
+        else:
+            sql_path = _gather_sql_path(dist, MAJOR_VER)
+
+        result = host.run(f"cd && psql -X -f {sql_path} > out.txt")
+
+    assert result.rc == 0, result.stderr
+
+
+def test_pg_gather_file_version(host):
+    dist = host.system_info.distribution
+
+    pg_version_str = pg_versions["version"]
+    pg_version = version.parse(pg_version_str)
+
+    with host.sudo("postgres"):
+        if _is_old_gather_version(pg_version):
+            cmd = "cd && psql -X -f /usr/bin/gather.sql > out.txt"
+        else:
+            sql_path = _gather_sql_path(dist, MAJOR_VER)
+            cmd = f"head -5 {sql_path} | tail -1 | cut -d' ' -f3"
+
+        result = host.run(cmd)
+
+    assert result.rc == 0, result.stderr
+
+    expected_version = pg_versions["pg_gather"]["sql_file_version"]
+    assert expected_version in result.stdout.strip(), result.stdout
+
+
+# def test_pg_gather_output(host):
+#     dist = host.system_info.distribution
+
+#     # Minimum PostgreSQL versions where pg_gather install location were changed
+#     PG_GATHER_VERSIONS = {
+#         13: version.parse("13.23"),
+#         14: version.parse("14.20"),
+#         15: version.parse("15.15"),
+#         16: version.parse("16.11"),
+#         17: version.parse("17.7"),
+#         18: version.parse("18.1"),
+#     }
+
+#     pg_version_str = pg_versions["version"]
+#     pg_version = version.parse(pg_version_str)
+
+#     min_supported = PG_GATHER_VERSIONS.get(pg_version.major)
+#     if min_supported and pg_version < min_supported:
+#         with host.sudo("postgres"):
+#             result = host.run("cd && psql -X -f /usr/bin/gather.sql > out.txt")
+#             assert result.rc == 0, result.stderr
+#     else:
+#         with host.sudo("postgres"):
+#             if dist.lower() in ["ubuntu", "debian"]:
+#                 result = host.run(f"cd && psql -X -f /usr/share/postgresql/{MAJOR_VER}/contrib/gather.sql > out.txt")
+#             else:
+#                 result = host.run(f"cd && psql -X -f /usr/pgsql-{MAJOR_VER}/share/contrib/gather.sql > out.txt")
+#             assert result.rc == 0, result.stderr
+
+
+# def test_pg_gather_file_version(host):
+#     dist = host.system_info.distribution
+
+#     # Minimum PostgreSQL versions where pg_gather install location were changed
+#     PG_GATHER_VERSIONS = {
+#         13: version.parse("13.23"),
+#         14: version.parse("14.20"),
+#         15: version.parse("15.15"),
+#         16: version.parse("16.11"),
+#         17: version.parse("17.7"),
+#         18: version.parse("18.1"),
+#     }
+
+#     pg_version_str = pg_versions["version"]
+#     pg_version = version.parse(pg_version_str)
+
+#     min_supported = PG_GATHER_VERSIONS.get(pg_version.major)
+#     if min_supported and pg_version < min_supported:
+#         with host.sudo("postgres"):
+#             result = host.run("cd && psql -X -f /usr/bin/gather.sql > out.txt")
+#     else:
+#         with host.sudo("postgres"):
+#             if dist.lower() in ["ubuntu", "debian"]:
+#                 result = host.run(f"head -5 /usr/share/postgresql/{MAJOR_VER}/contrib/gather.sql | tail -1 | cut -d' ' -f3")
+#             else:
+#                 result = host.run(f"head -5 /usr/pgsql-{MAJOR_VER}/share/contrib/gather.sql | tail -1 | cut -d' ' -f3")
+#     assert result.rc == 0, result.stderr
+#     assert pg_versions["pg_gather"]['sql_file_version'] in result.stdout.strip("\n"), result.stdout
 
 
 def test_pg_gather_package_version(host):
@@ -750,12 +866,6 @@ def test_pg_gather_package_version(host):
         pg_gather = host.package(f"percona-pg_gather")
     assert pg_gather.is_installed
     assert pg_versions["pg_gather"]['version'] in pg_gather.version, pg_gather.version
-
-
-def test_pg_gather_file_version(host):
-    result = host.run(f"head -5 /usr/bin/gather.sql | tail -1 | cut -d' ' -f3")
-    assert result.rc == 0, result.stderr
-    assert pg_versions["pg_gather"]['sql_file_version'] in result.stdout.strip("\n"), result.stdout
 
 
 def test_pgvector_package_version(host):
