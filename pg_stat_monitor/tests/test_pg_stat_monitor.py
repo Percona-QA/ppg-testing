@@ -30,8 +30,8 @@ def test_pg_stat_monitor(host):
         print("Contents of /tmp/pg_stat_monitor/tmp_check/log:")
         print(tmp_result_logs.stdout)
 
-        cat_logs_result = host.run("cat /tmp/pg_stat_monitor/log/*.log")
-        print("Contents of /tmp/pg_stat_monitor/log/.log_file:")
+        cat_logs_result = host.run("cat /tmp/pg_stat_monitor/tmp_check/log/*.log")
+        print("Contents of /tmp/pg_stat_monitor/tmp_check/log/.log_file:")
         print(cat_logs_result.stdout)
 
         if result.rc != 0:
