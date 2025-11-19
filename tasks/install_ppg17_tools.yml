@@ -2,12 +2,12 @@
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
       pgaudit_rhel_package_name: "percona-pgaudit"
-      postgis_rhel_package_name_prefix: "percona-postgis35"
+      postgis_rhel_package_name_prefix: "percona-postgis33"
 
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
       pgaudit_rhel_package_name: "percona-pgaudit17"
-      postgis_rhel_package_name_prefix: "percona-postgis35_17"
+      postgis_rhel_package_name_prefix: "percona-postgis33_17"
     when: (pg_version_to_install | string is version('17.0', '>=', strict=True))
 
   - debug:
