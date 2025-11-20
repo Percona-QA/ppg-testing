@@ -13,6 +13,17 @@ MAJOR_VER = settings.MAJOR_VER
 
 POSTGIS_VERSION_LIMIT = version.parse("3.3.99")  # Run only for ≤3.3.x tarballs
 
+# List of expected PG-18 TDE binaries
+TDE_BINARIES = [
+    "pg_tde_archive_decrypt",
+    "pg_tde_basebackup",
+    "pg_tde_change_key_provider",
+    "pg_tde_checksums",
+    "pg_tde_resetwal",
+    "pg_tde_restore_encrypt",
+    "pg_tde_rewind",
+    "pg_tde_waldump",
+]
 
 # Minimum PostgreSQL versions where pg_gather install location changed
 PG_GATHER_MIN_VERSIONS = {
@@ -933,6 +944,109 @@ def test_pg_telemetry_extension_version(host):
         result = host.run("psql -c 'SELECT percona_pg_telemetry_version();' | awk 'NR==3{print $1}'")
         assert result.rc == 0, result.stderr
         assert result.stdout.strip("\n") == pg_versions['pg_telemetry_version']
+
+
+@pytest.mark.parametrize("binary", TDE_BINARIES)
+def test_tde_binaries_present(host, binary):
+    """
+    Verify all PG-18/17 TDE binaries exist in the correct PostgreSQL 18 bin directory
+    depending on OS type (Debian/Ubuntu vs RHEL/CentOS/Rocky).
+    """
+    # pg_tde only exists on PG-17 and above.
+    if int(settings.MAJOR_VER) < 17:
+        pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
+
+    dist = host.system_info.distribution.lower()
+
+    # Determine the PostgreSQL 18 bin directory
+    if dist in ["ubuntu", "debian"]:
+        bin_path = f"/usr/lib/postgresql/{MAJOR_VER}/bin/{binary}"
+    else:  # RHEL / Rocky / AlmaLinux / Amazon Linux 2023
+        bin_path = f"/usr/pgsql-{MAJOR_VER}/bin/{binary}"
+
+    file = host.file(bin_path)
+
+    assert file.exists, f"{binary} is missing at {bin_path}"
+    assert file.is_file, f"{binary} exists but is not a file at {bin_path}"
+    assert file.mode & 0o111, f"{binary} exists but is not executable at {bin_path}"
+
+
+def test_tde_perl_test_module_present(host):
+    """
+    Ensure the TDE Perl test module TdeCluster.pm is present in the pgxs directory
+    on both Debian/Ubuntu and RHEL-based systems.
+    """
+    # pg_tde Perl module only exists on PG-17 and above.
+    if int(settings.MAJOR_VER) < 17:
+        pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
+
+    dist = host.system_info.distribution.lower()
+
+    if dist in ["ubuntu", "debian"]:
+        path = f"/usr/lib/postgresql/{MAJOR_VER}/lib/pgxs/src/test/perl/PostgreSQL/Test/TdeCluster.pm"
+    else:
+        path = f"/usr/pgsql-{MAJOR_VER}/lib/pgxs/src/test/perl/PostgreSQL/Test/TdeCluster.pm"
+
+    f = host.file(path)
+    assert f.exists, f"Missing: {path}"
+    assert f.is_file, f"Path is not a file: {path}"
+    assert f.size > 0, f"File is empty: {path}"
+
+def test_pgxs_perl_modules_present(host):
+    """
+    Verify presence of PostgreSQL PGXS Perl test modules on PG-17 and PG-18
+    for both Debian/Ubuntu and RHEL-based systems.
+    """
+
+    dist = host.system_info.distribution.lower()
+    major = int(MAJOR_VER)
+
+    # Debian/Ubuntu path vs RHEL path
+    if dist in ["ubuntu", "debian"]:
+        base = f"/usr/lib/postgresql/{MAJOR_VER}/lib/pgxs/src/test/perl"
+    else:
+        base = f"/usr/pgsql-{MAJOR_VER}/lib/pgxs/src/test/perl"
+
+    # PGXS files for PG-17 (AdjustDump.pm does NOT exist on PG17)
+    PGXS_PG17 = [
+        "PostgreSQL/Test/AdjustUpgrade.pm",
+        "PostgreSQL/Test/BackgroundPsql.pm",
+        "PostgreSQL/Test/Cluster.pm",
+        "PostgreSQL/Test/Kerberos.pm",
+        "PostgreSQL/Test/RecursiveCopy.pm",
+        "PostgreSQL/Test/SimpleTee.pm",
+        "PostgreSQL/Test/Utils.pm",
+        "PostgreSQL/Version.pm",
+    ]
+
+    # PGXS files for PG-18
+    PGXS_PG18 = [
+        "PostgreSQL/Test/AdjustDump.pm",
+        "PostgreSQL/Test/AdjustUpgrade.pm",
+        "PostgreSQL/Test/BackgroundPsql.pm",
+        "PostgreSQL/Test/Cluster.pm",
+        "PostgreSQL/Test/Kerberos.pm",
+        "PostgreSQL/Test/RecursiveCopy.pm",
+        "PostgreSQL/Test/SimpleTee.pm",
+        "PostgreSQL/Test/Utils.pm",
+        "PostgreSQL/Version.pm",
+    ]
+
+    # Select correct file list
+    if major == 17:
+        required_files = PGXS_PG17
+    elif major == 18:
+        required_files = PGXS_PG18
+    else:
+        pytest.skip(f"Test only applies to PG-17 and PG-18 (got PG-{major}).")
+
+    # Validate all required files
+    for rel_path in required_files:
+        path = f"{base}/{rel_path}"
+        f = host.file(path)
+        assert f.exists, f"Missing required PGXS file: {path}"
+        assert f.is_file, f"Not a file: {path}"
+        assert f.size > 0, f"File is empty: {path}"
 
 
 # def test_pg_telemetry_file_pillar_version(host):
