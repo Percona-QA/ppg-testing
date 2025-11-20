@@ -488,11 +488,43 @@
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     when: ansible_os_family == "Debian"
 
-  - name: Start patroni
-    service:
+  - name: Copy postgresql.yml for patroni service Debian
+    copy:
+      src: postgresql0_deb.yml
+      dest: /etc/patroni/patroni.yml
+      owner: postgres
+      group: postgres
+      mode: 0644
+    when: ansible_os_family == "Debian"
+
+  # - name: Change systemd Type from notify to simple for Patroni
+  #   ansible.builtin.replace:
+  #     path: /usr/lib/systemd/system/patroni.service
+  #     regexp: '^Type=notify'
+  #     replace: 'Type=simple'
+  #   become: yes
+  #   when: ansible_os_family == "Debian"
+
+  # - name: Reload systemd daemon
+  #   ansible.builtin.command: systemctl daemon-reload
+  #   become: yes
+  #   when: ansible_os_family == "Debian"
+
+  # - name: Start patroni
+  #   service:
+  #     name: patroni
+  #     state: started
+  #     enabled: yes
+
+  - name: Enable and start patroni with wait
+    ansible.builtin.systemd:
       name: patroni
       state: started
       enabled: yes
+      daemon_reload: yes
+    async: 180
+    poll: 5
+    become: yes
 
   - name: Install etcd packages RHEL
     yum:
@@ -535,6 +567,31 @@
       packages:
       - percona-postgresql-17-pgvector
     when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('17.2', '>=', strict=True))
+
+  - name: Install pg_tde packages RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-pg_tde_17 
+      - percona-pg_tde_17-devel 
+      - percona-pg_tde_17-debugsource 
+      - percona-pg_tde_17-debuginfo
+    when: ansible_os_family == "RedHat"
+
+  - name: Install pg_tde packages Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgresql-17-pg-tde
+      - percona-postgresql-17-pg-tde-client
+      - percona-postgresql-17-pg-tde-dbgsym
+    when: ansible_os_family == "Debian"
 
   - name: Install patroni related packages Debian
     apt:
