@@ -1049,6 +1049,30 @@ def test_pgxs_perl_modules_present(host):
         assert f.size > 0, f"File is empty: {path}"
 
 
+def test_llvmjit_files_present(host):
+    """
+    Ensure LLVM JIT .bc and .so files required by PostgreSQL are present.
+    Applies only to PostgreSQL installations on Debian/Ubuntu systems.
+    """
+
+    dist = host.system_info.distribution.lower()
+    if dist not in ["debian", "ubuntu"]:
+        pytest.skip("LLVM JIT file verification only applies to Debian/Ubuntu package installations.")
+
+    base_path = f"/usr/lib/postgresql/{MAJOR_VER}/lib"
+
+    expected_files = [
+        f"{base_path}/llvmjit_types.bc",
+        f"{base_path}/llvmjit.so",
+    ]
+
+    for path in expected_files:
+        f = host.file(path)
+        assert f.exists, f"Missing LLVM JIT file: {path}"
+        assert f.is_file, f"Path exists but is not a file: {path}"
+        assert f.size > 0, f"File {path} exists but is empty!"
+
+
 # def test_pg_telemetry_file_pillar_version(host):
 #     output = host.run("cat /usr/local/percona/telemetry/pg/*.json | grep -i pillar_version")
 #     assert output.rc == 0, output.stderr
