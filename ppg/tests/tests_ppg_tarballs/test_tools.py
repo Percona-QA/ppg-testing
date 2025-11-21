@@ -807,7 +807,7 @@ def test_tde_binaries_present(host, binary):
 
     dist = host.system_info.distribution.lower()
 
-    bin_path = f"{get_server_path}/bin/{binary}"
+    bin_path = f"{PG_PATH}/bin/{binary}"
 
     file = host.file(bin_path)
 
