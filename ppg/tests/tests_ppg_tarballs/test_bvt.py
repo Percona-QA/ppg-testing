@@ -209,8 +209,8 @@ def test_extenstions_list(extension_list, host, extension):
         if extension in ['plpythonu', "plpython2u", 'jsonb_plpython2u', 'ltree_plpython2u', 'jsonb_plpythonu',
                             'ltree_plpythonu', 'hstore_plpythonu', 'hstore_plpython2u']:
             pytest.skip("Skipping extension " + extension + " for DEB based in pg: " + os.getenv("VERSION"))
-    # Skip adminpack extension for PostgreSQL 17
-    if settings.MAJOR_VER in ["17"] and extension == 'adminpack':
+    # Skip adminpack extension for PostgreSQL 17,18 
+    if settings.MAJOR_VER in ["17","18"] and extension == 'adminpack':
         pytest.skip("Skipping adminpack extension as it is dropped in PostgreSQL 17")
     assert extension in extension_list
 
@@ -241,8 +241,8 @@ def test_enable_extension(host, get_psql_binary_path , extension):
         'postgis_topology-3','address_standardizer_data_us','postgis_tiger_geocoder','postgis_raster','postgis_topology',
         'postgis_sfcgal','address_standardizer-3','postgis-3','address_standardizer','postgis','address_standardizer_data_us-3']:
             pytest.skip("Skipping extension " + extension + " due to multiple dependencies. Already being checked in test_tools.py.")
-    # Skip adminpack extension for PostgreSQL 17
-    if settings.MAJOR_VER in ["17"] and extension == 'adminpack':
+    # Skip adminpack extension for PostgreSQL 17,18
+    if settings.MAJOR_VER in ["17","18"] and extension == 'adminpack':
         pytest.skip("Skipping adminpack extension as it is dropped in PostgreSQL 17")
     with host.sudo("postgres"):
         install_extension = host.run(get_psql_binary_path + " -c 'CREATE EXTENSION IF NOT EXISTS \"{}\";'".format(extension))
@@ -281,8 +281,8 @@ def test_drop_extension(host,get_psql_binary_path, extension):
         'postgis_topology-3','address_standardizer_data_us','postgis_tiger_geocoder','postgis_raster','postgis_topology',
         'postgis_sfcgal','address_standardizer-3','postgis-3','address_standardizer','postgis','address_standardizer_data_us-3']:
             pytest.skip("Skipping extension " + extension + " due to multiple dependencies. Already being checked in test_tools.py.")
-    # Skip adminpack extension for PostgreSQL 17
-    if settings.MAJOR_VER in ["17"] and extension == 'adminpack':
+    # Skip adminpack extension for PostgreSQL 17, 18
+    if settings.MAJOR_VER in ["17","18"] and extension == 'adminpack':
         pytest.skip("Skipping adminpack extension as it is dropped in PostgreSQL 17")
     with host.sudo("postgres"):
         drop_extension = host.run(get_psql_binary_path + " -c 'DROP EXTENSION if exists \"{}\" CASCADE;'".format(extension))
