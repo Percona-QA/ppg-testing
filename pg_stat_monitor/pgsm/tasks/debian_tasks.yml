@@ -110,35 +110,35 @@
     block:
 
       - name: Add LLVM repo for Debian 11
-      ansible.builtin.copy:
-        dest: /etc/apt/sources.list.d/llvm.list
-        content: |
-          deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/bullseye/ llvm-toolchain-bullseye-14 main
-        owner: root
-        group: root
-        mode: "0644"
+        ansible.builtin.copy:
+          dest: /etc/apt/sources.list.d/llvm.list
+          content: |
+            deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/bullseye/ llvm-toolchain-bullseye-14 main
+          owner: root
+          group: root
+          mode: "0644"
 
       - name: Download LLVM GPG key
-      ansible.builtin.get_url:
-        url: https://apt.llvm.org/llvm-snapshot.gpg.key
-        dest: /usr/share/keyrings/llvm.gpg
-        mode: "0644"
-        owner: root
-        group: root
+        ansible.builtin.get_url:
+          url: https://apt.llvm.org/llvm-snapshot.gpg.key
+          dest: /usr/share/keyrings/llvm.gpg
+          mode: "0644"
+          owner: root
+          group: root
 
       - name: Update apt cache
-      ansible.builtin.apt:
-        update_cache: yes
+        ansible.builtin.apt:
+          update_cache: yes
 
       - name: Install LLVM 14 packages
-      ansible.builtin.apt:
-        name:
-          - clang-14
-          - lld-14
-          - llvm-14
-          - llvm-14-dev
-          - llvm-14-linker-tools
-        state: present
+        ansible.builtin.apt:
+          name:
+            - clang-14
+            - lld-14
+            - llvm-14
+            - llvm-14-dev
+            - llvm-14-linker-tools
+          state: present
 
   - name: Clone pg_stat_monitor sources
     git:
