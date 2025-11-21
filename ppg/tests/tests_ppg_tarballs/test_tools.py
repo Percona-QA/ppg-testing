@@ -21,6 +21,38 @@ os.environ['PATH'] = f"{PG_PATH}/bin:{INSTALL_PATH}/percona-pgbouncer/bin/:{INST
 
 POSTGIS_VERSION_LIMIT = version.parse("3.3.99")  # Run only for ≤3.3.x tarballs
 
+
+# List of expected PG-18 TDE binaries
+TDE_BINARIES = [
+    "pg_tde_archive_decrypt",
+    "pg_tde_basebackup",
+    "pg_tde_change_key_provider",
+    "pg_tde_checksums",
+    "pg_tde_resetwal",
+    "pg_tde_restore_encrypt",
+    "pg_tde_rewind",
+    "pg_tde_waldump",
+]
+
+# Minimum PostgreSQL versions where pg_gather install location changed
+PG_GATHER_MIN_VERSIONS = {
+    13: version.parse("13.23"),
+    14: version.parse("14.20"),
+    15: version.parse("15.15"),
+    16: version.parse("16.11"),
+    17: version.parse("17.7"),
+    18: version.parse("18.1"),
+}
+
+# Minimum PostgreSQL versions where PostGIS is available
+POSTGIS_MIN_SUPPORTED_VERSIONS = {
+    13: version.parse("13.19"),
+    14: version.parse("14.16"),
+    15: version.parse("15.11"),
+    16: version.parse("16.6"),
+    17: version.parse("17.3"),
+}
+
 # Minimum PostgreSQL versions where PostGIS is available
 MIN_SUPPORTED_VERSIONS = {
     13: version.parse("13.19"),
@@ -762,3 +794,51 @@ def test_postgis_extension_version(host, get_psql_binary_path):
         assert installed_version == expected_postgis_ver, (
             f"PostGIS version mismatch: expected {expected_postgis_ver}, got {installed_version}"
         )
+
+
+@pytest.mark.parametrize("binary", TDE_BINARIES)
+def test_tde_binaries_present(host, binary):
+    """
+    Verify all PG-18/17 TDE binaries exist in the correct PostgreSQL 18 bin directory
+    """
+    # pg_tde only exists on PG-17 and above.
+    if int(settings.MAJOR_VER) < 17:
+        pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
+
+    dist = host.system_info.distribution.lower()
+
+    bin_path = f"{get_server_path}/bin/{binary}"
+
+    file = host.file(bin_path)
+
+    assert file.exists, f"{binary} is missing at {bin_path}"
+    assert file.is_file, f"{binary} exists but is not a file at {bin_path}"
+    assert file.mode & 0o111, f"{binary} exists but is not executable at {bin_path}"
+
+
+# f"{get_server_path}/share/extension/postgis.control",
+# f"{get_server_path}/lib/postgis-3.so",]
+# sql_dir = f"{get_server_path}/share/extension/"
+
+# def test_llvmjit_files_present(host):
+#     """
+#     Ensure LLVM JIT .bc and .so files required by PostgreSQL are present.
+#     Applies only to PostgreSQL installations on Debian/Ubuntu systems.
+#     """
+
+#     dist = host.system_info.distribution.lower()
+#     if dist not in ["debian", "ubuntu"]:
+#         pytest.skip("LLVM JIT file verification only applies to Debian/Ubuntu package installations.")
+
+#     base_path = f"/usr/lib/postgresql/{MAJOR_VER}/lib"
+
+#     expected_files = [
+#         f"{base_path}/llvmjit_types.bc",
+#         f"{base_path}/llvmjit.so",
+#     ]
+
+#     for path in expected_files:
+#         f = host.file(path)
+#         assert f.exists, f"Missing LLVM JIT file: {path}"
+#         assert f.is_file, f"Path exists but is not a file: {path}"
+#         assert f.size > 0, f"File {path} exists but is empty!"
