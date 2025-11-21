@@ -1,7 +1,7 @@
 ---
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
-      postgis_rhel_package_name_prefix: "percona-postgis33_{{ major_version }}"
+      postgis_rhel_package_name_prefix: "percona-postgis35_{{ major_version }}"
 
   - debug:
       msg: "Value of postgis_rhel_package_name_prefix is : {{ postgis_rhel_package_name_prefix }}"
