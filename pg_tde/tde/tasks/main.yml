@@ -281,7 +281,6 @@
     state: absent
   become_user: postgres
 
-
 - name: Copy pg_tde test files
   ansible.builtin.copy:
     src: "{{ item }}"
