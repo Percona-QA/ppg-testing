@@ -50,6 +50,7 @@
         - libzstd-dev
         - jq
         - liburing-dev
+        - libnuma-dev
 
   - name: Ensure correct lz4 package is installed (Debian/Ubuntu)
     ansible.builtin.apt:

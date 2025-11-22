@@ -293,8 +293,8 @@
       - multiple_extensions.pl
       - delete_principal_key_1.out
     pg_tde_dest:
-      multiple_extensions.pl: /tmp/postgres/contrib/pg_tde/t/multiple_extensions.pl
-      delete_principal_key_1.out: /tmp/postgres/contrib/pg_tde/expected/delete_principal_key_1.out
+      multiple_extensions.pl: /tmp/pg_tde/t/multiple_extensions.pl
+      delete_principal_key_1.out: /tmp/pg_tde/expected/delete_principal_key_1.out
 
 - name: Include KMIP server setup
   ansible.builtin.include_tasks: run_kmip_vault_server.yml
