@@ -64,10 +64,16 @@
   command: python3 -m pip install patroni[etcd]
   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
+- name: Install SELinux policy packages
+  package:
+    name:
+      - selinux-policy
+      - selinux-policy-targeted
+    state: present
+
 - name: Set SELinux to permissive for testing
   ansible.posix.selinux:
     state: permissive
-  when: ansible_facts['os_family'] == 'RedHat'
 
 - name: Create /etc/patroni directory
   file:
