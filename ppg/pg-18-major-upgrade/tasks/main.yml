@@ -31,10 +31,12 @@
 - name: install Percona Platform for PostgreSQL 17 packages
   include_tasks: ../../../../tasks/install_ppg17.yml
 
-- name: Initialize Percona PostgreSQL 17 on RHEL without checksums
-  ansible.builtin.command:
-    cmd: "/usr/pgsql-17/bin/postgresql-17-setup initdb --no-checksums"
+- name: Initialize Percona PostgreSQL 17 without checksums on RHEL
   become: yes
+  ansible.builtin.command:
+    cmd: "/usr/pgsql-17/bin/initdb --no-checksums --pgdata=/var/lib/pgsql/17/data"
+  environment:
+    PGUSER: postgres
   when: ansible_os_family == "RedHat"
 
 - name: Install PPG tools
@@ -177,10 +179,12 @@
       - percona-pg-stat-monitor18
   when: ansible_os_family == "Debian"
 
-- name: Initialize Percona PostgreSQL 18 on RHEL without checksums
-  ansible.builtin.command:
-    cmd: "/usr/pgsql-18/bin/postgresql-18-setup initdb --no-checksums"
+- name: Initialize Percona PostgreSQL 18 without checksums on RHEL
   become: yes
+  ansible.builtin.command:
+    cmd: "/usr/pgsql-18/bin/initdb --no-checksums --pgdata=/var/lib/pgsql/18/data"
+  environment:
+    PGUSER: postgres
   when: ansible_os_family == "RedHat"
 
 - name: Set io_method to worker for PG 18
