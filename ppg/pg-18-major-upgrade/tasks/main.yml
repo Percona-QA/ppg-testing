@@ -31,10 +31,10 @@
 - name: install Percona Platform for PostgreSQL 17 packages
   include_tasks: ../../../../tasks/install_ppg17.yml
 
-- name: Initialize Postgres RHEL
-  command: /usr/pgsql-17/bin/postgresql-17-setup initdb
-  environment:
-    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+- name: Initialize Percona PostgreSQL 17 on RHEL without checksums
+  ansible.builtin.command:
+    cmd: "/usr/pgsql-17/bin/postgresql-17-setup initdb --no-checksums"
+  become: yes
   when: ansible_os_family == "RedHat"
 
 - name: Install PPG tools
@@ -177,10 +177,18 @@
       - percona-pg-stat-monitor18
   when: ansible_os_family == "Debian"
 
-- name: Initialize Postgres RHEL
-  command: /usr/pgsql-18/bin/postgresql-18-setup initdb
-  environment:
-    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+- name: Initialize Percona PostgreSQL 18 on RHEL without checksums
+  ansible.builtin.command:
+    cmd: "/usr/pgsql-18/bin/postgresql-18-setup initdb --no-checksums"
+  become: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Set io_method to worker for PG 18
+  ansible.builtin.lineinfile:
+    path: "/var/lib/pgsql/18/data/postgresql.conf"
+    regexp: '^io_method'
+    line: "io_method = 'worker'"
+  become: yes
   when: ansible_os_family == "RedHat"
 
 - name: Stop postgresql service for RHEL based
@@ -195,11 +203,19 @@
     state: stopped
   when: ansible_os_family == "Debian"
 
-- name: Execute pg_createcluster for version 18
-  command: /usr/bin/pg_createcluster 18 main --port=5433
-  become: true
-  become_method: sudo
+- name: Create PostgreSQL 18 cluster on Debian with no checksums
+  ansible.builtin.command: >
+    /usr/bin/pg_createcluster 18 main
+    --port=5433
+    -- --no-data-checksums
+  become: yes
   become_user: postgres
+  when: ansible_os_family == "Debian"
+
+- name: Set io_method = 'worker' for PostgreSQL 18 cluster
+  lineinfile:
+    path: /etc/postgresql/18/main/postgresql.conf
+    line: "io_method = 'worker'"
   when: ansible_os_family == "Debian"
 
 - pause:
@@ -230,7 +246,7 @@
   ansible.builtin.command: /sbin/ldconfig
 
 - name: Execute pg_upgrade RHEL
-  command: env LD_LIBRARY_PATH=/usr/pgsql-18/lib:/usr/lib:$LD_LIBRARY_PATH /usr/pgsql-18/bin/pg_upgrade --old-bindir /usr/pgsql-17/bin --new-bindir /usr/pgsql-18/bin --old-datadir /var/lib/pgsql/17/data --new-datadir /var/lib/pgsql/18/data
+  command: env LD_LIBRARY_PATH=/usr/pgsql-18/lib:/usr/lib:$LD_LIBRARY_PATH LIBRARY_PATH=/usr/pgsql-18/lib:/usr/lib:$LIBRARY_PATH /usr/pgsql-18/bin/pg_upgrade --old-bindir /usr/pgsql-17/bin --new-bindir /usr/pgsql-18/bin --old-datadir /var/lib/pgsql/17/data --new-datadir /var/lib/pgsql/18/data
   become: true
   become_user: postgres
   args:
@@ -238,7 +254,7 @@
   when: ansible_os_family == "RedHat"
 
 - name: Execute pg_upgrade Deb
-  command: env LD_LIBRARY_PATH=/usr/lib/postgresql/18/lib:/usr/lib:$LD_LIBRARY_PATH /usr/lib/postgresql/18/bin/pg_upgrade --old-datadir=/var/lib/postgresql/17/main --new-datadir=/var/lib/postgresql/18/main --old-bindir=/usr/lib/postgresql/17/bin --new-bindir=/usr/lib/postgresql/18/bin --old-options '-c config_file=/etc/postgresql/17/main/postgresql.conf' --new-options '-c config_file=/etc/postgresql/18/main/postgresql.conf'
+  command: env LD_LIBRARY_PATH=/usr/lib/postgresql/18/lib:/usr/lib:$LD_LIBRARY_PATH LIBRARY_PATH=/usr/pgsql-18/lib:/usr/lib:$LIBRARY_PATH /usr/lib/postgresql/18/bin/pg_upgrade --old-datadir=/var/lib/postgresql/17/main --new-datadir=/var/lib/postgresql/18/main --old-bindir=/usr/lib/postgresql/17/bin --new-bindir=/usr/lib/postgresql/18/bin --old-options '-c config_file=/etc/postgresql/17/main/postgresql.conf' --new-options '-c config_file=/etc/postgresql/18/main/postgresql.conf'
   become: true
   become_method: sudo
   become_user: postgres
