@@ -231,11 +231,11 @@
 
 - debug: var=results.stdout_lines
 
-- name: Build & Install pg_tde
+- name: Build pg_tde
   become: true
   become_user: postgres
   ansible.builtin.command: >
-    make PG_CONFIG={{ pg_config_path }} install
+    make USE_PGXS=1 PG_CONFIG={{ pg_config_path }}
   args:
     chdir: /tmp/pg_tde
     executable: /bin/bash
