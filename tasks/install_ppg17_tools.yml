@@ -408,16 +408,28 @@
         - percona-pg-gather
     when: ansible_os_family == "Debian"
 
+  # - name: Add extensions to postgresql.conf for Debian
+  #   lineinfile:
+  #     path: /etc/postgresql/17/main/postgresql.conf
+  #     line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, percona_pg_telemetry'
+  #   when: ansible_os_family == "Debian"
+
+  # - name: Add extensions to postgresql.conf for RHEL
+  #   lineinfile:
+  #     path: /var/lib/pgsql/17/data/postgresql.conf
+  #     line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, percona_pg_telemetry'
+  #   when: ansible_os_family == "RedHat"
+
   - name: Add extensions to postgresql.conf for Debian
     lineinfile:
       path: /etc/postgresql/17/main/postgresql.conf
-      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, percona_pg_telemetry'
+      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
     when: ansible_os_family == "Debian"
 
   - name: Add extensions to postgresql.conf for RHEL
     lineinfile:
       path: /var/lib/pgsql/17/data/postgresql.conf
-      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, percona_pg_telemetry'
+      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
     when: ansible_os_family == "RedHat"
 
   - name: Remove pg_hba.conf debian
@@ -472,44 +484,6 @@
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     when: ansible_os_family == "Debian"
-
-  - name: Copy postgresql.yml for patroni service Debian
-    copy:
-      src: postgresql0_deb.yml
-      dest: /etc/patroni/patroni.yml
-      owner: postgres
-      group: postgres
-      mode: 0644
-    when: ansible_os_family == "Debian"
-
-  # - name: Change systemd Type from notify to simple for Patroni
-  #   ansible.builtin.replace:
-  #     path: /usr/lib/systemd/system/patroni.service
-  #     regexp: '^Type=notify'
-  #     replace: 'Type=simple'
-  #   become: yes
-  #   when: ansible_os_family == "Debian"
-
-  # - name: Reload systemd daemon
-  #   ansible.builtin.command: systemctl daemon-reload
-  #   become: yes
-  #   when: ansible_os_family == "Debian"
-
-  # - name: Start patroni
-  #   service:
-  #     name: patroni
-  #     state: started
-  #     enabled: yes
-
-  - name: Enable and start patroni with wait
-    ansible.builtin.systemd:
-      name: patroni
-      state: started
-      enabled: yes
-      daemon_reload: yes
-    async: 180
-    poll: 5
-    become: yes
 
   - name: Install etcd packages RHEL
     yum:
@@ -589,6 +563,68 @@
         - percona-haproxy
     when: ansible_os_family == "Debian"
 
+  - name: Create /etc/patroni directory
+    file:
+      path: /etc/patroni
+      state: directory
+
+  # - name: Check if patroni.yml exists
+  #   ansible.builtin.stat:
+  #     path: /etc/patroni/patroni.yml
+  #   register: patroni_cfg_stat
+  #   become: yes
+
+  # - name: Copy Patroni sample config to active config if not present
+  #   ansible.builtin.copy:
+  #     src: /etc/patroni/patroni.yml.sample
+  #     dest: /etc/patroni/patroni.yml
+  #     remote_src: yes
+  #     owner: postgres
+  #     group: postgres
+  #     mode: '0644'
+  #   become: yes
+  #   when:
+  #     - ansible_os_family == "Debian"
+  #     - not patroni_cfg_stat.stat.exists
+
+  - name: Copy postgresql.yml for patroni service Debian
+    copy:
+      src: postgresql0_deb.yml
+      dest: /etc/patroni/patroni.yml
+      owner: postgres
+      group: postgres
+      mode: 0644
+    when: ansible_os_family == "Debian"
+
+  # - name: Change systemd Type from notify to simple for Patroni
+  #   ansible.builtin.replace:
+  #     path: /usr/lib/systemd/system/patroni.service
+  #     regexp: '^Type=notify'
+  #     replace: 'Type=simple'
+  #   become: yes
+  #   when: ansible_os_family == "Debian"
+
+  # - name: Reload systemd daemon
+  #   ansible.builtin.command: systemctl daemon-reload
+  #   become: yes
+  #   when: ansible_os_family == "Debian"
+
+  # - name: Start patroni
+  #   service:
+  #     name: patroni
+  #     state: started
+  #     enabled: yes
+
+  - name: Enable and start patroni with wait
+    ansible.builtin.systemd:
+      name: patroni
+      state: started
+      enabled: yes
+      daemon_reload: yes
+    async: 180
+    poll: 5
+    become: yes
+
   # - name: Install patroni related dependency on Debian 13
   #   apt:
   #     name: "{{ packages }}"
@@ -613,11 +649,6 @@
   #       - etcd-client
   #       - percona-haproxy
   #   when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int >= 12)
-
-  - name: Create /etc/patroni directory
-    file:
-      path: /etc/patroni
-      state: directory
 
   - name: Create test patroni directory RHEL
     file:
