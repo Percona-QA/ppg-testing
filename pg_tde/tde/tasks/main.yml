@@ -241,6 +241,8 @@
     executable: /bin/bash
   environment:
     PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:{{ ansible_env.PATH }}"
+    LD_LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu:{{ pg_lib_dir }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
+    LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu:{{ pg_lib_dir }}:{{ ansible_env.LIBRARY_PATH | default('') }}"
     TDE_MODE: "1"
   register: tde_install_output
 
@@ -279,18 +281,21 @@
     state: absent
   become_user: postgres
 
-# - name: Copy pg_tde test files
-#   ansible.builtin.copy:
-#     src: "{{ item }}"
-#     dest: "{{ pg_tde_dest[item] }}"
-#     owner: postgres
-#     mode: '0644'
-#   loop: "{{ pg_tde_files }}"
-#   vars:
-#     pg_tde_files:
-#       - multiple_extensions.pl
-#     pg_tde_dest:
-#       multiple_extensions.pl: /tmp/postgres/contrib/pg_tde/t/multiple_extensions.pl
+
+- name: Copy pg_tde test files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ pg_tde_dest[item] }}"
+    owner: postgres
+    mode: '0644'
+  loop: "{{ pg_tde_files }}"
+  vars:
+    pg_tde_files:
+      - multiple_extensions.pl
+      - delete_principal_key_1.out
+    pg_tde_dest:
+      multiple_extensions.pl: /tmp/postgres/contrib/pg_tde/t/multiple_extensions.pl
+      delete_principal_key_1.out: /tmp/postgres/contrib/pg_tde/expected/delete_principal_key_1.out
 
 - name: Include KMIP server setup
   ansible.builtin.include_tasks: run_kmip_vault_server.yml
