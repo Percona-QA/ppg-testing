@@ -494,6 +494,7 @@
       packages:
       - etcd
       - percona-haproxy
+      - python3-etcd
     when: ansible_os_family == "RedHat"
 
   - name: Restart etcd RHEL
