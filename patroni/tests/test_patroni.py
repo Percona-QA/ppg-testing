@@ -12,6 +12,14 @@ def test_etcd(host):
     assert host.service("etcd").is_running
 
 
+def test_patroni_config_file_exists(host):
+    f = host.file("/var/lib/pgsql/patroni_test/postgresql1.yml")
+    assert f.exists
+    assert f.user == "postgres"
+    assert f.group == "postgres"
+    assert f.mode == 0o644
+
+
 def test_patroni_service(host):
     assert host.service("patroni").is_running, print(host.run("systemctl status patroni").stdout)
     assert host.service("patroni1").is_running, print(host.run("systemctl status patroni1").stdout)

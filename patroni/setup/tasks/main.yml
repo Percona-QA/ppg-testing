@@ -64,6 +64,11 @@
   command: python3 -m pip install patroni[etcd]
   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
+- name: Set SELinux to permissive for testing
+  ansible.posix.selinux:
+    state: permissive
+  when: ansible_facts['os_family'] == 'RedHat'
+
 - name: Create /etc/patroni directory
   file:
     path: /etc/patroni
@@ -71,10 +76,11 @@
 
 - name: Create test patroni directory
   file:
-    path: /var/lib/pgsql/patroni_test/
+    path: /var/lib/pgsql/patroni_test
     state: directory
     owner: postgres
     group: postgres
+    mode: "0755"
 
 - name: Copy postgresql0.yml for patroni service
   copy:
@@ -82,7 +88,7 @@
     dest: /etc/patroni/postgresql.yml
     owner: root
     group: root
-    mode: 0644
+    mode: "0644"
 
 - name: Replace server version in postgresql.yml
   become: true
@@ -94,7 +100,7 @@
     dest: /var/lib/pgsql/patroni_test/postgresql1.yml
     owner: postgres
     group: postgres
-    mode: 0644
+    mode: "0644"
 
 - name: Replace server version in postgresql1.yml
   become: true
@@ -106,11 +112,18 @@
     dest: /var/lib/pgsql/patroni_test/postgresql2.yml
     owner: postgres
     group: postgres
-    mode: 0644
+    mode: "0644"
 
 - name: Replace server version in postgresql2.yml
   become: true
   shell: sed -i 's/16/{{ major_version }}/' /var/lib/pgsql/patroni_test/postgresql2.yml
+
+- name: Fix ownership of Patroni directory tree
+  file:
+    path: /var/lib/pgsql
+    owner: postgres
+    group: postgres
+    recurse: true
 
 - name: Copy patroni1 service file
   copy:
