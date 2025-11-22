@@ -131,6 +131,7 @@
     packages:
         - percona-postgresql-client-common
         - percona-postgresql-common
+        - percona-postgresql-common-dev
         - percona-postgresql18
         - percona-postgresql18-contrib
         - percona-postgresql18-debuginfo
@@ -155,21 +156,6 @@
   when: ansible_os_family == "RedHat"
   environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
-
-- name: Determine required PostgreSQL dev package for RHEL
-  set_fact:
-    pg_dev_package: >-
-      {{ 'percona-postgresql-server-dev-all'
-         if (upgrade_to_pg_version | string is version('18.4', '<=', strict=True))
-         else 'percona-postgresql-common-dev' }}
-  when: ansible_os_family == "RedHat"
-
-- name: Install PostgreSQL dev package on RHEL
-  yum:
-    name: "{{ pg_dev_package }}"
-    state: latest
-    update_cache: yes
-  when: ansible_os_family == "RedHat"
 
 - name: Install pg-stat-monitor RHEL
   yum:
@@ -242,8 +228,6 @@
 - name: Run ldconfig after adding percona lib path
   become: yes
   ansible.builtin.command: /sbin/ldconfig
-  args:
-    warn: false
 
 - name: Execute pg_upgrade RHEL
   command: env LD_LIBRARY_PATH=/usr/pgsql-18/lib:/usr/lib:$LD_LIBRARY_PATH /usr/pgsql-18/bin/pg_upgrade --old-bindir /usr/pgsql-17/bin --new-bindir /usr/pgsql-18/bin --old-datadir /var/lib/pgsql/17/data --new-datadir /var/lib/pgsql/18/data
