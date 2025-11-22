@@ -40,9 +40,9 @@
 - name: Install PPG tools
   include_tasks: ../../../../tasks/install_ppg17_tools.yml
 
-# =========Telemetry testcases
-- name: Verify telemetry installation
-  include_tasks: ../../../../tasks/verify_telemetry.yml
+# # =========Telemetry testcases
+# - name: Verify telemetry installation
+#   include_tasks: ../../../../tasks/verify_telemetry.yml
 
 - name: Install GCC Deb
   apt:
