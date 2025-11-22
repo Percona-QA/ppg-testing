@@ -1,14 +1,41 @@
 ---
 - name: Extract major version safely
   ansible.builtin.set_fact:
-    psp_repo: "{{ lookup('env','PSP_REPO') }}"
-    psp_branch: "{{ lookup('env','PSP_BRANCH') }}"
+    tde_repo: "{{ lookup('env','TDE_REPO') }}"
+    tde_branch: "{{ lookup('env','TDE_BRANCH') }}"
     telemetry_env:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
     major_version: "{{ lookup('env','VERSION') | regex_replace('ppg-(\\d+).*','\\1') }}"
     pg_version_to_install: "{{ lookup('env','VERSION') | regex_replace('ppg-','') }}"
     postgres_group: "{{ 'wheel' if ansible_os_family == 'RedHat' else 'admin' }}"
+    io_method: "{{ lookup('env', 'IO_METHOD') }}"
     cacheable: true
+
+- name: Set PostgreSQL config path for Debian/Ubuntu
+  set_fact:
+    pg_conf: "/etc/postgresql/{{ major_version }}/main/postgresql.conf"
+    pg_config_path: "/usr/lib/postgresql/{{ major_version }}/bin/pg_config"
+    pg_bin_dir: "/usr/lib/postgresql/{{ major_version }}/bin"
+    pg_lib_dir: "/usr/lib/postgresql/{{ major_version }}/lib"
+  when: ansible_os_family == "Debian"
+
+- name: Set PostgreSQL config path for RHEL/CentOS/Rocky
+  set_fact:
+    pg_conf: "/var/lib/pgsql/{{ major_version }}/data/postgresql.conf"
+    pg_config_path: "/usr/pgsql-{{ major_version }}/bin/pg_config"
+    pg_bin_dir: "/usr/pgsql-{{ major_version }}/bin"
+    pg_lib_dir: "/usr/pgsql-{{ major_version }}/lib"
+  when: ansible_os_family == "RedHat"
+
+- name: End play on RHEL 8 and Rocky 8 for pg-18>= and io_uring, as uring not supported
+  meta: end_play
+  when:
+    - (major_version | int) >= 18
+    - io_method in ['io_uring']
+    - >
+      (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'Rocky' and ansible_facts['distribution_major_version'] | int == 8)
+      or
+      (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'RedHat' and ansible_facts['distribution_major_version'] | int == 8)
 
 - name: Set postgres paths and service name
   ansible.builtin.set_fact:
@@ -37,69 +64,211 @@
     group: "{{ postgres_group }}"
     state: present
 
-- name: Ensure PostgreSQL directories exist
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    owner: postgres
-    group: "{{ postgres_group }}"
-    mode: "0775"
-    recurse: yes
+- name: Get ulimit results
+  become_user: postgres
+  ansible.builtin.shell: ulimit -a
+  register: results
+
+- debug: var=results.stdout_lines
+
+- name: Ensure at least 4 GB swap is configured
+  become: true
+  block:
+    - name: Check if swap is already enabled
+      ansible.builtin.command: swapon --noheadings --show=SIZE
+      register: swap_status
+      changed_when: false
+      failed_when: false
+
+    - name: Set fact for existing swap size in MB
+      ansible.builtin.set_fact:
+        swap_size_mb: >-
+          {{ ((swap_status.stdout | regex_findall('\\d+') | map('int') | sum) / 1048576) | int }}
+
+    - name: Create 4G swap file if not present or too small
+      ansible.builtin.command: fallocate -l 4G /swapfile
+      args:
+        creates: /swapfile
+      when: (swap_size_mb | int) < 3000
+
+    - name: Secure swap file permissions
+      ansible.builtin.file:
+        path: /swapfile
+        owner: root
+        group: root
+        mode: '0600'
+      when: (swap_size_mb | int) < 3000
+
+    - name: Format swap file
+      ansible.builtin.command: mkswap /swapfile
+      when: (swap_size_mb | int) < 3000
+
+    - name: Enable swap
+      ansible.builtin.command: swapon /swapfile
+      when: (swap_size_mb | int) < 3000
+
+    - name: Persist swap in /etc/fstab
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        line: '/swapfile none swap sw 0 0'
+        state: present
+      when: (swap_size_mb | int) < 3000
+
+- name: Verify swap is active
+  ansible.builtin.command: free -h
+  register: swap_info
+  changed_when: false
+
+- ansible.builtin.debug:
+    msg: "Swap configured successfully. Current memory: {{ swap_info.stdout_lines }}"
+
+- name: Set stack ulimit for a specific user
+  become: true
+  pam_limits:
+    domain: postgres  # Replace with the target username
+    limit_type: "-"         # Applies to both soft and hard limits
+    limit_item: stack
+    value: 102400            # Desired stack size in KB
+  register: results
+
+- debug: var=results.stdout_lines
+
+- name: Check if io_uring is disabled
+  command: cat /proc/sys/kernel/io_uring_disabled
+  register: uring_disabled
+  ignore_errors: true
+  when:
+    - (major_version | int) >= 18
+    - io_method in ['io_uring']
+    - ansible_os_family == 'RedHat'
+
+- debug: var=uring_disabled.stdout_lines
+  when:
+    - (major_version | int) >= 18
+    - io_method in ['io_uring']
+    - ansible_os_family == 'RedHat'
+
+- name: Enable io_uring if possible
+  when: uring_disabled.stdout is defined and uring_disabled.stdout | int > 0
+  become: true
+  sysctl:
+    name: kernel.io_uring_disabled
+    value: 0
+    state: present
+  when:
+    - (major_version | int) >= 18
+    - io_method in ['io_uring']
+    - ansible_os_family == 'RedHat'
+
+- name: Check kernel version
+  command: uname -r
+  register: kernel_version
+  changed_when: false
+  when:
+    - (major_version | int) >= 18
+    - io_method in ['io_uring']
+    - ansible_os_family == 'RedHat'
+
+- debug:
+    msg: "Kernel version is {{ kernel_version.stdout }}"
+  when:
+    - (major_version | int) >= 18
+    - io_method in ['io_uring']
+    - ansible_os_family == 'RedHat'
+
+- name: Print all facts
+  debug:
+    var: ansible_facts
+
+- name: Ensure postgres user has unlimited core dump limit
+  become: true
+  community.general.pam_limits:
+    domain: postgres
+    limit_item: core
+    limit_type: "{{ item }}"
+    value: unlimited
   loop:
-    - /opt/pgsql
-    - /opt/pgsql/data
+    - soft
+    - hard
 
 - name: Install OS-specific dependencies
   ansible.builtin.include_tasks: "{{ ansible_os_family | lower }}_depends.yml"
 
 # =============================
-# Clone Postgres/PSP sources with pg_tde
+# Clone TDE sources for pg_tde
 # =============================
-- name: Clone Postgres/PSP sources with pg_tde
-  ansible.builtin.git:
-    repo: "{{ psp_repo }}"
-    version: "{{ psp_branch }}"
-    dest: /tmp/postgres
+- name: Clone pg_tde sources
+  git:
+    repo: "{{ tde_repo }}"
+    version: "{{ tde_branch }}"
+    dest: /tmp/pg_tde
     track_submodules: true
-    update: yes
+  vars:
+    repo: "https://github.com/percona/pg_tde.git"
+    version: "{{ lookup('env', 'TDE_BRANCH') }}"
   become_user: postgres
-  register: git_result
-  retries: 3
-  delay: 10
-  until: git_result is succeeded
-  throttle: 1
+  register: results
 
-- name: Update submodules
-  ansible.builtin.command: git submodule update --init --recursive
+- debug: var=results.stdout_lines
+
+- name: Remove vault_v2_test from Makefile
+  ansible.builtin.lineinfile:
+    path: /tmp/pg_tde/Makefile
+    regexp: '.*vault_v2_test.*'
+    state: absent
+  when: 
+    - ansible_os_family == 'Debian'
+    - ansible_distribution == 'Debian'
+    - (ansible_distribution_major_version | int) == 13 
+
+- name: Submodule update
+  command : git submodule update --init --recursive
   args:
-    chdir: /tmp/postgres
+    chdir: /tmp/pg_tde
+    executable: /bin/bash
   become_user: postgres
+  register: results
 
-- name: Configure Postgres/PSP from sources
-  ansible.builtin.command:
-    cmd: ./configure --enable-debug --enable-cassert --enable-tap-tests --with-icu --prefix=/opt/pgsql
-    chdir: /tmp/postgres
+- debug: var=results.stdout_lines
+
+- name: Build & Install pg_tde
+  become: true
   become_user: postgres
-  register: configure_results
-
-- debug:
-    var: configure_results.stdout_lines
-
-- name: Build Postgres world
-  community.general.make:
-    chdir: /tmp/postgres
-    target: world
-    jobs: "{{ ansible_processor_vcpus | default(4) }}"
-  become_user: postgres
+  ansible.builtin.command: >
+    make PG_CONFIG={{ pg_config_path }} install
+  args:
+    chdir: /tmp/pg_tde
+    executable: /bin/bash
   environment:
+    PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:{{ ansible_env.PATH }}"
     TDE_MODE: "1"
-  register: make_results
-  retries: 3
-  delay: 15
-  until: make_results is succeeded
+  register: tde_install_output
 
 - debug:
-    var: make_results.stdout_lines
+    var: tde_install_output.stdout_lines
+
+# - name: Add pg_tde to shared_preload_libraries
+#   ansible.builtin.lineinfile:
+#     path: "{{ pg_conf }}"
+#     regexp: "^shared_preload_libraries"
+#     line: "shared_preload_libraries = 'pg_tde'"
+#     create: no
+
+# Remove old io_method (if PG18+)
+- name: Comment out any io_method line (PG18+)
+  ansible.builtin.replace:
+    path: "{{ pg_conf }}"
+    regexp: '^(?!#)(.*io_method.*)$'
+    replace: '# \1'
+  when: (major_version | int) >= 18
+
+# Add or set io_method (PG18+)
+- name: Update io_method in postgresql.conf for PG18+
+  ansible.builtin.lineinfile:
+    path: "{{ pg_conf }}"
+    regexp: "^io_method"
+    line: "io_method = {{ io_method }}"
+  when: (major_version | int) >= 18
 
 # =============================
 # pg_tde test setup
@@ -110,22 +279,18 @@
     state: absent
   become_user: postgres
 
-- name: Copy pg_tde test files
-  ansible.builtin.copy:
-    src: "{{ item }}"
-    dest: "{{ pg_tde_dest[item] }}"
-    owner: postgres
-    mode: '0644'
-  loop: "{{ pg_tde_files }}"
-  vars:
-    pg_tde_files:
-      - multiple_extensions.pl
-      - vault_v2_test_1.out
-      - delete_principal_key_1.out
-    pg_tde_dest:
-      multiple_extensions.pl: /tmp/postgres/contrib/pg_tde/t/multiple_extensions.pl
-      vault_v2_test_1.out: /tmp/postgres/contrib/pg_tde/expected/vault_v2_test_1.out
-      delete_principal_key_1.out: /tmp/postgres/contrib/pg_tde/expected/delete_principal_key_1.out
+# - name: Copy pg_tde test files
+#   ansible.builtin.copy:
+#     src: "{{ item }}"
+#     dest: "{{ pg_tde_dest[item] }}"
+#     owner: postgres
+#     mode: '0644'
+#   loop: "{{ pg_tde_files }}"
+#   vars:
+#     pg_tde_files:
+#       - multiple_extensions.pl
+#     pg_tde_dest:
+#       multiple_extensions.pl: /tmp/postgres/contrib/pg_tde/t/multiple_extensions.pl
 
 - name: Include KMIP server setup
   ansible.builtin.include_tasks: run_kmip_vault_server.yml
@@ -139,6 +304,14 @@
     owner: postgres
     group: "{{ postgres_group }}"
     recurse: true
+
+- name: Change ownership of /tmp/bao_env to postgres
+  ansible.builtin.file:
+    path: /tmp/bao_env
+    owner: postgres
+    group: "{{ postgres_group }}"
+    recurse: true
+  become: true
 
 # =============================
 # OS-specific tasks

@@ -1,61 +1,116 @@
-- name: Install base Perl tools on RHEL
-  yum:
-    name:
+---
+  - name: Setting facts so that they will be persisted in the fact cache
+    ansible.builtin.set_fact:
+      postgis_rhel_package_name_prefix: "percona-postgis35_{{ major_version }}"
+
+  - debug:
+      msg: "Value of postgis_rhel_package_name_prefix is : {{ postgis_rhel_package_name_prefix }}"
+
+  - name: setup epel release
+    yum:
+      name: epel-release
+      update_cache: yes
+      state: present
+
+  - name: Clean dnf RHEL8
+    become: true
+    command: dnf clean all -y
+    when: ansible_distribution_major_version == "8"
+
+  - name: Add the user 'postgres'
+    ansible.builtin.user:
+      name: postgres
+      shell: /bin/bash
+      uid: 1040
+      group: wheel
+
+  - name: Ensure cpanminus is installed
+    become: true
+    ansible.builtin.package:
+      name: cpanminus
+      state: present
+
+  - name: Install perl-CPAN and perl-App-cpanminus on Red Hat
+    become: true
+    yum:
+      name: "{{ item }}"
+      state: present
+    loop:
       - perl-CPAN
       - perl-App-cpanminus
       - perl-IPC-Run
-    state: present
 
-- name: Install Perl modules via cpanm
-  community.general.cpanm:
-    name: "{{ item }}"
-  loop:
-    - Text::Trim
-    - File::Rename
-    - CGI::Session
-    - HTTP::Server::Simple::CGI
-  ignore_errors: true
+  - name: Install perl module Text::Trim
+    become: true
+    command: cpanm Text::Trim
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-- name: Install Development Tools group
-  yum:
-    name: "@Development tools"
-    state: present
+  - name: Install Development tools
+    become: true
+    command: yum -y groupinstall "Development tools"
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-- name: Enable llvm-toolset on RHEL 8
-  command: dnf module enable llvm-toolset -y
-  when: ansible_distribution_major_version == "8"
+  - name: Enable llvm-toolset dnf module for RHEL8
+    become: true
+    command: dnf module enable llvm-toolset -y
+    when: ansible_distribution_major_version == "8"
 
-- name: Install LLVM/Clang packages
-  yum:
-    name: "{{ item }}"
-    state: present
-  loop:
-    - llvm-toolset
-    - llvm
-    - llvm-devel
-    - clang
-    - clang-devel
-  when: ansible_distribution_major_version in ["8", "9"]
+  - name: Install llvm-toolset
+    become: true
+    command: yum install -y llvm-toolset clang-devel clang
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_distribution_major_version == "8"
 
-- name: Show LLVM version
-  command: llvm-config --version
-  register: llvm_ver
-  ignore_errors: true
+  - name: Install clang clang-devel on RHEL 9
+    become: true
+    command: yum install -y clang-devel clang
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_distribution_major_version == "9"
 
-- debug:
-    msg: "LLVM version: {{ llvm_ver.stdout | default('Not installed') }}"
+  - name: LLVM Version
+    command: llvm-config --version
+    ignore_errors: true
+    register: results
 
-- name: Show Clang version
-  command: clang --version
-  register: clang_ver
-  ignore_errors: true
+  - debug:
+      var: results.stdout
 
-- debug:
-    msg: "Clang version: {{ clang_ver.stdout | default('Not installed') }}"
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
 
-- name: Install common development packages
-  yum:
-    name:
+  - debug:
+      var: results.stdout
+
+  - name: Debug 1
+    command: rpm -qi systemtap-sdt-devel
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Debug 2
+    command: yum -v search systemtap-sdt-devel
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: install tools
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - clang
       - zlib-devel
       - readline-devel
       - gcc
@@ -75,12 +130,19 @@
       - libicu-devel
       - libzstd
       - libzstd-devel
+      - llvm
+      - llvm-toolset
+      - llvm-devel
+      - clang-devel
       - vim
       - git
       - perl-ExtUtils*
       - docbook-xsl
+      - perl-IPC-Run
       - perl-Test-Simple
+      - perl-CPAN
       - libcurl-devel
+      - perl-App-cpanminus
       - make
       - autoconf
       - json-c-devel
@@ -88,66 +150,412 @@
       - wget
       - perl-LWP-Protocol-https
       - perl-JSON
-    state: present
-    update_cache: yes
+      - jq
+      - liburing
+      - liburing-devel
 
-- name: Install RHEL 8/9 specific packages
-  yum:
-    name:
+  - name: install packages specific to rhel 8 and 9
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
       - lcov
       - prename
-    state: present
-    update_cache: yes
-  when: ansible_distribution_major_version in ["8", "9"]
+    when: ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
 
-- name: Install kernel-modules-extra on RHEL 10
-  dnf:
-    name: "kernel-modules-extra-{{ ansible_kernel }}"
-    state: present
-  when: ansible_distribution_major_version == "10"
+  - name: Install kernel-modules-extra on RHEL 10
+    become: true
+    dnf:
+      name: "kernel-modules-extra-{{ ansible_kernel }}"
+      state: present
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
-- name: Ensure br_netfilter module is loaded (RHEL 10 only)
-  community.general.modprobe:
-    name: br_netfilter
-    state: present
-  when: ansible_distribution_major_version == "10"
+  - name: Ensure br_netfilter module is loaded
+    become: true
+    community.general.modprobe:
+      name: br_netfilter
+      state: present
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
-- name: Install perl modules for RHEL 9
-  yum:
-    name:
+  - name: Install cpanm File::Rename
+    become: true
+    command: cpanm File::Rename
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+  # - name: Install HTTP::Server::Simple::CGI Perl module
+  #   become: true
+  #   ansible.builtin.command: >
+  #     cpanm --notest --quiet HTTP::Server::Simple::CGI
+  #   args:
+  #     creates: /usr/local/share/perl5/HTTP/Server/Simple/CGI.pm
+
+  # - name: Install cpanm CGI::Session
+  #   become: true
+  #   command: cpanm CGI::Session
+
+  # - name: Install HTTP::Server::Simple::CGI
+  #   become: true
+  #   command: cpanm HTTP::Server::Simple::CGI
+
+  - name: Install required Perl modules
+    become: true
+    ansible.builtin.command: >
+      cpanm --notest --quiet {{ item }}
+    args:
+      creates: "/usr/local/share/perl5/{{ item | replace('::', '/') }}.pm"
+    loop:
+      - CGI::Session
+      - HTTP::Server::Simple::CGI
+
+  - name: Debug 3
+    command: rpm -qi systemtap-sdt-devel
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Debug 4
+    command: yum -v search systemtap-sdt-devel
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Debug 5
+    command: yum install -y systemtap-sdt-devel --allowerasing
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Install perl Text-trim
+    command: cpanm Text::Trim
+    ignore_errors: true
+    register: results
+
+  - name: install perl modules for rhel 9
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
       - perl-FindBin
       - perl-Opcode
-    state: present
-    update_cache: yes
-  when: ansible_distribution_major_version == "9"
+    when: ansible_distribution_major_version == "9"
 
-# Debug: Systemtap check (instead of repeating multiple rpm/yum queries)
-- name: Check for systemtap-sdt-devel
-  yum:
-    name: systemtap-sdt-devel
-    state: present
-  register: systemtap_result
-  ignore_errors: true
+  - name: LLVM Version
+    command: llvm-config --version
+    ignore_errors: true
+    register: results
 
-- debug:
-    msg: "Systemtap package state: {{ systemtap_result }}"
+  - debug:
+      var: results.stdout
 
-# ARM-specific tuning
-- name: Check ulimit for postgres on Rocky 8 ARM
-  become_user: postgres
-  command: ulimit -a
-  register: ulimit_result
-  when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
 
-- debug:
-    var: ulimit_result.stdout_lines
-  when: ulimit_result is defined
+  - name: Get ulimit on Rocky 8 ARM for postgres user
+    become_user: postgres
+    command: ulimit -a
+    register: results
+    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
 
-- name: Set memlock limit for postgres on Rocky 8 ARM
-  community.general.pam_limits:
-    domain: postgres
-    limit_type: '-'
-    limit_item: memlock
-    value: 128
-    comment: 128kb memory lock for postgres
-  when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
+  - debug: var=results.stdout_lines
+    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
+
+  - name: Modify memlock, both soft and hard, limit for the user postgres
+    community.general.pam_limits:
+      domain: postgres
+      limit_type: '-'
+      limit_item: memlock
+      value: 128
+      comment: 128kb memory lock for postgres
+    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
+
+  - debug: var=results.stdout_lines
+    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
+
+  - name: Get ulimit on Rocky 8 ARM for postgres user
+    become_user: postgres
+    command: ulimit -a
+    register: results
+    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
+
+  - debug: var=results.stdout_lines
+    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
+
+  - name: Change ownership of /tmp/bao_env to postgres
+    ansible.builtin.file:
+      path: /tmp/bao_env
+      owner: postgres
+      group: wheel
+      recurse: true
+    become: true
+  - name: Disable dnf module for RHEL8
+    become: true
+    command: dnf module disable postgresql -y
+    when: ansible_distribution_major_version == "8"
+
+  - name: install Percona Platform for PostgreSQL rpm packages for RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-postgresql-client-common
+      - percona-postgresql-common
+      - percona-postgresql{{ postgres_version }}
+      - percona-postgresql{{ postgres_version }}-contrib
+      - percona-postgresql{{ postgres_version }}-devel
+      - percona-postgresql{{ postgres_version }}-libs
+      - percona-postgresql{{ postgres_version }}-plperl
+      - percona-postgresql{{ postgres_version }}-plpython3
+      - percona-postgresql{{ postgres_version }}-pltcl
+      - percona-postgresql{{ postgres_version }}-server
+      - percona-postgresql{{ postgres_version }}-test
+      - percona-postgresql{{ postgres_version }}-llvmjit
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+    when: ansible_distribution_major_version == "8"
+
+  - name: install Percona Platform for PostgreSQL rpm packages for RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-postgresql-client-common
+      - percona-postgresql-common
+      - percona-postgresql{{ postgres_version }}
+      - percona-postgresql{{ postgres_version }}-contrib
+      - percona-postgresql{{ postgres_version }}-devel
+      - percona-postgresql{{ postgres_version }}-libs
+      - percona-postgresql{{ postgres_version }}-plperl
+      - percona-postgresql{{ postgres_version }}-plpython3
+      - percona-postgresql{{ postgres_version }}-pltcl
+      - percona-postgresql{{ postgres_version }}-server
+      - percona-postgresql{{ postgres_version }}-test
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+    when: ansible_distribution_major_version == "9" or ansible_distribution_major_version == "10"
+
+  - name: Install postgresql-server-dev-all RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgresql-server-dev-all
+    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('17.4', '<=', strict=True))
+
+  - name: Install postgresql-common-dev RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgresql-common-dev
+    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('17.5', '>=', strict=True))
+
+  - name: Install pg_tde packages RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-pg_tde_{{ postgres_version }}
+      - percona-pg_tde_{{ postgres_version }}-devel 
+      - percona-pg_tde_{{ postgres_version }}-debugsource 
+      - percona-pg_tde_{{ postgres_version }}-debuginfo
+
+  - name: Initialize Postgres RHEL
+    become: true
+    command: /usr/pgsql-{{ major_version }}/bin/postgresql-{{ major_version }}-setup initdb
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+  - name: Install pgaudit RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-pgaudit{{ postgres_version }}
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install set_user RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-pgaudit{{ postgres_version }}_set_user
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install pgrepack RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-pg_repack{{ postgres_version }}
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install percona-postgis RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - "{{postgis_rhel_package_name_prefix}}"
+      - "{{postgis_rhel_package_name_prefix}}-client"
+      - "{{postgis_rhel_package_name_prefix}}-client-debuginfo"
+      - "{{postgis_rhel_package_name_prefix}}-debuginfo"
+      - "{{postgis_rhel_package_name_prefix}}-devel"
+      - "{{postgis_rhel_package_name_prefix}}-docs"
+      - "{{postgis_rhel_package_name_prefix}}-gui"
+      - "{{postgis_rhel_package_name_prefix}}-gui-debuginfo"
+      - "{{postgis_rhel_package_name_prefix}}-llvmjit"
+      - "{{postgis_rhel_package_name_prefix}}-utils"
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install pg-stat-monitor RHEL RPM Package
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pg_stat_monitor{{ major_version }}
+        - percona-pg_stat_monitor{{ major_version }}-debuginfo
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Add extensions to postgresql.conf for RHEL
+    lineinfile:
+      path: /var/lib/pgsql/{{ major_version }}/data/postgresql.conf
+      line: shared_preload_libraries = 'pg_tde'
+
+  - name: Start Postgres RHEL
+    service:
+      name: postgresql-{{ major_version }}
+      state: started
+      enabled: yes
+
+  - name: Check if postgres processes are running
+    command: ps aux
+    register: ps_output
+
+  - name: Show postgres processes
+    debug:
+      msg: "{{ ps_output.stdout_lines | select('search', 'postgres') | list }}"
+
+  - name: List postgres socket files
+    shell: ls -l /tmp/.s.PGSQL* || true
+    register: socket_output
+
+  - name: Show postgres socket files
+    debug:
+      var: socket_output.stdout_lines
+
+  - name: Show PostgreSQL unix_socket_directories
+    shell: |
+      psql -d postgres -t -A -c "SHOW unix_socket_directories;"
+    become: true
+    become_user: postgres
+    register: socket_dir
+
+  - name: Print PostgreSQL socket directory
+    debug:
+      var: socket_dir.stdout
+
+  - name: Set stack ulimit for a specific user
+    become: true
+    pam_limits:
+      domain: postgres  # Replace with the target username
+      limit_type: "-"         # Applies to both soft and hard limits
+      limit_item: stack
+      value: 102400            # Desired stack size in KB
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Allow postgres user to create core dumps
+    community.general.pam_limits:
+      domain: postgres
+      limit_type: hard
+      limit_item: core
+      value: unlimited
+    register: results
+    when: ansible_distribution_major_version == "10"
+
+  - debug: var=results.stdout_lines
+    when: ansible_distribution_major_version == "10"
+
+  - name: Allow postgres user to create core dumps (soft)
+    community.general.pam_limits:
+      domain: postgres
+      limit_type: soft
+      limit_item: core
+      value: unlimited
+    register: results
+    when: ansible_distribution_major_version == "10"
+
+  - debug: var=results.stdout_lines
+    when: ansible_distribution_major_version == "10"
+
+  - name: Get ulimit results
+    become_user: postgres
+    ansible.builtin.shell: ulimit -a
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Run psql show default_table_access_method
+    shell: |
+      psql -c "show default_table_access_method;"
+    become_user: postgres
+    args:
+      executable: /bin/bash
+    environment:
+      PGHOST: "/run/postgresql, /tmp"
+      PGPORT: "5432"
+      LANG: "C.UTF-8"
+    register: psql_result
+    when: ansible_os_family == 'RedHat'
+
+  - name: Show psql output
+    debug:
+      var: psql_result.stdout_lines
+
+  - name: Show psql output
+    debug:
+      var: psql_result.stderr_lines

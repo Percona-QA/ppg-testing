@@ -1,277 +1,34 @@
 ---
-  - name: Setting facts so that they will be persisted in the fact cache
-    ansible.builtin.set_fact:
-      postgis_rhel_package_name_prefix: "percona-postgis33_{{ major_version }}"
-
-  - debug:
-      msg: "Value of postgis_rhel_package_name_prefix is : {{ postgis_rhel_package_name_prefix }}"
-
-  - name: Disable dnf module for RHEL8
-    become: true
-    command: dnf module disable postgresql -y
-    when: ansible_distribution_major_version == "8"
-
-  - name: install Percona Platform for PostgreSQL rpm packages for RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      postgres_version: "{{ major_version }}"
-      packages:
-      - percona-postgresql-client-common
-      - percona-postgresql-common
-      - percona-postgresql{{ postgres_version }}
-      - percona-postgresql{{ postgres_version }}-contrib
-      - percona-postgresql{{ postgres_version }}-devel
-      - percona-postgresql{{ postgres_version }}-libs
-      - percona-postgresql{{ postgres_version }}-plperl
-      - percona-postgresql{{ postgres_version }}-plpython3
-      - percona-postgresql{{ postgres_version }}-pltcl
-      - percona-postgresql{{ postgres_version }}-server
-      - percona-postgresql{{ postgres_version }}-test
-      - percona-postgresql{{ postgres_version }}-llvmjit
-    environment:
-      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
-    when: ansible_distribution_major_version == "8"
-
-  - name: install Percona Platform for PostgreSQL rpm packages for RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      postgres_version: "{{ major_version }}"
-      packages:
-      - percona-postgresql-client-common
-      - percona-postgresql-common
-      - percona-postgresql{{ postgres_version }}
-      - percona-postgresql{{ postgres_version }}-contrib
-      - percona-postgresql{{ postgres_version }}-devel
-      - percona-postgresql{{ postgres_version }}-libs
-      - percona-postgresql{{ postgres_version }}-plperl
-      - percona-postgresql{{ postgres_version }}-plpython3
-      - percona-postgresql{{ postgres_version }}-pltcl
-      - percona-postgresql{{ postgres_version }}-server
-      - percona-postgresql{{ postgres_version }}-test
-    environment:
-      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
-    when: ansible_distribution_major_version == "9" or ansible_distribution_major_version == "10"
-
-  - name: Install postgresql-server-dev-all RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - percona-postgresql-server-dev-all
-    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('17.4', '<=', strict=True))
-
-  - name: Install postgresql-common-dev RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - percona-postgresql-common-dev
-    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('17.5', '>=', strict=True))
-
-  - name: Initialize Postgres RHEL
-    become: true
-    command: /usr/pgsql-{{ major_version }}/bin/postgresql-{{ major_version }}-setup initdb
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
-  - name: Install pgaudit RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      postgres_version: "{{ major_version }}"
-      packages:
-      - percona-pgaudit{{ postgres_version }}
-    environment:
-      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
-
-  - name: Install set_user RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      postgres_version: "{{ major_version }}"
-      packages:
-      - percona-pgaudit{{ postgres_version }}_set_user
-    environment:
-      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
-
-  - name: Install pgrepack RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      postgres_version: "{{ major_version }}"
-      packages:
-      - percona-pg_repack{{ postgres_version }}
-    environment:
-      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
-
-  - name: Install percona-postgis RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      postgres_version: "{{ major_version }}"
-      packages:
-      - "{{postgis_rhel_package_name_prefix}}"
-      - "{{postgis_rhel_package_name_prefix}}-client"
-      - "{{postgis_rhel_package_name_prefix}}-client-debuginfo"
-      - "{{postgis_rhel_package_name_prefix}}-debuginfo"
-      - "{{postgis_rhel_package_name_prefix}}-devel"
-      - "{{postgis_rhel_package_name_prefix}}-docs"
-      - "{{postgis_rhel_package_name_prefix}}-gui"
-      - "{{postgis_rhel_package_name_prefix}}-gui-debuginfo"
-      - "{{postgis_rhel_package_name_prefix}}-llvmjit"
-      - "{{postgis_rhel_package_name_prefix}}-utils"
-    environment:
-      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
-
-  - name: Install pg-stat-monitor RHEL RPM Package
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-        - percona-pg_stat_monitor{{ major_version }}
-        - percona-pg_stat_monitor{{ major_version }}-debuginfo
-    environment:
-      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
-
-  - name: Add extensions to postgresql.conf for RHEL
-    lineinfile:
-      path: /var/lib/pgsql/{{ major_version }}/data/postgresql.conf
-      line: shared_preload_libraries = 'pg_tde'
-
-  - name: Start Postgres RHEL
-    service:
-      name: postgresql-{{ major_version }}
-      state: started
-      enabled: yes
-
-  - name: Check if postgres processes are running
-    command: ps aux
-    register: ps_output
-
-  - name: Show postgres processes
-    debug:
-      msg: "{{ ps_output.stdout_lines | select('search', 'postgres') | list }}"
-
-  - name: List postgres socket files
-    shell: ls -l /tmp/.s.PGSQL* || true
-    register: socket_output
-
-  - name: Show postgres socket files
-    debug:
-      var: socket_output.stdout_lines
-
-  - name: Show PostgreSQL unix_socket_directories
-    shell: |
-      psql -d postgres -t -A -c "SHOW unix_socket_directories;"
-    become: true
-    become_user: postgres
-    register: socket_dir
-
-  - name: Print PostgreSQL socket directory
-    debug:
-      var: socket_dir.stdout
-
-  - name: Set stack ulimit for a specific user
-    become: true
-    pam_limits:
-      domain: postgres  # Replace with the target username
-      limit_type: "-"         # Applies to both soft and hard limits
-      limit_item: stack
-      value: 102400            # Desired stack size in KB
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Allow postgres user to create core dumps
-    community.general.pam_limits:
-      domain: postgres
-      limit_type: hard
-      limit_item: core
-      value: unlimited
-    register: results
-    when: ansible_distribution_major_version == "10"
-
-  - debug: var=results.stdout_lines
-    when: ansible_distribution_major_version == "10"
-
-  - name: Allow postgres user to create core dumps (soft)
-    community.general.pam_limits:
-      domain: postgres
-      limit_type: soft
-      limit_item: core
-      value: unlimited
-    register: results
-    when: ansible_distribution_major_version == "10"
-
-  - debug: var=results.stdout_lines
-    when: ansible_distribution_major_version == "10"
-
-  - name: Get ulimit results
-    become_user: postgres
-    ansible.builtin.shell: ulimit -a
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Run psql show default_table_access_method
-    shell: |
-      psql -c "show default_table_access_method;"
-    become_user: postgres
-    args:
-      executable: /bin/bash
-    environment:
-      PGHOST: "/run/postgresql, /tmp"
-      PGPORT: "5432"
-      LANG: "C.UTF-8"
-    register: psql_result
-    when: ansible_os_family == 'RedHat'
-
-  - name: Show psql output
-    debug:
-      var: psql_result.stdout_lines
-
-  - name: Show psql output
-    debug:
-      var: psql_result.stderr_lines
-
-  - name: Run installcheck with tde
+  - name: Run check tde tests
     shell: | 
-      export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
-      export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
-      export VAULT_ADDR=https://127.0.0.1:8200
-      export VAULT_TOKEN=root
+      echo $VAULT_ADDR
+
+      CLUSTER_INFO=$(mktemp)
+      bao server -dev -dev-tls -dev-cluster-json="$CLUSTER_INFO" > /dev/null &
+      sleep 10
+      export VAULT_ROOT_TOKEN_FILE=$(mktemp)
+      jq -r .root_token "$CLUSTER_INFO" > "$VAULT_ROOT_TOKEN_FILE"
+      export VAULT_CACERT_FILE=$(jq -r .ca_cert_path "$CLUSTER_INFO")
+      rm "$CLUSTER_INFO"
+
+      ## We need to enable key/value version 1 engine for just for tests
+      bao secrets enable -ca-cert="$VAULT_CACERT_FILE" -path=kv-v1 -version=1 kv
+
+      ## Create a test namespace for the tests to test namespace support
+      echo $VAULT_ADDR
+      export VAULT_SKIP_VERIFY=true
+      bao status
+      bao namespace create "pgns"
+      bao secrets enable -ns=pgns -path=secret -description="Production Secrets" kv-v2
+      bao status
+
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
-
-      # EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" \
-      # make installcheck USE_PGXS=1 -k \
-      # 2>&1 | tee /tmp/installcheck.log
-
-      make installcheck USE_PGXS=1 -k PROVE_FLAGS='-v -p'
+      cd /tmp/pg_tde && make -s installcheck -k
     become_user: postgres
     args:
       executable: /bin/bash
-      chdir: "/tmp/postgres/contrib/pg_tde"
+      chdir: "/tmp/pg_tde"
     environment:
       PG_TEST_PORT_DIR: "/tmp/pg_tde"
       PGHOST: "/run/postgresql, /tmp"
@@ -282,17 +39,13 @@
       PGCTLTIMEOUT: 120
       PG_TEST_TIMEOUT_DEFAULT: 300
     ignore_errors: yes
-    when: ansible_os_family == 'RedHat'
     register: regression
 
-  - name: Show stdout of installcheck regression tests
+  - name: Show stdout of check tde tests
     debug:
       var: regression.stdout_lines
 
-  - debug:
-      var: regression.stderr_lines
-
-  - name: Show stderr if installcheck test fails
+  - name: Show stderr if test fails
     debug:
       var: regression.stderr_lines
     when:
@@ -300,7 +53,7 @@
       - regression.rc != 0
 
   - name: Show tde regression diffs if tests failed
-    shell: cat /tmp/postgres/contrib/pg_tde/regression.diffs
+    shell: cat /tmp/pg_tde/regression.diffs
     register: diffs_output
     when:
       - regression is defined
@@ -315,9 +68,9 @@
       - regression.rc != 0
       - diffs_output is defined
 
-  - name: Fail the playbook if tests failed in installcheck
+  - name: Fail the playbook if tde tests failed
     fail:
-      msg: "All regression tests failed with return code {{ regression.rc }}"
+      msg: "TDE regression tests failed with return code {{ regression.rc }}"
     when:
       - regression is defined
       - regression.rc != 0
