@@ -31,12 +31,16 @@
 - name: install Percona Platform for PostgreSQL 17 packages
   include_tasks: ../../../../tasks/install_ppg17.yml
 
-- name: Initialize Percona PostgreSQL 17 without checksums on RHEL
-  become: yes
+- name: Initialize Percona PostgreSQL 17 on RHEL
   ansible.builtin.command:
-    cmd: "/usr/pgsql-17/bin/initdb --no-checksums --pgdata=/var/lib/pgsql/17/data"
-  environment:
-    PGUSER: postgres
+    cmd: "/usr/pgsql-17/bin/postgresql-17-setup initdb"
+  become: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Enable checksums on Percona PostgreSQL 17 cluster
+  ansible.builtin.command:
+    cmd: "/usr/pgsql-17/bin/pg_checksums --enable -D /var/lib/pgsql/17/data"
+  become: yes
   when: ansible_os_family == "RedHat"
 
 - name: Install PPG tools
@@ -179,12 +183,10 @@
       - percona-pg-stat-monitor18
   when: ansible_os_family == "Debian"
 
-- name: Initialize Percona PostgreSQL 18 without checksums on RHEL
-  become: yes
+- name: Initialize Percona PostgreSQL 18 on RHEL
   ansible.builtin.command:
-    cmd: "/usr/pgsql-18/bin/initdb --no-checksums --pgdata=/var/lib/pgsql/18/data"
-  environment:
-    PGUSER: postgres
+    cmd: "/usr/pgsql-18/bin/postgresql-18-setup initdb"
+  become: yes
   when: ansible_os_family == "RedHat"
 
 - name: Set io_method to worker for PG 18
@@ -211,7 +213,7 @@
   ansible.builtin.command: >
     /usr/bin/pg_createcluster 18 main
     --port=5433
-    -- --no-data-checksums
+    --no-data-checksums
   become: yes
   become_user: postgres
   when: ansible_os_family == "Debian"
