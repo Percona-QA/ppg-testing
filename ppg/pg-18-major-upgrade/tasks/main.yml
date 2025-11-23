@@ -211,9 +211,7 @@
 
 - name: Create PostgreSQL 18 cluster on Debian with no checksums
   ansible.builtin.command: >
-    /usr/bin/pg_createcluster 18 main
-    --port=5433
-    --no-data-checksums
+    /usr/bin/pg_createcluster 18 main --port=5433
   become: yes
   become_user: postgres
   when: ansible_os_family == "Debian"
