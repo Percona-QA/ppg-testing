@@ -86,26 +86,41 @@
     state: directory
     owner: postgres
     group: postgres
-    mode: "0755"
-
-- name: Set patroni_test directory permissions
-  file:
-    path: /var/lib/pgsql/patroni_test
-    owner: postgres
-    group: postgres
-    mode: "0755"
+    mode: 0755
 
 - name: Copy postgresql0.yml for patroni service
   copy:
     src: postgresql0.yml
     dest: /etc/patroni/postgresql.yml
-    owner: root
-    group: root
-    mode: "0644"
+    owner: postgres
+    group: postgres
+    mode: 0644
 
 - name: Replace server version in postgresql.yml
   become: true
   shell: sed -i 's/16/{{ major_version }}/' /etc/patroni/postgresql.yml
+
+- name: Enable and start patroni with wait
+  ansible.builtin.systemd:
+    name: patroni
+    state: started
+    enabled: yes
+    daemon_reload: yes
+  async: 180
+  poll: 5
+  become: yes
+
+- name: Copy postgresql0.yml for patroni service
+  copy:
+    src: postgresql0.yml
+    dest: /var/lib/pgsql/patroni_test/postgresql0.yml
+    owner: postgres
+    group: postgres
+    mode: 0644
+
+- name: Replace server version in postgresql.yml
+  become: true
+  shell: sed -i 's/16/{{ major_version }}/' /var/lib/pgsql/patroni_test/postgresql0.yml
 
 - name: Copy postgresql1.yml for patroni service
   copy:
@@ -113,18 +128,11 @@
     dest: /var/lib/pgsql/patroni_test/postgresql1.yml
     owner: postgres
     group: postgres
-    mode: "0644"
+    mode: 0644
 
 - name: Replace server version in postgresql1.yml
   become: true
   shell: sed -i 's/16/{{ major_version }}/' /var/lib/pgsql/patroni_test/postgresql1.yml
-
-- name: Set patroni_test files permissions readable by all
-  file:
-    path: /var/lib/pgsql/patroni_test/postgresql1.yml
-    owner: postgres
-    group: postgres
-    mode: "0644"
 
 - name: Copy postgresql2.yml for patroni service
   copy:
@@ -132,11 +140,32 @@
     dest: /var/lib/pgsql/patroni_test/postgresql2.yml
     owner: postgres
     group: postgres
-    mode: "0644"
+    mode: 0644
 
 - name: Replace server version in postgresql2.yml
   become: true
   shell: sed -i 's/16/{{ major_version }}/' /var/lib/pgsql/patroni_test/postgresql2.yml
+
+- name: Set patroni_test files permissions readable by all
+  file:
+    path: /var/lib/pgsql/patroni_test/postgresql0.yml
+    owner: postgres
+    group: postgres
+    mode: 0644
+
+- name: Set patroni_test files permissions readable by all
+  file:
+    path: /var/lib/pgsql/patroni_test/postgresql1.yml
+    owner: postgres
+    group: postgres
+    mode: 0644
+
+- name: Set patroni_test files permissions readable by all
+  file:
+    path: /var/lib/pgsql/patroni_test/postgresql2.yml
+    owner: postgres
+    group: postgres
+    mode: 0644
 
 - name: Debug patroni1.yml file existence and permissions
   block:
