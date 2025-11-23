@@ -277,9 +277,16 @@
 # =============================
 - name: Remove old multiple extensions test case
   ansible.builtin.file:
-    path: /tmp/postgres/contrib/pg_tde/t/multiple_extensions.pl
+    path: /tmp/pg_tde/t/multiple_extensions.pl
     state: absent
   become_user: postgres
+
+- name: Remove wal_archiving test case on rhel
+  ansible.builtin.file:
+    path: /tmp/pg_tde/t/wal_archiving.pl
+    state: absent
+  become_user: postgres
+  when: ansible_os_family == 'RedHat'
 
 - name: Copy pg_tde test files
   ansible.builtin.copy:
