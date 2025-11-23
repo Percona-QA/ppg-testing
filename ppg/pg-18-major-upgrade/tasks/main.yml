@@ -231,7 +231,7 @@
   become: yes
   ansible.builtin.copy:
     dest: /etc/ld.so.conf.d/percona-pg18.conf
-    content: "/usr/lib/postgresql/18/lib\n"
+    content: "/usr/lib/postgresql/18/lib"
     owner: root
     group: root
     mode: '0644'
@@ -241,7 +241,7 @@
   become: yes
   ansible.builtin.copy:
     dest: /etc/ld.so.conf.d/percona-pg18.conf
-    content: "/usr/pgsql-18/lib\n"
+    content: "/usr/pgsql-18/lib"
     owner: root
     group: root
     mode: '0644'
