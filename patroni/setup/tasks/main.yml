@@ -95,13 +95,6 @@
     group: postgres
     mode: "0755"
 
-- name: Set patroni_test files permissions readable by all
-  file:
-    path: /var/lib/pgsql/patroni_test/postgresql1.yml
-    owner: postgres
-    group: postgres
-    mode: "0644"
-
 - name: Copy postgresql0.yml for patroni service
   copy:
     src: postgresql0.yml
@@ -125,6 +118,13 @@
 - name: Replace server version in postgresql1.yml
   become: true
   shell: sed -i 's/16/{{ major_version }}/' /var/lib/pgsql/patroni_test/postgresql1.yml
+
+- name: Set patroni_test files permissions readable by all
+  file:
+    path: /var/lib/pgsql/patroni_test/postgresql1.yml
+    owner: postgres
+    group: postgres
+    mode: "0644"
 
 - name: Copy postgresql2.yml for patroni service
   copy:
