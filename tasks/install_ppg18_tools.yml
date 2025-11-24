@@ -522,10 +522,10 @@
       update_cache: yes
     vars:
       packages:
-      - percona-pg_tde_18 
-      - percona-pg_tde_18-devel 
-      - percona-pg_tde_18-debugsource 
-      - percona-pg_tde_18-debuginfo
+      - percona-pg_tde18
+      - percona-pg_tde18-devel
+      - percona-pg_tde18-debugsource
+      - percona-pg_tde18-debuginfo
     when: ansible_os_family == "RedHat"
 
   - name: Install pg_tde packages Debian
@@ -535,9 +535,8 @@
       update_cache: yes
     vars:
       packages:
-      - percona-postgresql-18-pg-tde
-      - percona-postgresql-18-pg-tde-client
-      - percona-postgresql-18-pg-tde-dbgsym
+      - percona-pg-tde18
+      - percona-pg-tde18-client
     when: ansible_os_family == "Debian"
 
   - name: Install patroni related packages Debian
