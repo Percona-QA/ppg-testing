@@ -379,19 +379,6 @@
     vars:
       postgres_version: "{{ major_version }}"
       packages:
-      - percona-pg_tde_{{ postgres_version }}
-      - percona-pg_tde_{{ postgres_version }}-devel 
-      - percona-pg_tde_{{ postgres_version }}-debugsource 
-      - percona-pg_tde_{{ postgres_version }}-debuginfo
-
-  - name: Install pg_tde packages RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      postgres_version: "{{ major_version }}"
-      packages:
       - percona-pg_tde{{ postgres_version }}
       - percona-pg_tde{{ postgres_version }}-devel
       - percona-pg_tde{{ postgres_version }}-debugsource
