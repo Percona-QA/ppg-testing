@@ -230,6 +230,8 @@ redhat_percona_telemetry_agent = "/etc/sysconfig/percona-telemetry-agent"
 
 @pytest.mark.parametrize("package", telemetry_packages)
 def test_rpm_package_is_installed(host, package):
+    if int(MAJOR_VER) in [18]:
+        pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
     dist = host.system_info.distribution
     pkg = host.package(package)
     assert pkg.is_installed
