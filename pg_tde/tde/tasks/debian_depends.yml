@@ -112,6 +112,17 @@
       - percona-postgresql-{{ postgres_version }}-pg-tde-client
       - percona-postgresql-{{ postgres_version }}-pg-tde-dbgsym
 
+  - name: Install pg_tde packages Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-pg-tde{{ postgres_version }}
+      - percona-pg-tde{{ postgres_version }}-client
+      - percona-pg-tde{{ postgres_version }}-dbgsym
+
   - name: Install pgaudit Debian
     apt:
       name: "{{ packages }}"
