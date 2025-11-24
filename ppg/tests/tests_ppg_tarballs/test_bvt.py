@@ -340,7 +340,7 @@ def test_language(host,get_psql_binary_path, language):
         # if dist.lower() in ["redhat", "centos", "rhel", "rocky", "ol"]:
         #     if "python3" in language:
         #         pytest.skip("Skipping python3 language for Centos or RHEL")
-        if dist.lower() in rpm_dists and language in ['plpythonu', "plpython2u"] and settings.MAJOR_VER in ["12", "13" , "14", "15", "16","17"]:
+        if dist.lower() in rpm_dists and language in ['plpythonu', "plpython2u"]:
             pytest.skip("Skipping python2 extensions for RHEL on Major version 16")
         if dist.lower() in deb_dists and language in ['plpythonu', "plpython2u"]:
             pytest.skip("Skipping python2 extensions for DEB based")
