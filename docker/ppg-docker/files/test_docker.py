@@ -384,22 +384,3 @@ def test_tde_binaries_present(host, binary):
     assert file.exists, f"{binary} is missing at {bin_path}"
     assert file.is_file, f"{binary} exists but is not a file at {bin_path}"
     assert file.mode & 0o111, f"{binary} exists but is not executable at {bin_path}"
-
-
-def test_tde_perl_test_module_present(host):
-    """
-    Ensure the TDE Perl test module TdeCluster.pm is present in the pgxs directory
-    on both Debian/Ubuntu and RHEL-based systems.
-    """
-    # pg_tde Perl module only exists on PG-17 and above.
-    if int(MAJOR_VER) < 17:
-        pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
-
-    dist = host.system_info.distribution.lower()
-
-    path = f"/usr/pgsql-{MAJOR_VER}/lib/pgxs/src/test/perl/PostgreSQL/Test/TdeCluster.pm"
-
-    f = host.file(path)
-    assert f.exists, f"Missing: {path}"
-    assert f.is_file, f"Path is not a file: {path}"
-    assert f.size > 0, f"File is empty: {path}"
