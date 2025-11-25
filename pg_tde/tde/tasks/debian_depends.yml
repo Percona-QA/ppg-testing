@@ -106,6 +106,7 @@
       state: latest
       update_cache: yes
     vars:
+      postgres_version: "{{ major_version }}"
       packages:
       - percona-pg-tde{{ postgres_version }}
       - percona-pg-tde{{ postgres_version }}-client
