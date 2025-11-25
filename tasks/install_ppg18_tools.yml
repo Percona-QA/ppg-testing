@@ -537,6 +537,7 @@
       packages:
       - percona-pg-tde18
       - percona-pg-tde18-client
+      - percona-pg-tde18-dbgsym
     when: ansible_os_family == "Debian"
 
   - name: Install patroni related packages Debian

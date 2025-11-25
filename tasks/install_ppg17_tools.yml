@@ -2,12 +2,12 @@
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
       pgaudit_rhel_package_name: "percona-pgaudit"
-      postgis_rhel_package_name_prefix: "percona-postgis33"
+      postgis_rhel_package_name_prefix: "percona-postgis35"
 
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
       pgaudit_rhel_package_name: "percona-pgaudit17"
-      postgis_rhel_package_name_prefix: "percona-postgis33_17"
+      postgis_rhel_package_name_prefix: "percona-postgis33_15"
     when: (pg_version_to_install | string is version('17.0', '>=', strict=True))
 
   - debug:
@@ -527,6 +527,7 @@
       - percona-postgresql-17-pgvector
     when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('17.2', '>=', strict=True))
 
+
   - name: Install pg_tde packages RHEL
     yum:
       name: "{{ packages }}"
@@ -534,11 +535,11 @@
       update_cache: yes
     vars:
       packages:
-      - percona-pg_tde_17 
-      - percona-pg_tde_17-devel 
-      - percona-pg_tde_17-debugsource 
-      - percona-pg_tde_17-debuginfo
-    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('17.7', '>=', strict=True))
+      - percona-pg_tde17
+      - percona-pg_tde17-devel
+      - percona-pg_tde17-debugsource
+      - percona-pg_tde17-debuginfo
+    when: ansible_os_family == "RedHat"
 
   - name: Install pg_tde packages Debian
     apt:
@@ -547,10 +548,10 @@
       update_cache: yes
     vars:
       packages:
-      - percona-postgresql-17-pg-tde
-      - percona-postgresql-17-pg-tde-client
-      - percona-postgresql-17-pg-tde-dbgsym
-    when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('17.7', '>=', strict=True))
+      - percona-pg-tde17
+      - percona-pg-tde17-client
+      - percona-pg-tde17-dbgsym
+    when: ansible_os_family == "Debian"
 
   - name: Install patroni related packages Debian
     apt:
