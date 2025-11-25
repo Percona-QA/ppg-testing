@@ -261,19 +261,20 @@
     file_type: file
   register: found_json_files
 
-- name: Fail if no JSON files are found
-  ansible.builtin.fail:
-    msg: "No JSON files found in /usr/local/percona/telemetry/pg/."
-  when: found_json_files.matched == 0
+#Disabling for the Q4-2025 where telemetry is not enabled by default. 
+# - name: Fail if no JSON files are found
+#   ansible.builtin.fail:
+#     msg: "No JSON files found in /usr/local/percona/telemetry/pg/."
+#   when: found_json_files.matched == 0
 
-- name: Check if the JSON files are not empty
-  ansible.builtin.stat:
-    path: "{{ item.path }}"
-  loop: "{{ found_json_files.files }}"
-  register: json_file_stats
+# - name: Check if the JSON files are not empty
+#   ansible.builtin.stat:
+#     path: "{{ item.path }}"
+#   loop: "{{ found_json_files.files }}"
+#   register: json_file_stats
 
-- name: Fail if any JSON file is empty
-  fail:
-    msg: "The following JSON file is empty: {{ item.stat.path }}"
-  loop: "{{ json_file_stats.results }}"
-  when: item.stat.size == 0
+# - name: Fail if any JSON file is empty
+#   fail:
+#     msg: "The following JSON file is empty: {{ item.stat.path }}"
+#   loop: "{{ json_file_stats.results }}"
+#   when: item.stat.size == 0

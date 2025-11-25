@@ -2,12 +2,12 @@
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
       pgaudit_rhel_package_name: "percona-pgaudit"
-      postgis_rhel_package_name_prefix: "percona-postgis33"
+      postgis_rhel_package_name_prefix: "percona-postgis35"
 
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
       pgaudit_rhel_package_name: "percona-pgaudit15"
-      postgis_rhel_package_name_prefix: "percona-postgis33_15"
+      postgis_rhel_package_name_prefix: "percona-postgis35_15"
     when: (pg_version_to_install | string is version('15.5', '>=', strict=True))
 
   - debug:
@@ -397,29 +397,27 @@
     lineinfile:
       path: /etc/postgresql/15/main/postgresql.conf
       line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
-    when: (ansible_os_family == "Debian") and
-      (pg_version_to_install | string is version('15.7', '<=', strict=True))
+    when: ansible_os_family == "Debian"
 
   - name: Add extensions to postgresql.conf for RHEL
     lineinfile:
       path: /var/lib/pgsql/15/data/postgresql.conf
       line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
-    when: (ansible_os_family == "RedHat") and
-      (pg_version_to_install | string is version('15.7', '<=', strict=True))
+    when: ansible_os_family == "RedHat"
 
-  - name: Add extensions to postgresql.conf for Debian
-    lineinfile:
-      path: /etc/postgresql/15/main/postgresql.conf
-      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, percona_pg_telemetry'
-    when: (ansible_os_family == "Debian") and
-      (pg_version_to_install | string is version('15.8', '>=', strict=True))
+  # - name: Add extensions to postgresql.conf for Debian
+  #   lineinfile:
+  #     path: /etc/postgresql/15/main/postgresql.conf
+  #     line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, percona_pg_telemetry'
+  #   when: (ansible_os_family == "Debian") and
+  #     (pg_version_to_install | string is version('15.8', '>=', strict=True))
 
-  - name: Add extensions to postgresql.conf for RHEL
-    lineinfile:
-      path: /var/lib/pgsql/15/data/postgresql.conf
-      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, percona_pg_telemetry'
-    when: (ansible_os_family == "RedHat") and
-      (pg_version_to_install | string is version('15.8', '>=', strict=True))
+  # - name: Add extensions to postgresql.conf for RHEL
+  #   lineinfile:
+  #     path: /var/lib/pgsql/15/data/postgresql.conf
+  #     line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, percona_pg_telemetry'
+  #   when: (ansible_os_family == "RedHat") and
+  #     (pg_version_to_install | string is version('15.8', '>=', strict=True))
 
   - name: Remove pg_hba.conf debian
     file:
