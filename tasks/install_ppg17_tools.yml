@@ -527,7 +527,6 @@
       - percona-postgresql-17-pgvector
     when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('17.2', '>=', strict=True))
 
-
   - name: Install pg_tde packages RHEL
     yum:
       name: "{{ packages }}"

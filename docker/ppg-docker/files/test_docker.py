@@ -371,7 +371,7 @@ def test_tde_binaries_present(host, binary):
     depending on OS type (Debian/Ubuntu vs RHEL/CentOS/Rocky).
     """
     # pg_tde only exists on PG-17 and above.
-    if int(settings.MAJOR_VER) < 17:
+    if int(MAJOR_VER) < 17:
         pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
 
     dist = host.system_info.distribution.lower()
@@ -392,7 +392,7 @@ def test_tde_perl_test_module_present(host):
     on both Debian/Ubuntu and RHEL-based systems.
     """
     # pg_tde Perl module only exists on PG-17 and above.
-    if int(settings.MAJOR_VER) < 17:
+    if int(MAJOR_VER) < 17:
         pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
 
     dist = host.system_info.distribution.lower()
