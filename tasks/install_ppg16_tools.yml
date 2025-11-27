@@ -487,12 +487,6 @@
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     when: ansible_os_family == "Debian"
 
-  - name: Start patroni
-    service:
-      name: patroni
-      state: started
-      enabled: yes
-
   - name: Install etcd packages RHEL
     yum:
       name: "{{ packages }}"
