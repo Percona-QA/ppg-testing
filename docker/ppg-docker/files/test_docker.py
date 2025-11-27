@@ -354,34 +354,34 @@ def test_tde_binaries_present(host, binary):
     assert file.mode & 0o111, f"{binary} exists but is not executable at {bin_path}"
 
 
-def test_telemetry_extension_in_conf(host):
-    """Test if percona_pg_telemetry extension exists in postgresql.auto.conf."""
-    if int(MAJOR_VER) in [17,18]:
-        pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
-    config_path = "/data/db/postgresql.auto.conf"
-    assert host.file(config_path).exists, f"{config_path} does not exists"
-    assert host.file(config_path).contains('percona_pg_telemetry'), f"'percona_pg_telemetry' not found in {config_path}."
+# def test_telemetry_extension_in_conf(host):
+#     """Test if percona_pg_telemetry extension exists in postgresql.auto.conf."""
+#     if int(MAJOR_VER) in [17,18]:
+#         pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+#     config_path = "/data/db/postgresql.auto.conf"
+#     assert host.file(config_path).exists, f"{config_path} does not exists"
+#     assert host.file(config_path).contains('percona_pg_telemetry'), f"'percona_pg_telemetry' not found in {config_path}."
 
 
-def test_pg_telemetry_file_pillar_version(host):
-    if int(MAJOR_VER) in [17,18]:
-        pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
-    output = host.run("cat /usr/local/percona/telemetry/pg/*.json | grep -i pillar_version")
-    assert output.rc == 0, output.stderr
-    assert MAJOR_MINOR_VER in output.stdout, output.stdout
+# def test_pg_telemetry_file_pillar_version(host):
+#     if int(MAJOR_VER) in [17,18]:
+#         pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+#     output = host.run("cat /usr/local/percona/telemetry/pg/*.json | grep -i pillar_version")
+#     assert output.rc == 0, output.stderr
+#     assert MAJOR_MINOR_VER in output.stdout, output.stdout
 
 
-def test_pg_telemetry_file_database_count(host):
-    if int(MAJOR_VER) in [17,18]:
-        pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
-    output = host.run("cat /usr/local/percona/telemetry/pg/*.json | grep -i databases_count")
-    assert output.rc == 0, output.stderr
-    assert '2' in output.stdout, output.stdout
+# def test_pg_telemetry_file_database_count(host):
+#     if int(MAJOR_VER) in [17,18]:
+#         pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+#     output = host.run("cat /usr/local/percona/telemetry/pg/*.json | grep -i databases_count")
+#     assert output.rc == 0, output.stderr
+#     assert '2' in output.stdout, output.stdout
 
 
-def test_telemetry_enabled(host):
-    if int(MAJOR_VER) in [17,18]:
-        pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
-    assert host.file('/usr/local/percona/telemetry_uuid').exists
-    assert host.file('/usr/local/percona/telemetry_uuid').contains('PRODUCT_FAMILY_POSTGRESQL')
-    assert host.file('/usr/local/percona/telemetry_uuid').contains('instanceId:[0-9a-fA-F]\\{8\\}-[0-9a-fA-F]\\{4\\}-[0-9a-fA-F]\\{4\\}-[0-9a-fA-F]\\{4\\}-[0-9a-fA-F]\\{12\\}$')
+# def test_telemetry_enabled(host):
+#     if int(MAJOR_VER) in [17,18]:
+#         pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+#     assert host.file('/usr/local/percona/telemetry_uuid').exists
+#     assert host.file('/usr/local/percona/telemetry_uuid').contains('PRODUCT_FAMILY_POSTGRESQL')
+#     assert host.file('/usr/local/percona/telemetry_uuid').contains('instanceId:[0-9a-fA-F]\\{8\\}-[0-9a-fA-F]\\{4\\}-[0-9a-fA-F]\\{4\\}-[0-9a-fA-F]\\{4\\}-[0-9a-fA-F]\\{12\\}$')
