@@ -36,7 +36,6 @@
         - pkg-config
         - valgrind
         - liblz4-dev
-        - liblz4-tool
         - zstd
         - libzstd-dev
         - bzip2
@@ -44,6 +43,23 @@
         - libsharyanto-string-util-perl
         - libipc-run-perl
         - libtext-csv-xs-perl
+        - python3-systemd
+    when: ansible_os_family == "Debian"
+
+  - name: Ensure correct lz4 package is installed (Debian/Ubuntu)
+    ansible.builtin.apt:
+      name: "{{ lz4_package }}"
+      state: present
+      update_cache: yes
+    vars:
+      lz4_package: >-
+        {% if ansible_distribution == 'Debian' and (ansible_distribution_major_version | int) < 13 %}
+          liblz4-tool
+        {% elif ansible_distribution == 'Ubuntu' and (ansible_distribution_major_version | int) <= 24 %}
+          liblz4-tool
+        {% else %}
+          lz4
+        {% endif %}
     when: ansible_os_family == "Debian"
 
   - name: Install pgaudit Debian
