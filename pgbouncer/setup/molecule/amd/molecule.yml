@@ -4,12 +4,12 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: pgbouncer-deb12-amd-${BUILD_NUMBER}
+  - name: pgbouncer-u24-amd-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-06c431709bcd3b51d
+    image: ami-0cf5b48e0c60471d0
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t2.xlarge
-    ssh_user: admin
+    ssh_user: ubuntu
     root_device_name: /dev/sda1
     instance_tags:
       iit-billing-tag: jenkins-pg-worker
