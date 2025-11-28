@@ -25,11 +25,11 @@
 #   command: dnf module disable llvm-toolset -y
 #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
-- name: setup epel release
-  yum:
-    name: epel-release
-    update_cache: yes
-    state: present
+# - name: setup epel release
+#   yum:
+#     name: epel-release
+#     update_cache: yes
+#     state: present
 
 - name: Configure repository
   include_tasks: ../../../../tasks/enable_repo.yml
