@@ -14,9 +14,9 @@
       state: present
     when: ansible_os_family == "RedHat"
 
-  - name: Enable crb on rocky linux 9
-    become: true
-    command: dnf config-manager --set-enabled crb
+  # - name: Enable crb on rocky linux 9
+  #   become: true
+  #   command: dnf config-manager --set-enabled crb
 
   - name: install Percona Platform for PostgreSQL rpm packages
     yum:

@@ -4,12 +4,12 @@ dependency:
 driver:
   name: ec2
 platforms:
-  - name: pgpool-rocky9-arm-${BUILD_NUMBER}
+  - name: pgpool-rhel9-arm-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-0899e48d70f37fb63
+    image: ami-091cd356fd6ad46ec
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
-    instance_type: t4g.large
-    ssh_user: rocky
+    instance_type: t4g.medium
+    ssh_user: ec2-user
     root_device_name: /dev/sda1
     instance_tags:
       iit-billing-tag: jenkins-pg-worker
