@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pgbouncer-deb12-amd-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-04a8220c151d8840a
+    image: ami-06c431709bcd3b51d
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t2.xlarge
     ssh_user: admin
