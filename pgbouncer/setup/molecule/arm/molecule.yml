@@ -9,7 +9,7 @@ platforms:
     image: ami-05edd75f8277dc043
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t4g.xlarge
-    ssh_user: admin
+    ssh_user: ubuntu
     root_device_name: /dev/sda1
     instance_tags:
       iit-billing-tag: jenkins-pg-worker
