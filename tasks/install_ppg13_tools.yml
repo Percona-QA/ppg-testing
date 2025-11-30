@@ -552,18 +552,18 @@
       - percona-postgresql-13-pgvector
     when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('13.18', '>=', strict=True))
 
-  - name: Install patroni related packages Debian
-    apt:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-        - etcd
-        - percona-haproxy
-    when: (ansible_distribution == "Ubuntu") or
-      (ansible_os_family == "Debian" and ansible_lsb.major_release|int <= 11) or
-      (ansible_os_family == "Debian" and pg_version_to_install | string is version('13.15', '>=', strict=True))
+  # - name: Install patroni related packages Debian
+  #   apt:
+  #     name: "{{ packages }}"
+  #     state: latest
+  #     update_cache: yes
+  #   vars:
+  #     packages:
+  #       - etcd
+  #       - percona-haproxy
+  #   when: (ansible_distribution == "Ubuntu") or
+  #     (ansible_os_family == "Debian" and ansible_lsb.major_release|int <= 11) or
+  #     (ansible_os_family == "Debian" and pg_version_to_install | string is version('13.15', '>=', strict=True))
 
   # - name: Install patroni related packages Debian 12
   #   apt:

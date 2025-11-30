@@ -142,8 +142,9 @@
     become_user: postgres
     register: results
 
-  - debug:
-      var: results.stdout
+  - name: Show stdout of pytest regression tests
+    debug:
+      var: results.stdout_lines
 
   # - name: Install pip requirements
   #   shell: pip3 install -r requirements.txt

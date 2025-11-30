@@ -40,7 +40,6 @@
         - libzstd-dev
         - bzip2
         - libbz2-dev
-#        - libsharyanto-string-util-perl
         - libipc-run-perl
         - libtext-csv-xs-perl
         - python3-systemd
@@ -149,18 +148,6 @@
         max_wal_senders = 10
         wal_level = logical
     when: ansible_os_family == "RedHat"
-
-#  - name: Debian. Edit pg_stat_monitor.pgsm_bucket_time
-#    lineinfile:
-#      path: /etc/postgresql/14/main/postgresql.conf
-#      line: pg_stat_monitor.pgsm_bucket_time = 600
-#    when: ansible_os_family == "Debian"
-#
-#  - name: RHEL. Edit pg_stat_monitor.pgsm_bucket_time
-#    lineinfile:
-#      path: /var/lib/pgsql/14/data/postgresql.conf
-#      line: pg_stat_monitor.pgsm_bucket_time = 600
-#    when: ansible_os_family == "RedHat"
 
   - name: Restart Postgres RHEL
     service:
