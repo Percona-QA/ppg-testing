@@ -199,6 +199,16 @@
   #   command: python3 -m pip install patroni[etcd]
   #   when: ansible_os_family == "RedHat"
 
+  - name: Install python3 etcd libraries on Debian 11
+    apt:
+      name:
+        - python3-etcd
+        - python3-etcd3
+      state: present
+      update_cache: yes
+    become: yes
+    when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int == 11)
+
   - name: Install patroni debian
     apt:
       name: "{{ packages }}"
