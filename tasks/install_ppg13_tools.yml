@@ -207,7 +207,7 @@
       state: present
       update_cache: yes
     become: yes
-    when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int == 11)
+    when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int == 13)
 
   - name: Install patroni debian
     apt:
