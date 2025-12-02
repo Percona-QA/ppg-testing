@@ -21,7 +21,6 @@ SKIPPED_DEBIAN = ["ppg-11.8", "ppg-11.9", "ppg-11.10", "ppg-11.12", "ppg-11.17",
                   "ppg-15.0", "ppg-15.1"]
 BINARIES = pg_versions['binaries']
 
-
 @pytest.fixture()
 def postgres_unit_file(host):
     cmd = "sudo systemctl list-units| grep postgresql"
@@ -484,3 +483,15 @@ def test_rpm7_package_provides(host, percona_package, vanila_package):
     provides = set(result.stdout.split())
     assert result.rc == 0, result.stderr
     assert vanila_package in provides, result.stdout
+
+
+def test_build_with_liburing(host):
+    if settings.MAJOR_VER not in ["18"]:
+        pytest.skip("Skipping, test only for PostgreSQL 18 version")
+
+    output = host.check_output("pg_config --configure")
+
+    if '--with-liburing' not in output:
+        pytest.xfail("PostgreSQL 18 was built without --with-liburing")
+
+    assert '--with-liburing' in output
