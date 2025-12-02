@@ -492,6 +492,6 @@ def test_build_with_liburing(host):
     output = host.check_output("pg_config --configure")
 
     if '--with-liburing' not in output:
-        pytest.xfail("PostgreSQL 18 was built without --with-liburing")
+        pytest.fail("PostgreSQL 18 was built without --with-liburing")
 
     assert '--with-liburing' in output
