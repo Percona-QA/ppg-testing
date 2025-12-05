@@ -97,18 +97,18 @@
     vars:
       postgres_version: "{{ major_version }}"
       packages:
-      - percona-postgresql-client-common
-      - percona-postgresql-common
-      - percona-postgresql-common-dev
-      - percona-postgresql{{ postgres_version }}
-      - percona-postgresql{{ postgres_version }}-contrib
-      - percona-postgresql{{ postgres_version }}-devel
-      - percona-postgresql{{ postgres_version }}-libs
-      - percona-postgresql{{ postgres_version }}-plperl
-      - percona-postgresql{{ postgres_version }}-plpython3
-      - percona-postgresql{{ postgres_version }}-pltcl
-      - percona-postgresql{{ postgres_version }}-server
-      - percona-postgresql{{ postgres_version }}-test
+        - percona-postgresql-client-common
+        - percona-postgresql-common
+        - percona-postgresql-common-dev
+        - percona-postgresql{{ postgres_version }}
+        - percona-postgresql{{ postgres_version }}-contrib
+        # - percona-postgresql{{ postgres_version }}-devel
+        - percona-postgresql{{ postgres_version }}-libs
+        - percona-postgresql{{ postgres_version }}-plperl
+        - percona-postgresql{{ postgres_version }}-plpython3
+        - percona-postgresql{{ postgres_version }}-pltcl
+        - percona-postgresql{{ postgres_version }}-server
+        - percona-postgresql{{ postgres_version }}-test
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
