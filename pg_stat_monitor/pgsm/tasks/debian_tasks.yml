@@ -128,7 +128,7 @@
         apt:
           update_cache: yes
 
-      - name: Install LLVM packages
+      - name: Install LLVM 14 packages (PG ≥ 16)
         apt:
           name:
             - clang-14
@@ -137,6 +137,18 @@
             - llvm-14-dev
             - llvm-14-linker-tools
           state: present
+        when: major_version | int >= 16
+
+      - name: Install LLVM 13 packages (PG ≤ 15)
+        apt:
+          name:
+            - clang-13
+            - lld-13
+            - llvm-13
+            - llvm-13-dev
+            - llvm-13-linker-tools
+          state: present
+        when: major_version | int <= 15
 
   - name: Clone pg_stat_monitor sources
     git:
