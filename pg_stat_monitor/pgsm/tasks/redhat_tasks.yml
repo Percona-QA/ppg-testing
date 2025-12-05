@@ -22,7 +22,7 @@
 
   - name: Install perl module perl-IPC-Run
     become: true
-    command: cpanm perl-IPC-Run
+    command: cpanm IPC::Run
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
