@@ -284,13 +284,29 @@
           - libevent-devel
           - perl-Pod-Checker
           - perl-devel
-          - perl-JSON-XS
           - perl-Test-Simple
           - libtool
           - make
           - pandoc
           - pkgconfig
       when: ansible_os_family == "RedHat"
+
+    - name: Install Perl JSON module for EL10+
+      yum:
+        name: perl-JSON
+        state: present
+      when:
+        - ansible_os_family == "RedHat"
+        - ansible_distribution_major_version|int >= 10
+
+    - name: Install Perl JSON::XS for EL7–9
+      yum:
+        name: perl-JSON-XS
+        state: present
+      when:
+        - ansible_os_family == "RedHat"
+        - ansible_distribution_major_version|int < 10
+
 
     - name: Install additional packages Debian
       apt:
