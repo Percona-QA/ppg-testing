@@ -217,7 +217,7 @@
           make
           make install
         args:
-          chdir: /tmp/liburing-*
+          chdir: /tmp/liburing
 
   - name: Install kernel-modules-extra on RHEL 10
     become: true
