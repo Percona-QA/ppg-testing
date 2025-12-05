@@ -27,22 +27,6 @@
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-  - name: LLVM Version
-    command: llvm-config --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: CLANG Version
-    command: clang --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
   - name: Install Development tools
     become: true
     command: yum -y groupinstall "Development tools"

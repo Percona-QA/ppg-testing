@@ -225,11 +225,16 @@
       command:  sudo dnf install -y acl
       when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
-    - name: Update Oracle Linux 8 and 9 to latest
+    # - name: Update Oracle Linux 8 and 9 to latest
+    #   become: true
+    #   shell: | 
+    #     sudo dnf update -y
+    #   when: ansible_distribution == "OracleLinux" or ansible_distribution == "Rocky"
+
+    - name: Update RedHat-family systems to latest
       become: true
-      shell: | 
-        sudo dnf update -y 
-      when: ansible_distribution == "OracleLinux"
+      ansible.builtin.shell: dnf update -y
+      when: ansible_os_family == "RedHat"
 
     - name: Setup oracle linux 9 for ssh
       become: true
