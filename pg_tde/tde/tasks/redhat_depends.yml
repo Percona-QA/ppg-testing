@@ -155,8 +155,6 @@
       - perl-LWP-Protocol-https
       - perl-JSON
       - jq
-      - liburing
-      - liburing-devel
 
   - name: install packages specific to rhel 8 and 9
     yum:

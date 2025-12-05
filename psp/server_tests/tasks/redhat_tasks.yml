@@ -164,8 +164,17 @@
       - perl-LWP-Protocol-https
       - perl-JSON
       - jq
+
+  - name: install tools
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
       - liburing
       - liburing-devel
+    when: ansible_distribution != "RedHat" and ansible_distribution_major_version != "10"
 
   - name: install packages specific to rhel 8 and 9
     yum:
@@ -177,6 +186,38 @@
       - lcov
       - prename
     when: ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
+
+  - name: install liburing devel RHEL 10
+    when: ansible_distribution == "RedHat" and ansible_distribution_major_version == "10"
+    block:
+
+      - name: Install build deps
+        yum:
+          name:
+            - gcc
+            - make
+            - kernel-headers
+            - kernel-devel
+          state: present
+
+      - name: Download liburing source
+        get_url:
+          url: https://github.com/axboe/liburing/archive/refs/tags/liburing-2.5.tar.gz
+          dest: /tmp/liburing.tar.gz
+
+      - name: Extract liburing
+        unarchive:
+          src: /tmp/liburing.tar.gz
+          dest: /tmp
+          remote_src: yes
+
+      - name: Build liburing
+        shell: |
+          ./configure --prefix=/usr
+          make
+          make install
+        args:
+          chdir: /tmp/liburing-*
 
   - name: Install kernel-modules-extra on RHEL 10
     become: true
