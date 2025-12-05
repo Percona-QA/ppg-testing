@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: psp-rocky10-arm-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-0070031686973a8a3
+    image: ami-0f6a9ada15335045a
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t4g.xlarge
     ssh_user: rocky
