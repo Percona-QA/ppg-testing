@@ -205,27 +205,11 @@
           url: https://github.com/axboe/liburing/archive/refs/tags/liburing-2.5.tar.gz
           dest: /tmp/liburing.tar.gz
 
-      - name: List /tmp
-        command: ls -l /tmp
-        ignore_errors: true
-        register: results
-
-      - debug:
-          var: results.stdout
-
       - name: Extract liburing
         unarchive:
           src: /tmp/liburing.tar.gz
           dest: /tmp
           remote_src: yes
-
-      - name: List /tmp
-        command: ls -l /tmp
-        ignore_errors: true
-        register: results
-
-      - debug:
-          var: results.stdout
 
       - name: Build liburing
         shell: |
