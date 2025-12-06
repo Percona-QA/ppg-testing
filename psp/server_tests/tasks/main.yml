@@ -276,6 +276,8 @@
     args:
       chdir: /tmp/postgres
       executable: /bin/bash
+    environment:
+      PKG_CONFIG_PATH: "/usr/local/lib/pkgconfig:/usr/lib/pkgconfig:/usr/lib64/pkgconfig"
     become: true
     become_user: postgres
     when:
