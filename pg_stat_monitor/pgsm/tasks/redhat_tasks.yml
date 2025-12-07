@@ -102,7 +102,7 @@
         - percona-postgresql-common-dev
         - percona-postgresql{{ postgres_version }}
         - percona-postgresql{{ postgres_version }}-contrib
-        # - percona-postgresql{{ postgres_version }}-devel
+        - percona-postgresql{{ postgres_version }}-devel
         - percona-postgresql{{ postgres_version }}-libs
         - percona-postgresql{{ postgres_version }}-plperl
         - percona-postgresql{{ postgres_version }}-plpython3
