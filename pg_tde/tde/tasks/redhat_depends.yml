@@ -39,11 +39,11 @@
       - perl-CPAN
       - perl-App-cpanminus
 
-  - name: Install perl module perl-IPC-Run
-    become: true
-    command: cpanm IPC::Run
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  # - name: Install perl module perl-IPC-Run
+  #   become: true
+  #   command: cpanm IPC::Run
+  #   environment:
+  #     PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
   - name: Install perl module Text::Trim
     become: true
@@ -162,10 +162,10 @@
         - liburing-devel
       state: latest
       update_cache: yes
-    when: not (
-      ansible_distribution == "RedHat" and
-      ansible_distribution_major_version | int == 10
-      )
+    # when: not (
+    #   ansible_distribution == "RedHat" and
+    #   ansible_distribution_major_version | int == 10
+    #   )
 
   - name: install packages specific to rhel 8 and 9
     yum:
@@ -178,37 +178,37 @@
       - prename
     when: ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
 
-  - name: install liburing devel RHEL 10
-    when: ansible_distribution == "RedHat" and ansible_distribution_major_version == "10"
-    block:
+  # - name: install liburing devel RHEL 10
+  #   when: ansible_distribution == "RedHat" and ansible_distribution_major_version == "10"
+  #   block:
 
-      - name: Install build deps
-        yum:
-          name:
-            - gcc
-            - make
-            - kernel-headers
-            - kernel-devel
-          state: present
+  #     - name: Install build deps
+  #       yum:
+  #         name:
+  #           - gcc
+  #           - make
+  #           - kernel-headers
+  #           - kernel-devel
+  #         state: present
 
-      - name: Download liburing source
-        get_url:
-          url: https://github.com/axboe/liburing/archive/refs/tags/liburing-2.5.tar.gz
-          dest: /tmp/liburing.tar.gz
+  #     - name: Download liburing source
+  #       get_url:
+  #         url: https://github.com/axboe/liburing/archive/refs/tags/liburing-2.5.tar.gz
+  #         dest: /tmp/liburing.tar.gz
 
-      - name: Extract liburing
-        unarchive:
-          src: /tmp/liburing.tar.gz
-          dest: /tmp
-          remote_src: yes
+  #     - name: Extract liburing
+  #       unarchive:
+  #         src: /tmp/liburing.tar.gz
+  #         dest: /tmp
+  #         remote_src: yes
 
-      - name: Build liburing
-        shell: |
-          ./configure --prefix=/usr
-          make
-          make install
-        args:
-          chdir: /tmp/liburing-liburing-2.5
+  #     - name: Build liburing
+  #       shell: |
+  #         ./configure --prefix=/usr
+  #         make
+  #         make install
+  #       args:
+  #         chdir: /tmp/liburing-liburing-2.5
 
   - name: Install kernel-modules-extra on RHEL 10
     become: true
