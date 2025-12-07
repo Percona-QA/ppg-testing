@@ -89,6 +89,37 @@
   - debug:
       var: results.stdout
 
+  - name: Display OS and version (Ansible facts)
+    ansible.builtin.debug:
+      msg:
+        - "OS Family      : {{ ansible_os_family }}"
+        - "Distribution   : {{ ansible_distribution }}"
+        - "Version        : {{ ansible_distribution_version }}"
+        - "Major Version  : {{ ansible_distribution_major_version }}"
+        - "Kernel         : {{ ansible_kernel }}"
+
+  - name: List all DNF repositories
+    ansible.builtin.command: dnf repolist all
+    register: dnf_repos_all
+    changed_when: false
+    when: ansible_os_family == "RedHat"
+
+  - name: Show all repos
+    ansible.builtin.debug:
+      var: dnf_repos_all.stdout_lines
+    when: ansible_os_family == "RedHat"
+
+  - name: Dump DNF repo configuration
+    ansible.builtin.command: dnf config-manager --dump
+    register: dnf_repo_dump
+    changed_when: false
+    when: ansible_os_family == "RedHat"
+
+  - name: Show repository dump
+    ansible.builtin.debug:
+      var: dnf_repo_dump.stdout_lines
+    when: ansible_os_family == "RedHat"
+
   - name: install Percona Platform for PostgreSQL rpm packages for RHEL
     yum:
       name: "{{ packages }}"

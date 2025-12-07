@@ -76,38 +76,6 @@
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     when: ansible_distribution_major_version == "9"
 
-  - name: LLVM Version
-    command: llvm-config --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: CLANG Version
-    command: clang --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: Debug 1
-    command: rpm -qi systemtap-sdt-devel
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: Debug 2
-    command: yum -v search systemtap-sdt-devel
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
   - name: install tools
     yum:
       name: "{{ packages }}"
@@ -156,16 +124,48 @@
       - perl-JSON
       - jq
 
-  - name: install tools
+  - name: Display OS and version (Ansible facts)
+    ansible.builtin.debug:
+      msg:
+        - "OS Family      : {{ ansible_os_family }}"
+        - "Distribution   : {{ ansible_distribution }}"
+        - "Version        : {{ ansible_distribution_version }}"
+        - "Major Version  : {{ ansible_distribution_major_version }}"
+        - "Kernel         : {{ ansible_kernel }}"
+
+  - name: List all DNF repositories
+    ansible.builtin.command: dnf repolist all
+    register: dnf_repos_all
+    changed_when: false
+    when: ansible_os_family == "RedHat"
+
+  - name: Show all repos
+    ansible.builtin.debug:
+      var: dnf_repos_all.stdout_lines
+    when: ansible_os_family == "RedHat"
+
+  - name: Dump DNF repo configuration
+    ansible.builtin.command: dnf config-manager --dump
+    register: dnf_repo_dump
+    changed_when: false
+    when: ansible_os_family == "RedHat"
+
+  - name: Show repository dump
+    ansible.builtin.debug:
+      var: dnf_repo_dump.stdout_lines
+    when: ansible_os_family == "RedHat"
+
+  - name: Install liburing packages (not on RHEL 10)
     yum:
-      name: "{{ packages }}"
+      name:
+        - liburing
+        - liburing-devel
       state: latest
       update_cache: yes
-    vars:
-      packages:
-      - liburing
-      - liburing-devel
-    when: ansible_distribution != "RedHat" and ansible_distribution_major_version != "10"
+    when: not (
+      ansible_distribution == "RedHat" and
+      ansible_distribution_major_version | int == 10
+      )
 
   - name: install packages specific to rhel 8 and 9
     yum:
