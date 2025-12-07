@@ -170,6 +170,11 @@
     #     state: present
     #   when: ansible_facts['os_family'] == "RedHat"
 
+    - name: Update RedHat-family systems to latest
+      become: true
+      ansible.builtin.shell: dnf update -y
+      when: ansible_os_family == "RedHat"
+
     - name: Enable Powertools on Rocky 8
       become: true
       shell: | 
@@ -213,12 +218,20 @@
         dnf config-manager --set-enabled codeready-builder-for-rhel-9-rhui-rpms
       when: ansible_os_family == "RedHat" and ansible_distribution == "RedHat" and ansible_distribution_major_version == "9"
 
-    - name: Enable codeready-builder for RHEL 10
+    - name: Enable CodeReady Builder on RHEL 10
       become: true
-      shell: | 
-        dnf install -y dnf-plugins-core
-        dnf config-manager --set-enabled codeready-builder-for-rhel-10-rhui-rpms
-      when: ansible_os_family == "RedHat" and ansible_distribution == "RedHat" and ansible_distribution_major_version == "10"
+      block:
+        - name: Install dnf plugins
+          ansible.builtin.dnf:
+            name: dnf-plugins-core
+            state: present
+
+        - name: Enable CodeReady Builder repo
+          ansible.builtin.command:
+            cmd: dnf config-manager --set-enabled codeready-builder-for-rhel-10-rhui-rpms
+      when:
+        - ansible_distribution == "RedHat"
+        - ansible_distribution_major_version | int == 10
 
     - name: install acl package on rhel 10
       become: true
@@ -230,11 +243,6 @@
     #   shell: | 
     #     sudo dnf update -y
     #   when: ansible_distribution == "OracleLinux" or ansible_distribution == "Rocky"
-
-    - name: Update RedHat-family systems to latest
-      become: true
-      ansible.builtin.shell: dnf update -y
-      when: ansible_os_family == "RedHat"
 
     - name: Setup oracle linux 9 for ssh
       become: true
