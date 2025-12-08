@@ -419,7 +419,7 @@ def test_language(host, language):
         # if dist.lower() in ["redhat", "centos", "rhel", "rocky", "ol"]:
         #     if "python3" in language:
         #         pytest.skip("Skipping python3 language for Centos or RHEL")
-        if dist.lower() in rpm_dists and language in ['plpythonu', "plpython2u"] and  int(settings.MAJOR_VER) >= 12: # settings.MAJOR_VER in ["12", "13" , "14", "15", "16","17"]:
+        if dist.lower() in rpm_dists and language in ['plpythonu', "plpython2u"] and int(settings.MAJOR_VER) >= 12: # settings.MAJOR_VER in ["12", "13" , "14", "15", "16","17"]:
             pytest.skip("Skipping python2 extensions for RHEL on Major version 16")
         if dist.lower() in deb_dists and language in ['plpythonu', "plpython2u"]:
             pytest.skip("Skipping python2 extensions for DEB based")
@@ -489,9 +489,10 @@ def test_build_with_liburing(host):
     if settings.MAJOR_VER not in ["18"]:
         pytest.skip("Skipping, test only for PostgreSQL 18 version")
 
+    distribution = host.system_info.distribution.lower()
+    if distribution in ["redhat", "centos", "rhel", "rocky", "ol"] and \
+    host.system_info.release.startswith("8"):
+        pytest.skip(f"liburing not supported on {distribution} 8 for postgres {settings.MAJOR_VER}")
+
     output = host.check_output("pg_config --configure")
-
-    if '--with-liburing' not in output:
-        pytest.fail("PostgreSQL 18 was built without --with-liburing")
-
-    assert '--with-liburing' in output
+    assert '--with-liburing' in output, "PostgreSQL 18 was built without --with-liburing"
