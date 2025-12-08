@@ -26,6 +26,7 @@
 #        - libsharyanto-string-util-perl
         - libipc-run-perl
         - libtext-csv-xs-perl
+        - liburing-dev
     when: ansible_os_family == "Debian"
 
   - name: Ensure correct lz4 package is installed (Debian/Ubuntu)
@@ -60,6 +61,15 @@
     vars:
       packages:
         - readline-devel
+    when: ansible_os_family == "RedHat"
+
+  - name: Install liburing packages
+    yum:
+      name:
+        - liburing
+        - liburing-devel
+      state: latest
+      update_cache: yes
     when: ansible_os_family == "RedHat"
 
   - name: Create pgbackrest directory

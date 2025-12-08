@@ -165,7 +165,7 @@
       - perl-JSON
       - jq
 
-  - name: Install liburing packages (not on RHEL 10)
+  - name: Install liburing packages
     yum:
       name:
         - liburing
