@@ -15,9 +15,9 @@
       state: latest
     vars:
       packages:
-        - liburing1
         - liburing-dev
         - libnuma1
+        - libnuma-dev
     when: ansible_os_family == "Debian"
 
   - name: Install liburing packages rhel
