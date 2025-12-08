@@ -379,7 +379,7 @@ def test_postgres_client_string(host, get_psql_binary_path):
 #     assert "server is running" in restart_postgresql.stdout, restart_postgresql.stdout
 
 
-def test_build_with_liburing(host):
+def test_build_with_liburing(host, get_psql_binary_path):
     if settings.MAJOR_VER not in ["18"]:
         pytest.skip("Skipping, test only for PostgreSQL 18 version")
 
