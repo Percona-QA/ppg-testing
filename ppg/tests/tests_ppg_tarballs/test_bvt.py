@@ -377,3 +377,17 @@ def test_postgres_client_string(host, get_psql_binary_path):
 # def test_restart_postgresql(restart_postgresql):
 #     assert restart_postgresql.rc == 0, restart_postgresql.stderr
 #     assert "server is running" in restart_postgresql.stdout, restart_postgresql.stdout
+
+
+def test_build_with_liburing(host):
+    if settings.MAJOR_VER not in ["18"]:
+        pytest.skip("Skipping, test only for PostgreSQL 18 version")
+
+    distribution = host.system_info.distribution.lower()
+    if distribution in ["redhat", "centos", "rhel", "rocky", "ol"] and \
+    host.system_info.release.startswith("8"):
+        pytest.skip(f"liburing not supported on {distribution} 8 for postgres {settings.MAJOR_VER}")
+
+    cmd = f"{get_server_bin_path}/pg_config --configure"
+    output = host.check_output(cmd)
+    assert '--with-liburing' in output, "PostgreSQL 18 was built without --with-liburing"

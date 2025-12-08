@@ -385,3 +385,17 @@ def test_tde_binaries_present(host, binary):
 #     assert host.file('/usr/local/percona/telemetry_uuid').exists
 #     assert host.file('/usr/local/percona/telemetry_uuid').contains('PRODUCT_FAMILY_POSTGRESQL')
 #     assert host.file('/usr/local/percona/telemetry_uuid').contains('instanceId:[0-9a-fA-F]\\{8\\}-[0-9a-fA-F]\\{4\\}-[0-9a-fA-F]\\{4\\}-[0-9a-fA-F]\\{4\\}-[0-9a-fA-F]\\{12\\}$')
+
+
+def test_build_with_liburing(host):
+    if MAJOR_VER not in ["18"]:
+        pytest.skip("Skipping, test only for PostgreSQL 18 version")
+
+    distribution = host.system_info.distribution.lower()
+    if distribution in ["redhat", "centos", "rhel", "rocky", "ol"] and \
+    host.system_info.release.startswith("8"):
+        pytest.skip(f"liburing not supported on {distribution} 8 for postgres {MAJOR_VER}")
+
+    cmd = "pg_config --configure"
+    output = host.check_output(cmd)
+    assert '--with-liburing' in output, "PostgreSQL 18 was built without --with-liburing"
