@@ -31,7 +31,13 @@
       state: directory
       owner: postgres
       group: wheel
-      mode: 0775      
+      mode: 0775
+
+  - name: Ensure cpanminus is installed
+    become: true
+    ansible.builtin.package:
+      name: cpanminus
+      state: present
 
   - name: Install perl-CPAN and perl-App-cpanminus on Red Hat
     become: true
@@ -41,7 +47,12 @@
     loop:
       - perl-CPAN
       - perl-App-cpanminus
-      - perl-IPC-Run
+
+  # - name: Install perl module perl-IPC-Run
+  #   become: true
+  #   command: cpanm IPC::Run
+  #   environment:
+  #     PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
   - name: Install perl module Text::Trim
     become: true
@@ -141,7 +152,6 @@
       - git
       - perl-ExtUtils*
       - docbook-xsl
-      - perl-IPC-Run
       - perl-Test-Simple
       - perl-CPAN
       - libcurl-devel
@@ -153,6 +163,19 @@
       - wget
       - perl-LWP-Protocol-https
       - perl-JSON
+      - jq
+
+  - name: Install liburing packages
+    yum:
+      name:
+        - liburing
+        - liburing-devel
+      state: latest
+      update_cache: yes
+    # when: not (
+    #   ansible_distribution == "RedHat" and
+    #   ansible_distribution_major_version | int == 10
+    #   )
 
   - name: install packages specific to rhel 8 and 9
     yum:
@@ -165,15 +188,37 @@
       - prename
     when: ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
 
-  # - name: install packages specific to rhel 10
-  #   yum:
-  #     name: "{{ packages }}"
-  #     state: latest
-  #     update_cache: yes
-  #   vars:
-  #     packages:
-  #     - kernel-modules-extra
-  #   when: ansible_distribution_major_version == "10"
+  # - name: install liburing devel RHEL 10
+  #   when: ansible_distribution == "RedHat" and ansible_distribution_major_version == "10"
+  #   block:
+
+  #     - name: Install build deps
+  #       yum:
+  #         name:
+  #           - gcc
+  #           - make
+  #           - kernel-headers
+  #           - kernel-devel
+  #         state: present
+
+  #     - name: Download liburing source
+  #       get_url:
+  #         url: https://github.com/axboe/liburing/archive/refs/tags/liburing-2.5.tar.gz
+  #         dest: /tmp/liburing.tar.gz
+
+  #     - name: Extract liburing
+  #       unarchive:
+  #         src: /tmp/liburing.tar.gz
+  #         dest: /tmp
+  #         remote_src: yes
+
+  #     - name: Build liburing
+  #       shell: |
+  #         ./configure --prefix=/usr
+  #         make
+  #         make install
+  #       args:
+  #         chdir: /tmp/liburing-liburing-2.5
 
   - name: Install kernel-modules-extra on RHEL 10
     become: true
@@ -194,13 +239,30 @@
     command: cpanm File::Rename
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
-  - name: Install cpanm CGI::Session
-    become: true
-    command: cpanm CGI::Session
+  # - name: Install HTTP::Server::Simple::CGI Perl module
+  #   become: true
+  #   ansible.builtin.command: >
+  #     cpanm --notest --quiet HTTP::Server::Simple::CGI
+  #   args:
+  #     creates: /usr/local/share/perl5/HTTP/Server/Simple/CGI.pm
 
-  - name: Install HTTP::Server::Simple::CGI
+  # - name: Install cpanm CGI::Session
+  #   become: true
+  #   command: cpanm CGI::Session
+
+  # - name: Install HTTP::Server::Simple::CGI
+  #   become: true
+  #   command: cpanm HTTP::Server::Simple::CGI
+
+  - name: Install required Perl modules
     become: true
-    command: cpanm HTTP::Server::Simple::CGI
+    ansible.builtin.command: >
+      cpanm --notest --quiet {{ item }}
+    args:
+      creates: "/usr/local/share/perl5/{{ item | replace('::', '/') }}.pm"
+    loop:
+      - CGI::Session
+      - HTTP::Server::Simple::CGI
 
   - name: Debug 3
     command: rpm -qi systemtap-sdt-devel
@@ -288,402 +350,10 @@
   - name: Include KMIP server setup playbook
     include_tasks: run_kmip_vault_server.yml
 
-  - name: Change ownership of /tmp/vault_env to postgres
+  - name: Change ownership of /tmp/bao_env to postgres
     ansible.builtin.file:
-      path: /tmp/vault_env
+      path: /tmp/bao_env
       owner: postgres
       group: wheel
       recurse: true
     become: true
-
-  # - name: Clone Postgres/PSP sources with pg_tde
-  #   git:
-  #     repo: "{{ repo }}"
-  #     version: "{{ version }}"
-  #     dest: /tmp/postgres
-  #     track_submodules: true
-  #   vars:
-  #     repo: "{{ lookup('env', 'PSP_REPO') }}"
-  #     version: "{{ lookup('env', 'PSP_BRANCH') }}"
-  #   become_user: postgres
-
-  # - name: Submodule update
-  #   command : git submodule update --init --recursive
-  #   args:
-  #     chdir: /tmp/postgres
-  #   become_user: postgres
-
-  # # - name: Remove pg_tde from source tree for heap-checkworld
-  # #   become_user: postgres
-  # #   command: rm -fr /tmp/postgres/contrib/pg_tde
-  # #   when: testsuite == 'server-check-world-without-tde'
-  # #   register: results
-
-  # # - debug: var=results.stdout_lines
-
-  # # - name: Remove libtde from source tree for heap-checkworld
-  # #   become_user: postgres
-  # #   command: rm -fr /tmp/postgres/src/libtde
-  # #   when: testsuite == 'server-check-world-without-tde'
-  # #   register: results
-
-  # # - debug: var=results.stdout_lines
-
-  # # - name: Configure Postgres/PSP from sources
-  # #   command: ./configure '--enable-debug' '--enable-cassert' '--enable-tap-tests' '--with-icu' '--prefix=/opt/pgsql'
-  # #   args:
-  # #     chdir: /tmp/postgres
-  # #   become_user: postgres
-  # #   register: results
-
-  # # - debug: var=results.stdout_lines
-
-  # # - name: Configure Postgres/PSP from sources
-  # #   command: ./configure '--enable-debug' '--enable-cassert' '--enable-tap-tests' '--with-icu' '--prefix=/opt/pgsql' \
-  # #    '--enable-rpath' '--includedir=/opt/pgsql/include' '--mandir=/opt/pgsql/share/man' '--datadir=/opt/pgsql/share' \
-  # #    '--libdir=/opt/pgsql/lib' '--with-lz4' '--with-extra-version= - Percona Distribution' '--with-zstd' \
-  # #    '--with-icu' '--with-llvm' '--with-perl' '--with-python' '--with-tcl' '--with-tclconfig=/usr/lib64' \
-  # #    '--with-openssl' '--with-pam' '--with-gssapi' '--with-includes=/usr/include' '--with-libraries=/usr/lib64' \
-  # #    '--enable-nls' '--enable-dtrace' '--with-uuid=e2fs' '--with-libxml' '--with-libxslt' '--with-ldap' \
-  # #    '--with-selinux' '--with-systemd' '--with-system-tzdata=/usr/share/zoneinfo' '--sysconfdir=/etc/sysconfig/pgsql' \
-  # #    'CFLAGS=-O2 -g -pipe -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fexceptions -fstack-protector-strong -grecord-gcc-switches -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1 -m64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection' \
-  # #    'LDFLAGS=-Wl,--as-needed' 'LLVM_CONFIG=/usr/bin/llvm-config' 'CLANG=/usr/bin/clang' \
-  # #    'PKG_CONFIG_PATH=:/usr/lib64/pkgconfig:/usr/share/pkgconfig' 'PYTHON=/usr/bin/python3'
-  # #   args:
-  # #     chdir: /tmp/postgres
-  # #   become_user: postgres
-  # #   register: results
-  # #   when: ansible_architecture == 'x86_64'
-
-  # # - name: Configure Postgres/PSP from sources
-  # #   command: ./configure '--enable-debug' '--enable-cassert' '--enable-tap-tests' '--with-icu' '--prefix=/opt/pgsql' \
-  # #    '--enable-rpath' '--includedir=/opt/pgsql/include' '--mandir=/opt/pgsql/share/man' '--datadir=/opt/pgsql/share' \
-  # #    '--libdir=/opt/pgsql/lib' '--with-lz4' '--with-extra-version= - Percona Distribution' '--with-zstd' \
-  # #    '--with-icu' '--with-llvm' '--with-perl' '--with-python' '--with-tcl' '--with-tclconfig=/usr/lib64' \
-  # #    '--with-openssl' '--with-pam' '--with-gssapi' '--with-includes=/usr/include' '--with-libraries=/usr/lib64' \
-  # #    '--enable-nls' '--enable-dtrace' '--with-uuid=e2fs' '--with-libxml' '--with-libxslt' '--with-ldap' \
-  # #    '--with-selinux' '--with-systemd' '--with-system-tzdata=/usr/share/zoneinfo' '--sysconfdir=/etc/sysconfig/pgsql' \
-  # #    'CFLAGS=-O2 -g -pipe -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fexceptions -fstack-protector-strong -grecord-gcc-switches -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection' \
-  # #    'LDFLAGS=-Wl,--as-needed' 'LLVM_CONFIG=/usr/bin/llvm-config' 'CLANG=/usr/bin/clang' \
-  # #    'PKG_CONFIG_PATH=:/usr/lib64/pkgconfig:/usr/share/pkgconfig' 'PYTHON=/usr/bin/python3'
-  # #   args:
-  # #     chdir: /tmp/postgres
-  # #   become_user: postgres
-  # #   register: results
-  # #   when: ansible_architecture == 'aarch64'
-
-  # - name: Configure Postgres/PSP from sources
-  #   command: ./configure '--enable-debug' '--enable-cassert' '--enable-tap-tests' '--with-icu' '--prefix=/opt/pgsql'
-  #   args:
-  #     chdir: /tmp/postgres
-  #   become_user: postgres
-  #   register: results
-
-  # - name: Build Postgres/PSP (world) from sources
-  #   make:
-  #     chdir: "/tmp/postgres"
-  #     jobs: 4 
-  #     target: world
-  #   become_user: postgres
-  #   environment:
-  #     TDE_MODE: 1 
-  #   register: results
-
-  # - debug: var=results.stdout_lines
-
-  # - name: Install Postgres/PSP (install-world) from build binaries
-  #   make:
-  #     chdir: "/tmp/postgres"
-  #     target: install-world 
-  #   environment:
-  #     TDE_MODE: 1 
-  #   register: results
-
-  # - debug: var=results.stdout_lines
-
-  # - name: Copy pg_config to /usr/bin
-  #   become: true 
-  #   command: sudo cp /opt/pgsql/bin/pg_config /usr/bin
-
-  # - name: Remove multiple extensions tap test case from pg_tde
-  #   become_user: postgres
-  #   command: rm -f /tmp/postgres/contrib/pg_tde/t/005_multiple_extensions.pl
-  #   register: results
-
-  # - debug: var=results.stdout_lines
-
-  # # - name: Remove create_schema.sql test case for tde_heap
-  # #   become_user: postgres
-  # #   command: rm -f /tmp/postgres/src/test/regress/sql/create_schema.sql
-  # #   when: (testsuite == 'server-installcheck-world-with-tde')
-  # #   register: results
-
-  # # - debug: var=results.stdout_lines
-
-  # - name: initdb cluster
-  #   become_user: postgres
-  #   command: ./initdb -D /opt/pgsql/data --set shared_preload_libraries=pg_tde
-  #   args:
-  #     chdir: /opt/pgsql/bin
-  #   environment:
-  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
-  #   when: (testsuite == 'server-installcheck-world-with-tde')
-  #   register: results
-
-  # - debug: var=results.stdout_lines
-  #   when: (testsuite == 'server-installcheck-world-with-tde')
-
-  # - name: Start Server
-  #   become_user: postgres
-  #   command: ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
-  #   args:
-  #     chdir: /opt/pgsql/bin
-  #   environment:
-  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
-  #     TDE_MODE: 1
-  #     LANG: C.UTF-8
-  #     LC_CTYPE: C
-  #     LC_ALL: C
-  #   when: (testsuite == 'server-installcheck-world-with-tde')
-  #   register: results
-
-  # - debug: var=results.stdout_lines
-  #   when: (testsuite == 'server-installcheck-world-with-tde')
-
-  # - name: Check pg_tde library output
-  #   become_user: postgres
-  #   shell: | 
-  #     psql -c "select * from pg_available_extensions where name like 'pg_tde';"
-  #   args:
-  #     executable: /bin/bash
-  #     chdir: "/tmp/postgres"
-  #   environment:
-  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
-  #   when: (testsuite == 'server-installcheck-world-with-tde')
-  #   register: results
-
-  # - debug: var=results.stdout_lines
-  #   when: (testsuite == 'server-installcheck-world-with-tde')
-
-  # - name: Check default_table_access_method library output
-  #   become_user: postgres
-  #   shell: | 
-  #     psql -c "show default_table_access_method ;"
-  #   args:
-  #     executable: /bin/bash
-  #     chdir: "/tmp/postgres"
-  #   environment:
-  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
-  #   when: (testsuite == 'server-installcheck-world-with-tde')
-  #   register: results
-
-  # - debug: var=results.stdout_lines
-
-  # - name: Remove pg_tde from source tree for heap-checkworld
-  #   become_user: postgres
-  #   command: rm -fr /tmp/postgres/contrib/pg_tde
-  #   when: testsuite == 'server-check-world-without-tde'
-  #   register: results
-
-  # - name: Run server-check-world
-  #   shell: | 
-  #     set -e
-  #     export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
-  #     export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
-  #     export VAULT_ADDR=https://127.0.0.1:8200
-  #     export VAULT_TOKEN=root
-
-  #     echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
-  #     echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
-  #     cd /tmp/postgres && make -s check-world
-  #   become_user: postgres
-  #   args:
-  #     executable: /bin/bash
-  #     chdir: "/tmp/postgres/"
-  #   environment:
-  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
-  #     PG_TEST_PORT_DIR: "/tmp/pg_tde"
-  #     INSTALL_DIR: "/opt/pgsql"
-  #     PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
-  #   when: testsuite == 'server-check-world-without-tde'
-  #   register: regression
-
-  # - debug: var=regression.stdout_lines
-  #   when: testsuite == 'server-check-world-without-tde'
-  # - debug: var=regression.stderr_lines
-  #   when: testsuite == 'server-check-world-without-tde'
-
-  # - name: Run pg_tde tests only - check
-  #   shell: | 
-  #     cd /opt/pgsql/bin
-  #     echo "default_table_access_method = 'tde_heap'" >> /opt/pgsql/data/postgresql.conf
-  #     ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop -o '-p 5432'
-  #     sleep 5
-  #     ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
-
-  #     export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
-  #     export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
-  #     export VAULT_ADDR=https://127.0.0.1:8200
-  #     export VAULT_TOKEN=root
-
-  #     echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
-  #     echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
-  #     cd /tmp/postgres/contrib/pg_tde && make -s check -k
-  #   become_user: postgres
-  #   args:
-  #     executable: /bin/bash
-  #     chdir: "/tmp/postgres/contrib/pg_tde"
-  #   environment:
-  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
-  #     PG_TEST_PORT_DIR: "/tmp/pg_tde"
-  #     INSTALL_DIR: "/opt/pgsql"
-  #     TDE_MODE: 1
-  #     PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
-  #   when: testsuite == 'tde-installcheck-only'
-  #   register: regression
-
-  # - debug: var=regression.stdout_lines
-  #   when: testsuite == 'tde-installcheck-only'
-  # - debug: var=regression.stderr_lines
-  #   when: testsuite == 'tde-installcheck-only'
-
-  # - name: Run tde_setup_global.sql using psql
-  #   shell: |
-  #     cd /opt/pgsql/bin
-  #     ./psql -d postgres -f /tmp/postgres/ci_scripts/tde_setup_global.sql  -v ON_ERROR_STOP=on
-  #     ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile restart -o '-p 5432'
-  #   become: true
-  #   become_user: postgres
-  #   environment:
-  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
-  #     PG_TEST_PORT_DIR: "/tmp/pg_tde"
-  #     INSTALL_DIR: "/opt/pgsql"
-  #     TDE_MODE: "1"
-  #     LANG: "C.UTF-8"
-  #     LC_CTYPE: "C"
-  #     LC_ALL: "C"
-  #     PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
-  #   ignore_errors: yes
-  #   when: testsuite == 'server-installcheck-world-with-tde'
-
-
-  # - name: Run installcheck-world with tde
-  #   ignore_errors: yes
-  #   shell: | 
-  #     cd /opt/pgsql/bin
-  #     echo "default_table_access_method = 'tde_heap'" >> /opt/pgsql/data/postgresql.conf
-  #     ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile stop -o '-p 5432'
-  #     sleep 5
-  #     ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
-  #     psql -c "show default_table_access_method ;"
-
-  #     export VAULT_ROOT_TOKEN_FILE=/tmp/vault_env/vault_token.txt
-  #     export VAULT_CACERT_FILE=/tmp/vault_env/vault_ca.crt
-  #     export VAULT_ADDR=https://127.0.0.1:8200
-  #     export VAULT_TOKEN=root
-
-  #     echo "Using Vault token file: $VAULT_ROOT_TOKEN_FILE"
-  #     echo "Using Vault CA cert file: $VAULT_CACERT_FILE"
-  #     export TDE_MODE=1 && cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/postgres/ci_scripts/tde_setup.sql" make -s installcheck-world -k
-  #   become_user: postgres
-  #   args:
-  #     executable: /bin/bash
-  #     chdir: "/tmp/postgres/"
-  #   environment:
-  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
-  #     PG_TEST_PORT_DIR: "/tmp/pg_tde"
-  #     INSTALL_DIR: "/opt/pgsql"
-  #     TDE_MODE: 1
-  #     LANG: C.UTF-8
-  #     LC_CTYPE: C
-  #     LC_ALL: C
-  #     PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
-  #   when: testsuite == 'server-installcheck-world-with-tde'
-  #   register: regression
-
-  # - debug: var=regression.stdout_lines
-  #   when: testsuite == 'server-installcheck-world-with-tde'
-  # - debug: var=regression.stderr_lines
-  #   when: testsuite == 'server-installcheck-world-with-tde'
-
-  # - stat:
-  #     path: /tmp/postgres/src/test/regress/regression.diffs
-  #   register: server_diff
-
-  # # - name: Get Server - regression.diffs contents
-  # #   ignore_errors: yes
-  # #   command: cat /tmp/postgres/src/test/regress/regression.diffs
-  # #   register: command_output
-  # #   when: output.stat.exists == True
-
-  # # - name: Print to console Server - regression.diffs contents
-  # #   ignore_errors: yes
-  # #   debug:
-  # #     msg: "{{command_output.stdout_lines}}"
-  # #   when: output.stat.exists == True
-
-  # # - stat:
-  # #     path: /tmp/postgres/contrib/pg_tde/regression.diffs
-  # #   register: output
-
-  # # - name: Get pg_tde - regression.diffs contents
-  # #   ignore_errors: yes
-  # #   command: cat /tmp/postgres/contrib/pg_tde/regression.diffs
-  # #   register: command_output
-  # #   when: output.stat.exists == True
-
-  # # - name: Print to console pg_tde - regression.diffs contents
-  # #   ignore_errors: yes
-  # #   debug:
-  # #     msg: "{{command_output.stdout_lines}}"
-  # #   when: output.stat.exists == True
-
-  # - name: Get Server - regression.diffs contents
-  #   command: cat /tmp/postgres/src/test/regress/regression.diffs
-  #   register: command_output
-  #   when: server_diff.stat.isreg is defined and server_diff.stat.isreg == True
-
-  # - name: Print to console Server - regression.diffs contents
-  #   debug:
-  #     msg: "{{command_output.stdout_lines}}"
-  #   when: server_diff.stat.isreg is defined and server_diff.stat.isreg == True
-
-  # - stat:
-  #     path: /tmp/postgres/contrib/pg_tde/regression.diffs
-  #   register: tde_diff
-
-  # - name: Get pg_tde - regression.diffs contents
-  #   command: cat /tmp/postgres/contrib/pg_tde/regression.diffs
-  #   register: command_output
-  #   when: tde_diff.stat.isreg is defined and tde_diff.stat.isreg == True
-
-  # - name: Print to console pg_tde - regression.diffs contents
-  #   debug:
-  #     msg: "{{command_output.stdout_lines}}"
-  #   when: tde_diff.stat.isreg is defined and tde_diff.stat.isreg == True
-
-  # - name: Get server logfile contents if exists
-  #   command: cat /tmp/postgres/logfile
-  #   register: log_output
-  #   when: regression.rc is defined and regression.rc != 0
-
-  # - name: Print to console logfile
-  #   debug:
-  #     msg: "{{log_output.stdout_lines}}"
-  #   when: regression.rc is defined and regression.rc != 0
-
-  # - debug: var=regression.rc
-  #   when: regression.rc is defined
-
-  # - name: End play if regression has failures
-  #   fail:
-  #     msg: "regression failed"
-  #   when: regression.rc is defined and (regression.rc != 0 and regression.rc != 2)

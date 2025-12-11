@@ -1,7 +1,7 @@
 ---
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
-      postgis_rhel_package_name_prefix: "percona-postgis33_{{ major_version }}"
+      postgis_rhel_package_name_prefix: "percona-postgis35_{{ major_version }}"
 
   - debug:
       msg: "Value of postgis_rhel_package_name_prefix is : {{ postgis_rhel_package_name_prefix }}"
@@ -21,27 +21,17 @@
       - perl-App-cpanminus
       - perl-IPC-Run
 
+  # - name: Install perl module perl-IPC-Run
+  #   become: true
+  #   command: cpanm IPC::Run
+  #   environment:
+  #     PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
   - name: Install perl module Text::Trim
     become: true
     command: cpanm Text::Trim
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
-  - name: LLVM Version
-    command: llvm-config --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: CLANG Version
-    command: clang --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
 
   - name: Install Development tools
     become: true
@@ -100,6 +90,37 @@
   - debug:
       var: results.stdout
 
+  - name: Display OS and version (Ansible facts)
+    ansible.builtin.debug:
+      msg:
+        - "OS Family      : {{ ansible_os_family }}"
+        - "Distribution   : {{ ansible_distribution }}"
+        - "Version        : {{ ansible_distribution_version }}"
+        - "Major Version  : {{ ansible_distribution_major_version }}"
+        - "Kernel         : {{ ansible_kernel }}"
+
+  - name: List all DNF repositories
+    ansible.builtin.command: dnf repolist all
+    register: dnf_repos_all
+    changed_when: false
+    when: ansible_os_family == "RedHat"
+
+  - name: Show all repos
+    ansible.builtin.debug:
+      var: dnf_repos_all.stdout_lines
+    when: ansible_os_family == "RedHat"
+
+  - name: Dump DNF repo configuration
+    ansible.builtin.command: dnf config-manager --dump
+    register: dnf_repo_dump
+    changed_when: false
+    when: ansible_os_family == "RedHat"
+
+  - name: Show repository dump
+    ansible.builtin.debug:
+      var: dnf_repo_dump.stdout_lines
+    when: ansible_os_family == "RedHat"
+
   - name: install Percona Platform for PostgreSQL rpm packages for RHEL
     yum:
       name: "{{ packages }}"
@@ -108,18 +129,18 @@
     vars:
       postgres_version: "{{ major_version }}"
       packages:
-      - percona-postgresql-client-common
-      - percona-postgresql-common
-      - percona-postgresql-common-dev
-      - percona-postgresql{{ postgres_version }}
-      - percona-postgresql{{ postgres_version }}-contrib
-      - percona-postgresql{{ postgres_version }}-devel
-      - percona-postgresql{{ postgres_version }}-libs
-      - percona-postgresql{{ postgres_version }}-plperl
-      - percona-postgresql{{ postgres_version }}-plpython3
-      - percona-postgresql{{ postgres_version }}-pltcl
-      - percona-postgresql{{ postgres_version }}-server
-      - percona-postgresql{{ postgres_version }}-test
+        - percona-postgresql-client-common
+        - percona-postgresql-common
+        - percona-postgresql-common-dev
+        - percona-postgresql{{ postgres_version }}
+        - percona-postgresql{{ postgres_version }}-contrib
+        - percona-postgresql{{ postgres_version }}-devel
+        - percona-postgresql{{ postgres_version }}-libs
+        - percona-postgresql{{ postgres_version }}-plperl
+        - percona-postgresql{{ postgres_version }}-plpython3
+        - percona-postgresql{{ postgres_version }}-pltcl
+        - percona-postgresql{{ postgres_version }}-server
+        - percona-postgresql{{ postgres_version }}-test
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 

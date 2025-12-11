@@ -21,7 +21,6 @@ SKIPPED_DEBIAN = ["ppg-11.8", "ppg-11.9", "ppg-11.10", "ppg-11.12", "ppg-11.17",
                   "ppg-15.0", "ppg-15.1"]
 BINARIES = pg_versions['binaries']
 
-
 @pytest.fixture()
 def postgres_unit_file(host):
     cmd = "sudo systemctl list-units| grep postgresql"
@@ -228,7 +227,7 @@ def test_postgres_client_version(host):
 def test_postgres_client_string(host):
     if settings.MAJOR_VER in ["11"]:
         pytest.skip("Skipping for ppg 11")
-    if settings.MAJOR_VER in ["17"]:
+    if settings.MAJOR_VER in ["17","18"]:
         assert f"psql (PostgreSQL) {pg_versions['version']} - Percona Server for PostgreSQL {pg_versions['percona-version']}" in host.check_output('psql -V')
     else:
         assert f"psql (PostgreSQL) {pg_versions['version']} - Percona Distribution" in host.check_output('psql -V')
@@ -278,7 +277,7 @@ def test_extenstions_list(extension_list, host, extension):
                             'ltree_plpythonu', 'hstore_plpythonu', 'hstore_plpython2u']:
             pytest.skip("Skipping extension " + extension + " for DEB based in pg: " + os.getenv("VERSION"))
     # Skip adminpack extension for PostgreSQL 17
-    if settings.MAJOR_VER in ["17"] and extension == 'adminpack':
+    if settings.MAJOR_VER in ["17","18"] and extension == 'adminpack':
         pytest.skip("Skipping adminpack extension as it is dropped in PostgreSQL 17")
     assert extension in extension_list
 
@@ -316,7 +315,7 @@ def test_enable_extension(host, extension):
         'postgis_sfcgal','address_standardizer-3','postgis-3','address_standardizer','postgis','address_standardizer_data_us-3']:
             pytest.skip("Skipping extension " + extension + " due to multiple dependencies. Already being checked in test_tools.py.")
     # Skip adminpack extension for PostgreSQL 17
-    if settings.MAJOR_VER in ["17"] and extension == 'adminpack':
+    if settings.MAJOR_VER in ["17","18"] and extension == 'adminpack':
         pytest.skip("Skipping adminpack extension as it is dropped in PostgreSQL 17")
     with host.sudo("postgres"):
         install_extension = host.run("psql -c 'CREATE EXTENSION \"{}\";'".format(extension))
@@ -362,7 +361,7 @@ def test_drop_extension(host, extension):
         'postgis_sfcgal','address_standardizer-3','postgis-3','address_standardizer','postgis','address_standardizer_data_us-3']:
             pytest.skip("Skipping extension " + extension + " due to multiple dependencies. Already being checked in test_tools.py.")
     # Skip adminpack extension for PostgreSQL 17
-    if settings.MAJOR_VER in ["17"] and extension == 'adminpack':
+    if settings.MAJOR_VER in ["17","18"] and extension == 'adminpack':
         pytest.skip("Skipping adminpack extension as it is dropped in PostgreSQL 17")
     with host.sudo("postgres"):
         drop_extension = host.run("psql -c 'DROP EXTENSION \"{}\";'".format(extension))
@@ -420,7 +419,7 @@ def test_language(host, language):
         # if dist.lower() in ["redhat", "centos", "rhel", "rocky", "ol"]:
         #     if "python3" in language:
         #         pytest.skip("Skipping python3 language for Centos or RHEL")
-        if dist.lower() in rpm_dists and language in ['plpythonu', "plpython2u"] and  int(settings.MAJOR_VER) >= 12: # settings.MAJOR_VER in ["12", "13" , "14", "15", "16","17"]:
+        if dist.lower() in rpm_dists and language in ['plpythonu', "plpython2u"] and int(settings.MAJOR_VER) >= 12: # settings.MAJOR_VER in ["12", "13" , "14", "15", "16","17"]:
             pytest.skip("Skipping python2 extensions for RHEL on Major version 16")
         if dist.lower() in deb_dists and language in ['plpythonu', "plpython2u"]:
             pytest.skip("Skipping python2 extensions for DEB based")
@@ -484,3 +483,16 @@ def test_rpm7_package_provides(host, percona_package, vanila_package):
     provides = set(result.stdout.split())
     assert result.rc == 0, result.stderr
     assert vanila_package in provides, result.stdout
+
+
+def test_build_with_liburing(host):
+    if settings.MAJOR_VER not in ["18"]:
+        pytest.skip("Skipping, test only for PostgreSQL 18 version")
+
+    distribution = host.system_info.distribution.lower()
+    if distribution in ["redhat", "centos", "rhel", "rocky", "ol"] and \
+    host.system_info.release.startswith("8"):
+        pytest.skip(f"liburing not supported on {distribution} 8 for postgres {settings.MAJOR_VER}")
+
+    output = host.check_output("pg_config --configure")
+    assert '--with-liburing' in output, "PostgreSQL 18 was built without --with-liburing"

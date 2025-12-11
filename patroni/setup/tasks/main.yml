@@ -10,10 +10,10 @@
 #   command: dnf clean all -y
 #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
-- name: Enable crb on Rocky 9
-  become: true
-  command: dnf config-manager --set-enabled crb
-  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+# - name: Enable crb on Rocky 9
+#   become: true
+#   command: dnf config-manager --set-enabled crb
+#   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
 # - name: Disable dnf module for RHEL8
 #   become: true
@@ -25,11 +25,11 @@
 #   command: dnf module disable llvm-toolset -y
 #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
-- name: setup epel release
-  yum:
-    name: epel-release
-    update_cache: yes
-    state: present
+# - name: setup epel release
+#   yum:
+#     name: epel-release
+#     update_cache: yes
+#     state: present
 
 - name: Configure repository
   include_tasks: ../../../../tasks/enable_repo.yml
@@ -64,6 +64,17 @@
   command: python3 -m pip install patroni[etcd]
   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
+# - name: Install SELinux policy packages
+#   package:
+#     name:
+#       - selinux-policy
+#       - selinux-policy-targeted
+#     state: present
+
+# - name: Set SELinux to permissive for testing
+#   ansible.posix.selinux:
+#     state: permissive
+
 - name: Create /etc/patroni directory
   file:
     path: /etc/patroni
@@ -71,22 +82,45 @@
 
 - name: Create test patroni directory
   file:
-    path: /var/lib/pgsql/patroni_test/
+    path: /var/lib/pgsql/patroni_test
     state: directory
     owner: postgres
     group: postgres
+    mode: 0755
 
 - name: Copy postgresql0.yml for patroni service
   copy:
     src: postgresql0.yml
     dest: /etc/patroni/postgresql.yml
-    owner: root
-    group: root
+    owner: postgres
+    group: postgres
     mode: 0644
 
 - name: Replace server version in postgresql.yml
   become: true
   shell: sed -i 's/16/{{ major_version }}/' /etc/patroni/postgresql.yml
+
+- name: Enable and start patroni with wait
+  ansible.builtin.systemd:
+    name: patroni
+    state: started
+    enabled: yes
+    daemon_reload: yes
+  async: 180
+  poll: 5
+  become: yes
+
+- name: Copy postgresql0.yml for patroni service
+  copy:
+    src: postgresql0.yml
+    dest: /var/lib/pgsql/patroni_test/postgresql0.yml
+    owner: postgres
+    group: postgres
+    mode: 0644
+
+- name: Replace server version in postgresql.yml
+  become: true
+  shell: sed -i 's/16/{{ major_version }}/' /var/lib/pgsql/patroni_test/postgresql0.yml
 
 - name: Copy postgresql1.yml for patroni service
   copy:
@@ -111,6 +145,100 @@
 - name: Replace server version in postgresql2.yml
   become: true
   shell: sed -i 's/16/{{ major_version }}/' /var/lib/pgsql/patroni_test/postgresql2.yml
+
+- name: Set patroni_test files permissions readable by all
+  file:
+    path: /var/lib/pgsql/patroni_test/postgresql0.yml
+    owner: postgres
+    group: postgres
+    mode: 0644
+
+- name: Set patroni_test files permissions readable by all
+  file:
+    path: /var/lib/pgsql/patroni_test/postgresql1.yml
+    owner: postgres
+    group: postgres
+    mode: 0644
+
+- name: Set patroni_test files permissions readable by all
+  file:
+    path: /var/lib/pgsql/patroni_test/postgresql2.yml
+    owner: postgres
+    group: postgres
+    mode: 0644
+
+- name: Debug patroni1.yml file existence and permissions
+  block:
+    - name: Check if postgresql1.yml file exists
+      stat:
+        path: /var/lib/pgsql/patroni_test/postgresql1.yml
+      register: patroni_file_stat
+
+    - name: Show file stat info
+      debug:
+        var: patroni_file_stat
+
+    - name: Try to read postgresql1.yml as postgres user
+      become: yes
+      become_user: postgres
+      command: cat /var/lib/pgsql/patroni_test/postgresql1.yml
+      register: read_as_postgres
+      failed_when: false
+      changed_when: false
+
+    - name: Show content read as postgres
+      debug:
+        var: read_as_postgres.stdout_lines
+
+    - name: Try to read postgresql1.yml as remote user
+      command: cat /var/lib/pgsql/patroni_test/postgresql1.yml
+      register: read_as_remote_user
+      failed_when: false
+      changed_when: false
+
+    - name: Show content read as remote user
+      debug:
+        var: read_as_remote_user.stdout_lines
+
+- name: Fix ownership of Patroni directory tree
+  file:
+    path: /var/lib/pgsql
+    owner: postgres
+    group: postgres
+    recurse: true
+
+- name: Debug patroni1.yml file existence and permissions 2
+  block:
+    - name: Check if postgresql1.yml file exists
+      stat:
+        path: /var/lib/pgsql/patroni_test/postgresql1.yml
+      register: patroni_file_stat
+
+    - name: Show file stat info
+      debug:
+        var: patroni_file_stat
+
+    - name: Try to read postgresql1.yml as postgres user
+      become: yes
+      become_user: postgres
+      command: cat /var/lib/pgsql/patroni_test/postgresql1.yml
+      register: read_as_postgres
+      failed_when: false
+      changed_when: false
+
+    - name: Show content read as postgres
+      debug:
+        var: read_as_postgres.stdout_lines
+
+    - name: Try to read postgresql1.yml as remote user
+      command: cat /var/lib/pgsql/patroni_test/postgresql1.yml
+      register: read_as_remote_user
+      failed_when: false
+      changed_when: false
+
+    - name: Show content read as remote user
+      debug:
+        var: read_as_remote_user.stdout_lines
 
 - name: Copy patroni1 service file
   copy:

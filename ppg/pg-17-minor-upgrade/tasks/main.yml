@@ -13,6 +13,12 @@
    ansible_distribution_major_version == "24" and
    pg_version_to_install | string is version('16.2', '<=', strict=True)
 
+- name: End play on Debian 13
+  meta: end_play
+  when: ansible_distribution == "Debian" and
+   ansible_distribution_major_version == "13" and
+   pg_version_to_install | string is version('17.6', '<=', strict=True)
+
 - name: End play on RedHat 10 and 16.9 and older versions
   fail:
     msg: "Stopping execution on rhel 10 because 16.9 and below are not supported."

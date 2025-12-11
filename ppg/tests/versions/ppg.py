@@ -1,6 +1,6 @@
 from .extensions import get_extensions_ppg11, get_extensions_ppg12, get_extensions_ppg13
 
-DISTROS = ['bullseye', 'jammy', 'bookworm', 'noble']
+DISTROS = ['bullseye', 'jammy', 'bookworm', 'noble', 'trixie']
 DEB116_PACKAGES_TEMPLATE = ["percona-postgresql-{}",
                             "percona-postgresql-client",
                             "percona-postgresql",
@@ -397,6 +397,30 @@ def get_pg17_versions(distros, packages, distro_type):
     return ppg_17_versions
 
 
+def get_pg18_versions(distros, packages, distro_type):
+    ppg_18_versions = {
+                       "deb_packages": fill_template_form(DEB12_PACKAGES_TEMPLATE, "18"),
+                       "deb_provides": fill_provides_template_form(DEB_PROVIDES_TEMPLATE, "18"),
+                       "rpm7_provides": fill_provides_template_form(RPM7_PROVIDES_TEMPLATE, "18"),
+                       'rpm_provides': fill_provides_template_form(RPM_PROVIDES_TEMPLATE, "18"),
+                       "rpm_packages": fill_template_form(RPM_PG13PACKAGES_TEMPLATE, "18"),
+                       "rpm7_packages": fill_template_form(RPM7_PG13PACKAGES_TEMPLATE, "18"),
+                       "rhel_files": fill_template_form(RHEL_FILES_TEMPLATE, "18"),
+                       "deb_files": fill_template_form(DEB_FILES_TEMPLATE, "18"),
+                       "extensions": get_extensions_ppg13(distro_type),
+                       "binaries": ['clusterdb', 'createdb', 'createuser',
+                                    'dropdb', 'dropuser', 'pg_basebackup',
+                                    'pg_config', 'pg_dump', 'pg_dumpall',
+                                    'pg_isready', 'pg_receivewal', 'pg_recvlogical',
+                                    'pg_restore', 'pg_verifybackup', 'psql',
+                                    'reindexdb', 'vacuumdb'],
+                       "languages": LANGUAGES}
+
+    ppg_18_versions.update({"deb_pkg_ver": fill_package_versions(packages=packages,
+                                                                 distros=distros)})
+    return ppg_18_versions
+
+
 def get_ppg_versions(distro_type):
     """Get dictionary with versions
     :param distro_type: deb or rpm
@@ -614,5 +638,17 @@ def get_ppg_versions(distro_type):
             "ppg-16.10": get_pg16_versions(packages=["2:16.10-1", "1:280-1", '280-1'],
                                           distros=DISTROS, distro_type=distro_type),
             "ppg-17.6": get_pg17_versions(packages=["2:17.6-1", "1:280-1", '280-1'],
+                                          distros=DISTROS, distro_type=distro_type),
+            "ppg-13.23": get_pg13_versions(packages=["2:13.23-1", "1:287-1", '287-1'],
+                                          distros=DISTROS, distro_type=distro_type),
+            "ppg-14.20": get_pg14_versions(packages=["2:14.20-1", "1:287-1", '287-1'],
+                                          distros=DISTROS, distro_type=distro_type),
+            "ppg-15.15": get_pg15_versions(packages=["2:15.15-1", "1:287-1", '287-1'],
+                                          distros=DISTROS, distro_type=distro_type),
+            "ppg-16.11": get_pg16_versions(packages=["2:16.11-1", "1:287-1", '287-1'],
+                                          distros=DISTROS, distro_type=distro_type),
+            "ppg-17.7": get_pg17_versions(packages=["2:17.7-1", "1:287-1", '287-1'],
+                                          distros=DISTROS, distro_type=distro_type),
+            "ppg-18.1": get_pg18_versions(packages=["3:18.1-2", "1:287-1", '287-1'],
                                           distros=DISTROS, distro_type=distro_type),
             }

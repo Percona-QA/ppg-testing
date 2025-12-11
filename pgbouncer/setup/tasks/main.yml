@@ -36,9 +36,11 @@
         - libipc-run-perl
         - libevent-dev
         - python3-pip
-        - python3.11-venv
+        - python3.12-venv
         - python3-pytest
         - libc-ares-dev
+        - socat
+        - python3-psycopg2
     retries: 60
     delay: 10
     register: result
@@ -140,8 +142,9 @@
     become_user: postgres
     register: results
 
-  - debug:
-      var: results.stdout
+  - name: Show stdout of pytest regression tests
+    debug:
+      var: results.stdout_lines
 
   # - name: Install pip requirements
   #   shell: pip3 install -r requirements.txt

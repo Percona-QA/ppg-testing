@@ -115,17 +115,17 @@
       update_cache: yes
     when: ansible_os_family == "RedHat"
 
-  - name: Check if Telemetry file exisits
-    stat:
-        path: /usr/local/percona/telemetry_uuid
-    register: telemetry_file_check
+  # - name: Check if Telemetry file exisits
+  #   stat:
+  #       path: /usr/local/percona/telemetry_uuid
+  #   register: telemetry_file_check
 
-  - name: Register output of /usr/local/percona/telemetry_uuid
-    become: true
-    command: cat /usr/local/percona/telemetry_uuid
-    register: telemetry_file_output
-    when: telemetry_file_check.stat.exists
+  # - name: Register output of /usr/local/percona/telemetry_uuid
+  #   become: true
+  #   command: cat /usr/local/percona/telemetry_uuid
+  #   register: telemetry_file_output
+  #   when: telemetry_file_check.stat.exists
 
-  - debug:
-      msg: "Telemetry file output is : {{ telemetry_file_output }}"
-    when: telemetry_file_check.stat.exists
+  # - debug:
+  #     msg: "Telemetry file output is : {{ telemetry_file_output }}"
+  #   when: telemetry_file_check.stat.exists

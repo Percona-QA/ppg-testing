@@ -2,12 +2,12 @@
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
       pgaudit_rhel_package_name: "percona-pgaudit"
-      postgis_rhel_package_name_prefix: "percona-postgis33"
+      postgis_rhel_package_name_prefix: "percona-postgis35"
 
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
       pgaudit_rhel_package_name: "percona-pgaudit15"
-      postgis_rhel_package_name_prefix: "percona-postgis33_15"
+      postgis_rhel_package_name_prefix: "percona-postgis35_15"
     when: (pg_version_to_install | string is version('15.5', '>=', strict=True))
 
   - debug:
@@ -36,7 +36,6 @@
         - pkg-config
         - valgrind
         - liblz4-dev
-        - liblz4-tool
         - zstd
         - libzstd-dev
         - bzip2
@@ -44,6 +43,23 @@
 #        - libsharyanto-string-util-perl
         - libipc-run-perl
         - libtext-csv-xs-perl
+        - python3-systemd
+    when: ansible_os_family == "Debian"
+
+  - name: Ensure correct lz4 package is installed (Debian/Ubuntu)
+    ansible.builtin.apt:
+      name: "{{ lz4_package }}"
+      state: present
+      update_cache: yes
+    vars:
+      lz4_package: >-
+        {% if ansible_distribution == 'Debian' and (ansible_distribution_major_version | int) < 13 %}
+          liblz4-tool
+        {% elif ansible_distribution == 'Ubuntu' and (ansible_distribution_major_version | int) <= 24 %}
+          liblz4-tool
+        {% else %}
+          lz4
+        {% endif %}
     when: ansible_os_family == "Debian"
 
   - name: Install pgaudit Debian
@@ -393,19 +409,17 @@
         - percona-pg-gather
     when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('15.4', '>=', strict=True))
 
-  - name: Add extensions to postgresql.conf for Debian
-    lineinfile:
-      path: /etc/postgresql/15/main/postgresql.conf
-      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
-    when: (ansible_os_family == "Debian") and
-      (pg_version_to_install | string is version('15.7', '<=', strict=True))
+  # - name: Add extensions to postgresql.conf for Debian
+  #   lineinfile:
+  #     path: /etc/postgresql/15/main/postgresql.conf
+  #     line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
+  #   when: ansible_os_family == "Debian"
 
-  - name: Add extensions to postgresql.conf for RHEL
-    lineinfile:
-      path: /var/lib/pgsql/15/data/postgresql.conf
-      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
-    when: (ansible_os_family == "RedHat") and
-      (pg_version_to_install | string is version('15.7', '<=', strict=True))
+  # - name: Add extensions to postgresql.conf for RHEL
+  #   lineinfile:
+  #     path: /var/lib/pgsql/15/data/postgresql.conf
+  #     line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
+  #   when: ansible_os_family == "RedHat"
 
   - name: Add extensions to postgresql.conf for Debian
     lineinfile:
@@ -474,12 +488,6 @@
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     when: ansible_os_family == "Debian"
 
-  - name: Start patroni
-    service:
-      name: patroni
-      state: started
-      enabled: yes
-
   - name: Install etcd packages RHEL
     yum:
       name: "{{ packages }}"
@@ -528,23 +536,92 @@
       (ansible_os_family == "Debian" and ansible_lsb.major_release|int <= 11) or
       (ansible_os_family == "Debian" and pg_version_to_install | string is version('15.7', '>=', strict=True))
 
-  - name: Install patroni related packages Debian 12
+
+  # - name: Install patroni related packages Debian 12
+  #   apt:
+  #     name: "{{ packages }}"
+  #     state: latest
+  #     update_cache: yes
+  #   vars:
+  #     packages:
+  #       - etcd-server
+  #       - etcd-client
+  #       - percona-haproxy
+  #   when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int == 12) and
+  #     pg_version_to_install | string is version('16.2', '<=', strict=True)
+
+  - name: Install patroni related packages Debian
     apt:
       name: "{{ packages }}"
       state: latest
       update_cache: yes
     vars:
       packages:
-        - etcd-server
-        - etcd-client
+        - etcd
         - percona-haproxy
-    when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int == 12) and
-      pg_version_to_install | string is version('15.6', '<=', strict=True)
+    when: ansible_os_family == "Debian"
 
   - name: Create /etc/patroni directory
     file:
       path: /etc/patroni
       state: directory
+
+  # - name: Check if patroni.yml exists
+  #   ansible.builtin.stat:
+  #     path: /etc/patroni/patroni.yml
+  #   register: patroni_cfg_stat
+  #   become: yes
+
+  # - name: Copy Patroni sample config to active config if not present
+  #   ansible.builtin.copy:
+  #     src: /etc/patroni/patroni.yml.sample
+  #     dest: /etc/patroni/patroni.yml
+  #     remote_src: yes
+  #     owner: postgres
+  #     group: postgres
+  #     mode: '0644'
+  #   become: yes
+  #   when:
+  #     - ansible_os_family == "Debian"
+  #     - not patroni_cfg_stat.stat.exists
+
+  - name: Copy postgresql.yml for patroni service Debian
+    copy:
+      src: postgresql0_deb.yml
+      dest: /etc/patroni/patroni.yml
+      owner: postgres
+      group: postgres
+      mode: 0644
+    when: ansible_os_family == "Debian"
+
+  # - name: Change systemd Type from notify to simple for Patroni
+  #   ansible.builtin.replace:
+  #     path: /usr/lib/systemd/system/patroni.service
+  #     regexp: '^Type=notify'
+  #     replace: 'Type=simple'
+  #   become: yes
+  #   when: ansible_os_family == "Debian"
+
+  # - name: Reload systemd daemon
+  #   ansible.builtin.command: systemctl daemon-reload
+  #   become: yes
+  #   when: ansible_os_family == "Debian"
+
+  # - name: Start patroni
+  #   service:
+  #     name: patroni
+  #     state: started
+  #     enabled: yes
+
+  - name: Enable and start patroni with wait
+    ansible.builtin.systemd:
+      name: patroni
+      state: started
+      enabled: yes
+      daemon_reload: yes
+    async: 180
+    poll: 5
+    become: yes
 
   - name: Create test patroni directory RHEL
     file:

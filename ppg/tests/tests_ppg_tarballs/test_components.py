@@ -21,14 +21,17 @@ os.environ['PATH'] = f"{PG_PATH}/bin:{INSTALL_PATH}/percona-pgbouncer/bin/:{INST
 PACKAGES = ["libecpg_compat.so.3", 'libecpg.so.6', "libpgtypes.so.3", "libpq.so.5"]
 pg_versions = settings.get_settings(os.environ['MOLECULE_SCENARIO_NAME'])[os.getenv("VERSION")]
 
+
 @pytest.fixture(scope='session')
 def get_server_path(scope='session'):
     return PG_PATH
+
 
 @pytest.fixture(scope='session')
 def get_psql_binary_path(scope='session'):
     server_path=os.path.join(PG_PATH,'bin','psql')
     return server_path
+
 
 @pytest.fixture()
 def perl_function(host,get_psql_binary_path):
@@ -104,6 +107,7 @@ def build_libpq_programm(host):
     return host.run(
         "gcc -o lib_version /tmp/libpq_command_temp_dir/lib_version.c -I{} -lpq -std=c99".format(pg_include))
 
+
 @pytest.mark.parametrize("package", PACKAGES)
 def test_deb_package_is_installed(host, get_server_path, package):
     os_name = host.system_info.distribution
@@ -114,6 +118,7 @@ def test_deb_package_is_installed(host, get_server_path, package):
         file = host.file(package_filename)
         # Assert that the file exists
         assert file.exists, f"{package} does not exist."
+
 
 def test_perl_function(host, perl_function,get_psql_binary_path):
     _ = perl_function

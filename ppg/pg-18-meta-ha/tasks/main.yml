@@ -1,0 +1,23 @@
+---
+- name: Setting facts so that they will be persisted in the fact cache
+  ansible.builtin.set_fact:
+    pg_version_to_install: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
+
+- name: Configure repository
+  include_tasks: ../../../../tasks/enable_repo.yml
+
+- name: install Percona Platform for PostgreSQL 18 packages
+  include_tasks: ../../../../tasks/install_ppg_meta_ha.yml
+
+- name: Initialize Postgres RHEL
+  command: /usr/pgsql-18/bin/postgresql-18-setup initdb
+  environment:
+    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  when: ansible_os_family == "RedHat"
+
+- name: Start Postgres RHEL
+  service:
+    name: postgresql-18
+    state: started
+    enabled: yes
+  when: ansible_os_family == "RedHat"

@@ -1,0 +1,356 @@
+---
+# Tasks for test major upgrade for PPG 18 packages
+
+- name: Configure repository
+  include_tasks: ../../../tasks/install_percona_release.yml
+
+- name: setup epel release
+  yum:
+    name: epel-release
+    update_cache: yes
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Setting facts so that they will be persisted in the fact cache
+  ansible.builtin.set_fact:
+    pg_version_to_install: "{{ lookup('env', 'FROM_VERSION') | replace('ppg-','') }}"
+    upgrade_to_pg_version: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
+
+- name: End play on Debian 13
+  meta: end_play
+  when: ansible_distribution == "Debian" and
+   ansible_distribution_major_version == "13" and
+   pg_version_to_install | string is version('17.6', '<=', strict=True)
+
+- name: Setup initial (old) repository
+  command: percona-release enable {{ pg_version }} {{ repo }}
+  vars:
+    repo: "{{ lookup('env', 'FROM_REPO') }}"
+    pg_version: "{{ lookup('env', 'FROM_VERSION') }}"
+
+- name: install Percona Platform for PostgreSQL 17 packages
+  include_tasks: ../../../../tasks/install_ppg17.yml
+
+- name: Initialize Percona PostgreSQL 17 on RHEL
+  ansible.builtin.command:
+    cmd: "/usr/pgsql-17/bin/postgresql-17-setup initdb"
+  become: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Enable checksums on Percona PostgreSQL 17 cluster
+  ansible.builtin.command:
+    cmd: "/usr/pgsql-17/bin/pg_checksums --enable -D /var/lib/pgsql/17/data"
+  become: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Install PPG tools
+  include_tasks: ../../../../tasks/install_ppg17_tools.yml
+
+- name: Start Postgres RHEL
+  service:
+    name: postgresql-17
+    state: started
+    enabled: true
+  when: ansible_os_family == "RedHat"
+
+- name: Start postgresql service for Debian based
+  service:
+    name: postgresql
+    state: started
+    enabled: true
+  when: ansible_os_family == "Debian"
+
+- name: Disable old repository
+  command: percona-release disable {{ pg_version }} {{ repo }}
+  vars:
+    repo: "{{ lookup('env', 'FROM_REPO') }}"
+    pg_version: "{{ lookup('env', 'FROM_VERSION') }}"
+
+- name: Setup new repository
+  command: percona-release enable-only {{ pg_version }} {{ repo }}
+  vars:
+    repo: "{{ lookup('env', 'TO_REPO') }}"
+    pg_version: "{{ lookup('env', 'VERSION') }}"
+
+- name: install Percona Platform for PostgreSQL deb packages
+  apt:
+    name: "{{ packages }}"
+    update_cache: yes
+    state: latest
+  vars:
+    packages:
+      - percona-postgresql
+      - percona-postgresql-18
+      - percona-postgresql-all
+      - percona-postgresql-client
+      - percona-postgresql-client-18
+      - percona-postgresql-common
+      - percona-postgresql-contrib
+      - percona-postgresql-doc
+      - percona-postgresql-doc-18
+      - percona-postgresql-plperl-18
+      - percona-postgresql-plpython3-18
+      - percona-postgresql-pltcl-18
+      - percona-postgresql-server-dev-18
+      - percona-postgresql-common-dev
+      - percona-postgresql-18-dbgsym
+      - percona-postgresql-client-18-dbgsym
+      - percona-postgresql-plperl-18-dbgsym
+      - percona-postgresql-plpython3-18-dbgsym
+      - percona-postgresql-pltcl-18-dbgsym
+      - postgresql-client-common
+      - postgresql-common
+  when: ansible_os_family == "Debian"
+  environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+# - name: install Percona Platform for PostgreSQL deb packages
+#   apt:
+#     name: "{{ packages }}"
+#     update_cache: yes
+#     state: latest
+#   vars:
+#     packages:
+#     - percona-postgresql-plpython3-18
+#     - percona-postgresql-plpython3-18-dbgsym
+#   when:
+#     - ansible_os_family == "Debian"
+
+# - name: Disable llvm-toolset dnf module for RHEL8
+#   become: true
+#   command: dnf module disable llvm-toolset -y
+#   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+
+#Remove conflicting package to make installation move on
+- name: Remove conflicting percona-postgresql-common-dev
+  ansible.builtin.package:
+    name: percona-postgresql-common-dev
+    state: absent
+  when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('17.9', '>=', strict=True))
+
+- name: install Percona Platform for PostgreSQL rpm packages for RHEL
+  yum:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+        - percona-postgresql-client-common
+        - percona-postgresql-common
+        - percona-postgresql-common-dev
+        - percona-postgresql18
+        - percona-postgresql18-contrib
+        - percona-postgresql18-debuginfo
+        - percona-postgresql18-devel
+        - percona-postgresql18-docs
+        - percona-postgresql18-libs
+        - percona-postgresql18-llvmjit
+        - percona-postgresql18-plpython3
+        - percona-postgresql18-plperl
+        - percona-postgresql18-pltcl
+        - percona-postgresql18-server
+        - percona-postgresql18-test
+        - percona-postgresql18-contrib-debuginfo
+        - percona-postgresql18-debuginfo
+        - percona-postgresql18-debugsource
+        - percona-postgresql18-devel-debuginfo
+        - percona-postgresql18-libs-debuginfo
+        - percona-postgresql18-plperl-debuginfo
+        - percona-postgresql18-pltcl-debuginfo
+        - percona-postgresql18-plpython3-debuginfo
+        - percona-postgresql18-server-debuginfo
+  when: ansible_os_family == "RedHat"
+  environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+- name: Install pg-stat-monitor RHEL
+  yum:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+      - percona-pg_stat_monitor18
+  when: ansible_os_family == "RedHat"
+
+- name: Install pg-stat-monitor debian
+  apt:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+      - percona-pg-stat-monitor18
+  when: ansible_os_family == "Debian"
+
+- name: Initialize Percona PostgreSQL 18 on RHEL
+  ansible.builtin.command:
+    cmd: "/usr/pgsql-18/bin/postgresql-18-setup initdb"
+  become: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Set io_method to worker for PG 18
+  ansible.builtin.lineinfile:
+    path: "/var/lib/pgsql/18/data/postgresql.conf"
+    regexp: '^io_method'
+    line: "io_method = 'worker'"
+  become: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Stop postgresql service for RHEL based
+  service:
+    name: postgresql-17
+    state: stopped
+  when: ansible_os_family == "RedHat"
+
+- name: Stop postgresql service for Debian based
+  service:
+    name: postgresql
+    state: stopped
+  when: ansible_os_family == "Debian"
+
+- name: Create PostgreSQL 18 cluster on Debian with no checksums
+  ansible.builtin.command: >
+    /usr/bin/pg_createcluster 18 main --port=5433 -- --no-data-checksums
+  become: yes
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+
+- name: Set io_method = 'worker' for PostgreSQL 18 cluster
+  lineinfile:
+    path: /etc/postgresql/18/main/postgresql.conf
+    line: "io_method = 'worker'"
+  when: ansible_os_family == "Debian"
+
+- pause:
+    minutes: 1
+
+- name: Add Percona PG18 lib to ld.so.conf.d
+  become: yes
+  ansible.builtin.copy:
+    dest: /etc/ld.so.conf.d/percona-pg18.conf
+    content: "/usr/lib/postgresql/18/lib"
+    owner: root
+    group: root
+    mode: '0644'
+  when: ansible_os_family == "Debian"
+
+- name: Add Percona PG18 lib to ld.so.conf.d
+  become: yes
+  ansible.builtin.copy:
+    dest: /etc/ld.so.conf.d/percona-pg18.conf
+    content: "/usr/pgsql-18/lib"
+    owner: root
+    group: root
+    mode: '0644'
+  when: ansible_os_family == "RedHat"
+
+- name: Run ldconfig after adding percona lib path
+  become: yes
+  ansible.builtin.command: /sbin/ldconfig
+
+- name: Execute pg_upgrade RHEL
+  command: /usr/pgsql-18/bin/pg_upgrade --old-bindir /usr/pgsql-17/bin --new-bindir /usr/pgsql-18/bin --old-datadir /var/lib/pgsql/17/data --new-datadir /var/lib/pgsql/18/data
+  become: true
+  become_user: postgres
+  args:
+    chdir: /tmp
+  when: ansible_os_family == "RedHat"
+
+- name: Execute pg_upgrade Deb
+  command: /usr/lib/postgresql/18/bin/pg_upgrade --old-datadir=/var/lib/postgresql/17/main --new-datadir=/var/lib/postgresql/18/main --old-bindir=/usr/lib/postgresql/17/bin --new-bindir=/usr/lib/postgresql/18/bin --old-options '-c config_file=/etc/postgresql/17/main/postgresql.conf' --new-options '-c config_file=/etc/postgresql/18/main/postgresql.conf'
+  become: true
+  become_method: sudo
+  become_user: postgres
+  args:
+    chdir: /tmp
+  when: ansible_os_family == "Debian"
+
+- name: Change postgresql 17 port in config Debian
+  lineinfile:
+    path: /etc/postgresql/17/main/postgresql.conf
+    search_string: 'port'
+    line: port = 5433
+  when: ansible_os_family == "Debian"
+
+- name: Change postgresql 17 port in config RHEL
+  lineinfile:
+    path: /var/lib/pgsql/17/data/postgresql.conf
+    search_string: 'port'
+    line: port = 5433
+  when: ansible_os_family == "RedHat"
+
+- name: Change postgresql 18 port in config Debian
+  lineinfile:
+    path: /etc/postgresql/18/main/postgresql.conf
+    search_string: 'port'
+    line: port = 5432
+  when: ansible_os_family == "Debian"
+
+- name: Change postgresql 18 port in config RHEL
+  lineinfile:
+    path: /var/lib/pgsql/18/data/postgresql.conf
+    search_string: 'port'
+    line: port = 5432
+  when: ansible_os_family == "RedHat"
+
+- name: Add extensions to postgresql.conf for Debian
+  lineinfile:
+    path: /etc/postgresql/18/main/postgresql.conf
+    line: shared_preload_libraries = 'pg_stat_monitor'
+  when: ansible_os_family == "Debian"
+
+- name: Add extensions to postgresql.conf for RHEL
+  lineinfile:
+    path: /var/lib/pgsql/18/data/postgresql.conf
+    line: shared_preload_libraries = 'pg_stat_monitor'
+  when: ansible_os_family == "RedHat"
+
+- name: Restart postgresql service for RHEL based
+  service:
+    name: postgresql-18
+    state: restarted
+    enabled: true
+  when: ansible_os_family == "RedHat"
+
+- name: Drop pg_dropcluster for version 17
+  command: /usr/bin/pg_dropcluster 17 main
+  become: true
+  become_method: sudo
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: list pg_lsclsuters
+  command: pg_lsclusters
+  become: true
+  become_method: sudo
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: Delete /var/run/postgresql lock and pid file
+  command: rm -fr /var/run/postgresql/*
+  become: true
+  when: ansible_os_family == "Debian"
+  register: results
+
+- name: Restart postgresql service for Debian based
+  service:
+    name: postgresql@18-main.service
+    state: restarted
+    enabled: true
+  when: ansible_os_family == "Debian"
+
+- name: Display ppg version
+  become_user: postgres
+  shell: psql -c "select version()"
+  register: results
+
+- debug: var=results.stdout_lines

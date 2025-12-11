@@ -155,6 +155,10 @@
     params:
       USE_PGXS: 1
   become_user: postgres
+  environment:
+    PG_REGRESS_NO_CORES: "1"
+    LC_ALL: C
+    TZ: UTC
   register: installcheck
 
 - debug: var=installcheck.stdout_lines

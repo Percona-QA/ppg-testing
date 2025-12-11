@@ -8,19 +8,19 @@
 - name: Configure repository
   include_tasks: ../../../../tasks/enable_repo.yml
 
-- name: setup epel release
-  yum:
-    name: epel-release
-    update_cache: yes
-    state: present
+# - name: setup epel release
+#   yum:
+#     name: epel-release
+#     update_cache: yes
+#     state: present
 
-- name: Enable dnf-plugins-core
-  become: true
-  command: sudo dnf install dnf-plugins-core
+# - name: Enable dnf-plugins-core
+#   become: true
+#   command: sudo dnf install dnf-plugins-core
 
-- name: Enable crb on rocky linux 9
-  become: true
-  command: dnf config-manager --set-enabled crb
+# - name: Enable crb on rocky linux 9
+#   become: true
+#   command: dnf config-manager --set-enabled crb
 
 - name: install Percona Platform for PostgreSQL rpm packages
   yum:

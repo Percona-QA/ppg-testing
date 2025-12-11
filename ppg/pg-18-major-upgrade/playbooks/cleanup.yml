@@ -1,0 +1,124 @@
+---
+- name: Fix broken
+  hosts: all
+  become: true
+  become_method: sudo
+  tasks:
+    - name: Fix Postgresql-17 deb packages
+      apt:
+        name: "{{ packages }}"
+        state: fixed
+        update_cache: true
+      vars:
+        packages:
+          - percona-postgresql-17
+          - percona-postgresql-17-dbgsym
+          - percona-postgresql-client-17
+          - percona-postgresql-doc-17
+          - percona-postgresql-plperl-17
+          - percona-postgresql-plpython3-17
+          - percona-postgresql-pltcl-17
+          - percona-postgresql-server-dev-17
+          - percona-postgresql-client-17-dbgsym
+          - percona-postgresql-plperl-17-dbgsym
+          - percona-postgresql-plpython3-17-dbgsym
+          - percona-postgresql-pltcl-17-dbgsym
+          - percona-pg-stat-monitor17
+          - percona-pgaudit17-set-user
+          - percona-postgresql-17-wal2json
+      when: ansible_os_family == "Debian"
+
+- name: Cleanup
+  hosts: all
+  become: true
+  become_method: sudo
+  tasks:
+    - name: remove Postgresql deb packages
+      apt:
+        name: "{{ packages }}"
+        state: absent
+        update_cache: true
+      vars:
+        packages:
+          - percona-postgresql-17
+          - percona-postgresql-17-dbgsym
+          - percona-postgresql-client-17
+          - percona-postgresql-doc-17
+          - percona-postgresql-plperl-17
+          - percona-postgresql-plpython3-17
+          - percona-postgresql-pltcl-17
+          - percona-postgresql-server-dev-17
+          - percona-postgresql-client-17-dbgsym
+          - percona-postgresql-plperl-17-dbgsym
+          - percona-postgresql-plpython3-17-dbgsym
+          - percona-postgresql-pltcl-17-dbgsym
+          - percona-pg-stat-monitor17
+          - percona-pgaudit17-set-user
+          - percona-postgresql-17-wal2json
+      ignore_errors: true
+      when: ansible_os_family == "Debian"
+
+    # - name: Remove Percona Platform for PostgreSQL deb packages
+    #   apt:
+    #     name: "{{ packages }}"
+    #     state: absent
+    #   vars:
+    #     packages:
+    #     - percona-postgresql-plpython-17
+    #     - percona-postgresql-plpython-17-dbgsym
+    #     - percona-postgresql-server-dev-17-dbgsym
+    #   when:
+    #     - ansible_os_family == "Debian"
+    #     - lookup('env', 'PG_VERSION') == "ppg-17.5"
+
+    - name: remove Postgresql rpm packages
+      yum:
+        name: "{{ packages }}"
+        state: absent
+      vars:
+        packages:
+          - percona-postgresql17
+          - percona-postgresql17
+          - percona-postgresql17-contrib
+          - percona-postgresql17-debuginfo
+          - percona-postgresql17-devel
+          - percona-postgresql17-docs
+          - percona-postgresql17-libs
+          - percona-postgresql17-llvmjit
+          - percona-postgresql17-plperl
+          - percona-postgresql17-plpython
+          - percona-postgresql17-pltcl
+          - percona-postgresql17-server
+          - percona-postgresql17-test
+          - percona-postgresql17-debuginfo
+          - percona-postgresql17-debugsource
+          - percona-postgresql17-devel-debuginfo
+          - percona-postgresql17-libs-debuginfo
+          - percona-postgresql17-plperl-debuginfo
+          - percona-postgresql17-plpython-debuginfo
+          - percona-postgresql17-plpython3-debuginfo
+          - percona-postgresql17-pltcl-debuginfo
+          - percona-postgresql17-server-debuginfo
+      when: ansible_os_family == "RedHat"
+
+    # - name: remove pgaudit deb packages
+    #   apt:
+    #     name: percona-postgresql-17-pgaudit
+    #     state: absent
+    #   when: ansible_os_family == "Debian"
+
+    # - name: remove pg_repack deb packages
+    #   apt:
+    #     name: "{{ packages }}"
+    #     state: absent
+    #   vars:
+    #     packages:
+    #       - percona-postgresql-17-repack
+    #       - percona-postgresql-17-repack-dbgsym
+    #   when: ansible_os_family == "Debian"
+
+    - name: remove pg_repack rpm packages
+      yum:
+        name: percona-pg_repack17
+        state: absent
+      when: ansible_os_family == "RedHat"

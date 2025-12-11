@@ -15,8 +15,8 @@ def test_pg_stat_monitor(host):
             result = host.run("cd /tmp/pg_stat_monitor && export LANG=C && export LC_CTYPE=C && export LC_ALL=C && export PG_TEST_PORT_DIR=tmp/pg_stat_monitor && make installcheck USE_PGXS=1")
         else:
             result = host.run("cd /tmp/pg_stat_monitor && export LANG=C.UTF-8 && export LC_CTYPE=C && export LC_ALL=C && export PG_TEST_PORT_DIR=tmp/pg_stat_monitor && make installcheck USE_PGXS=1")
+        print(result.stderr)
+        print(result.stdout)
         if result.rc != 0:
-            print(result.stderr)
-            print(result.stdout)
             print(host.file("/tmp/pg_stat_monitor/regression.diffs").content_string)
             raise AssertionError
