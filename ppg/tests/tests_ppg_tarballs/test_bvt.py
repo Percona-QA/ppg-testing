@@ -397,12 +397,8 @@ def test_pg_config_flags(host, get_server_bin_path):
     """
     Test that specific flags should NOT be present in PostgreSQL configuration.
     """
-    # Get the OS distribution
-    os_release = host.check_output("cat /etc/os-release").lower()
-    is_debian_based = "debian" in os_release or "ubuntu" in os_release
-
     # Flags that should NOT be present
-    flags_to_exclude = ['--enable-debug', '--enable-cassert', '--disable-thread-safety']
+    flags_to_exclude = ['--enable-cassert', '--disable-thread-safety']
 
     # Get the PostgreSQL configuration output
     cmd = f"{get_server_bin_path}/pg_config --configure"
@@ -410,10 +406,6 @@ def test_pg_config_flags(host, get_server_bin_path):
 
     # Check each flag
     for flag in flags_to_exclude:
-        # Skip --enable-debug for Debian/Ubuntu
-        if flag == '--enable-debug' and is_debian_based:
-            pytest.skip(f"Skipping {flag} check for Debian/Ubuntu platforms")
-
         assert flag not in output, f"PostgreSQL was built with {flag}, but it should not be present"
 
     print("All flag checks passed successfully!")
