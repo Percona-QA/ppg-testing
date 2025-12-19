@@ -123,6 +123,7 @@
       - perl-LWP-Protocol-https
       - perl-JSON
       - jq
+      - numactl-devel
 
   - name: Display OS and version (Ansible facts)
     ansible.builtin.debug:

@@ -211,6 +211,7 @@
 
 - debug: var=results.stdout_lines
 
+#to be removed once test is stable
 - name: Remove vault_v2_test from Makefile
   ansible.builtin.lineinfile:
     path: /tmp/pg_tde/Makefile

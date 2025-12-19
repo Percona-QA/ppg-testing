@@ -391,3 +391,24 @@ def test_build_with_liburing(host, get_server_bin_path):
     cmd = f"{get_server_bin_path}/pg_config --configure"
     output = host.check_output(cmd)
     assert '--with-liburing' in output, "PostgreSQL 18 was built without --with-liburing"
+
+
+@pytest.mark.parametrize(
+    "flag",
+    [
+        ("--enable-cassert"),
+        ("--disable-thread-safety"),
+    ],
+)
+def test_pg_config_flags(host, get_server_bin_path, flag):
+    """
+    Verify that certain build flags are NOT present in pg_config --configure output.
+    """
+
+    # Get the PostgreSQL configuration output
+    cmd = f"{get_server_bin_path}/pg_config --configure"
+    output = host.check_output(cmd)
+
+    assert flag not in output, (
+        f"PostgreSQL was built with {flag}, but it should NOT be present"
+    )
