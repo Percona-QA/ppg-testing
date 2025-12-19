@@ -496,3 +496,28 @@ def test_build_with_liburing(host):
 
     output = host.check_output("pg_config --configure")
     assert '--with-liburing' in output, "PostgreSQL 18 was built without --with-liburing"
+
+
+def test_pg_config_flags(host):
+    """
+    Test that specific flags should NOT be present in PostgreSQL configuration.
+    """
+    # Get the OS distribution
+    os_release = host.check_output("cat /etc/os-release").lower()
+    is_debian_based = "debian" in os_release or "ubuntu" in os_release
+
+    # Flags that should NOT be present
+    flags_to_exclude = ['--enable-debug', '--enable-cassert', '--disable-thread-safety']
+
+    # Get the PostgreSQL configuration output
+    output = host.check_output("pg_config --configure")
+
+    # Check each flag
+    for flag in flags_to_exclude:
+        # Skip --enable-debug for Debian/Ubuntu
+        if flag == '--enable-debug' and is_debian_based:
+            pytest.skip(f"Skipping {flag} check for Debian/Ubuntu platforms")
+
+        assert flag not in output, f"PostgreSQL was built with {flag}, but it should not be present"
+
+    print("All flag checks passed successfully!")

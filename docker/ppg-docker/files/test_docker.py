@@ -399,3 +399,21 @@ def test_build_with_liburing(host):
     cmd = "pg_config --configure"
     output = host.check_output(cmd)
     assert '--with-liburing' in output, "PostgreSQL 18 was built without --with-liburing"
+
+
+def test_pg_config_flags(host):
+    """
+    Test that specific flags should NOT be present in PostgreSQL configuration.
+    """
+    # Flags that should NOT be present
+    flags_to_exclude = ['--enable-debug', '--enable-cassert', '--disable-thread-safety']
+
+    # Get the PostgreSQL configuration output
+    cmd = "pg_config --configure"
+    output = host.check_output(cmd)
+
+    # Check each flag
+    for flag in flags_to_exclude:
+        assert flag not in output, f"PostgreSQL was built with {flag}, but it should not be present"
+
+    print("All flag checks passed successfully!")
