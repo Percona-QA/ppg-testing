@@ -1,6 +1,6 @@
 import os
 import json
-
+import pytest
 import testinfra.utils.ansible_runner
 
 
@@ -33,49 +33,140 @@ def test_haproxy_connect(host):
     assert result.rc == 0, result.stderr
 
 
-# def test_cluster_status(host):
-#     cluster_cmd = 'patronictl -c /var/lib/pgsql/patroni_test/postgresql1.yml list -f json'
-#     cluster_result = host.run(cluster_cmd)
-#     print(cluster_result.stdout)
-#     assert cluster_result.rc == 0, cluster_result.stderr
-#     cluster_json = json.loads(cluster_result.stdout)
-#     assert len(cluster_json) == 3, f"Must have 3 nodes in the cluster, but found {len(cluster_json)}"
-#     assert cluster_json[0]['State'] == 'running', cluster_json[0]
-#     assert cluster_json[1]['State'] == 'streaming', cluster_json[1]
-#     assert cluster_json[2]['State'] == 'streaming', cluster_json[2]
-#     # for cluster in cluster_json:
-#     #     assert cluster['State'] == 'running', cluster
-
-
-def test_cluster_status1(host):
+@pytest.fixture(scope="module")
+def patroni_cluster_data(host):
     """
-    Tests that the cluster status shows exactly 3 nodes and asserts that
-    every node's State is either 'running' or 'streaming'.
-    Prints the state of all nodes to the console on failure.
+    Fixture to execute patronictl and return the parsed JSON data for the cluster.
     """
     cluster_cmd = 'patronictl -c /var/lib/pgsql/patroni_test/postgresql1.yml list -f json'
 
-    # 1. Execute the command
+    # Execute the command
     cluster_result = host.run(cluster_cmd)
 
-    # Print the raw JSON output for context/debugging
-    print("\n--- patronictl list JSON Output ---")
-    print(cluster_result.stdout)
-    print("------------------------------------\n")
+    # Check command execution success
+    if cluster_result.rc != 0:
+        pytest.fail(f"patronictl command failed with RC {cluster_result.rc}: {cluster_result.stderr}")
 
-    # 2. Check command execution success
-    assert cluster_result.rc == 0, f"patronictl command failed with RC {cluster_result.rc}: {cluster_result.stderr}"
-
+    # Check node count
     try:
         cluster_json = json.loads(cluster_result.stdout)
     except json.JSONDecodeError as e:
         pytest.fail(f"Failed to parse JSON output: {e}\nOutput: {cluster_result.stdout}")
 
-    # 3. Check node count
+    expected_nodes = 3
+    if len(cluster_json) != expected_nodes:
+        pytest.fail(f"Must have {expected_nodes} nodes in the cluster, but found {len(cluster_json)}")
+
+    return cluster_json
+
+
+def test_cluster_node_roles(patroni_cluster_data):
+    """
+    Tests that the cluster has exactly one 'Leader' and two 'Replica' nodes.
+    """
+    role_counts = {'Leader': 0, 'Replica': 0}
+
+    # Iterate through all nodes and count their roles
+    for node in patroni_cluster_data:
+        role = node.get('Role')
+        member = node.get('Member', 'Unknown')
+
+        # Count roles if they are the ones we care about
+        if role in role_counts:
+            role_counts[role] += 1
+        else:
+            # Fail if we find an unexpected role like 'Initializing', 'Pending', etc.
+            pytest.fail(f"Node '{member}' has an unexpected Role: '{role}'. Expected 'Leader' or 'Replica'.")
+
+    # Assert the final counts
+    fail_message = ""
+    if role_counts['Leader'] != 1:
+        fail_message += f"Expected 1 Leader, but found {role_counts['Leader']}.\n"
+
+    if role_counts['Replica'] != 2:
+        fail_message += f"Expected 2 Replicas, but found {role_counts['Replica']}.\n"
+
+    if fail_message:
+        # Print the counts to console before failing
+        print(f"\n--- Node Role Counts ---\n{json.dumps(role_counts, indent=2)}\n------------------------")
+        pytest.fail(f"Cluster role validation failed:\n{fail_message}")
+
+    print("✅ Cluster has the correct role distribution (1 Leader, 2 Replicas).")
+
+
+def test_role_state_mapping(patroni_cluster_data):
+    """
+    Tests that the 'Leader' node has State 'running' and 'Replica' nodes have State 'streaming'.
+    """
+    failed_nodes = []
+
+    # Define the required role-state mapping
+    expected_states = {
+        'Leader': 'running',
+        'Replica': 'streaming'
+    }
+
+    print("\n--- Patroni Role-State Check ---")
+    for node in patroni_cluster_data:
+        role = node.get('Role')
+        state = node.get('State')
+        member = node.get('Member', 'Unknown')
+
+        print(f"Node: {member}, Role: {role}, State: {state}")
+
+        # Check if the observed state matches the expected state for that role
+        if role in expected_states and state != expected_states[role]:
+            failed_nodes.append({
+                'member': member,
+                'role': role,
+                'actual_state': state,
+                'expected_state': expected_states[role]
+            })
+
+    print("--------------------------------")
+
+    # Final assertion
+    if failed_nodes:
+        fail_message = (
+            "One or more nodes failed the Role-State mapping check.\n"
+            "Mismatched Nodes:\n"
+        )
+        for node in failed_nodes:
+            fail_message += (
+                f" - Node: {node['member']} (Role: {node['role']}) "
+                f"Expected State: '{node['expected_state']}', Actual State: '{node['actual_state']}'\n"
+            )
+
+        pytest.fail(fail_message)
+
+    print("✅ All nodes have the correct state based on their role (Leader=running, Replica=streaming).")
+
+
+def test_cluster_status(patroni_cluster_data):
+    """
+    Tests that the cluster status shows exactly 3 nodes and asserts that
+    every node's State is either 'running' or 'streaming'.
+    Prints the state of all nodes to the console on failure.
+    """
+
+    # Print the raw JSON output for context/debugging
+    print("\n--- patronictl list JSON Output ---")
+    print(patroni_cluster_data.stdout)
+    print("------------------------------------\n")
+
+    # Check command execution success
+    assert patroni_cluster_data.rc == 0, f"patronictl command failed with RC {patroni_cluster_data.rc}: {patroni_cluster_data.stderr}"
+
+    try:
+        cluster_json = json.loads(patroni_cluster_data.stdout)
+    except json.JSONDecodeError as e:
+        pytest.fail(f"Failed to parse JSON output: {e}\nOutput: {patroni_cluster_data.stdout}")
+
+    # Check node count
     expected_nodes = 3
     assert len(cluster_json) == expected_nodes, f"Must have {expected_nodes} nodes in the cluster, but found {len(cluster_json)}"
 
-    # 4. Assert State and Print to Console on Failure
+    # Assert State and Print to Console on Failure
 
     # Define acceptable states
     acceptable_states = {'running', 'streaming'}
@@ -108,40 +199,3 @@ def test_cluster_status1(host):
         pytest.fail(fail_message)
 
     print("✅ All node states are either 'running' (primary) or 'streaming' (replicas).")
-
-
-def test_cluster_status2(host):
-    cluster_cmd = "patronictl -c /var/lib/pgsql/patroni_test/postgresql1.yml list -f json"
-    result = host.run(cluster_cmd)
-
-    # Print raw output for debugging
-    print("patronictl output:")
-    print(result.stdout)
-
-    assert result.rc == 0, f"Command failed: {result.stderr}"
-
-    cluster = json.loads(result.stdout)
-
-    # Ensure cluster size
-    assert len(cluster) == 3, (
-        f"Expected 3 nodes in cluster, found {len(cluster)}: {cluster}"
-    )
-
-    allowed_states = {"running", "streaming"}
-
-    for idx, node in enumerate(cluster):
-        node_name = node.get("Member", f"node-{idx}")
-        node_state = node.get("State")
-
-        # Print node state to console
-        print(f"Node {idx} ({node_name}) state: {node_state}")
-
-        assert node_state in allowed_states, (
-            f"Node {node_name} has invalid state '{node_state}', "
-            f"expected one of {allowed_states}"
-        )
-
-def test_haproxy_web(host):
-    curl_cmd = 'curl http://localhost:7000'
-    curl_result = host.run(curl_cmd)
-    assert curl_result.rc == 0, curl_result.stderr
