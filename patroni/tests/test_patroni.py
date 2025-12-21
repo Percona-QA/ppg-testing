@@ -38,7 +38,12 @@ def patroni_cluster_data(host):
     """
     Fixture to execute patronictl and return the parsed JSON data for the cluster.
     """
-    cluster_cmd = 'patronictl -c /var/lib/pgsql/patroni_test/postgresql1.yml list -f json'
+    with host.sudo("postgres"):
+        cluster_cmd = host.run(
+            "patronictl -c /var/lib/pgsql/patroni_test/postgresql1.yml list -f json"
+        )
+
+    assert cluster_cmd.rc == 0, cluster_cmd.stderr
 
     # Execute the command
     cluster_result = host.run(cluster_cmd)
@@ -190,6 +195,7 @@ def test_cluster_status(patroni_cluster_data):
         pytest.fail(fail_message)
 
     print("✅ All node states are either 'running' (primary) or 'streaming' (replicas).")
+
 
 def test_cluster_status2(host):
     cluster_cmd = "patronictl -c /var/lib/pgsql/patroni_test/postgresql1.yml list -f json"
