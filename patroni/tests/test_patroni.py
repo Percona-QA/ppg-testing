@@ -43,6 +43,11 @@ def patroni_cluster_data(host):
     # Execute the command
     cluster_result = host.run(cluster_cmd)
 
+    # Print the raw JSON output for context/debugging
+    print("\n--- patronictl list JSON Output ---")
+    print(cluster_result.stdout)
+    print("------------------------------------\n")
+
     # Check command execution success
     if cluster_result.rc != 0:
         pytest.fail(f"patronictl command failed with RC {cluster_result.rc}: {cluster_result.stderr}")
@@ -148,23 +153,9 @@ def test_cluster_status(patroni_cluster_data):
     every node's State is either 'running' or 'streaming'.
     Prints the state of all nodes to the console on failure.
     """
-
-    # Print the raw JSON output for context/debugging
-    print("\n--- patronictl list JSON Output ---")
-    print(patroni_cluster_data.stdout)
-    print("------------------------------------\n")
-
-    # Check command execution success
-    assert patroni_cluster_data.rc == 0, f"patronictl command failed with RC {patroni_cluster_data.rc}: {patroni_cluster_data.stderr}"
-
-    try:
-        cluster_json = json.loads(patroni_cluster_data.stdout)
-    except json.JSONDecodeError as e:
-        pytest.fail(f"Failed to parse JSON output: {e}\nOutput: {patroni_cluster_data.stdout}")
-
     # Check node count
     expected_nodes = 3
-    assert len(cluster_json) == expected_nodes, f"Must have {expected_nodes} nodes in the cluster, but found {len(cluster_json)}"
+    assert len(patroni_cluster_data) == expected_nodes, f"Must have {expected_nodes} nodes in the cluster, but found {len(patroni_cluster_data)}"
 
     # Assert State and Print to Console on Failure
 
@@ -175,7 +166,7 @@ def test_cluster_status(patroni_cluster_data):
     failed_nodes = []
 
     print("--- Patroni Node States ---")
-    for node in cluster_json:
+    for node in patroni_cluster_data:
         node_name = node.get('Member', 'Unknown')
         node_state = node.get('State', 'N/A')
 

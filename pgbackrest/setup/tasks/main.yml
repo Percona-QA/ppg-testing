@@ -93,11 +93,45 @@
   service:
     name: postgresql
     state: stopped
+- name: Ensure Apache is stopped and port 80 is free
+  ansible.builtin.service:
+    name: apache2
+    state: stopped
+  become: true
+  ignore_errors: true
+
+- name: Find process holding port 80
+  ansible.builtin.shell: |
+    # Find the PID using netstat or ss
+    ss -lntp 'sport = :80' | grep -oP 'pid=\K\d+' || echo '0'
+  become: true
+  register: port_pid
+  changed_when: port_pid.stdout != '0' # Only report changes if a PID was found
+
+- name: Kill process if PID was found
+  ansible.builtin.command: kill {{ port_pid.stdout }}
+  become: true
+  when: port_pid.stdout != '0'
+  ignore_errors: true
 
 - name: Make sure tcp port 80 is free
+  ansible.builtin.shell:
+    cmd: fuser -k 80/tcp
+    warn: false
   become: true
-  command: sudo fuser -k 80/tcp
   ignore_errors: true
+  register: output
+
+- name: Show stdout of make tcp port 80 free
+  debug:
+    var: output.stdout_lines
+
+- name: Show stderr if make tcp port 80 free fails
+  debug:
+    var: output.stderr_lines
+  when:
+    - output is defined
+    - output.rc != 0
 
 - name: Run pgbackrest regression
   become_user: postgres
@@ -106,7 +140,23 @@
     --module=command --module=storage --vm-out --vm=none --no-coverage --test-path /tmp
   args:
     chdir: "/tmp"
-  register: results
+  ignore_errors: true
+  register: regression
 
-- debug:
-    var: results.stdout
+- name: Show stdout of regression tests
+  debug:
+    var: regression.stdout_lines
+
+- name: Show stderr if regression test fails
+  debug:
+    var: regression.stderr_lines
+  when:
+    - regression is defined
+    - regression.rc != 0
+
+- name: Fail the playbook if regression failed
+  fail:
+    msg: "All regression tests failed with return code {{ regression.rc }}"
+  when:
+    - regression is defined
+    - regression.rc != 0
