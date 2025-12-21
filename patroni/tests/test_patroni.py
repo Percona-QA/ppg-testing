@@ -12,14 +12,6 @@ def test_etcd(host):
     assert host.service("etcd").is_running
 
 
-def test_patroni_config_file_exists(host):
-    f = host.file("/var/lib/pgsql/patroni_test/postgresql1.yml")
-    assert f.exists
-    assert f.user == "postgres"
-    assert f.group == "postgres"
-    assert f.mode == 0o644
-
-
 def test_patroni_service(host):
     assert host.service("patroni").is_running, print(host.run("systemctl status patroni").stdout)
     assert host.service("patroni1").is_running, print(host.run("systemctl status patroni1").stdout)
@@ -31,6 +23,14 @@ def test_haproxy_connect(host):
     result = host.run(select)
     print(result.stdout)
     assert result.rc == 0, result.stderr
+
+
+def test_patroni_config_file_exists(host):
+    f = host.file("/var/lib/pgsql/patroni_test/postgresql1.yml")
+    assert f.exists
+    assert f.user == "postgres"
+    assert f.group == "postgres"
+    assert f.mode == 0o644
 
 
 @pytest.fixture(scope="module")
@@ -190,3 +190,34 @@ def test_cluster_status(patroni_cluster_data):
         pytest.fail(fail_message)
 
     print("✅ All node states are either 'running' (primary) or 'streaming' (replicas).")
+
+def test_cluster_status2(host):
+    cluster_cmd = "patronictl -c /var/lib/pgsql/patroni_test/postgresql1.yml list -f json"
+    result = host.run(cluster_cmd)
+
+    # Print raw output for debugging
+    print("patronictl output:")
+    print(result.stdout)
+
+    assert result.rc == 0, f"Command failed: {result.stderr}"
+
+    cluster = json.loads(result.stdout)
+
+    # Ensure cluster size
+    assert len(cluster) == 3, (
+        f"Expected 3 nodes in cluster, found {len(cluster)}: {cluster}"
+    )
+
+    allowed_states = {"running", "streaming"}
+
+    for idx, node in enumerate(cluster):
+        node_name = node.get("Member", f"node-{idx}")
+        node_state = node.get("State")
+
+        # Print node state to console
+        print(f"Node {idx} ({node_name}) state: {node_state}")
+
+        assert node_state in allowed_states, (
+            f"Node {node_name} has invalid state '{node_state}', "
+            f"expected one of {allowed_states}"
+        )

@@ -100,6 +100,22 @@
   become: true
   ignore_errors: true
 
+- name: Set postgres user home directory to /home/postgres
+  become: true
+  ansible.builtin.user:
+    name: postgres
+    home: /home/postgres
+    move_home: yes
+
+- name: Ensure /home/postgres exists
+  become: true
+  ansible.builtin.file:
+    path: /home/postgres
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0755"
+
 - name: Find process holding port 80
   ansible.builtin.shell: |
     # Find the PID using netstat or ss
