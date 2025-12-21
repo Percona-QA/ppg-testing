@@ -138,17 +138,6 @@
   ignore_errors: true
   register: output
 
-- name: Show stdout of make tcp port 80 free
-  debug:
-    var: output.stdout_lines
-
-- name: Show stderr if make tcp port 80 free fails
-  debug:
-    var: output.stderr_lines
-  when:
-    - output is defined
-    - output.rc != 0
-
 - name: Run pgbackrest regression
   become_user: postgres
   command: pgbackrest/test/test.pl --psql-bin=/usr/lib/postgresql/{{ major_version }}/bin \
