@@ -39,14 +39,11 @@ def patroni_cluster_data(host):
     Fixture to execute patronictl and return the parsed JSON data for the cluster.
     """
     with host.sudo("postgres"):
-        cluster_cmd = host.run(
-            "patronictl -c /var/lib/pgsql/patroni_test/postgresql1.yml list -f json"
-        )
+        cluster_cmd = "patronictl -c /var/lib/pgsql/patroni_test/postgresql1.yml list -f json"
+        # Execute the command
+        cluster_result = host.run(cluster_cmd)
 
-    assert cluster_cmd.rc == 0, cluster_cmd.stderr
-
-    # Execute the command
-    cluster_result = host.run(cluster_cmd)
+        assert cluster_result.rc == 0, cluster_result.stderr
 
     # Print the raw JSON output for context/debugging
     print("\n--- patronictl list JSON Output ---")
