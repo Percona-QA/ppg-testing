@@ -538,7 +538,7 @@
       - percona-pg_tde17-devel
       - percona-pg_tde17-debugsource
       - percona-pg_tde17-debuginfo
-    when: ansible_os_family == "RedHat"
+    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('17.7', '>=', strict=True))
 
   - name: Install pg_tde packages Debian
     apt:
@@ -550,7 +550,7 @@
       - percona-pg-tde17
       - percona-pg-tde17-client
       - percona-pg-tde17-dbgsym
-    when: ansible_os_family == "Debian"
+    when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('17.7', '>=', strict=True))
 
   - name: Install patroni related packages Debian
     apt:
