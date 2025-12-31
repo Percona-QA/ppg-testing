@@ -59,10 +59,10 @@
   environment:
     PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-- name: Install python3 module - patroni[etcd]
-  become: true
-  command: python3 -m pip install patroni[etcd]
-  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+# - name: Install python3 module - patroni[etcd]
+#   become: true
+#   command: python3 -m pip install patroni[etcd]
+#   when: ansible_os_family == "RedHat"
 
 # - name: Install SELinux policy packages
 #   package:
