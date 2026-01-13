@@ -18,6 +18,34 @@
         - wget
         - libtext-trim-perl
 
+  # --- Ubuntu / Debian ---
+  - name: Install locale support (Debian/Ubuntu)
+    apt:
+      name: locales
+      state: present
+      update_cache: yes
+    when: ansible_os_family == "Debian"
+
+  - name: Install English language pack (Ubuntu only)
+    apt:
+      name: language-pack-en
+      state: present
+      update_cache: yes
+    when: ansible_distribution == "Ubuntu"
+
+  # --- Ensure the locale is generated (Primarily for Debian/Ubuntu) ---
+  - name: Ensure en_US.UTF-8 locale is generated
+    community.general.locale_gen:
+      name: en_US.UTF-8
+      state: present
+    when: ansible_os_family == "Debian"
+
+  - name: Ensure en_US.UTF-8 locale exists
+    locale_gen:
+      name: en_US.UTF-8
+      state: present
+    when: ansible_os_family == "Debian"
+
   - name: install Percona Platform for PostgreSQL deb packages
     apt:
       name: "{{ packages }}"

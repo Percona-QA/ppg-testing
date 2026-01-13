@@ -243,15 +243,15 @@
   - debug: var=results.stdout_lines
 
   #to be removed once test is stable
-  - name: Remove vault_v2_test from Makefile
-    ansible.builtin.lineinfile:
-      path: /tmp/pg_tde/Makefile
-      regexp: '.*vault_v2_test.*'
-      state: absent
-    # when:
-    #   - ansible_os_family == 'Debian'
-    #   - ansible_distribution == 'Debian'
-    #   - (ansible_distribution_major_version | int) == 13
+  # - name: Remove vault_v2_test from Makefile
+  #   ansible.builtin.lineinfile:
+  #     path: /tmp/pg_tde/Makefile
+  #     regexp: '.*vault_v2_test.*'
+  #     state: absent
+  #   # when:
+  #   #   - ansible_os_family == 'Debian'
+  #   #   - ansible_distribution == 'Debian'
+  #   #   - (ansible_distribution_major_version | int) == 13
 
   - name: Submodule update
     command : git submodule update --init --recursive

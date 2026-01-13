@@ -4,7 +4,12 @@
     DOCKER_REPOSITORY: "{{ lookup('env', 'REPOSITORY') }}"
     PPG_VERSION: "{{ lookup('env', 'SERVER_VERSION')}}"
     TAG: "{{ lookup('env', 'DOCKER_TAG')}}"
+    WITH_POSTGIS: "{{ lookup('env', 'WITH_POSTGIS')}}"
     cacheable: true
+
+- name: Print PPG_VERSION and TAG
+  debug:
+    msg: "WITH_POSTGIS: {{ WITH_POSTGIS }}"
 
 - name: Assign TAG based on architecture and version
   set_fact:
@@ -190,6 +195,7 @@
     VERSION: "{{ PPG_VERSION }}"
     DOCKER_REPOSITORY: "{{ DOCKER_REPOSITORY }}"
     TAG: "{{ TAG }}"
+    WITH_POSTGIS: "{{ WITH_POSTGIS }}"
   register: results
 
 - debug: var=results.stdout_lines

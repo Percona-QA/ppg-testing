@@ -345,6 +345,7 @@
       group: wheel
       recurse: true
     become: true
+
   - name: Disable dnf module for RHEL8
     become: true
     command: dnf module disable postgresql -y
@@ -397,25 +398,12 @@
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
     when: ansible_distribution_major_version == "9" or ansible_distribution_major_version == "10"
 
-  - name: Install postgresql-server-dev-all RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
+  - name: Install Percona PostgreSQL development packages
+    ansible.builtin.dnf:
+      name: "{{ 'percona-postgresql-server-dev-all' if (pg_version_to_install is version('17.4', '<=')) else 'percona-postgresql-common-dev' }}"
+      state: present
       update_cache: yes
-    vars:
-      packages:
-      - percona-postgresql-server-dev-all
-    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('17.4', '<=', strict=True))
-
-  - name: Install postgresql-common-dev RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - percona-postgresql-common-dev
-    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('17.5', '>=', strict=True))
+    when: ansible_os_family == "RedHat"
 
   - name: Install pg_tde packages RHEL
     yum:

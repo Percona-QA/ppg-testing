@@ -408,16 +408,64 @@
         - percona-pg-gather
     when: ansible_os_family == "Debian"
 
+  - name: Install pgvector packages RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-pgvector_18
+      - percona-pgvector_18-debuginfo
+      - percona-pgvector_18-debugsource
+      - percona-pgvector_18-llvmjit
+    when: ansible_os_family == "RedHat"
+
+  - name: Install pgvector packages Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgresql-18-pgvector
+    when: ansible_os_family == "Debian"
+
+  - name: Install pg_tde packages RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-pg_tde18
+      - percona-pg_tde18-devel
+      - percona-pg_tde18-debugsource
+      - percona-pg_tde18-debuginfo
+    when: ansible_os_family == "RedHat"
+
+  - name: Install pg_tde packages Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-pg-tde18
+      - percona-pg-tde18-client
+      - percona-pg-tde18-dbgsym
+    when: ansible_os_family == "Debian"
+
   - name: Add extensions to postgresql.conf for Debian
     lineinfile:
       path: /etc/postgresql/18/main/postgresql.conf
-      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
+      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, pg_tde'
     when: (ansible_os_family == "Debian")
 
   - name: Add extensions to postgresql.conf for RHEL
     lineinfile:
       path: /var/lib/pgsql/18/data/postgresql.conf
-      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
+      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, pg_tde'
     when: (ansible_os_family == "RedHat")
 
   - name: Remove pg_hba.conf debian
@@ -491,54 +539,6 @@
       state: restarted
       enabled: yes
     when: ansible_os_family == "RedHat"
-
-  - name: Install pgvector packages RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - percona-pgvector_18
-      - percona-pgvector_18-debuginfo
-      - percona-pgvector_18-debugsource
-      - percona-pgvector_18-llvmjit
-    when: ansible_os_family == "RedHat"
-
-  - name: Install pgvector packages Debian
-    apt:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - percona-postgresql-18-pgvector
-    when: ansible_os_family == "Debian"
-
-  - name: Install pg_tde packages RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - percona-pg_tde18
-      - percona-pg_tde18-devel
-      - percona-pg_tde18-debugsource
-      - percona-pg_tde18-debuginfo
-    when: ansible_os_family == "RedHat"
-
-  - name: Install pg_tde packages Debian
-    apt:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - percona-pg-tde18
-      - percona-pg-tde18-client
-      - percona-pg-tde18-dbgsym
-    when: ansible_os_family == "Debian"
 
   - name: Install patroni related packages Debian
     apt:

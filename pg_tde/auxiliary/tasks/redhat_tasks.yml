@@ -1,0 +1,317 @@
+---
+  - name: setup epel release
+    yum:
+      name: epel-release
+      update_cache: yes
+      state: present
+
+  - name: Clean dnf RHEL8
+    become: true
+    command: dnf clean all -y
+    when: ansible_distribution_major_version == "8"
+
+  - name: Ensure the postgres group exists
+    ansible.builtin.group:
+      name: postgres
+      state: present
+      gid: 1040  # Optional: Match the UID for consistency
+    become: true
+
+  - name: Ensure the postgres user exists with correct groups
+    ansible.builtin.user:
+      name: postgres
+      shell: /bin/bash
+      uid: 1040
+      group: postgres  # Primary group
+      groups: wheel
+      append: yes
+    become: true
+
+  - name: Allow 'postgres' user to have passwordless sudo
+    ansible.builtin.lineinfile:
+      path: /etc/sudoers.d/allow-postgres-sudo
+      line: "postgres ALL=(ALL) NOPASSWD: ALL"
+      validate: '/usr/sbin/visudo -cf %s'
+      create: yes
+      owner: root
+      group: root
+      mode: '0440'
+    become: true
+
+  - name: Creates directory
+    ansible.builtin.file:
+      path: /opt/pgsql
+      state: directory
+      owner: postgres
+      group: wheel
+      mode: 0775
+
+  - name: Ensure cpanminus is installed
+    become: true
+    ansible.builtin.package:
+      name: cpanminus
+      state: present
+
+  - name: Install perl-CPAN and perl-App-cpanminus on Red Hat
+    become: true
+    yum:
+      name: "{{ item }}"
+      state: present
+    loop:
+      - perl-CPAN
+      - perl-App-cpanminus
+
+  # - name: Install perl module perl-IPC-Run
+  #   become: true
+  #   command: cpanm IPC::Run
+  #   environment:
+  #     PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+  - name: Install perl module Text::Trim
+    become: true
+    command: cpanm Text::Trim
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+  - name: Install Development tools
+    become: true
+    command: yum -y groupinstall "Development tools"
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+  - name: Enable llvm-toolset dnf module for RHEL8
+    become: true
+    command: dnf module enable llvm-toolset -y
+    when: ansible_distribution_major_version == "8"
+
+  - name: Install llvm-toolset
+    become: true
+    command: yum install -y llvm-toolset clang-devel clang
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_distribution_major_version == "8"
+
+  - name: Install clang clang-devel on RHEL 9
+    become: true
+    command: yum install -y clang-devel clang
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    when: ansible_distribution_major_version == "9"
+
+  - name: LLVM Version
+    command: llvm-config --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Debug 1
+    command: rpm -qi systemtap-sdt-devel
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Debug 2
+    command: yum -v search systemtap-sdt-devel
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: install tools
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - clang
+      - zlib-devel
+      - readline-devel
+      - gcc
+      - lz4
+      - lz4-devel
+      - python3
+      - krb5-devel
+      - openssl-devel
+      - pam-devel
+      - libxml2-devel
+      - libxslt-devel
+      - openldap-devel
+      - libuuid-devel
+      - systemd-devel
+      - tcl-devel
+      - python3-devel
+      - libicu-devel
+      - libzstd
+      - libzstd-devel
+      - llvm
+      - llvm-toolset
+      - llvm-devel
+      - clang-devel
+      - vim
+      - git
+      - perl-ExtUtils*
+      - docbook-xsl
+      - perl-Test-Simple
+      - perl-CPAN
+      - libcurl-devel
+      - perl-App-cpanminus
+      - make
+      - autoconf
+      - json-c-devel
+      - python3-pip
+      - wget
+      - perl-LWP-Protocol-https
+      - perl-JSON
+      - jq
+      - unzip
+      - lsof
+      - sysbench
+
+  - name: Install liburing packages
+    yum:
+      name:
+        - liburing
+        - liburing-devel
+      state: latest
+      update_cache: yes
+    # when: not (
+    #   ansible_distribution == "RedHat" and
+    #   ansible_distribution_major_version | int == 10
+    #   )
+
+  - name: install packages specific to rhel 8 and 9
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - lcov
+      - prename
+    when: ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
+
+  - name: Install kernel-modules-extra on RHEL 10
+    become: true
+    dnf:
+      name: "kernel-modules-extra-{{ ansible_kernel }}"
+      state: present
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+  - name: Ensure br_netfilter module is loaded
+    become: true
+    community.general.modprobe:
+      name: br_netfilter
+      state: present
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+  - name: Install cpanm File::Rename
+    become: true
+    command: cpanm File::Rename
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+  - name: Install required Perl modules
+    become: true
+    ansible.builtin.command: >
+      cpanm --notest --quiet {{ item }}
+    args:
+      creates: "/usr/local/share/perl5/{{ item | replace('::', '/') }}.pm"
+    loop:
+      - CGI::Session
+      - HTTP::Server::Simple::CGI
+
+  - name: Debug 3
+    command: rpm -qi systemtap-sdt-devel
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Debug 4
+    command: yum -v search systemtap-sdt-devel
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Debug 5
+    command: yum install -y systemtap-sdt-devel --allowerasing
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: Install perl Text-trim
+    command: cpanm Text::Trim
+    ignore_errors: true
+    register: results
+
+  - name: install perl modules for rhel 9
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - perl-FindBin
+      - perl-Opcode
+    when: ansible_distribution_major_version == "9"
+
+  - name: LLVM Version
+    command: llvm-config --version
+    ignore_errors: true
+    register: results
+
+  - debug:
+      var: results.stdout
+
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
+
+  - name: Get ulimit on Rocky 8 ARM for postgres user
+    become_user: postgres
+    command: ulimit -a
+    register: results
+    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
+
+  - debug: var=results.stdout_lines
+    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
+
+  - name: Modify memlock, both soft and hard, limit for the user postgres
+    community.general.pam_limits:
+      domain: postgres
+      limit_type: '-'
+      limit_item: memlock
+      value: 128
+      comment: 128kb memory lock for postgres
+    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
+
+  - debug: var=results.stdout_lines
+    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
+
+  - name: Get ulimit on Rocky 8 ARM for postgres user
+    become_user: postgres
+    command: ulimit -a
+    register: results
+    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
+
+  - debug: var=results.stdout_lines
+    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'

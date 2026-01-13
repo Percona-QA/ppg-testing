@@ -1,0 +1,125 @@
+---
+  - name: Install Debian Packages
+    apt:
+      name: "{{ packages }}"
+      update_cache: yes
+      state: latest
+    vars:
+      packages:
+        - wget
+        - libtext-trim-perl
+        - libreadline6-dev
+        - systemtap-sdt-dev
+        - zlib1g-dev
+        - libssl-dev
+        - libpam0g-dev
+        - python3-dev
+        - bison
+        - flex
+        - libipc-run-perl
+        - docbook-xsl
+        - docbook-xsl
+        - libxml2
+        - libxml2-utils
+        - libxml2-dev
+        - libxslt-dev
+        - xsltproc
+        - libkrb5-dev
+        - libldap2-dev
+        - libsystemd-dev
+        - gettext
+        - tcl-dev
+        - libperl-dev
+        - pkg-config
+        - clang
+        - llvm
+        - llvm-dev
+        - libselinux1-dev
+        - uuid-dev
+        - liblz4-dev
+        - libcurl4-openssl-dev
+        - vim
+        - git
+        - make
+        - gcc
+        - autoconf
+        - libjson-c-dev
+        - libhttp-server-simple-perl
+        - python3-pykmip
+        - libjson-perl
+        - libicu-dev
+        - libzstd-dev
+        - jq
+        - liburing-dev
+        - libxslt1-dev
+        - mawk
+        - perl
+        - pkgconf
+        - tcl-dev
+        - zstd
+        - unzip
+        - sysbench
+        - lcov
+        - perltidy
+        - lsof
+
+  - name: Ensure correct lz4 package is installed (Debian/Ubuntu)
+    ansible.builtin.apt:
+      name: "{{ lz4_package }}"
+      state: present
+      update_cache: yes
+    vars:
+      lz4_package: >-
+        {% if ansible_distribution == 'Debian' and (ansible_distribution_major_version | int) < 13 %}
+          liblz4-tool
+        {% elif ansible_distribution == 'Ubuntu' and (ansible_distribution_major_version | int) <= 24 %}
+          liblz4-tool
+        {% else %}
+          lz4
+        {% endif %}
+    when: ansible_os_family == "Debian"
+
+  - name: Install rename
+    ansible.builtin.shell: sudo DEBIAN_FRONTEND=noninteractive apt install -y rename
+  
+  - name: Install IPC::RUN
+    ansible.builtin.shell: yes | sudo /usr/bin/perl -MCPAN -e 'install IPC::RUN'
+
+  - name: Install Text::Trim
+    ansible.builtin.shell: yes | sudo /usr/bin/perl -MCPAN -e 'install Text::Trim'
+
+  - name: Ensure the postgres group exists
+    ansible.builtin.group:
+      name: postgres
+      state: present
+      gid: 1040  # Optional: Match the UID for consistency
+    become: true
+
+  - name: Ensure the postgres user exists with correct groups
+    ansible.builtin.user:
+      name: postgres
+      shell: /bin/bash
+      uid: 1040
+      group: postgres  # Primary group
+      groups: sudo
+      append: yes
+    become: true
+
+  - name: Allow 'postgres' user to have passwordless sudo
+    ansible.builtin.lineinfile:
+      path: /etc/sudoers.d/allow-postgres-sudo
+      line: "postgres ALL=(ALL) NOPASSWD: ALL"
+      validate: '/usr/sbin/visudo -cf %s'
+      create: yes
+      owner: root
+      group: root
+      mode: '0440'
+    become: true
+
+  - name: Creates directory
+    ansible.builtin.file:
+      path: /opt/pgsql
+      state: directory
+      owner: postgres
+      group: admin
+      mode: 0775

@@ -1,0 +1,102 @@
+
+- name: Ensure required dependencies are installed
+  ansible.builtin.yum:
+    name:
+      - yum-utils
+      - device-mapper-persistent-data
+      - lvm2
+    state: present
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+- name: Ensure dnf-utils is installed (provides yum-config-manager)
+  ansible.builtin.dnf:
+    name: dnf-utils
+    state: present
+  become: true
+  when: ansible_os_family == "RedHat"
+
+- name: Install kernel-modules-extra on RHEL 10
+  dnf:
+    name: "kernel-modules-extra-{{ ansible_kernel }}"
+    state: present
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+- name: Ensure br_netfilter module is loaded (RHEL 10 only)
+  community.general.modprobe:
+    name: br_netfilter
+    state: present
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+- name: Add Docker CE repository RHEL 8,9
+  become: true
+  command: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+  when: ansible_os_family == "RedHat"
+
+- name: Install Docker packages
+  become: true
+  ansible.builtin.yum:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Ensure containerd service is started
+  ansible.builtin.service:
+    name: containerd
+    state: started
+    enabled: yes
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+- name: Start docker
+  become: true
+  service:
+    name: docker
+    state: started
+    enabled: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Install docker.io Deb
+  become: true
+  apt:
+    name: docker.io
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: show docker binary location
+  command: which docker
+  register: results
+
+- debug:
+    var: results.stdout
+
+- name: Ensure the 'docker' group exists
+# Docker installation usually creates this, but it's safer to ensure
+  become: true
+  ansible.builtin.group:
+    name: docker
+    state: present
+
+- name: Add user to the docker group
+  become: true
+  ansible.builtin.user:
+    name: postgres
+    groups: docker
+    append: yes
+  register: user_update
+
+- name: Ensure Docker socket has correct group ownership
+  # This is a fallback in case the daemon hasn't set it correctly
+  become: true
+  ansible.builtin.file:
+    path: /var/run/docker.sock
+    owner: root
+    group: docker
+    mode: '0660'
+
+- name: Reset connection to apply group changes
+  # Group changes require a fresh login session to take effect
+  become: true
+  ansible.builtin.meta: reset_connection
+  when: user_update.changed

@@ -596,13 +596,13 @@ def test_postgis_binary_version(host, binary):
 
     assert result.rc == 0, f"Failed to execute {binary}: {result.stderr}"
 
-    actual_version = result.stdout.strip()
+    extension_version = result.stdout.strip()
     expected_version = pg_versions["postgis_version"]
 
-    print(f"{binary}: expected={expected_version}, got={actual_version}")
+    print(f"{binary}: expected={expected_version}, got={extension_version}")
 
-    assert expected_version in actual_version, (
-        f"{binary} version mismatch: expected {expected_version}, got {actual_version}"
+    assert expected_version in extension_version, (
+        f"{binary} version mismatch: expected {expected_version}, got {extension_version}"
     )
 
 
@@ -1047,6 +1047,71 @@ def test_pgxs_perl_modules_present(host):
         assert f.exists, f"Missing required PGXS file: {path}"
         assert f.is_file, f"Not a file: {path}"
         assert f.size > 0, f"File is empty: {path}"
+
+
+@pytest.mark.skipif(int(MAJOR_VER) < 17, reason=f"pg_tde requires PG 17+, found {MAJOR_VER}")
+def test_pg_tde_extension(host):
+    # Use -t (tuples only) and -A (unaligned) for bulletproof parsing
+    psql_base = "psql -t -A -c"
+
+    with host.sudo("postgres"):
+        try:
+            # 1. Execute the create command
+            create_res = host.run(f"{psql_base} 'CREATE EXTENSION IF NOT EXISTS pg_tde CASCADE;'")
+            assert create_res.rc == 0, f"Failed to create pg_tde: {create_res.stderr}"
+
+            # 2. Metadata Verification (Existence)
+            count = host.run(f"{psql_base} \"SELECT count(*) FROM pg_extension WHERE extname = 'pg_tde';\"").stdout.strip()
+            assert count == "1", "pg_tde extension not found in pg_extension table"
+
+            # 3. Version Check (Catalog Metadata)
+            sql_version = host.run(f"{psql_base} \"SELECT extversion FROM pg_extension WHERE extname = 'pg_tde';\"").stdout.strip()
+            expected_sql_v = pg_versions.get('PG_TDE_sql_version')
+            assert sql_version == expected_sql_v, f"SQL version mismatch. Expected {expected_sql_v}, found {sql_version}"
+
+            # 4. Functional Check (C-Library Version)
+            # This verifies the shared library is actually loaded into memory
+            lib_version = host.run(f"{psql_base} \"SELECT pg_tde_version();\"").stdout.strip()
+            expected_lib_v = pg_versions.get('PG_TDE_version')
+            assert lib_version == expected_lib_v, f"Library version mismatch. Expected {expected_lib_v}, found {lib_version}"
+
+        finally:
+            # 5. Cleanup (The 'finally' block ensures this runs even if assertions above fail)
+            drop_res = host.run(f"{psql_base} 'DROP EXTENSION IF EXISTS pg_tde CASCADE;'")
+
+            # 6. Final Verification
+            final_count = host.run(f"{psql_base} \"SELECT count(*) FROM pg_extension WHERE extname = 'pg_tde';\"").stdout.strip()
+            assert final_count == "0", "Failed to drop pg_tde extension cleanly"
+
+
+@pytest.mark.skipif(int(MAJOR_VER) < 17, reason=f"pg_tde is only supported on PostgreSQL 17+, current version: {MAJOR_VER}")
+def test_pg_tde_package_version(host):
+    dist = host.system_info.distribution.lower()
+    expected_version = pg_versions.get('PG_TDE_package_version')
+
+    # 1. Determine package names based on OS family
+    # Debian/Ubuntu uses hyphens (-); RHEL/CentOS/Oracle uses underscores (_)
+    if dist in ["ubuntu", "debian"]:
+        package_names = [
+            f"percona-pg-tde{MAJOR_VER}", 
+            f"percona-pg-tde{MAJOR_VER}-client"
+        ]
+    else:
+        # Assuming RPM-based (RHEL/OEL/AL)
+        package_names = [f"percona-pg_tde{MAJOR_VER}"]
+
+    # 2. Iterate and verify each package
+    for pkg_name in package_names:
+        pkg = host.package(pkg_name)
+
+        # Check if installed
+        assert pkg.is_installed, f"Package {pkg_name} is not installed on {dist}"
+
+        # Check version
+        assert expected_version in pkg.version, (
+            f"Version mismatch for {pkg_name}. "
+            f"Expected to find: {expected_version}, Found: {pkg.version}"
+        )
 
 
 def test_llvmjit_files_present(host):
