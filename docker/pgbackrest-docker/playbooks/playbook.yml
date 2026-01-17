@@ -66,6 +66,6 @@
           - "Percona pgBackRest Stanza Name: {{ pgbackrest_stanza_name }}"
       tags:
         - always
-    
-    - name: Include all role tasks
-      include_tasks: ../tasks/main.yml
+
+  roles:
+    - role: pgbackrest-docker
