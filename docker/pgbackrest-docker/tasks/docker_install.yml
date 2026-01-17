@@ -1,0 +1,319 @@
+# Docker Installation Tasks
+- name: Install Docker on Ubuntu/Debian
+  block:
+    - name: Update apt cache
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+      
+    - name: Install required packages for Docker
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+      
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg
+        state: present
+      when: 
+        - ansible_os_family == "Debian"
+        - ansible_distribution in ["Ubuntu", "Debian"]
+      ignore_errors: true
+      
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch={{ ansible_architecture }}] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
+        state: present
+        update_cache: true
+      when: 
+        - ansible_os_family == "Debian"
+        - ansible_distribution in ["Ubuntu", "Debian"]
+        - ansible_architecture in ["amd64", "arm64"]
+      ignore_errors: true
+      
+    - name: Install Docker (from Docker repository)
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+      when: 
+        - ansible_os_family == "Debian"
+        - ansible_distribution in ["Ubuntu", "Debian"]
+      ignore_errors: true
+      
+    - name: Install Docker (fallback to docker.io)
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+        state: present
+      when: 
+        - ansible_os_family == "Debian"
+        - docker_version.rc != 0
+      ignore_errors: true
+      
+  when: 
+    - docker_version.rc != 0
+    - ansible_os_family == "Debian"
+    - pgbackrest_test_install_docker | default(true) | bool
+  tags:
+    - prerequisites
+    - install
+
+- name: Install Docker on RHEL/CentOS/Fedora
+  block:
+    - name: Install required packages
+      package:
+        name:
+          - yum-utils
+          - device-mapper-persistent-data
+          - lvm2
+        state: present
+      ignore_errors: true
+      
+    - name: Add Docker repository (RHEL/CentOS/Oracle/Rocky/Alma)
+      yum_repository:
+        name: docker-ce-stable
+        description: Docker CE Stable
+        baseurl: "https://download.docker.com/linux/centos/{{ ansible_distribution_major_version }}/$basearch/stable"
+        gpgcheck: true
+        gpgkey: https://download.docker.com/linux/centos/gpg
+        enabled: true
+      when: 
+        - ansible_os_family == "RedHat"
+        - ansible_distribution in ["CentOS", "Red Hat Enterprise Linux", "OracleLinux", "Rocky", "AlmaLinux"]
+      ignore_errors: true
+      
+    - name: Add Docker repository (Fedora)
+      yum_repository:
+        name: docker-ce
+        description: Docker CE Stable
+        baseurl: "https://download.docker.com/linux/fedora/$basearch/stable"
+        gpgcheck: true
+        gpgkey: https://download.docker.com/linux/fedora/gpg
+        enabled: true
+      when: 
+        - ansible_os_family == "RedHat"
+        - ansible_distribution == "Fedora"
+      ignore_errors: true
+      
+    - name: Install Docker
+      package:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+      ignore_errors: true
+      
+  when: 
+    - docker_version.rc != 0
+    - ansible_os_family == "RedHat"
+    - pgbackrest_test_install_docker | default(true) | bool
+  tags:
+    - prerequisites
+    - install
+
+- name: Check if Homebrew is installed (macOS)
+  command: brew --version
+  register: homebrew_check
+  changed_when: false
+  failed_when: false
+  when: ansible_os_family == "Darwin"
+  tags:
+    - prerequisites
+    - install
+
+- name: Install Docker on macOS (Homebrew)
+  block:
+    - name: Install Docker via Homebrew
+      block:
+        - name: Install Docker Desktop via Homebrew (Cask)
+          command: brew install --cask docker
+          register: docker_install_result
+          changed_when: docker_install_result.rc == 0
+          failed_when: false
+          when: homebrew_check.rc == 0
+          
+        - name: Verify Docker installation
+          command: docker --version
+          register: docker_check_after_install
+          changed_when: false
+          failed_when: false
+          
+      when: homebrew_check.rc == 0
+      rescue:
+        - name: Note Homebrew installation failed
+          debug:
+            msg: "Docker installation via Homebrew failed. Please install Docker Desktop manually from https://www.docker.com/products/docker-desktop"
+      
+    - name: Warn about macOS Docker installation
+      debug:
+        msg: "Docker not installed. Please install Docker Desktop for macOS from https://www.docker.com/products/docker-desktop or install via Homebrew: brew install --cask docker"
+      when: 
+        - homebrew_check.rc != 0
+        - docker_version.rc != 0
+      
+  when: 
+    - docker_version.rc != 0
+    - ansible_os_family == "Darwin"
+    - pgbackrest_test_install_docker | default(true) | bool
+  tags:
+    - prerequisites
+    - install
+
+# Docker Compose Installation Tasks
+- name: Install Docker Compose (non-macOS, binary then pip fallback)
+  block:
+    - name: Determine Docker Compose version to install
+      set_fact:
+        docker_compose_version: "{{ pgbackrest_test_docker_compose_version | default('2.24.5') }}"
+
+    - name: Download Docker Compose binary
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+      register: compose_download
+      ignore_errors: true
+
+    - name: Create symlink for docker-compose if downloaded
+      file:
+        src: /usr/local/bin/docker-compose
+        dest: /usr/bin/docker-compose
+        state: link
+      when: compose_download is succeeded
+      ignore_errors: true
+
+    - name: Set compose binary installation fact
+      set_fact:
+        compose_binary_installed: "{{ compose_download is succeeded }}"
+
+    - name: Ensure python3-pip is installed for pip fallback (RHEL family)
+      yum:
+        name: python3-pip
+        state: present
+      when:
+        - ansible_os_family == "RedHat"
+        - not compose_binary_installed | bool
+      ignore_errors: true
+
+    - name: Install Docker Compose via pip (fallback)
+      pip:
+        name: docker-compose
+        state: present
+      when: not compose_binary_installed | bool
+      ignore_errors: true
+
+  when:
+    - not docker_compose_available | bool
+    - ansible_os_family != "Darwin"
+    - pgbackrest_test_install_docker_compose | default(true) | bool
+  tags:
+    - prerequisites
+    - install
+
+- name: Install Docker Compose on macOS (Homebrew)
+  block:
+    - name: Install Docker Compose via Homebrew
+      block:
+        - name: Install Docker Compose
+          homebrew:
+            name: docker-compose
+            state: present
+          register: compose_install_result
+          ignore_errors: true
+      when: homebrew_check.rc == 0
+      rescue:
+        - name: Note Homebrew module not available
+          debug:
+            msg: "Homebrew module not available. Install community.general collection: ansible-galaxy collection install community.general"
+      
+    - name: Warn about macOS Docker Compose installation
+      debug:
+        msg: "Docker Compose not installed. Please install via Homebrew: brew install docker-compose or install Docker Desktop which includes Docker Compose"
+      when: 
+        - homebrew_check.rc != 0
+        - not docker_compose_available | bool
+      
+  when: 
+    - not docker_compose_available | bool
+    - ansible_os_family == "Darwin"
+    - pgbackrest_test_install_docker_compose | default(true) | bool
+  tags:
+    - prerequisites
+    - install
+
+# Start and enable Docker service
+- name: Start and enable Docker service (Linux)
+  systemd:
+    name: docker
+    state: started
+    enabled: true
+  when: 
+    - ansible_os_family != "Darwin"
+    - docker_version.rc == 0 or docker_version is changed
+  tags:
+    - prerequisites
+    - install
+
+- name: Add current user to docker group (Linux)
+  user:
+    name: "{{ ansible_user_id }}"
+    groups: docker
+    append: true
+  when: 
+    - ansible_os_family != "Darwin"
+    - docker_version.rc == 0 or docker_version is changed
+    - pgbackrest_test_add_user_to_docker_group | default(true) | bool
+  become: true
+  tags:
+    - prerequisites
+    - install
+
+# Verify installations
+- name: Verify Docker installation
+  command: docker --version
+  register: docker_version_final
+  changed_when: false
+  failed_when: docker_version_final.rc != 0
+  tags:
+    - prerequisites
+    - always
+
+- name: Verify Docker Compose installation
+  block:
+    - name: Check docker-compose command
+      command: docker-compose --version
+      register: docker_compose_check
+      changed_when: false
+      failed_when: false
+      
+    - name: Check docker compose plugin
+      command: docker compose version
+      register: docker_compose_plugin_check
+      changed_when: false
+      failed_when: false
+      
+    - name: Fail if neither Docker Compose available
+      fail:
+        msg: "Docker Compose is not available. Installation may have failed."
+      when: 
+        - docker_compose_check.rc != 0
+        - docker_compose_plugin_check.rc != 0
+        - pgbackrest_test_install_docker_compose | default(true) | bool
+  tags:
+    - prerequisites
+    - always

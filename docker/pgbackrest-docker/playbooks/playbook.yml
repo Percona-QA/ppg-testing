@@ -1,0 +1,71 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  become_method: sudo
+  # Set facts from environment variables (Jenkins job)
+  vars:
+    # Get Docker repository from environment (percona or perconalab)
+    DOCKER_REPOSITORY: "{{ lookup('env', 'REPOSITORY') | default('percona', true) }}"
+    # Get PostgreSQL server version from environment
+    PG_SERVER_VERSION: "{{ lookup('env', 'SERVER_VERSION') | default('18.1', true) }}"
+    # Get PostgreSQL server image tag from environment
+    PG_IMAGE_TAG: "{{ lookup('env', 'DOCKER_SERVER_TAG') | default('18', true) }}"
+    # Component name
+    COMPONENT_NAME: "{{ lookup('env', 'COMPONENT_NAME') | default('pgbackrest', true) }}"
+    # Get pgBackRest component version from environment
+    PGBACKREST_COMPONENT_VERSION: "{{ lookup('env', 'COMPONENT_VERSION') | default('2.57.0', true) }}"
+    # Get pgBackRest image tag from environment
+    PGBACKREST_IMAGE_TAG: "{{ lookup('env', 'DOCKER_COMPONENT_TAG') | default('latest', true) }}"
+    # Extract PostgreSQL major version for PG_BIN
+    PG_MAJOR: "{{ (PG_SERVER_VERSION | regex_search('^[0-9]+')) | default('18', true) }}"
+    
+    # Project configuration
+    pgbackrest_test_project_dir: "{{ playbook_dir }}/.."
+    # Note: logs and results directories not needed with pytest (outputs to stdout/stderr)
+    # Uncomment if you add pytest plugins to generate JSON/JUnit reports
+    # pgbackrest_test_results_dir: "{{ pgbackrest_test_project_dir }}/results"
+    # pgbackrest_test_log_dir: "{{ pgbackrest_test_project_dir }}/logs"
+    
+    # Docker images - constructed from repository and tags
+    postgres_test_image: "{{ DOCKER_REPOSITORY }}/percona-distribution-postgresql:{{ PG_IMAGE_TAG }}"
+    pgbackrest_test_image: "{{ DOCKER_REPOSITORY }}/percona-pgbackrest:{{ PGBACKREST_IMAGE_TAG }}"
+    pg_bin_path: "{{ pg_bin | default('/usr/pgsql-' ~ PG_MAJOR ~ '/bin') }}"
+    postgres_container_name: "ppg_server_primary"
+    pgbackrest_container_name: "ppg_pgbackrest"
+    pgbackrest_stanza_name: "main"
+    
+    # Test configuration
+    pgbackrest_test_suite: "{{ test_suite | default('all') }}"
+    pgbackrest_test_log_level: "{{ log_level | default('INFO') }}"
+    pgbackrest_test_cleanup_after: "{{ cleanup_after | default(true) }}"
+    
+    # Verbosity
+    pgbackrest_test_verbose: "{{ verbose | default(false) }}"
+    
+    # Installation settings
+    pgbackrest_test_install_docker: true
+    pgbackrest_test_install_docker_compose: true
+    pgbackrest_test_add_user_to_docker_group: true
+    pgbackrest_test_docker_compose_version: "2.57.0"
+    
+    # Execution settings
+    pgbackrest_test_timeout: 7200  # Timeout in seconds (2 hours default)
+  tasks:
+    - name: Display Docker image configuration
+      debug:
+        msg:
+          - "Docker Repository: {{ DOCKER_REPOSITORY }}"
+          - "Percona PostgreSQL Image: {{ postgres_test_image }}"
+          - "Percona pgBackRest Image: {{ pgbackrest_test_image }}"
+          - "Percona PostgreSQL Image Tag: {{ PG_IMAGE_TAG }}"
+          - "Percona pgBackRest Image Tag: {{ PGBACKREST_IMAGE_TAG }}"
+          - "Percona PostgreSQL Bin: {{ pg_bin_path }}"
+          - "Percona pgBackRest Container Name: {{ pgbackrest_container_name }}"
+          - "Percona PostgreSQL Container Name: {{ postgres_container_name }}"
+          - "Percona pgBackRest Stanza Name: {{ pgbackrest_stanza_name }}"
+      tags:
+        - always
+    
+    - name: Include all role tasks
+      include_tasks: ../tasks/main.yml
