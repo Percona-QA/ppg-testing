@@ -182,12 +182,22 @@
         docker_compose_version: "{{ pgbackrest_test_docker_compose_version | default('2.24.5') }}"
 
     - name: Download Docker Compose binary
-      get_url:
-        url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
-        dest: /usr/local/bin/docker-compose
-        mode: '0755'
-      register: compose_download
-      ignore_errors: true
+      block:
+        - name: Download Docker Compose binary (requested version)
+          get_url:
+            url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
+            dest: /usr/local/bin/docker-compose
+            mode: '0755'
+          register: compose_download
+          ignore_errors: true
+      rescue:
+        - name: Download Docker Compose binary (latest)
+          get_url:
+            url: "https://github.com/docker/compose/releases/latest/download/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
+            dest: /usr/local/bin/docker-compose
+            mode: '0755'
+          register: compose_download
+          ignore_errors: true
 
     - name: Create symlink for docker-compose if downloaded
       file:

@@ -8,6 +8,31 @@
 #   tags:
 #     - prerequisites
 #     - always
+- name: Yum update
+  become: true
+  command: yum -y update
+  when: ansible_os_family == "RedHat"
+
+- name: Ensure required dependencies are installed
+  ansible.builtin.yum:
+    name:
+      - yum-utils
+      - device-mapper-persistent-data
+      - lvm2
+    state: present
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+- name: Install kernel-modules-extra on RHEL 10
+  dnf:
+    name: "kernel-modules-extra-{{ ansible_kernel }}"
+    state: present
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+- name: Ensure br_netfilter module is loaded (RHEL 10 only)
+  community.general.modprobe:
+    name: br_netfilter
+    state: present
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
 - name: Check if Docker is installed
   command: docker --version
@@ -52,6 +77,36 @@
   tags:
     - prerequisites
     - install
+
+- name: Ensure Docker service is running
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+  become: true
+  when:
+    - docker_version.rc == 0
+    - not pgbackrest_test_skip_setup | default(false) | bool
+  tags:
+    - prerequisites
+    - prepare
+    - always
+
+- name: Wait for Docker daemon to be ready
+  ansible.builtin.command: docker info
+  register: docker_info
+  changed_when: false
+  retries: 10
+  delay: 3
+  until: docker_info.rc == 0
+  become: true
+  when:
+    - docker_version.rc == 0
+    - not pgbackrest_test_skip_setup | default(false) | bool
+  tags:
+    - prerequisites
+    - prepare
+    - always
 
 - name: Ensure /tmp/docker_test directory exists (for compose/config)
   file:
