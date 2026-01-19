@@ -1,5 +1,5 @@
 ---
-# --- PREPARATION: REMOVE CONFLICTS ---
+# --- 1. PREPARATION: REMOVE CONFLICTS ---
 - name: Remove legacy Docker packages (All)
   package:
     name:
@@ -10,70 +10,65 @@
       - runc
     state: absent
 
-# --- SECTION 1: DEBIAN / UBUNTU SETUP ---
-- name: Install dependencies for Debian/Ubuntu
-  apt:
-    name:
-      - ca-certificates
-      - curl
-      - gnupg
-    state: present
-    update_cache: yes
+# --- 2. DEBIAN / UBUNTU CONFIGURATION (Inc. Debian 13 & ARM) ---
+- name: Debian Family Setup
+  block:
+    - name: Install Debian dependencies
+      apt:
+        name: [ca-certificates, curl, gnupg]
+        state: present
+        update_cache: yes
+
+    - name: Ensure /etc/apt/keyrings exists
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download Docker GPG key
+      get_url:
+        url: "https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg"
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+
+    - name: Get system architecture
+      command: dpkg --print-architecture
+      register: deb_arch
+      changed_when: false
+
+    - name: Add Docker Repository
+      apt_repository:
+        repo: "deb [arch={{ deb_arch.stdout }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
+        state: present
+        filename: docker
+        update_cache: yes
+
+    - name: Install Docker Engine (Debian/Ubuntu)
+      apt:
+        name: [docker-ce, docker-ce-cli, containerd.io, docker-buildx-plugin, docker-compose-plugin]
+        state: present
+        update_cache: yes
   when: ansible_os_family == "Debian"
 
-- name: Ensure /etc/apt/keyrings directory exists
-  file:
-    path: /etc/apt/keyrings
-    state: directory
-    mode: '0755'
-  when: ansible_os_family == "Debian"
+# --- 3. RHEL / ROCKY / ORACLE CONFIGURATION (Inc. RHEL 10) ---
+- name: RedHat Family Setup
+  block:
+    - name: Install dnf-plugins-core (RHEL family)
+      dnf:
+        name: dnf-plugins-core
+        state: present
 
-- name: Download Docker GPG key (Modern Method)
-  get_url:
-    url: "https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg"
-    dest: /etc/apt/keyrings/docker.asc
-    mode: '0644'
-  when: ansible_os_family == "Debian"
+    - name: Add Docker Repository (RHEL family)
+      get_url:
+        url: https://download.docker.com/linux/centos/docker-ce.repo
+        dest: /etc/yum.repos.d/docker-ce.repo
 
-- name: Add Docker Repository to sources.list.d
-  apt_repository:
-    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
-    state: present
-    filename: docker
-  when: ansible_os_family == "Debian"
-
-# --- SECTION 2: RHEL / ROCKY / ORACLE SETUP ---
-- name: Install dnf-plugins-core (RHEL family)
-  dnf:
-    name: dnf-plugins-core
-    state: present
+    - name: Install Docker Engine (RHEL/Rocky/OL)
+      dnf:
+        name: [docker-ce, docker-ce-cli, containerd.io, docker-buildx-plugin, docker-compose-plugin]
+        state: present
+        allowerasing: yes # Essential for RHEL 10 / Rocky 10 conflicts
   when: ansible_os_family == "RedHat"
-
-- name: Add Docker Repository (RHEL family)
-  get_url:
-    url: https://download.docker.com/linux/centos/docker-ce.repo
-    dest: /etc/yum.repos.d/docker-ce.repo
-  when: ansible_os_family == "RedHat"
-
-# --- SECTION 3: INSTALLATION (ALL) ---
-- name: Install Docker Engine and Plugins
-  package:
-    name:
-      - docker-ce
-      - docker-ce-cli
-      - containerd.io
-      - docker-buildx-plugin
-      - docker-compose-plugin
-    state: latest
-  # Use allowerasing for RHEL 10/Rocky 10 conflicts with Podman/Buildah
-  register: docker_install
-  ignore_errors: yes
-
-- name: Retry install with allowerasing (RHEL/Rocky 10 specific)
-  command: dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin --allowerasing
-  when:
-    - ansible_os_family == "RedHat"
-    - docker_install.failed
 
 # --- SECTION 4: SERVICE & PERMISSIONS ---
 - name: Start and enable Docker service
