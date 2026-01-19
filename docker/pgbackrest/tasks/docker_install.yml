@@ -72,12 +72,19 @@
 
 - name: Install Docker on RHEL/CentOS/Fedora
   block:
+    - name: Set Docker repo major version (RHEL family)
+      set_fact:
+        docker_repo_major_version: >-
+          {{ (ansible_distribution_major_version | int)
+             if (ansible_distribution_major_version | int) < 10 else 9 }}
+
     - name: Install required packages
       package:
         name:
           - yum-utils
           - device-mapper-persistent-data
           - lvm2
+          - curl
         state: present
       ignore_errors: true
       
@@ -85,7 +92,7 @@
       yum_repository:
         name: docker-ce-stable
         description: Docker CE Stable
-        baseurl: "https://download.docker.com/linux/centos/{{ ansible_distribution_major_version }}/$basearch/stable"
+        baseurl: "https://download.docker.com/linux/centos/{{ docker_repo_major_version }}/$basearch/stable"
         gpgcheck: true
         gpgkey: https://download.docker.com/linux/centos/gpg
         enabled: true
@@ -116,6 +123,20 @@
           - docker-buildx-plugin
           - docker-compose-plugin
         state: present
+      ignore_errors: true
+
+    - name: Check Docker after package install
+      command: docker --version
+      register: docker_post_install_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install Docker using convenience script (fallback)
+      shell: curl -fsSL https://get.docker.com | sh
+      args:
+        creates: /usr/bin/docker
+      become: true
+      when: docker_post_install_check.rc != 0
       ignore_errors: true
       
   when: 
