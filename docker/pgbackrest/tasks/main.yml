@@ -8,10 +8,6 @@
 #   tags:
 #     - prerequisites
 #     - always
-- name: Yum update
-  become: true
-  command: yum -y update
-  when: ansible_os_family == "RedHat"
 
 - name: Ensure required dependencies are installed
   ansible.builtin.yum:
@@ -34,100 +30,12 @@
     state: present
   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
-- name: Check if Docker is installed
-  command: docker --version
-  register: docker_version
-  changed_when: false
-  failed_when: false
-  tags:
-    - prerequisites
-    - always
-  
-- name: Check if Docker Compose is installed
-  command: docker-compose --version
-  register: docker_compose_version
-  changed_when: false
-  failed_when: false
-  tags:
-    - prerequisites
-    - always
 
-- name: Check for Docker Compose V2 (plugin format)
-  command: docker compose version
-  register: docker_compose_v2_version
-  changed_when: false
-  failed_when: false
-  tags:
-    - prerequisites
-    - always
-
-- name: Set Docker Compose availability fact
-  set_fact:
-    docker_compose_available: "{{ docker_compose_version.rc == 0 or docker_compose_v2_version.rc == 0 }}"
-  tags:
-    - prerequisites
-    - always
-
-# Docker Installation Tasks moved to docker_install.yml
-- name: Install Docker/Docker Compose if missing
+- name: Install Docker/Docker Compose
   include_tasks: docker_install.yml
-  when:
-    - docker_version.rc != 0 or not docker_compose_available | bool
-    - pgbackrest_test_install_docker | default(true) | bool
   tags:
     - prerequisites
     - install
-
-- name: Re-check Docker after installation
-  command: docker --version
-  register: docker_version_after_install
-  changed_when: false
-  failed_when: false
-  when:
-    - docker_version.rc != 0
-    - pgbackrest_test_install_docker | default(true) | bool
-  tags:
-    - prerequisites
-    - always
-
-- name: Set Docker availability fact
-  set_fact:
-    docker_available: >-
-      {{ (docker_version.rc == 0)
-         or (docker_version_after_install is defined and docker_version_after_install.rc == 0) }}
-  tags:
-    - prerequisites
-    - always
-
-- name: Ensure Docker service is running
-  ansible.builtin.service:
-    name: docker
-    state: started
-    enabled: true
-  become: true
-  when:
-    - docker_available | default(false) | bool
-    - not pgbackrest_test_skip_setup | default(false) | bool
-  tags:
-    - prerequisites
-    - prepare
-    - always
-
-- name: Wait for Docker daemon to be ready
-  ansible.builtin.command: docker info
-  register: docker_info
-  changed_when: false
-  retries: 10
-  delay: 3
-  until: docker_info.rc == 0
-  become: true
-  when:
-    - docker_available | default(false) | bool
-    - not pgbackrest_test_skip_setup | default(false) | bool
-  tags:
-    - prerequisites
-    - prepare
-    - always
 
 - name: Ensure /tmp/docker_test directory exists (for compose/config)
   file:
@@ -160,24 +68,24 @@
 # --- Refactored Docker and DB Setup ---
 - name: Detect Docker Compose command
   shell: |
-    if command -v docker-compose &> /dev/null; then
-      echo "docker-compose"
-    elif docker compose version &> /dev/null 2>&1; then
+    if docker compose version &> /dev/null 2>&1; then
       echo "docker compose"
+    elif command -v docker-compose &> /dev/null; then
+      echo "docker-compose"
     else
       echo "ERROR"
     fi
   register: docker_compose_cmd
+  # Use head -n 1 to ensure we only get the echo'd string, not version info
   changed_when: false
-  when: not pgbackrest_test_skip_setup | default(false) | bool
   tags:
     - prepare
     - always
 
 - name: Set Docker Compose command fact
   set_fact:
-    docker_compose_command: "{{ docker_compose_cmd.stdout | trim }}"
-  when: not pgbackrest_test_skip_setup | default(false) | bool
+    # Use splitlines()[0] as an extra safety measure to take only the first line
+    docker_compose_command: "{{ docker_compose_cmd.stdout_lines[0] | trim }}"
   tags:
     - prepare
     - always
@@ -186,7 +94,6 @@
   fail:
     msg: "Neither 'docker-compose' nor 'docker compose' is available. Please install Docker Compose."
   when: 
-    - not pgbackrest_test_skip_setup | default(false) | bool
     - docker_compose_command | default('') == "ERROR"
   tags:
     - prepare
@@ -194,7 +101,6 @@
 
 - name: Start PostgreSQL and pgBackRest Repository services (Shell Fallback)
   ansible.builtin.shell: |
-    {{ docker_compose_command }} -f docker-compose.yml down -v
     {{ docker_compose_command }} -f docker-compose.yml up -d
   args:
     chdir: "/tmp/docker_test"
@@ -211,7 +117,6 @@
     DOCKER_REPOSITORY: "{{ DOCKER_REPOSITORY }}"
     COMPONENT_VERSION: "{{ PGBACKREST_COMPONENT_VERSION }}"
   when: 
-    - not pgbackrest_test_skip_setup | default(false) | bool
     - docker_compose_command | default('') != "ERROR"
   tags:
     - prepare
@@ -226,7 +131,6 @@
     - pg_container_info.container.State.Health.Status | default('') == 'healthy'
   retries: 30 # 30 retries * 2 second delay = 60 seconds
   delay: 2
-  when: not pgbackrest_test_skip_setup | default(false) | bool
   tags:
     - prepare
     - always

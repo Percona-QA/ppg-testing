@@ -1,104 +1,95 @@
-- name: Yum update
-  become: true
-  command: yum -y update
-  when: ansible_os_family == "RedHat"
-
-- name: Ensure required dependencies are installed
-  ansible.builtin.yum:
+---
+# --- PREPARATION: REMOVE CONFLICTS ---
+- name: Remove legacy Docker packages (All)
+  package:
     name:
-      - yum-utils
-      - device-mapper-persistent-data
-      - lvm2
-    state: present
-  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+      - docker
+      - docker-engine
+      - docker.io
+      - containerd
+      - runc
+    state: absent
 
-- name: Install kernel-modules-extra on RHEL 10
+# --- SECTION 1: DEBIAN / UBUNTU SETUP ---
+- name: Install dependencies for Debian/Ubuntu
+  apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: Ensure /etc/apt/keyrings directory exists
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+  when: ansible_os_family == "Debian"
+
+- name: Download Docker GPG key (Modern Method)
+  get_url:
+    url: "https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg"
+    dest: /etc/apt/keyrings/docker.asc
+    mode: '0644'
+  when: ansible_os_family == "Debian"
+
+- name: Add Docker Repository to sources.list.d
+  apt_repository:
+    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
+    state: present
+    filename: docker
+  when: ansible_os_family == "Debian"
+
+# --- SECTION 2: RHEL / ROCKY / ORACLE SETUP ---
+- name: Install dnf-plugins-core (RHEL family)
   dnf:
-    name: "kernel-modules-extra-{{ ansible_kernel }}"
+    name: dnf-plugins-core
     state: present
-  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
-
-- name: Ensure br_netfilter module is loaded (RHEL 10 only)
-  community.general.modprobe:
-    name: br_netfilter
-    state: present
-  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
-
-- name: Add Docker CE repository RHEL 8,9
-  become: true
-  command: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
   when: ansible_os_family == "RedHat"
 
-- name: Yum update
-  become: true
-  command: yum -y update
+- name: Add Docker Repository (RHEL family)
+  get_url:
+    url: https://download.docker.com/linux/centos/docker-ce.repo
+    dest: /etc/yum.repos.d/docker-ce.repo
   when: ansible_os_family == "RedHat"
 
-- name: Install Docker packages
-  become: true
-  ansible.builtin.yum:
+# --- SECTION 3: INSTALLATION (ALL) ---
+- name: Install Docker Engine and Plugins
+  package:
     name:
       - docker-ce
       - docker-ce-cli
       - containerd.io
-    state: present
-  when: ansible_os_family == "RedHat"
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: latest
+  # Use allowerasing for RHEL 10/Rocky 10 conflicts with Podman/Buildah
+  register: docker_install
+  ignore_errors: yes
 
-- name: Ensure containerd service is started
-  ansible.builtin.service:
-    name: containerd
-    state: started
-    enabled: yes
-  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+- name: Retry install with allowerasing (RHEL/Rocky 10 specific)
+  command: dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin --allowerasing
+  when:
+    - ansible_os_family == "RedHat"
+    - docker_install.failed
 
-- name: Start docker
-  become: true
+# --- SECTION 4: SERVICE & PERMISSIONS ---
+- name: Start and enable Docker service
   service:
     name: docker
     state: started
     enabled: yes
-  when: ansible_os_family == "RedHat"
 
-- name: Install docker.io Deb
-  become: true
-  apt:
-    name: docker.io
-    update_cache: yes
-  when: ansible_os_family == "Debian"
+- name: Ensure 'docker' group exists
+  group:
+    name: docker
+    state: present
 
-- name: Install python3-pip
-  become: true
-  apt:
-    name: python3-pip
-    state: latest
-    update_cache: yes
-  when: ansible_os_family == "Debian"
-
-- name: run this on OSX type systems
-  debug: msg="hello from osx"
-  when: ansible_distribution == 'MacOSX'
-
-- name: Install brew
-  become: true
-  command: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
-  when: ansible_os_family == "MacOSX"
-
-- name: Install Docker
-  become: true
-  command: brew cask install docker
-  when: ansible_os_family == "MacOSX"
-
-- name: show docker version
-  command: docker -v
-  register: results
-  when: ansible_os_family == "Debian" or ansible_os_family == "MacOSX"
-
-- debug:
-    var: results.stdout
-
-- name: show docker binary location
-  command: which docker
-  register: results
-
-- debug:
-    var: results.stdout
+- name: Add current user to docker group
+  user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: yes
+  when: ansible_user is defined
