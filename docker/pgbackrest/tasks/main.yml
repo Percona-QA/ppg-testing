@@ -78,6 +78,27 @@
     - prerequisites
     - install
 
+- name: Re-check Docker after installation
+  command: docker --version
+  register: docker_version_after_install
+  changed_when: false
+  failed_when: false
+  when:
+    - docker_version.rc != 0
+    - pgbackrest_test_install_docker | default(true) | bool
+  tags:
+    - prerequisites
+    - always
+
+- name: Set Docker availability fact
+  set_fact:
+    docker_available: >-
+      {{ (docker_version.rc == 0)
+         or (docker_version_after_install is defined and docker_version_after_install.rc == 0) }}
+  tags:
+    - prerequisites
+    - always
+
 - name: Ensure Docker service is running
   ansible.builtin.service:
     name: docker
@@ -85,7 +106,7 @@
     enabled: true
   become: true
   when:
-    - docker_version.rc == 0
+    - docker_available | default(false) | bool
     - not pgbackrest_test_skip_setup | default(false) | bool
   tags:
     - prerequisites
@@ -101,7 +122,7 @@
   until: docker_info.rc == 0
   become: true
   when:
-    - docker_version.rc == 0
+    - docker_available | default(false) | bool
     - not pgbackrest_test_skip_setup | default(false) | bool
   tags:
     - prerequisites
