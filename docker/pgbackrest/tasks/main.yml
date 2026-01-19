@@ -122,18 +122,20 @@
     - prepare
     - always
 
-- name: Wait for PostgreSQL container to become healthy
-  community.docker.docker_container_info:
-    name: "{{ postgres_container_name }}"
-  register: pg_container_info
-  until:
-    - pg_container_info.exists | default(false)
-    - pg_container_info.container.State.Health.Status | default('') == 'healthy'
-  retries: 30 # 30 retries * 2 second delay = 60 seconds
+- name: Wait for PostgreSQL container to become healthy (CLI Method)
+  shell: |
+    docker inspect --format='{{ '{{' }} .State.Health.Status {{ '}}' }}' "{{ postgres_container_name }}"
+  register: pg_health
+  # This loop will keep running until 'healthy' is returned
+  until: pg_health.stdout == "healthy"
+  retries: 30
   delay: 2
-  tags:
-    - prepare
-    - always
+  become: true
+  changed_when: false
+  # Safety: If the container fails or stays 'unhealthy', this task will fail after 60s
+  failed_when:
+    - pg_health.stdout == "unhealthy" or pg_health.rc != 0
+  tags: [prepare, always]
 
 # Test execution tasks
 
