@@ -181,6 +181,13 @@
       set_fact:
         docker_compose_version: "{{ pgbackrest_test_docker_compose_version | default('2.24.5') }}"
 
+    - name: Install Docker Compose plugin via package (RHEL family)
+      package:
+        name: docker-compose-plugin
+        state: present
+      when: ansible_os_family == "RedHat"
+      ignore_errors: true
+
     - name: Download Docker Compose binary
       block:
         - name: Download Docker Compose binary (requested version)
@@ -224,7 +231,9 @@
       pip:
         name: docker-compose
         state: present
-      when: not compose_binary_installed | bool
+      when:
+        - not compose_binary_installed | bool
+        - ansible_os_family != "RedHat"
       ignore_errors: true
 
   when:
