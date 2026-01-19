@@ -221,7 +221,9 @@
   community.docker.docker_container_info:
     name: "{{ postgres_container_name }}"
   register: pg_container_info
-  until: pg_container_info.container.State.Health.Status == 'healthy'
+  until:
+    - pg_container_info.exists | default(false)
+    - pg_container_info.container.State.Health.Status | default('') == 'healthy'
   retries: 30 # 30 retries * 2 second delay = 60 seconds
   delay: 2
   when: not pgbackrest_test_skip_setup | default(false) | bool
