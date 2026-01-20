@@ -1,0 +1,12 @@
+---
+# Ansible requirements file
+# Install with: ansible-galaxy install -r requirements.yml
+
+collections:
+  - name: community.general
+    version: ">=1.0.0"
+  - name: community.docker
+    version: ">=3.0.0" # REQUIRED for docker_compose and docker_exec modules
+
+# No external roles required
+# The pgbackrest_test role is included in this repository

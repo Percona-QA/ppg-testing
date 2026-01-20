@@ -1,0 +1,279 @@
+---
+# Prerequisites validation and installation tasks
+# Note: System facts are automatically gathered by Ansible
+# If gather_facts is disabled, uncomment the setup task below
+
+# - name: Gather system facts
+#   setup:
+#   tags:
+#     - prerequisites
+#     - always
+
+- name: Ensure required dependencies are installed
+  ansible.builtin.yum:
+    name:
+      - yum-utils
+      - device-mapper-persistent-data
+      - lvm2
+    state: present
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+- name: Install kernel-modules-extra on RHEL 10
+  dnf:
+    name: "kernel-modules-extra-{{ ansible_kernel }}"
+    state: present
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+- name: Ensure br_netfilter module is loaded (RHEL 10 only)
+  community.general.modprobe:
+    name: br_netfilter
+    state: present
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+
+- name: Install Docker/Docker Compose
+  include_tasks: docker_install.yml
+  tags:
+    - prerequisites
+    - install
+
+- name: Ensure /tmp/docker_test directory exists (for compose/config)
+  file:
+    path: /tmp/docker_test
+    state: directory
+    mode: '0755'
+  tags:
+    - prepare
+    - always
+
+- name: Copy docker-compose.yml to /tmp/docker_test
+  ansible.builtin.copy:
+    src: "../files/docker-compose.yml"
+    dest: "/tmp/docker_test/docker-compose.yml"
+    mode: '0644'
+  tags:
+    - prepare
+    - always
+
+- name: Render pgbackrest.conf to /tmp/docker_test
+  ansible.builtin.template:
+    src: "../files/pgbackrest.conf"
+    dest: "/tmp/docker_test/pgbackrest.conf"
+    mode: '0644'
+  tags:
+    - prepare
+    - always
+
+
+# --- Refactored Docker and DB Setup ---
+- name: Detect Docker Compose command
+  shell: |
+    if docker compose version &> /dev/null 2>&1; then
+      echo "docker compose"
+    elif command -v docker-compose &> /dev/null; then
+      echo "docker-compose"
+    else
+      echo "ERROR"
+    fi
+  register: docker_compose_cmd
+  # Use head -n 1 to ensure we only get the echo'd string, not version info
+  changed_when: false
+  tags:
+    - prepare
+    - always
+
+- name: Set Docker Compose command fact
+  set_fact:
+    # Use splitlines()[0] as an extra safety measure to take only the first line
+    docker_compose_command: "{{ docker_compose_cmd.stdout_lines[0] | trim }}"
+  tags:
+    - prepare
+    - always
+
+- name: Fail if Docker Compose is not available
+  fail:
+    msg: "Neither 'docker-compose' nor 'docker compose' is available. Please install Docker Compose."
+  when: 
+    - docker_compose_command | default('') == "ERROR"
+  tags:
+    - prepare
+    - always
+
+- name: Start PostgreSQL and pgBackRest Repository services (Shell Fallback)
+  ansible.builtin.shell: |
+    {{ docker_compose_command }} -f docker-compose.yml up -d
+  args:
+    chdir: "/tmp/docker_test"
+  become: true
+  environment: # <-- NEW: Inject Ansible variables into the shell environment
+    PG_IMAGE: "{{ postgres_test_image }}"
+    PGBACKREST_IMAGE: "{{ pgbackrest_test_image }}"
+    PG_CONTAINER_NAME: "{{ postgres_container_name }}"
+    PGBACKREST_CONTAINER_NAME: "{{ pgbackrest_container_name }}"
+    PGBACKREST_STANZA_NAME: "{{ pgbackrest_stanza_name }}"
+    PG_BIN: "{{ pg_bin_path }}"
+    SERVER_VERSION: "{{ PG_SERVER_VERSION }}"
+    PG_IMAGE_TAG: "{{ PG_IMAGE_TAG }}"
+    DOCKER_REPOSITORY: "{{ DOCKER_REPOSITORY }}"
+    COMPONENT_VERSION: "{{ PGBACKREST_COMPONENT_VERSION }}"
+  when: 
+    - docker_compose_command | default('') != "ERROR"
+  tags:
+    - prepare
+    - always
+
+- name: Wait for PostgreSQL container to become healthy (CLI Method)
+  shell: |
+    docker inspect --format='{{ '{{' }} .State.Health.Status {{ '}}' }}' "{{ postgres_container_name }}"
+  register: pg_health
+  # This loop will keep running until 'healthy' is returned
+  until: pg_health.stdout == "healthy"
+  retries: 30
+  delay: 2
+  become: true
+  changed_when: false
+  # Safety: If the container fails or stays 'unhealthy', this task will fail after 60s
+  failed_when:
+    - pg_health.stdout == "unhealthy" or pg_health.rc != 0
+  tags: [prepare, always]
+
+# Test execution tasks
+
+- name: Copy test_docker.py to /tmp/docker_test
+  ansible.builtin.copy:
+    src: "{{ pgbackrest_test_project_dir }}/files/test_docker.py"
+    dest: /tmp/docker_test/test_docker.py
+    owner: root
+    group: root
+    mode: '0644'
+
+
+- name: Install python3-venv on Debian/Ubuntu
+  become: true
+  apt:
+    name: python3-venv
+    state: present
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+  tags:
+    - execute
+    - always
+
+- name: Ensure Python virtual environment (if available)
+  block:
+    - name: Check if virtual environment activate script exists
+      ansible.builtin.stat:
+        path: /tmp/docker_test/validation/bin/activate
+      register: venv_check
+
+    - name: Remove virtual environment if activate script is missing
+      ansible.builtin.file:
+        path: /tmp/docker_test/validation
+        state: absent
+      when: not venv_check.stat.exists | default(false)
+
+    - name: Ensure Python virtual environment exists
+      ansible.builtin.command: python3 -m venv validation
+      args:
+        chdir: /tmp/docker_test
+      become: true
+      register: venv_create
+      ignore_errors: true
+
+    - name: Verify virtual environment was created
+      ansible.builtin.stat:
+        path: /tmp/docker_test/validation/bin/activate
+      register: venv_activate
+
+    - name: Set venv usage fact
+      set_fact:
+        use_validation_venv: "{{ venv_activate.stat.exists | default(false) }}"
+  tags:
+    - execute
+    - always
+
+- name: Warn if virtual environment was not created
+  ansible.builtin.debug:
+    msg: "Virtual environment creation failed; falling back to system Python. Output: {{ venv_create.stdout }} {{ venv_create.stderr }}"
+  when: not use_validation_venv | bool
+  tags:
+    - execute
+    - always
+
+- name: Install bash on Debian
+  become: true
+  apt:
+    name: bash
+    state: latest
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+  tags:
+    - execute
+    - always
+
+- name: Ensure python3-pip is installed for system fallback (RHEL/CentOS/Rocky/Oracle)
+  become: true
+  yum:
+    name: python3-pip
+    state: present
+  when: 
+    - ansible_os_family == "RedHat"
+    - not use_validation_venv | bool
+  ignore_errors: true
+  tags:
+    - execute
+    - always
+
+- name: Install pytest dependencies
+  shell: |
+    if [ "{{ use_validation_venv | bool }}" = "True" ]; then
+      source /tmp/docker_test/validation/bin/activate
+      pip install pytest-testinfra pytest pytest-order docker
+    else
+      python3 -m pip install --user pytest-testinfra pytest pytest-order docker
+    fi
+  args:
+    executable: /bin/bash
+    chdir: /tmp/docker_test
+  become: true
+  tags:
+    - execute
+    - always
+
+- name: Create python venv and run docker tests
+  shell: |
+    if [ "{{ use_validation_venv | bool }}" = "True" ]; then
+      source validation/bin/activate
+      pytest test_docker.py -vv -s -rpfs
+    else
+      python3 -m pytest -vv -s -rpfs test_docker.py
+    fi
+  args:
+    executable: /bin/bash
+    chdir: /tmp/docker_test
+  become: true
+  environment:
+    PG_IMAGE: "{{ postgres_test_image }}"
+    PGBACKREST_IMAGE: "{{ pgbackrest_test_image }}"
+    PG_CONTAINER_NAME: "{{ postgres_container_name }}"
+    PGBACKREST_CONTAINER_NAME: "{{ pgbackrest_container_name }}"
+    PGBACKREST_STANZA_NAME: "{{ pgbackrest_stanza_name }}"
+    PG_BIN: "{{ pg_bin_path }}"
+    SERVER_VERSION: "{{ PG_SERVER_VERSION }}"
+    PG_IMAGE_TAG: "{{ PG_IMAGE_TAG }}"
+    DOCKER_REPOSITORY: "{{ DOCKER_REPOSITORY }}"
+    COMPONENT_VERSION: "{{ PGBACKREST_COMPONENT_VERSION }}"
+  register: results
+  tags:
+    - execute
+    - always
+  
+- debug: var=results.stdout_lines
+
+- name: Show stderr if docker test fails
+  debug:
+    var: results.stderr_lines
+  when: 
+    - results is defined
+    - results.rc != 0
+
