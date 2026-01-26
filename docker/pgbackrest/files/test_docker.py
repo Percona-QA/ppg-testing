@@ -5,8 +5,9 @@ import time
 
 client = docker.from_env()
 
-MAJOR_VER = os.getenv('SERVER_VERSION').split('.')[0]
-MAJOR_MINOR_VER = os.getenv('PSERVER_VERSION')
+SERVER_VERSION = os.getenv('SERVER_VERSION', '18')
+MAJOR_VER = SERVER_VERSION.split('.')[0]
+MAJOR_MINOR_VER = os.getenv('SERVER_VERSION')
 DOCKER_REPO = os.getenv('DOCKER_REPOSITORY')
 IMG_TAG = os.getenv('PG_IMAGE_TAG')
 PG_CONTAINER_NAME = os.getenv("PG_CONTAINER_NAME", "pg_primary")
@@ -14,6 +15,9 @@ PGBACKREST_CONTAINER_NAME = os.getenv("PGBACKREST_CONTAINER_NAME", "pgbackrest")
 PGBACKREST_STANZA_NAME = os.getenv("PGBACKREST_STANZA_NAME", "main")
 PG_BIN = os.getenv("PG_BIN", f"/usr/pgsql-{MAJOR_VER}/bin")
 PGBACKREST_VERSION = os.getenv('COMPONENT_VERSION')
+WITH_TDE = os.getenv("WITH_TDE", "0")
+TDE_ENABLED = WITH_TDE == "1" and MAJOR_VER.isdigit() and int(MAJOR_VER) >= 17
+ACCESS_METHOD = " USING tde_heap" if TDE_ENABLED else ""
 
 # --- Registration to fix the "UnknownMarkWarning" ---
 def pytest_configure(config):
@@ -86,10 +90,16 @@ def ensure_postgres_running():
 
 def update_restore_command():
     container = client.containers.get(PGBACKREST_CONTAINER_NAME)
-    restore_command = (
-        f"restore_command = 'TMPDIR=/tmp {PG_BIN}/pg_tde_archive_decrypt %f \"%p\" "
-        f"\"pgbackrest --config=/etc/pgbackrest.conf --stanza={PGBACKREST_STANZA_NAME} archive-get %f %%p\"'"
-    )
+    if TDE_ENABLED:
+        restore_command = (
+            f"restore_command = 'TMPDIR=/tmp {PG_BIN}/pg_tde_archive_decrypt %f \"%p\" "
+            f"\"pgbackrest --config=/etc/pgbackrest.conf --stanza={PGBACKREST_STANZA_NAME} archive-get %f %%p\"'"
+        )
+    else:
+        restore_command = (
+            f"restore_command = 'pgbackrest --config=/etc/pgbackrest.conf "
+            f"--stanza={PGBACKREST_STANZA_NAME} archive-get %f %p'"
+        )
     container.exec_run(
         "bash -lc '"
         "conf=/data/db/postgresql.auto.conf; "
@@ -102,6 +112,8 @@ def update_restore_command():
 
 
 def ensure_tde_setup():
+    if not TDE_ENABLED:
+        return
     container = client.containers.get(PG_CONTAINER_NAME)
     container.exec_run(
         "bash -lc 'mkdir -p /var/lib/pgbackrest/keys && "
@@ -155,7 +167,8 @@ def ensure_tde_setup():
 
 @pytest.fixture(scope="session", autouse=True)
 def tde_setup():
-    ensure_tde_setup()
+    if TDE_ENABLED:
+        ensure_tde_setup()
 
 # --- Tests ---
 @pytest.mark.order(0)
@@ -187,7 +200,7 @@ def test_stanza_creation():
 @pytest.mark.order(2)
 def test_full_backup():
     """Verify a full backup works. (archive_command is handled by pg_primary)"""
-    run_sql("CREATE TABLE restore_val (id int, val text) USING tde_heap;")
+    run_sql(f"CREATE TABLE restore_val (id int, val text){ACCESS_METHOD};")
     run_sql("INSERT INTO restore_val VALUES (1, 'original_data');")
     run_sql("SELECT pg_switch_wal();")
     # Force a WAL switch to trigger the archive_command automatically
@@ -202,7 +215,7 @@ def test_full_backup():
 def test_incremental_backup():
     """Verify incremental backups track changes correctly."""
     # Insert some data to create a delta
-    run_sql("CREATE TABLE test_data (id serial primary key, note text) USING tde_heap;")
+    run_sql(f"CREATE TABLE test_data (id serial primary key, note text){ACCESS_METHOD};")
     run_sql("INSERT INTO test_data (note) VALUES ('verification_data');")
     run_sql("SELECT pg_switch_wal();")
     
@@ -216,8 +229,8 @@ def test_incremental_backup():
 @pytest.mark.order(4)
 def test_initial_backup_and_timestamp(pitr_context):
     """Inserts 'good' data, and captures the PITR time."""
-    
-    run_sql("CREATE TABLE pitr_test (id int, val text) USING tde_heap;")
+
+    run_sql(f"CREATE TABLE pitr_test (id int, val text){ACCESS_METHOD};")
     run_sql("INSERT INTO pitr_test VALUES (1, 'good_data');")
     
     # We force a WAL switch to ensure the data is written to the WAL stream
@@ -271,7 +284,7 @@ def test_retention_enforcement():
     """
     # 1. Add more backups to ensure we are well over the limit of 2
     for i in range(3):
-        run_sql(f"CREATE TABLE seed_retention_{i} (id int) USING tde_heap;")
+        run_sql(f"CREATE TABLE seed_retention_{i} (id int){ACCESS_METHOD};")
         run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} --type=full backup")
     
     # 2. Explicitly trigger the expire command (though backup usually does this)

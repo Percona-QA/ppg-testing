@@ -19,6 +19,9 @@
     PGBACKREST_IMAGE_TAG: "{{ lookup('env', 'DOCKER_COMPONENT_TAG') | default('latest', true) }}"
     # Extract PostgreSQL major version for PG_BIN
     PG_MAJOR: "{{ (PG_SERVER_VERSION | regex_search('^[0-9]+')) | default('18', true) }}"
+    # TDE is supported only for PostgreSQL 17+
+    WITH_TDE_REQUESTED: "{{ lookup('env', 'WITH_TDE') | default('0', true) }}"
+    WITH_TDE_EFFECTIVE: "{{ (WITH_TDE_REQUESTED | bool and (PG_MAJOR | int) >= 17) | ternary('1', '0') }}"
     
     # Project configuration
     pgbackrest_test_project_dir: "{{ playbook_dir }}/.."
@@ -64,9 +67,8 @@
           - "Percona pgBackRest Container Name: {{ pgbackrest_container_name }}"
           - "Percona PostgreSQL Container Name: {{ postgres_container_name }}"
           - "Percona pgBackRest Stanza Name: {{ pgbackrest_stanza_name }}"
+          - "WITH_TDE (effective): {{ WITH_TDE_EFFECTIVE }}"
       tags:
         - always
-    # roles:
-    # - role: pgbackrest
-    - name: Run pgBackRest docker tests
-      import_tasks: "../tasks/main.yml"
+  roles:
+  - role: pgbackrest
