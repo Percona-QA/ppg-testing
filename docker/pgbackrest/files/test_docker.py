@@ -17,7 +17,7 @@ PG_BIN = os.getenv("PG_BIN", f"/usr/pgsql-{MAJOR_VER}/bin")
 PGBACKREST_VERSION = os.getenv('COMPONENT_VERSION')
 WITH_TDE = os.getenv("WITH_TDE", "0")
 TDE_ENABLED = WITH_TDE == "1" and MAJOR_VER.isdigit() and int(MAJOR_VER) >= 17
-ACCESS_METHOD = " USING tde_heap" if TDE_ENABLED else ""
+ACCESS_METHOD = "USING tde_heap" if TDE_ENABLED else "USING heap"
 
 # --- Registration to fix the "UnknownMarkWarning" ---
 def pytest_configure(config):
@@ -122,36 +122,9 @@ def ensure_tde_setup():
     )
     sql = """
     CREATE EXTENSION IF NOT EXISTS pg_tde;
-    DO $$
-    BEGIN
-      PERFORM pg_tde_add_database_key_provider_file('file-vault', '/var/lib/pgbackrest/keys/pg_tde_test_001_basic.per');
-    EXCEPTION
-      WHEN duplicate_object THEN
-        NULL;
-    END $$;
-    DO $$
-    BEGIN
-      PERFORM pg_tde_create_key_using_database_key_provider('test-db-key', 'file-vault');
-    EXCEPTION
-      WHEN duplicate_object THEN
-        NULL;
-    END $$;
-    SELECT pg_tde_set_key_using_database_key_provider('test-db-key', 'file-vault');
-    DO $$
-    BEGIN
-      PERFORM pg_tde_add_global_key_provider_file('wal-vault', '/var/lib/pgbackrest/keys/pg_tde_test_001_wal.per');
-    EXCEPTION
-      WHEN duplicate_object THEN
-        NULL;
-    END $$;
-    DO $$
-    BEGIN
-      PERFORM pg_tde_create_key_using_global_key_provider('wal-key', 'wal-vault');
-    EXCEPTION
-      WHEN duplicate_object THEN
-        NULL;
-    END $$;
-    SELECT pg_tde_set_server_key_using_global_key_provider('wal-key', 'wal-vault');
+    SELECT pg_tde_add_global_key_provider_file('wal-vault1', '/var/lib/pgbackrest/keys/pg_tde_test_001_wal.per');
+    SELECT pg_tde_create_key_using_global_key_provider('wal-key', 'wal-vault');
+    SELECT pg_tde_set_default_key_using_global_key_provider('wal-key', 'wal-vault');
     """
     exit_code, output = run_sql_exec(sql)
     assert exit_code == 0, output
