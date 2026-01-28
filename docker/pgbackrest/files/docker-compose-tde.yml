@@ -7,7 +7,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: mysecretpassword
       PGDATA: /data/db
-      ENABLE_PG_TDE: "1"
+      WITH_TDE: "${WITH_TDE:-0}"
+      ENABLE_PG_TDE: "${WITH_TDE:-0}"
     volumes:
       - pgdata:/data/db
       - pg_socket:/var/run/postgresql
