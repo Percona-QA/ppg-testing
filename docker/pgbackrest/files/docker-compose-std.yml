@@ -7,8 +7,6 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: mysecretpassword
       PGDATA: /data/db
-      WITH_TDE: "${WITH_TDE:-0}"
-      ENABLE_PG_TDE: "${WITH_TDE:-0}"
     volumes:
       - pgdata:/data/db
       - pg_socket:/var/run/postgresql
@@ -22,21 +20,7 @@ services:
       timeout: 5s
       retries: 5
     shm_size: "1g"
-    command: >
-      bash -ce '
-      if [ "${WITH_TDE:-0}" = "1" ]; then
-        export ARCH_CMD="TMPDIR=/tmp ${PG_BIN}/pg_tde_archive_decrypt %f %p \"pgbackrest --config=/etc/pgbackrest.conf --stanza=${PGBACKREST_STANZA_NAME:-main} archive-push %p\"";
-      else
-        export ARCH_CMD="pgbackrest --config=/etc/pgbackrest.conf --stanza=${PGBACKREST_STANZA_NAME:-main} archive-push %p";
-      fi;
-
-      exec /entrypoint.sh postgres \
-        -c "wal_level=replica" \
-        -c "max_wal_senders=4" \
-        -c "archive_mode=on" \
-        -c "archive_command=$$ARCH_CMD"
-      '
-
+    command: postgres -c 'wal_level=replica' -c 'max_wal_senders=4' -c 'archive_mode=on' -c 'archive_command=pgbackrest --stanza=${PGBACKREST_STANZA_NAME:-main} archive-push %p'
   pgbackrest:
     image: ${PGBACKREST_IMAGE}
     container_name: ${PGBACKREST_CONTAINER_NAME:-pgbackrest}
