@@ -122,7 +122,7 @@ def ensure_tde_setup():
     )
     sql = """
     CREATE EXTENSION IF NOT EXISTS pg_tde;
-    SELECT pg_tde_add_global_key_provider_file('wal-vault1', '/var/lib/pgbackrest/keys/pg_tde_test_001_wal.per');
+    SELECT pg_tde_add_global_key_provider_file('wal-vault', '/var/lib/pgbackrest/keys/pg_tde_test_001_wal.per');
     SELECT pg_tde_create_key_using_global_key_provider('wal-key', 'wal-vault');
     SELECT pg_tde_set_default_key_using_global_key_provider('wal-key', 'wal-vault');
     """
