@@ -48,13 +48,17 @@
 
 - name: Copy the correct compose file based on TDE setting
   ansible.builtin.copy:
-    # If WITH_TDE is '1', it picks .tde.yml; otherwise, it picks .std.yml
-    src: "../files/docker-compose-{{ 'tde' if WITH_TDE | bool else 'std' }}.yml"
+    # If WITH_TDE_EFFECTIVE is '1', it picks .tde.yml; otherwise, it picks .std.yml
+    src: "../files/docker-compose-{{ 'tde' if WITH_TDE_EFFECTIVE | bool else 'std' }}.yml"
     dest: "/tmp/docker_test/docker-compose.yml"
     mode: '0644'
   tags:
     - prepare
     - always
+
+- name: Report TDE Status
+  ansible.builtin.debug:
+    msg: "TDE Requested: {{ WITH_TDE_REQUESTED }} | Postgres Version: {{ PG_MAJOR }} | Final Decision: {{ 'TDE ENABLED' if WITH_TDE_EFFECTIVE == '1' else 'STANDARD MODE' }}"
 
 - name: Render pgbackrest.conf to /tmp/docker_test
   ansible.builtin.template:
