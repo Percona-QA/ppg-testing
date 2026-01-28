@@ -49,7 +49,7 @@
 - name: Copy the correct compose file based on TDE setting
   ansible.builtin.copy:
     # If WITH_TDE is '1', it picks .tde.yml; otherwise, it picks .std.yml
-    src: "../files/docker-compose-{{ 'tde' if WITH_TDE | default('0') == '1' else 'std' }}.yml"
+    src: "../files/docker-compose-{{ 'tde' if WITH_TDE | bool else 'std' }}.yml"
     dest: "/tmp/docker_test/docker-compose.yml"
     mode: '0644'
   tags:
