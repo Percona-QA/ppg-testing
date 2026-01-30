@@ -1,0 +1,127 @@
+# =================================================
+# Clone,Build and install, Postgres/PSP with pg_tde
+# =================================================
+  - name: Clone Postgres/PSP sources
+    ansible.builtin.git:
+      repo: "{{ psp_repo }}"
+      version: "{{ psp_branch }}"
+      dest: /tmp/postgres
+      track_submodules: true
+    become: true
+    become_user: postgres
+    register: psp_clone_results
+
+  - name: Debug git results
+    debug: 
+      msg: "Cloned version: {{ psp_clone_results.after | default('N/A') }}"
+
+  - name: Clone pg_tde sources
+    git:
+      repo: "{{ tde_repo }}"
+      version: "{{ tde_branch }}"
+      dest: /tmp/pg_tde
+      track_submodules: true
+    become: true
+    become_user: postgres
+    register: tde_clone_results
+
+  - name: Debug git results
+    debug: 
+      msg: "Cloned version: {{ tde_clone_results.after | default('N/A') }}"
+
+  - name: Submodule update
+    command : git submodule update --init --recursive
+    args:
+      chdir: /tmp/pg_tde
+      executable: /bin/bash
+    become_user: postgres
+    when: not install_from_packages
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Configure Postgres/PSP from sources with liburing for supported OS. 
+    command: >
+      ./configure
+      --enable-debug
+      --enable-cassert
+      --enable-tap-tests
+      --with-icu
+      --prefix=/opt/pgsql
+      --with-liburing
+    args:
+      chdir: /tmp/postgres
+      executable: /bin/bash
+    # environment:
+    #   PKG_CONFIG_PATH: "/usr/local/lib/pkgconfig:/usr/lib/pkgconfig:/usr/lib64/pkgconfig"
+    become: true
+    become_user: postgres
+    when:
+      - (major_version | int) >= 18
+      - io_method in ['io_uring']
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Configure Postgres/PSP from sources
+    command: >
+      ./configure
+      --enable-debug
+      --enable-cassert
+      --enable-tap-tests
+      --with-icu
+      --prefix=/opt/pgsql
+    args:
+      chdir: /tmp/postgres
+      executable: /bin/bash
+    become_user: postgres
+    when:
+      - io_method in ['worker', 'sync']
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Run make install-world with parallel jobs
+    ansible.builtin.command: make install-world -j
+    args:
+      chdir: /tmp/postgres
+      executable: /bin/bash
+    become_user: postgres
+    environment:
+      TDE_MODE: 1
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Run make install for Injection points, as this extension is not built by default
+    ansible.builtin.command: make install -j -s -C src/test/modules/injection_points
+    args:
+      chdir: /tmp/postgres
+      executable: /bin/bash
+    become_user: postgres
+    environment:
+      TDE_MODE: 1
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Copy pg_config to /usr/bin
+    become: true 
+    command: sudo cp /opt/pgsql/bin/pg_config /usr/bin
+
+  - debug: var=results.stdout_lines
+
+  - name: Build & Install pg_tde
+    become: true
+    become_user: postgres
+    ansible.builtin.command: >
+      make PG_CONFIG=/opt/pgsql/bin/pg_config install
+    args:
+      chdir: /tmp/pg_tde
+      executable: /bin/bash
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      TDE_MODE: "1"
+    register: results
+
+  - debug: var=results.stdout_lines

@@ -5,16 +5,12 @@ import testinfra
 import sys
 import settings
 import time
-import glob
 
 MAJOR_VER = os.getenv('VERSION').split('.')[0]
 MAJOR_MINOR_VER = os.getenv('VERSION')
 DOCKER_REPO = os.getenv('DOCKER_REPOSITORY')
 IMG_TAG = os.getenv('TAG')
-# MAJOR_VER = '17'
-# MAJOR_MINOR_VER = '17.5'
-# DOCKER_REPO = 'perconalab'
-# IMG_TAG = '17'
+IS_WITH_POSTGIS = os.getenv('WITH_POSTGIS', 'false').lower() == "true"
 
 pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER)
 
@@ -39,14 +35,24 @@ TDE_BINARIES = [
 @pytest.fixture(scope='session')
 def host(request):
 
+    DOCKER_TO_USE = ""
+
+    if IS_WITH_POSTGIS:
+        DOCKER_TO_USE = f'{DOCKER_REPO}/percona-distribution-postgresql-with-postgis:{IMG_TAG}'
+    else:
+        DOCKER_TO_USE = f'{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG}'
+
     print('Major Version: ' + MAJOR_VER)
     print('Major Minor Version: ' + MAJOR_MINOR_VER)
     print('Image TAG: ' + IMG_TAG)
+    print('IS_WITH_POSTGIS: ' + str(IS_WITH_POSTGIS))
+    print('WITH_POSTGIS: ' + str(os.getenv('WITH_POSTGIS')))
+    print('DOCKER_TO_USE: ' + DOCKER_TO_USE)
 
     docker_id = subprocess.check_output(
-        ['docker', 'run', '--name', f'PG{MAJOR_VER}', '-e', 'POSTGRES_PASSWORD=secret',
+        ['docker', 'run', '--name', f'PG{MAJOR_VER}', '-e', 'POSTGRES_PASSWORD=secret', '-e', 'ENABLE_PG_TDE=1',
         '-e', 'PERCONA_TELEMETRY_URL=https://check-dev.percona.com/v1/telemetry/GenericReport',
-        '-d', f'{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG}']).decode().strip()
+        '-d', DOCKER_TO_USE]).decode().strip()
 
     # return a testinfra connection to the container
     yield testinfra.get_host("docker://" + docker_id)
@@ -57,8 +63,6 @@ def host(request):
 
 def test_myimage(host):
     # 'host' now binds to the container
-    if MAJOR_VER in ["11"]:
-        pytest.skip("Skipping for ppg 11")
     if int(MAJOR_VER) in [17, 18]:
         assert f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Server for PostgreSQL {pg_docker_versions['percona-version']}" in host.check_output('psql -V')
     else:
@@ -137,76 +141,196 @@ def test_postgres_client_version(host):
     result = host.check_output(cmd)
     assert f'{MAJOR_MINOR_VER}' in result.strip("\n"), result.stdout
 
+SKIP_EXTENSIONS = [
+    "pg_tde",
+    "postgis_sfcgal",
+    "address_standardizer",
+    "postgis_tiger_geocoder",
+    "postgis",
+    "postgis_topology",
+    "postgis_raster",
+    "address_standardizer_data_us"
+]
+
+
+@pytest.fixture(scope="module")
+def extension_list(host):
+    """
+    Fetches the list of all available extensions from PostgreSQL once per test module.
+    """
+    # -t: tuples only, -A: unaligned, -q: quiet
+    cmd = "psql -t -A -q -c 'SELECT name FROM pg_available_extensions;'"
+    res = host.run(cmd)
+    assert res.rc == 0, f"Failed to fetch extension list: {res.stderr}"
+
+    # Transform the multiline string into a clean set for O(1) lookup speed
+    return set(res.stdout.split())
+
+
+def should_skip(extension):
+    major = int(MAJOR_VER)
+
+    # 1. Hard skips
+    if extension in SKIP_EXTENSIONS:
+        return True, f"Explicitly skipped in SKIP_EXTENSIONS"
+
+    # 2. Version-based removals
+    if major >= 17 and extension == 'adminpack':
+        return True, "adminpack removed in PG17+"
+
+    # 3. Version-based additions
+    if major < 17 and extension == 'pg_tde':
+        return True, "pg_tde requires PG17+"
+
+    # 4. Feature-flag based skips
+    postgis_family = {
+        "postgis", "postgis_topology", "postgis_raster", "postgis_sfcgal", 
+        "address_standardizer", "postgis_tiger_geocoder", "address_standardizer_data_us"
+    }
+    if not IS_WITH_POSTGIS and extension in postgis_family:
+        return True, "Docker build is without PostGIS so skipping."
+
+    return False, None
+
 
 @pytest.mark.parametrize("extension", DOCKER_EXTENSIONS)
-def test_extenstions_list(extension_list, host, extension):
-    dist = host.system_info.distribution
-    # Skip adminpack extension for PostgreSQL 17 and above
-    if int(MAJOR_VER) in [17, 18] and extension == 'adminpack':
-        pytest.skip("Skipping adminpack extension as it is dropped in PostgreSQL 17")
-    assert extension in extension_list
+def test_extensions_list(extension_list, host, extension):
+    """
+    Verifies that the extension is available to be installed in the PostgreSQL instance.
+    """
+    # 1. Use the centralized helper for skip logic
+    # This replaces the messy if/elif blocks and ensures consistency
+    skip, reason = should_skip(extension)
+    if skip:
+        pytest.skip(reason)
 
+    # 2. Verify the extension is present in the available extensions list
+    # Use a descriptive error message to help debug if it's missing
+    assert extension in extension_list, (
+        f"Extension '{extension}' was expected but is not available in the "
+        f"PostgreSQL {MAJOR_VER} installation."
+    )
 
 @pytest.mark.parametrize("extension", DOCKER_EXTENSIONS)
 def test_enable_extension(host, extension):
-    dist = host.system_info.distribution
-    # Skip adminpack extension for PostgreSQL 17 and above
-    if int(MAJOR_VER) in [17, 18] and extension == 'adminpack':
-        pytest.skip("Skipping adminpack extension as it is dropped in PostgreSQL 17")
-    install_extension = host.run("psql -c 'CREATE EXTENSION \"{}\";'".format(extension))
-    assert install_extension.rc == 0, install_extension.stderr
-    assert install_extension.stdout.strip("\n") == "CREATE EXTENSION", install_extension.stderr
-    extensions = host.run("psql -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $3}'")
-    if MAJOR_VER in ["11"]:
-        extensions = host.run("psql -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $1}'")
-    assert extensions.rc == 0, extensions.stderr
-    assert extension in set(extensions.stdout.split()), extensions.stdout
+    skip, reason = should_skip(extension)
+    if skip:
+        pytest.skip(reason)
+
+    # 1. Install Extension
+    res = host.run(f'psql -c "CREATE EXTENSION \\"{extension}\\";"')
+    assert res.rc == 0, f"Failed to create {extension}: {res.stderr}"
+    assert "CREATE EXTENSION" in res.stdout
+
+    # 2. Verify existence using SQL count (Reliable replacement for awk)
+    check_sql = f"SELECT count(*) FROM pg_extension WHERE extname = '{extension}';"
+    count = host.run(f"psql -t -A -c \"{check_sql}\"").stdout.strip()
+    assert count == "1", f"Extension {extension} not found in pg_extension table"
 
 
 @pytest.mark.parametrize("extension", DOCKER_EXTENSIONS[::-1])
 def test_drop_extension(host, extension):
-    dist = host.system_info.distribution
-    # Skip adminpack extension for PostgreSQL 17
-    if int(MAJOR_VER) in [17, 18] and extension == 'adminpack':
-        pytest.skip("Skipping adminpack extension as it is dropped in PostgreSQL 17")
-    drop_extension = host.run("psql -c 'DROP EXTENSION \"{}\";'".format(extension))
-    assert drop_extension.rc == 0, drop_extension.stderr
-    assert drop_extension.stdout.strip("\n") == "DROP EXTENSION", drop_extension.stdout
-    extensions = host.run("psql -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $3}'")
-    if MAJOR_VER in ["11"]:
-        extensions = host.run("psql -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $1}'")
-    assert extensions.rc == 0, extensions.stderr
-    assert extension not in set(extensions.stdout.split()), extensions.stdout
+    skip, reason = should_skip(extension)
+    if skip:
+        pytest.skip(reason)
+
+    # 1. Drop Extension (Use CASCADE to handle dependencies)
+    res = host.run(f'psql -c "DROP EXTENSION \\"{extension}\\" CASCADE;"')
+    assert res.rc == 0, f"Failed to drop {extension}: {res.stderr}"
+    assert "DROP EXTENSION" in res.stdout
+
+    # 2. Verify it is gone
+    check_sql = f"SELECT count(*) FROM pg_extension WHERE extname = '{extension}';"
+    count = host.run(f"psql -t -A -c \"{check_sql}\"").stdout.strip()
+    assert count == "0", f"Extension {extension} still exists after drop"
 
 
 def test_plpgsql_extension(host):
-    extensions = host.run("psql -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $3}'")
-    if MAJOR_VER in ["11"]:
-        extensions = host.run("psql -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $1}'")
-    assert extensions.rc == 0, extensions.stderr
-    assert "plpgsql" in set(extensions.stdout.split()), extensions.stdout
+    # plpgsql is internal and always exists; just check for it directly
+    check_sql = "SELECT count(*) FROM pg_extension WHERE extname = 'plpgsql';"
+    count = host.run(f"psql -t -A -c \"{check_sql}\"").stdout.strip()
+    assert count == "1", "Default extension 'plpgsql' is missing!"
 
 
 @pytest.mark.parametrize("package", DOCKER_RPM_PACKAGES)
 def test_rpm_package_is_installed(host, package):
-    dist = host.system_info.distribution
+    # 1. Centralized Skip Logic
+    if int(MAJOR_VER) < 17 and "pg_tde" in package:
+        pytest.skip(f"pg_tde not supported on PostgreSQL {MAJOR_VER}")
+
+    if not IS_WITH_POSTGIS and "postgis" in package:
+        pytest.skip(f"Docker build is without PostGIS so skipping.")
+
     pkg = host.package(package)
-    assert pkg.is_installed
-    if package in ["percona-postgresql-client-common", "percona-postgresql-common"]:
-        assert pkg.version == pg_docker_versions[package]
-    elif package in [f"percona-pgaudit{MAJOR_VER}", f"percona-wal2json{MAJOR_VER}", f"percona-pg_stat_monitor{MAJOR_VER}",
-        f"percona-pgaudit{MAJOR_VER}_set_user", f"percona-pg_repack{MAJOR_VER}"]:
-        assert pkg.version == pg_docker_versions[package]['version']
+
+    # 2. Verify Installation
+    assert pkg.is_installed, f"Package {package} is not installed"
+
+    # 3. Dynamic Version Lookup
+    # We try to find the version in the dictionary with a fallback mechanism
+    pkg_data = pg_docker_versions.get(package)
+
+    if isinstance(pkg_data, dict):
+        # Handles cases like pg_docker_versions[package]['version']
+        expected_version = pkg_data.get('version')
     else:
-        assert pkg.version == pg_docker_versions['version']
+        # Handles cases like pg_docker_versions[package] (direct string)
+        expected_version = pkg_data
+
+    # Fallback to the global 'version' if the specific package isn't mapped
+    if not expected_version:
+        expected_version = pg_docker_versions.get('version')
+
+    assert pkg.version == expected_version, (
+        f"Version mismatch for {package}. Expected: {expected_version}, Found: {pkg.version}"
+    )
+
+
+# @pytest.mark.parametrize("package", DOCKER_RPM_PACKAGES)
+# def test_rpm_package_is_installed(host, package):
+#     if int(MAJOR_VER) < 17 and "pg_tde" in package:
+#         pytest.skip(f"pg_tde not supported on PostgreSQL {MAJOR_VER}")
+
+#     if not IS_WITH_POSTGIS and "postgis" in package:
+#         pytest.skip(f"Docker build is without PostGIS so skipping.")
+        
+#     pkg = host.package(package.strip())
+#     assert pkg.is_installed
+#     if package in ["percona-postgresql-client-common", "percona-postgresql-common"]:
+#         assert pkg.version == pg_docker_versions[package]
+#     elif package in [f"percona-pgaudit{MAJOR_VER}", f"percona-wal2json{MAJOR_VER}", f"percona-pg_stat_monitor{MAJOR_VER}",
+#         f"percona-pgaudit{MAJOR_VER}_set_user", f"percona-pg_repack{MAJOR_VER}", f"percona-patroni", f"percona-pg_tde{MAJOR_VER}",
+#         f"percona-pgbackrest", f"percona-pgvector_{MAJOR_VER}", f"percona-pgvector_{MAJOR_VER}-llvmjit", "python3-etcd",
+#         f"percona-postgis35_{MAJOR_VER}", f"percona-postgis35_{MAJOR_VER}-client", f"percona-postgis35_{MAJOR_VER}-gui",
+#         f"percona-postgis35_{MAJOR_VER}-llvmjit", f"percona-postgis35_{MAJOR_VER}-utils", "python3-pysyncobj", "python3-ydiff", "ydiff"]:
+#         assert pkg.version == pg_docker_versions[package]['version']
+#     else:
+#         assert pkg.version == pg_docker_versions['version']
 
 
 def test_pg_stat_monitor_extension_version(host):
-    result = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_stat_monitor;'")
-    assert result.rc == 0, result.stderr
-    result = host.run("psql -c 'SELECT pg_stat_monitor_version();' | awk 'NR==3{print $1}'")
-    assert result.rc == 0, result.stderr
-    assert result.stdout.strip("\n") == pg_docker_versions[f"percona-pg_stat_monitor{MAJOR_VER}"]['version']
+    # 1. Ensure extension is created
+    create_res = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_stat_monitor;'")
+    assert create_res.rc == 0, create_res.stderr
+
+    # 2. Get the Extension version (SQL Level)
+    # -t: tuples only, -A: unaligned
+    query = "SELECT pg_stat_monitor_version();"
+    actual_ext_version = host.run(f"psql -t -A -c \"{query}\"").stdout.strip()
+
+    # 3. Get Expected version from dictionary
+    pkg_key = f"percona-pg_stat_monitor{MAJOR_VER}"
+    expected_full_version = pg_docker_versions[pkg_key]['version']
+
+    # 4. Clean the version string
+    # RPM versions often look like '2.1.0-1.el9'. We need to strip the '-1.el9'
+    # part to match the PostgreSQL extension version '2.1.0'.
+    expected_clean_version = expected_full_version.split('-')[0]
+
+    assert actual_ext_version == expected_clean_version, (
+        f"Extension version {actual_ext_version} does not match "
+        f"expected version {expected_clean_version}"
+    )
 
 
 @pytest.mark.parametrize("file", DOCKER_RHEL_FILES)
@@ -252,7 +376,7 @@ redhat_percona_telemetry_agent = "/etc/sysconfig/percona-telemetry-agent"
 
 
 @pytest.mark.parametrize("package", telemetry_packages)
-def test_rpm_package_is_installed(host, package):
+def test_telemetry_package_is_installed(host, package):
     if int(MAJOR_VER) in [18]:
         pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
     dist = host.system_info.distribution
@@ -421,3 +545,215 @@ def test_pg_config_flags(host, flag):
     assert flag not in output, (
         f"PostgreSQL was built with {flag}, but it should NOT be present"
     )
+
+
+def test_postgis_extension(host):
+    if not IS_WITH_POSTGIS:
+        pytest.skip("Skipping PostGIS test.")
+    # 1. Execute the create command
+    cmd = "psql -c 'CREATE EXTENSION IF NOT EXISTS postgis CASCADE;'"
+    result = host.run(cmd)
+    assert result.rc == 0
+
+    # 2. Metadata Verification: Check if it's in pg_extension
+    check_cmd = "psql -t -c \"SELECT count(*) FROM pg_extension WHERE extname = 'postgis';\""
+    count = host.run(check_cmd).stdout.strip()
+    assert count == "1"
+
+    # 3. Version Check (Metadata): Get the installed version string
+    version_cmd = "psql -t -c \"SELECT extversion FROM pg_extension WHERE extname = 'postgis';\""
+    actual_version = host.run(version_cmd).stdout.strip()
+    # Assert version is not empty (e.g., '3.4')
+    assert len(actual_version) > 0
+    print(f"Detected PostGIS Extension Version: {actual_version}")
+    # Check expected version
+
+    expected_version = pg_docker_versions.get(f"percona-postgis35_{MAJOR_VER}", {}).get("extension_version")
+    assert actual_version == expected_version, f"Expected {expected_version}, but found {actual_version}"
+
+    # 4. Functional Check: Verify the extension is actually working
+    # This ensures the underlying GEOS and PROJ libraries are linked correctly
+    func_cmd = "psql -t -c \"SELECT postgis_version();\""
+    func_result = host.run(func_cmd)
+
+    assert func_result.rc == 0
+    assert "3." in func_result.stdout  # Assuming you expect PostGIS 3.x
+
+    # Execute the drop command with CASCADE
+    cmd = "psql -c 'DROP EXTENSION IF EXISTS postgis CASCADE;'"
+    result = host.run(cmd)
+
+    # Check if the command executed successfully
+    assert result.rc == 0
+
+    # Verification: Ensure it no longer exists in pg_extension
+    check_cmd = "psql -t -c \"SELECT count(*) FROM pg_extension WHERE extname = 'postgis';\""
+    count = host.run(check_cmd).stdout.strip()
+    assert count == "0"
+
+
+def test_pgvector_extension(host):
+    # 1. Execute the create command
+    # Note: The extension name is 'vector', though the project is pgvector
+    cmd = "psql -c 'CREATE EXTENSION IF NOT EXISTS vector CASCADE;'"
+    result = host.run(cmd)
+    assert result.rc == 0
+
+    # 2. Metadata Verification: Check if it's in pg_extension
+    check_cmd = "psql -t -c \"SELECT count(*) FROM pg_extension WHERE extname = 'vector';\""
+    count = host.run(check_cmd).stdout.strip()
+    assert count == "1"
+
+    # 3. Version Check (Metadata): Get the installed version string
+    version_cmd = "psql -t -c \"SELECT extversion FROM pg_extension WHERE extname = 'vector';\""
+    actual_version = host.run(version_cmd).stdout.strip()
+
+    # Assert version is not empty
+    assert len(actual_version) > 0
+    print(f"Detected pgvector Extension Version: {actual_version}")
+
+    # Check against your expected versions dictionary
+    expected_version = pg_docker_versions.get(f"percona-pgvector_{MAJOR_VER}", {}).get("extension_version")
+
+    assert actual_version == expected_version, f"Expected {expected_version}, but found {actual_version}"
+
+    # 4. Functional Check: Verify the 'vector' type is usable
+    # We cast a string to a vector and check its dimensions to ensure the C library is loaded
+    func_cmd = "psql -t -c \"SELECT vector_dims('[1,2,3]'::vector);\""
+    func_result = host.run(func_cmd)
+
+    assert func_result.rc == 0
+    assert func_result.stdout.strip() == "3"
+
+    # 5. Execute the drop command with CASCADE
+    cmd = "psql -c 'DROP EXTENSION IF EXISTS vector CASCADE;'"
+    result = host.run(cmd)
+    assert result.rc == 0
+
+    # 6. Verification: Ensure it no longer exists in pg_extension
+    check_cmd = "psql -t -c \"SELECT count(*) FROM pg_extension WHERE extname = 'vector';\""
+    count = host.run(check_cmd).stdout.strip()
+    assert count == "0"
+
+
+def test_patroni_version(host):
+    # 1. Run the patroni version command
+    # Output is usually in the format: "patroni 3.3.0"
+    cmd = "patroni --version"
+    result = host.run(cmd)
+
+    # 2. Check if the command exists and executed successfully
+    assert result.rc == 0, f"Patroni command failed or is not installed: {result.stderr}"
+
+    # 3. Parse the version number
+    # result.stdout might be "patroni 3.3.0", we want the second part
+    actual_version = result.stdout.strip()
+
+    print(f"Detected Patroni Version: {actual_version}")
+
+    # 4. Compare with the expected version from your dictionary
+    # Assuming the key follows your pattern: pg_docker_versions["patroni"]["binary_version"]
+    expected_version = pg_docker_versions.get("percona-patroni", {}).get("binary_version")
+
+    if expected_version:
+        assert actual_version == expected_version, f"Expected {expected_version}, but found {actual_version}"
+    else:
+        assert len(actual_version) > 0, "Patroni version could not be determined"
+
+
+def test_pgbackrest_version(host):
+    # 1. Run the pgbackrest version command
+    # Typical output: "pgBackRest 2.50"
+    cmd = "pgbackrest version"
+    result = host.run(cmd)
+
+    # 2. Check if the command exists and executed successfully
+    assert result.rc == 0, f"pgBackRest command failed: {result.stderr}"
+
+    # 3. Parse the version number
+    # We split the string and take the last element (e.g., "2.50")
+    actual_version = result.stdout.strip()
+
+    print(f"Detected pgBackRest Version: {actual_version}")
+
+    # 4. Compare with the expected version from your dictionary
+    expected_version = pg_docker_versions.get("percona-pgbackrest", {}).get("binary_version")
+
+    if expected_version:
+        assert actual_version == expected_version, f"Expected {expected_version}, but found {actual_version}"
+    else:
+        # Fallback: just ensure we got a valid-looking version string
+        assert len(actual_version) > 0 and actual_version[0].isdigit()
+
+
+def test_pg_tde_extension(host):
+    if int(MAJOR_VER) < 17:
+        pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
+
+    # 1. Execute the create command
+    cmd = "psql -c 'CREATE EXTENSION IF NOT EXISTS pg_tde CASCADE;'"
+    result = host.run(cmd)
+    assert result.rc == 0
+
+    # 2. Metadata Verification: Check if it's in pg_extension
+    check_cmd = "psql -t -c \"SELECT count(*) FROM pg_extension WHERE extname = 'pg_tde';\""
+    count = host.run(check_cmd).stdout.strip()
+    assert count == "1"
+
+    # 3. Version Check (Metadata): Get the installed version string
+    version_cmd = "psql -t -c \"SELECT extversion FROM pg_extension WHERE extname = 'pg_tde';\""
+    ext_sql_version = host.run(version_cmd).stdout.strip()
+
+    # Assert version is not empty
+    assert len(ext_sql_version) > 0
+    print(f"Detected pg_tde Extension Sql Version: {ext_sql_version}")
+
+    # Assert sql version of pg_tde
+    assert ext_sql_version == pg_docker_versions.get(f"percona-pg_tde{MAJOR_VER}", {}).get("ext_sql_version")
+
+    # 4. Functional Check: Verify the 'pg_tde' type is usable
+    # We cast a string to a pg_tde and check its dimensions to ensure the C library is loaded
+    func_cmd = "psql -t -c \"SELECT pg_tde_version();\""
+    actual_version = host.run(func_cmd).stdout.strip()
+
+    # Assert version is not empty
+    assert len(actual_version) > 0
+    print(f"Detected pg_tde Extension Version: {actual_version}")
+
+    # Check against your expected versions dictionary
+    expected_version = pg_docker_versions.get(f"percona-pg_tde{MAJOR_VER}", {}).get("extension_version")
+
+    assert actual_version == expected_version, f"Expected {expected_version}, but found {actual_version}"
+
+    # 5. Execute the drop command with CASCADE
+    cmd = "psql -c 'DROP EXTENSION IF EXISTS pg_tde CASCADE;'"
+    result = host.run(cmd)
+    assert result.rc == 0
+
+    # 6. Verification: Ensure it no longer exists in pg_extension
+    check_cmd = "psql -t -c \"SELECT count(*) FROM pg_extension WHERE extname = 'pg_tde';\""
+    count = host.run(check_cmd).stdout.strip()
+    assert count == "0"
+
+
+# def test_python3_etcd_version(host):
+#     # 1. Use Python to print the version of the 'etcd' module
+#     # We use 'import etcd' because that is the internal module name
+#     # for the python-etcd/python3-etcd package.
+#     cmd = "python3 -c 'import etcd; print(etcd.__version__)'"
+#     result = host.run(cmd)
+
+#     # 2. Check if the module is installed and the command succeeded
+#     assert result.rc == 0, f"python3-etcd is not installed or import failed: {result.stderr}"
+
+#     # 3. Parse the version number
+#     actual_version = result.stdout.strip()
+#     print(f"Detected python3-etcd Version: {actual_version}")
+
+#     # 4. Compare with the expected version from your dictionary
+#     expected_version = pg_docker_versions.get("python3_etcd", {}).get("binary_version")
+
+#     if expected_version:
+#         assert actual_version == expected_version, f"Expected {expected_version}, but found {actual_version}"
+#     else:
+#         assert len(actual_version) > 0, "python3-etcd version could not be determined"

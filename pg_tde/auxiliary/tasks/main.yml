@@ -1,0 +1,383 @@
+---
+  - name: Set Base Facts
+    set_fact:
+      go_version: "1.25.6"
+      major_version: "{{ lookup('env','VERSION') | regex_replace('ppg-(\\d+).*','\\1') }}"
+      install_from_packages: "{{ lookup('env', 'INSTALL_FROM_PACKAGES')}}"
+      full_version: "{{ lookup('env','VERSION') | regex_replace('ppg-','') }}"
+
+      # Convert "true"/"false" strings to actual Booleans
+      skip_testcase_enabled: "{{ lookup('env', 'SKIP_TESTCASE') | default('false') | bool }}"
+      build_from_source: "{{ lookup('env', 'BUILD_FROM_SOURCE') | default('false') | bool }}"
+
+      # Direct mappings
+      io_method: "{{ lookup('env', 'IO_METHOD') | default('worker') }}"
+      psp_repo: "{{ lookup('env', 'PSP_REPO') }}"
+      psp_branch: "{{ lookup('env', 'PSP_BRANCH') }}"
+      tde_repo: "{{ lookup('env', 'TDE_REPO') }}"
+      tde_branch: "{{ lookup('env', 'TDE_BRANCH') }}"
+      percona_qa_repo: "{{ lookup('env', 'PERCONA_QA_REPO') }}"
+      percona_qa_branch: "{{ lookup('env', 'PERCONA_QA_BRANCH') }}"
+      skip_testcase_list: "{{ lookup('env', 'TESTCASE_TO_SKIP') | default('') }}"
+      # ... include other env lookups here ...
+      go_version: "1.25.6"
+      go_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}"
+      cacheable: true
+
+  - name: Set Dependent Facts
+    set_fact:
+      # Now that go_version is saved, we can use it here
+      go_tarball: "go{{ go_version }}.linux-{{ go_arch }}"
+      go_download_url: "https://go.dev/dl/go{{ go_version }}.linux-{{ go_arch }}.tar.gz"
+      go_install_dir: "/usr/local"
+      cacheable: true
+
+  - name: Set PostgreSQL config path for Debian/Ubuntu
+    set_fact:
+      pg_conf: "/etc/postgresql/{{ major_version }}/main/postgresql.conf"
+      pg_config_path: "/usr/lib/postgresql/{{ major_version }}/bin/pg_config"
+      pg_bin_dir: "/usr/lib/postgresql/{{ major_version }}/bin"
+      pg_lib_dir: "/usr/lib/postgresql/{{ major_version }}/lib"
+      pg_install_dir: "/usr/lib/postgresql/{{ major_version }}"
+    when: ansible_os_family == "Debian" and install_from_packages
+
+  - name: Set PostgreSQL config path for RHEL/CentOS/Rocky
+    set_fact:
+      pg_conf: "/var/lib/pgsql/{{ major_version }}/data/postgresql.conf"
+      pg_config_path: "/usr/pgsql-{{ major_version }}/bin/pg_config"
+      pg_bin_dir: "/usr/pgsql-{{ major_version }}/bin"
+      pg_lib_dir: "/usr/pgsql-{{ major_version }}/lib"
+      pg_install_dir: "/usr/pgsql-{{ major_version }}"
+    when: ansible_os_family == "RedHat" and install_from_packages
+
+  - name: Set PostgreSQL config path for build from sources
+    set_fact:
+      pg_conf: "/opt/pgsql/data/postgresql.conf"
+      pg_config_path: "/opt/pgsql/bin/pg_config"
+      pg_bin_dir: "/opt/pgsql/bin"
+      pg_lib_dir: "/opt/pgsql/lib"
+      pg_install_dir: "/opt/pgsql"
+    when: not install_from_packages
+
+  - name: Verify Fact Extraction
+    debug:
+      msg: "Version: {{ major_version }}, Arch: {{ go_arch }}, Skip? {{ skip_testcase_enabled }}"
+
+  - name: End play on RHEL 8 and Rocky 8 for pg-18>= and io_uring, as uring not supported
+    meta: end_play
+    when:
+      - (major_version | int) >= 18
+      - io_method in ['io_uring']
+      - >
+        (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'Rocky' and ansible_facts['distribution_major_version'] | int == 8)
+        or
+        (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'RedHat' and ansible_facts['distribution_major_version'] | int == 8)
+
+  - name: Configure repository
+    ansible.builtin.include_tasks: ../../../../tasks/enable_repo.yml
+
+  - name: Include Redhat tasks file 
+    include_tasks: 
+      file: "redhat_tasks.yml"
+    when: ansible_os_family == 'RedHat'
+
+  - name: Include Debian tasks file 
+    include_tasks: 
+      file: "debian_tasks.yml"
+    when: ansible_os_family == 'Debian'
+
+  - name: Include Docker setup file
+    include_tasks:
+      file: "install_docker.yml"
+
+  - name: Get ulimit results
+    become_user: postgres
+    ansible.builtin.shell: ulimit -a
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Ensure at least 4 GB swap is configured
+    become: true
+    block:
+      - name: Check if swap is already enabled
+        ansible.builtin.command: swapon --noheadings --show=SIZE
+        register: swap_status
+        changed_when: false
+        failed_when: false
+
+      - name: Set fact for existing swap size in MB
+        ansible.builtin.set_fact:
+          swap_size_mb: >-
+            {{ ((swap_status.stdout | regex_findall('\\d+') | map('int') | sum) / 1048576) | int }}
+
+      - name: Create 4G swap file if not present or too small
+        ansible.builtin.command: fallocate -l 4G /swapfile
+        args:
+          creates: /swapfile
+        when: (swap_size_mb | int) < 3000
+
+      - name: Secure swap file permissions
+        ansible.builtin.file:
+          path: /swapfile
+          owner: root
+          group: root
+          mode: '0600'
+        when: (swap_size_mb | int) < 3000
+
+      - name: Format swap file
+        ansible.builtin.command: mkswap /swapfile
+        when: (swap_size_mb | int) < 3000
+
+      - name: Enable swap
+        ansible.builtin.command: swapon /swapfile
+        when: (swap_size_mb | int) < 3000
+
+      - name: Persist swap in /etc/fstab
+        ansible.builtin.lineinfile:
+          path: /etc/fstab
+          line: '/swapfile none swap sw 0 0'
+          state: present
+        when: (swap_size_mb | int) < 3000
+
+  - name: Verify swap is active
+    ansible.builtin.command: free -h
+    register: swap_info
+    changed_when: false
+
+  - ansible.builtin.debug:
+      msg: "Swap configured successfully. Current memory: {{ swap_info.stdout_lines }}"
+
+  - name: Set stack ulimit for a specific user
+    become: true
+    pam_limits:
+      domain: postgres  # Replace with the target username
+      limit_type: "-"         # Applies to both soft and hard limits
+      limit_item: stack
+      value: 102400            # Desired stack size in KB
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Check if io_uring is disabled
+    command: cat /proc/sys/kernel/io_uring_disabled
+    register: uring_disabled
+    ignore_errors: true
+    when:
+      - (major_version | int) >= 18
+      - io_method in ['io_uring']
+      - ansible_os_family == 'RedHat'
+
+  - debug: var=uring_disabled.stdout_lines
+    when:
+      - (major_version | int) >= 18
+      - io_method in ['io_uring']
+      - ansible_os_family == 'RedHat'
+
+  - name: Enable io_uring if possible
+    when: uring_disabled.stdout is defined and uring_disabled.stdout | int > 0
+    become: true
+    sysctl:
+      name: kernel.io_uring_disabled
+      value: 0
+      state: present
+    when:
+      - (major_version | int) >= 18
+      - io_method in ['io_uring']
+      - ansible_os_family == 'RedHat'
+
+  - name: Check kernel version
+    command: uname -r
+    register: kernel_version
+    changed_when: false
+    when:
+      - (major_version | int) >= 18
+      - io_method in ['io_uring']
+      - ansible_os_family == 'RedHat'
+
+  - debug:
+      msg: "Kernel version is {{ kernel_version.stdout }}"
+    when:
+      - (major_version | int) >= 18
+      - io_method in ['io_uring']
+      - ansible_os_family == 'RedHat'
+
+  - name: Print all facts
+    debug:
+      var: ansible_facts
+
+  - name: Ensure postgres user has unlimited core dump limit
+    become: true
+    community.general.pam_limits:
+      domain: postgres
+      limit_item: core
+      limit_type: "{{ item }}"
+      value: unlimited
+    loop:
+      - soft
+      - hard
+
+  - name: Get ulimit results
+    become_user: postgres
+    ansible.builtin.shell: ulimit -a
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Install OS-specific prerequisites
+    package:
+      name:
+        - curl
+        - tar
+      state: present
+
+  - name: Check if Go is already installed
+    shell: "/usr/local/go/bin/go version | grep -q 'go{{ go_version }}'"
+    register: go_exists
+    ignore_errors: true
+    changed_when: false
+
+  - name: Installation Block
+    when: go_exists.rc != 0
+    block:
+      - name: Download Go binary
+        get_url:
+          url: "{{ go_download_url }}"
+          dest: "/tmp/{{ go_tarball }}"
+          mode: '0644'
+
+      - name: Remove old Go installation
+        file:
+          path: "{{ go_install_dir }}/go"
+          state: absent
+
+      - name: Extract Go tarball
+        unarchive:
+          src: "/tmp/{{ go_tarball }}"
+          dest: "{{ go_install_dir }}"
+          remote_src: yes
+
+  - name: Add Go to system-wide PATH
+    copy:
+      dest: /etc/profile.d/golang.sh
+      content: |
+        export PATH=$PATH:/usr/local/go/bin
+        export GOPATH=$HOME/go
+        export PATH=$PATH:$GOPATH/bin
+      mode: '0644'
+
+  - name: Clean up tarball
+    file:
+      path: "/tmp/{{ go_tarball }}"
+      state: absent
+
+  # =================================================
+  # Clone,Build and install, Postgres/PSP with pg_tde
+  # =================================================
+
+  - name: Build from sources, PSP and TDE
+    include_tasks: 
+      file: "build_from_source.yml"
+    when: not install_from_packages
+
+  # =================================================
+  # Install from packages, both Postgres/PSP and pg_tde
+  # =================================================
+
+  - name: Install on RHEL
+    include_tasks: 
+      file: "install_from_packages_rhel.yml"
+    when: install_from_packages and ansible_os_family == 'RedHat'
+
+  - name: Install on Debian
+    include_tasks: 
+      file: "install_from_packages_deb.yml"
+    when: install_from_packages and ansible_os_family == 'Debian'
+
+  # =============================
+  # Clone Percona-qa sources
+  # =============================
+
+  - name: Clone Percona-qa sources
+    git:
+      repo: "{{ percona_qa_repo }}"
+      version: "{{ percona_qa_branch }}"
+      dest: /tmp/percona-qa
+    become: true          # Required for become_user to work
+    become_user: postgres
+    register: clone_results
+
+  - name: Debug git results
+    debug: 
+      msg: "Cloned version: {{ clone_results.after | default('N/A') }}"
+
+  # =============================
+  # Remove testcases to be skipped
+  # =============================
+  #- name: Remove skipped test cases
+  #  ansible.builtin.file:
+  #    path: "/tmp/percona-qa/postgresql/automation/tests/{{ item | trim }}"
+  #    state: absent
+  #  # split(',') handles single items (no comma) and lists (with comma) identically
+  #  loop: "{{ skip_testcase_list.split(',') }}"
+  #  when:
+  #    - skip_testcase_enabled                 # Already a boolean from your variable definition
+  #    - item | trim | length > 0              # Safety check for empty list items
+  #  become: true
+
+  # =============================
+  # Run Percona-qa sources tests
+  # =============================
+  - name: Run check tde tests
+    become: true
+    become_user: postgres
+    shell: "./test_runner.sh --server_build_path {{ pg_install_dir }} --skip_test {{ skip_testcase_list }} --io_method {{ io_method }}"
+    args:
+      executable: /bin/bash
+      chdir: "/tmp/percona-qa/postgresql/automation/wrapper"
+    environment:
+      # Prepending custom paths to the existing PATH
+      PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:/usr/local/go/bin:{{ ansible_env.PATH | default('/usr/local/bin:/usr/bin:/bin') }}"
+      LD_LIBRARY_PATH: "{{ pg_lib_dir }}"
+      PG_TEST_PORT_DIR: "/tmp/pg_tde_port"
+      INSTALL_DIR: "{{ pg_install_dir }}"
+      PGCTLTIMEOUT: "120"
+      PG_TEST_TIMEOUT_DEFAULT: "300"
+    ignore_errors: yes
+    register: regression
+
+  - name: Extract failed log paths
+    set_fact:
+      failed_log_paths: "{{ regression.stdout | regex_findall('❌ FAIL:.*\\n\\s+Log:\\s+(.*)') }}"
+
+  - name: Read last 50 lines of failed logs
+    shell: "tail -n 50 {{ item }}"
+    loop: "{{ failed_log_paths }}"
+    register: failed_log_outputs
+    become: true
+    become_user: postgres
+    ignore_errors: yes
+    when: failed_log_paths | length > 0
+
+  - name: Display failed test logs
+    debug:
+      msg: 
+        - "--------------------------------------------------"
+        - "TEST LOG: {{ item.item }} ❌ FAIL"
+        - "--------------------------------------------------"
+        - "{{ item.stdout_lines }}"
+    loop: "{{ failed_log_outputs.results }}"
+    # Only run if there are actual results in the list
+    when: failed_log_outputs.results | default([]) | length > 0
+
+  - name: Show stderr if test fails
+    debug:
+      var: regression.stderr_lines
+    when: 
+      - failed_log_outputs.results | default([]) | length > 0
+
+  - name: Fail the playbook if tde tests failed
+    fail:
+      msg: "TDE auxiliary tests failed"
+    when: 
+      - failed_log_outputs.results | default([]) | length > 0

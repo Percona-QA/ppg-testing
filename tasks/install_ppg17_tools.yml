@@ -408,6 +408,54 @@
         - percona-pg-gather
     when: ansible_os_family == "Debian"
 
+  - name: Install pgvector packages RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-pgvector_17
+      - percona-pgvector_17-debuginfo
+      - percona-pgvector_17-debugsource
+      - percona-pgvector_17-llvmjit
+    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('17.2', '>=', strict=True))
+
+  - name: Install pgvector packages Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgresql-17-pgvector
+    when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('17.2', '>=', strict=True))
+
+  - name: Install pg_tde packages RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-pg_tde17
+      - percona-pg_tde17-devel
+      - percona-pg_tde17-debugsource
+      - percona-pg_tde17-debuginfo
+    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('17.7', '>=', strict=True))
+
+  - name: Install pg_tde packages Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-pg-tde17
+      - percona-pg-tde17-client
+      - percona-pg-tde17-dbgsym
+    when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('17.7', '>=', strict=True))
+
   # - name: Add extensions to postgresql.conf for Debian
   #   lineinfile:
   #     path: /etc/postgresql/17/main/postgresql.conf
@@ -423,14 +471,14 @@
   - name: Add extensions to postgresql.conf for Debian
     lineinfile:
       path: /etc/postgresql/17/main/postgresql.conf
-      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
-    when: ansible_os_family == "Debian"
+      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, pg_tde'
+    when: (ansible_os_family == "Debian")
 
   - name: Add extensions to postgresql.conf for RHEL
     lineinfile:
       path: /var/lib/pgsql/17/data/postgresql.conf
-      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
-    when: ansible_os_family == "RedHat"
+      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, pg_tde'
+    when: (ansible_os_family == "RedHat")
 
   - name: Remove pg_hba.conf debian
     file:
@@ -503,54 +551,6 @@
       state: restarted
       enabled: yes
     when: ansible_os_family == "RedHat"
-
-  - name: Install pgvector packages RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - percona-pgvector_17
-      - percona-pgvector_17-debuginfo
-      - percona-pgvector_17-debugsource
-      - percona-pgvector_17-llvmjit
-    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('17.2', '>=', strict=True))
-
-  - name: Install pgvector packages Debian
-    apt:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - percona-postgresql-17-pgvector
-    when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('17.2', '>=', strict=True))
-
-  - name: Install pg_tde packages RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - percona-pg_tde17
-      - percona-pg_tde17-devel
-      - percona-pg_tde17-debugsource
-      - percona-pg_tde17-debuginfo
-    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('17.7', '>=', strict=True))
-
-  - name: Install pg_tde packages Debian
-    apt:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - percona-pg-tde17
-      - percona-pg-tde17-client
-      - percona-pg-tde17-dbgsym
-    when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('17.7', '>=', strict=True))
 
   - name: Install patroni related packages Debian
     apt:

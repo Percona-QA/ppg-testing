@@ -816,6 +816,40 @@ def test_tde_binaries_present(host, binary):
     assert file.mode & 0o111, f"{binary} exists but is not executable at {bin_path}"
 
 
+@pytest.mark.skipif(int(MAJOR_VER) < 17, reason=f"pg_tde requires PG 17+, found {MAJOR_VER}")
+def test_pg_tde_extension(host,get_psql_binary_path):
+    # Use -t (tuples only) and -A (unaligned) for bulletproof parsing
+    psql_base = f"{get_psql_binary_path} -Atc "
+
+    with host.sudo("postgres"):
+        try:
+            # 1. Execute the create command
+            create_res = host.run(f"{psql_base} 'CREATE EXTENSION IF NOT EXISTS pg_tde CASCADE;'")
+            assert create_res.rc == 0, f"Failed to create pg_tde: {create_res.stderr}"
+
+            # 2. Metadata Verification (Existence)
+            count = host.run(f"{psql_base} \"SELECT count(*) FROM pg_extension WHERE extname = 'pg_tde';\"").stdout.strip()
+            assert count == "1", "pg_tde extension not found in pg_extension table"
+
+            # 3. Version Check (Catalog Metadata)
+            sql_version = host.run(f"{psql_base} \"SELECT extversion FROM pg_extension WHERE extname = 'pg_tde';\"").stdout.strip()
+            expected_sql_v = pg_versions.get('PG_TDE_sql_version')
+            assert sql_version == expected_sql_v, f"SQL version mismatch. Expected {expected_sql_v}, found {sql_version}"
+
+            # 4. Functional Check (C-Library Version)
+            # This verifies the shared library is actually loaded into memory
+            lib_version = host.run(f"{psql_base} \"SELECT pg_tde_version();\"").stdout.strip()
+            expected_lib_v = pg_versions.get('PG_TDE_version')
+            assert lib_version == expected_lib_v, f"Library version mismatch. Expected {expected_lib_v}, found {lib_version}"
+
+        finally:
+            # 5. Cleanup (The 'finally' block ensures this runs even if assertions above fail)
+            drop_res = host.run(f"{psql_base} 'DROP EXTENSION IF EXISTS pg_tde CASCADE;'")
+
+            # 6. Final Verification
+            final_count = host.run(f"{psql_base} \"SELECT count(*) FROM pg_extension WHERE extname = 'pg_tde';\"").stdout.strip()
+            assert final_count == "0", "Failed to drop pg_tde extension cleanly"
+
 # f"{get_server_path}/share/extension/postgis.control",
 # f"{get_server_path}/lib/postgis-3.so",]
 # sql_dir = f"{get_server_path}/share/extension/"

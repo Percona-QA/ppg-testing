@@ -117,10 +117,17 @@
     command: dnf module enable llvm-toolset -y
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
-  - name: Add extensions to postgresql.conf
+  - name: Configure shared_preload_libraries for PostgreSQL < 17
     lineinfile:
-      path: "{{data_dir}}/postgresql.conf"
-      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
+      path: "{{ data_dir }}/postgresql.conf"
+      line: "shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'"
+    when: major_version | int < 17
+
+  - name: Configure shared_preload_libraries for PostgreSQL 17+ (includes pg_tde)
+    lineinfile:
+      path: "{{ data_dir }}/postgresql.conf"
+      line: "shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, pg_tde'"
+    when: major_version | int >= 17
 
   - name: Remove pg_hba.conf
     file:

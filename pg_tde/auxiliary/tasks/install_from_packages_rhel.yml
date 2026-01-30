@@ -1,0 +1,286 @@
+---
+  - name: setup epel release
+    yum:
+      name: epel-release
+      update_cache: yes
+      state: present
+
+  - name: Clean dnf RHEL8
+    become: true
+    command: dnf clean all -y
+    when: ansible_distribution_major_version == "8"
+
+  - name: Enable llvm-toolset dnf module for RHEL8
+    become: true
+    command: dnf module enable llvm-toolset -y
+    when: ansible_distribution_major_version == "8"
+
+  # - name: install tools
+  #   yum:
+  #     name: "{{ packages }}"
+  #     state: latest
+  #     update_cache: yes
+  #   vars:
+  #     packages:
+  #     - clang
+  #     - zlib-devel
+  #     - readline-devel
+  #     - gcc
+  #     - lz4
+  #     - lz4-devel
+  #     - python3
+  #     - krb5-devel
+  #     - openssl-devel
+  #     - pam-devel
+  #     - libxml2-devel
+  #     - libxslt-devel
+  #     - openldap-devel
+  #     - libuuid-devel
+  #     - systemd-devel
+  #     - tcl-devel
+  #     - python3-devel
+  #     - libicu-devel
+  #     - libzstd
+  #     - libzstd-devel
+  #     - llvm
+  #     - llvm-toolset
+  #     - llvm-devel
+  #     - clang-devel
+  #     - vim
+  #     - git
+  #     - perl-ExtUtils*
+  #     - docbook-xsl
+  #     - perl-Test-Simple
+  #     - perl-CPAN
+  #     - libcurl-devel
+  #     - perl-App-cpanminus
+  #     - make
+  #     - autoconf
+  #     - json-c-devel
+  #     - python3-pip
+  #     - wget
+  #     - perl-LWP-Protocol-https
+  #     - perl-JSON
+  #     - jq
+  #     - numactl-devel
+
+  - name: Display OS and version (Ansible facts)
+    ansible.builtin.debug:
+      msg:
+        - "OS Family      : {{ ansible_os_family }}"
+        - "Distribution   : {{ ansible_distribution }}"
+        - "Version        : {{ ansible_distribution_version }}"
+        - "Major Version  : {{ ansible_distribution_major_version }}"
+        - "Kernel         : {{ ansible_kernel }}"
+
+  - name: Install liburing packages 
+    yum:
+      name:
+        - liburing
+        - liburing-devel
+      state: latest
+      update_cache: yes
+
+  - name: install packages specific to rhel 8 and 9
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - lcov
+      - prename
+    when: ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
+
+  - name: Install kernel-modules-extra on RHEL 10
+    become: true
+    dnf:
+      name: "kernel-modules-extra-{{ ansible_kernel }}"
+      state: present
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+  - name: Ensure br_netfilter module is loaded
+    become: true
+    community.general.modprobe:
+      name: br_netfilter
+      state: present
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+  - name: CLANG Version
+    command: clang --version
+    ignore_errors: true
+    register: results
+
+  - name: Disable dnf module for RHEL8
+    become: true
+    command: dnf module disable postgresql -y
+    when: ansible_distribution_major_version == "8"
+
+  - name: install Percona Platform for PostgreSQL rpm packages for RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-postgresql-client-common
+      - percona-postgresql-common
+      - percona-postgresql{{ postgres_version }}
+      - percona-postgresql{{ postgres_version }}-contrib
+      - percona-postgresql{{ postgres_version }}-devel
+      - percona-postgresql{{ postgres_version }}-libs
+      - percona-postgresql{{ postgres_version }}-plperl
+      - percona-postgresql{{ postgres_version }}-plpython3
+      - percona-postgresql{{ postgres_version }}-pltcl
+      - percona-postgresql{{ postgres_version }}-server
+      - percona-postgresql{{ postgres_version }}-test
+      - percona-postgresql{{ postgres_version }}-llvmjit
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+    when: ansible_distribution_major_version == "8"
+
+  - name: install Percona Platform for PostgreSQL rpm packages for RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-postgresql-client-common
+      - percona-postgresql-common
+      - percona-postgresql{{ postgres_version }}
+      - percona-postgresql{{ postgres_version }}-contrib
+      - percona-postgresql{{ postgres_version }}-devel
+      - percona-postgresql{{ postgres_version }}-libs
+      - percona-postgresql{{ postgres_version }}-plperl
+      - percona-postgresql{{ postgres_version }}-plpython3
+      - percona-postgresql{{ postgres_version }}-pltcl
+      - percona-postgresql{{ postgres_version }}-server
+      - percona-postgresql{{ postgres_version }}-test
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+    when: ansible_distribution_major_version == "9" or ansible_distribution_major_version == "10"
+
+  - name: Install Percona PostgreSQL development packages
+    ansible.builtin.dnf:
+      name: "{{ 'percona-postgresql-server-dev-all' if (full_version is version('17.4', '<=')) else 'percona-postgresql-common-dev' }}"
+      state: present
+      update_cache: yes
+    when: ansible_os_family == "RedHat"
+
+  - name: Install pg_tde packages RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+      - percona-pg_tde{{ postgres_version }}
+      - percona-pg_tde{{ postgres_version }}-devel
+      - percona-pg_tde{{ postgres_version }}-debugsource
+      - percona-pg_tde{{ postgres_version }}-debuginfo
+
+  - name: Initialize Postgres RHEL
+    become: true
+    command: /usr/pgsql-{{ major_version }}/bin/postgresql-{{ major_version }}-setup initdb
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+  - name: Start Postgres RHEL
+    service:
+      name: postgresql-{{ major_version }}
+      state: started
+      enabled: yes
+
+  - name: Check if postgres processes are running
+    command: ps aux
+    register: ps_output
+
+  - name: Show postgres processes
+    debug:
+      msg: "{{ ps_output.stdout_lines | select('search', 'postgres') | list }}"
+
+  - name: List postgres socket files
+    shell: ls -l /tmp/.s.PGSQL* || true
+    register: socket_output
+
+  - name: Show postgres socket files
+    debug:
+      var: socket_output.stdout_lines
+
+  - name: Show PostgreSQL unix_socket_directories
+    shell: |
+      psql -d postgres -t -A -c "SHOW unix_socket_directories;"
+    become: true
+    become_user: postgres
+    register: socket_dir
+
+  - name: Print PostgreSQL socket directory
+    debug:
+      var: socket_dir.stdout
+
+  - name: Set stack ulimit for a specific user
+    become: true
+    pam_limits:
+      domain: postgres  # Replace with the target username
+      limit_type: "-"         # Applies to both soft and hard limits
+      limit_item: stack
+      value: 102400            # Desired stack size in KB
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Allow postgres user to create core dumps
+    community.general.pam_limits:
+      domain: postgres
+      limit_type: hard
+      limit_item: core
+      value: unlimited
+    register: results
+    when: ansible_distribution_major_version == "10"
+
+  - debug: var=results.stdout_lines
+    when: ansible_distribution_major_version == "10"
+
+  - name: Allow postgres user to create core dumps (soft)
+    community.general.pam_limits:
+      domain: postgres
+      limit_type: soft
+      limit_item: core
+      value: unlimited
+    register: results
+    when: ansible_distribution_major_version == "10"
+
+  - debug: var=results.stdout_lines
+    when: ansible_distribution_major_version == "10"
+
+  - name: Get ulimit results
+    become_user: postgres
+    ansible.builtin.shell: ulimit -a
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Run psql show default_table_access_method
+    shell: |
+      psql -c "show default_table_access_method;"
+    become_user: postgres
+    args:
+      executable: /bin/bash
+    environment:
+      PGHOST: "/run/postgresql, /tmp"
+      PGPORT: "5432"
+      LANG: "C.UTF-8"
+    register: psql_result
+    when: ansible_os_family == 'RedHat'
+
+  - name: Show psql output
+    debug:
+      var: psql_result.stdout_lines
+
+  - name: Show psql output
+    debug:
+      var: psql_result.stderr_lines
