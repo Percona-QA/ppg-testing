@@ -258,13 +258,13 @@
           - pandoc
       when: ansible_os_family == "Debian"
 
-    - name: Setup SSH keys CentOS
+    - name: Setup SSH keys RedHat
       ansible.posix.authorized_key:
-        user: centos
+        user: ec2-user
         key: "{{ lookup('file', 'public_keys') }}"
         state: present
         exclusive: False
-      when: ansible_distribution == "CentOS"
+      when: ansible_distribution == "RedHat"
 
     - name: Setup SSH keys for Oracle Linux or Amazon
       ansible.posix.authorized_key:
@@ -272,7 +272,7 @@
         key: "{{ lookup('file', 'public_keys') }}"
         state: present
         exclusive: False
-      when: ansible_distribution == "OracleLinux" and ansible_distribution_major_version|int == 8
+      when: ansible_distribution == "OracleLinux"
 
     - name: Setup SSH keys for Rocky Linux or Amazon
       ansible.posix.authorized_key:
