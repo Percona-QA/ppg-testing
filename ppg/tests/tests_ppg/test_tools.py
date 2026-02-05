@@ -483,21 +483,21 @@ def test_postgis_package_version(host):
         ]
     else:
         package_names = [
-            f"percona-postgis35_{MAJOR_VER}",
-            f"percona-postgis35_{MAJOR_VER}-client",
-            f"percona-postgis35_{MAJOR_VER}-debuginfo",
-            f"percona-postgis35_{MAJOR_VER}-devel",
-            f"percona-postgis35_{MAJOR_VER}-docs",
-            f"percona-postgis35_{MAJOR_VER}-gui",
-            f"percona-postgis35_{MAJOR_VER}-llvmjit",
-            f"percona-postgis35_{MAJOR_VER}-utils",
+            f"percona-postgis33_{MAJOR_VER}",
+            f"percona-postgis33_{MAJOR_VER}-client",
+            f"percona-postgis33_{MAJOR_VER}-debuginfo",
+            f"percona-postgis33_{MAJOR_VER}-devel",
+            f"percona-postgis33_{MAJOR_VER}-docs",
+            f"percona-postgis33_{MAJOR_VER}-gui",
+            f"percona-postgis33_{MAJOR_VER}-llvmjit",
+            f"percona-postgis33_{MAJOR_VER}-utils",
         ]
 
         # Add version-specific debug packages
         if release.startswith(("8", "9")):
             package_names.extend([
-                f"percona-postgis35_{MAJOR_VER}-client-debuginfo",
-                f"percona-postgis35_{MAJOR_VER}-gui-debuginfo",
+                f"percona-postgis33_{MAJOR_VER}-client-debuginfo",
+                f"percona-postgis33_{MAJOR_VER}-gui-debuginfo",
             ])
 
     for pkg_name in package_names:
