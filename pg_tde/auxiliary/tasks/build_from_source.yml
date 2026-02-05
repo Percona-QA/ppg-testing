@@ -75,8 +75,7 @@
       chdir: /tmp/postgres
       executable: /bin/bash
     become_user: postgres
-    when:
-      - io_method in ['worker', 'sync']
+    when: (io_method in ['worker', 'sync']) or (major_version | int == 17)
     register: results
 
   - debug: var=results.stdout_lines
