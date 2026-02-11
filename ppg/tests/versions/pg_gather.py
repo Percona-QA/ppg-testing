@@ -54,4 +54,9 @@ pg_gather = {
     "16.11": {"version": "32", "sql_file_version": "32"},
     "17.7": {"version": "32", "sql_file_version": "32"},
     "18.1": {"version": "32", "sql_file_version": "32"},
+    "14.21": {"version": "32", "sql_file_version": "32"},
+    "15.16": {"version": "32", "sql_file_version": "32"},
+    "16.12": {"version": "32", "sql_file_version": "32"},
+    "17.8": {"version": "32", "sql_file_version": "32"},
+    "18.2": {"version": "32", "sql_file_version": "32"},
 }

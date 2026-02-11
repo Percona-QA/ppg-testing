@@ -1138,6 +1138,35 @@ def test_llvmjit_files_present(host):
         assert f.size > 0, f"File {path} exists but is empty!"
 
 
+def test_pg_oidc_validator_package_version(host):
+    # 1. Check Major Version
+    major = int(settings.MAJOR_VER)
+    if major != 18:
+        pytest.skip(f"pg_oidc_validator supported only on PG-18 (got {major})")
+
+    # 2. Check Specific Minor Version (18.2)
+    current_ver_str = pg_versions.get('version', '0.0')
+    # Use packaging.version or simple float conversion
+    if version.parse(current_ver_str) < version.parse("18.2"):
+        pytest.skip(f"pg_oidc_validator requires PG 18.2+, found {current_ver_str}")
+
+    expected_version = pg_versions.get("PG_OIDC_VALIDATOR_package_version")
+    if not expected_version:
+        pytest.skip("PG_OIDC_VALIDATOR_package_version not defined in pg_versions.")
+
+    # Determine package name based on OS family
+    dist = host.system_info.distribution.lower()
+    pkg_name = "percona-pg-oidc-validator18" if dist in ["ubuntu", "debian"] else "percona-pg_oidc_validator18"
+
+    pkg = host.package(pkg_name)
+    assert pkg.is_installed, f"Package {pkg_name} is not installed"
+
+    # Using 'in' allows for build metadata variations (e.g., 1.0.1-1.el8)
+    assert expected_version in pkg.version, (
+        f"Version mismatch for {pkg_name}: expected {expected_version}, got {pkg.version}"
+    )
+
+
 # def test_pg_telemetry_file_pillar_version(host):
 #     output = host.run("cat /usr/local/percona/telemetry/pg/*.json | grep -i pillar_version")
 #     assert output.rc == 0, output.stderr
