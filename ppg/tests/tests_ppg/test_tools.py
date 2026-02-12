@@ -615,7 +615,7 @@ def test_postgis_binary_presence(host):
             #    postgis_binaries_path = "/usr/bin"
             #else:
             #    postgis_binaries_path = f"/usr/pgsql-{MAJOR_VER}/bin"
-            if float(pg_versions['postgis_version']) == 3.5.4:
+            if str(pg_versions['postgis_version']) == "3.5.4":
                 postgis_binaries_path = "/usr/bin"
             else:
                 postgis_binaries_path = f"/usr/pgsql-{MAJOR_VER}/bin"
