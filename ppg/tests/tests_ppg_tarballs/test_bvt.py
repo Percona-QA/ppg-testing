@@ -416,34 +416,23 @@ def test_pg_config_flags(host, get_server_bin_path, flag):
 
 def test_no_pyc_files_in_install_path(host):
     """
-    Ensures that no compiled Python (.pyc) files exist in the INSTALL_PATH.
-    .pyc files can cause issues in production deployments or packaging.
+    Checks for .pyc files INSIDE the remote host using Testinfra.
     """
-    # Retrieve the path from your settings or environment
-    # Using getattr or a default to prevent crash if undefined
-    install_path_str = getattr(settings, 'INSTALL_PATH', None)
+    if not INSTALL_PATH:
+        pytest.skip("INSTALL_PATH is not defined.")
 
-    if not install_path_str:
-        pytest.skip("INSTALL_PATH is not defined. Skipping .pyc check.")
+    # 1. Use host.file to check directory existence on the remote side
+    if not host.file(INSTALL_PATH).is_directory:
+        pytest.fail(f"Remote path does not exist or is not a directory: {INSTALL_PATH}")
 
-    install_path = Path(install_path_str)
+    # 2. Use the 'find' command on the remote host to search recursively
+    # -name "*.pyc" finds the files; -print0 handles weird filenames
+    cmd = host.run(f"find {INSTALL_PATH} -name '*.pyc'")
+    
+    # 3. Process results
+    found_files = cmd.stdout.strip().splitlines()
 
-    # 1. Check if directory exists
-    if not install_path.is_dir():
-        pytest.fail(f"INSTALL_PATH does not exist or is not a directory: {install_path}")
-
-    # 2. Search for .pyc files recursively using glob
-    # rglob matches the pattern in the directory and all subdirectories
-    pyc_files = list(install_path.rglob("*.pyc"))
-
-    # 3. Fail if the list is not empty
-    if pyc_files:
-        # We format the list of found files for a clear error message
-        found_list = "\n".join([str(p) for p in pyc_files[:10]]) # Limit display to 10
-        if len(pyc_files) > 10:
-            found_list += f"\n... and {len(pyc_files) - 10} more."
-
-        pytest.fail(
-            f"Found {len(pyc_files)} .pyc files in {install_path}. "
-            f"Compiled files should be removed before deployment:\n{found_list}"
-        )
+    if found_files:
+        found_list = "\n".join(found_files[:10])
+        pytest.fail(f"Found {len(found_files)} .pyc files on remote host in {INSTALL_PATH}:\n{found_list}")
+    assert True, "No .pyc files found in INSTALL_PATH"
