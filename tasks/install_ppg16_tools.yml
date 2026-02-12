@@ -325,26 +325,109 @@
         - libpgpool2
     when: ansible_os_family == "Debian"
 
-  - name: Fix PgPool paths for Debian/Ubuntu
-    block:
-      - name: Update configuration file paths
-        ansible.builtin.replace:
-          path: "/etc/pgpool2/pgpool.conf"
-          regexp: '^(#\s*)?{{ item.key }}\s*=.*'
-          replace: "{{ item.key }} = '{{ item.value }}'"
-        loop:
-          - { key: 'memq_cache_lock_file', value: '/tmp/memq_lock_file' }
-          - { key: 'pgpool_status_file', value: '/tmp/pgpool_status' }
-        notify: restart pgpool
+#- name: Fix pgpool2 4.7 permission paths after package install
+#  become: true
+#  block:
+#
+#    - name: Ensure pgpool runtime directories exist
+#      file:
+#        path: "{{ item }}"
+#        state: directory
+#        owner: postgres
+#        group: postgres
+#        mode: "0755"
+#      loop:
+#        - /var/run/pgpool
+#        - /var/lib/pgpool
+#
+#    - name: Fix backend_status_file path
+#      lineinfile:
+#        path: /etc/pgpool2/pgpool.conf
+#        regexp: '^\s*backend_status_file\s*='
+#        line: "backend_status_file = '/var/lib/pgpool/pgpool_status'"
+#        backup: yes
+#
+#    - name: Fix memqcache_lock_file path
+#      lineinfile:
+#        path: /etc/pgpool2/pgpool.conf
+#        regexp: '^\s*memqcache_lock_file\s*='
+#        line: "memqcache_lock_file = '/var/run/pgpool/memq_lock_file'"
+#
+#    # Recommended unless you explicitly use memqcache
+#    - name: Disable memory cache to avoid lock file issues
+#      lineinfile:
+#        path: /etc/pgpool2/pgpool.conf
+#        regexp: '^\s*memory_cache_enabled\s*='
+#        line: "memory_cache_enabled = off"
+#
+#  when:
+#    - ansible_os_family == "Debian"
+#    - pg_version_to_install | string is version('16.12', '>=', strict=True)
 
-      - name: Force systemd to use the explicit config path
-        ansible.builtin.lineinfile:
-          path: /usr/lib/systemd/system/percona-pgpool2.service
-          regexp: '^ExecStart='
-          line: "ExecStart=/usr/sbin/pgpool -n -f /etc/pgpool2/pgpool.conf"
-        notify: 
-          - reload systemd
-    when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('16.12', '>=', strict=True))
+  - name: Fix pgpool2 4.7 permission bug + systemd override
+    become: true
+    when:
+      - ansible_os_family == "Debian"
+      - pg_version_to_install | string is version('16.12', '>=', strict=True)
+    block:
+
+      - name: Check pgpool config exists
+        stat:
+          path: /etc/pgpool2/pgpool.conf
+        register: pgpool_conf
+
+      - name: Apply pgpool permission fixes
+        when: pgpool_conf.stat.exists | default(false)
+        block:
+
+          - name: Ensure pgpool runtime dirs exist
+            file:
+              path: "{{ item }}"
+              state: directory
+              owner: postgres
+              group: postgres
+              mode: "0755"
+            loop:
+              - /var/run/pgpool
+              - /var/lib/pgpool
+
+          - name: Fix backend_status_file if broken
+            lineinfile:
+              path: /etc/pgpool2/pgpool.conf
+              regexp: '^\s*backend_status_file\s*=\s*''/pgpool_status'''
+              line: "backend_status_file = '/var/lib/pgpool/pgpool_status'"
+              backup: yes
+
+          - name: Fix memqcache_lock_file if broken
+            lineinfile:
+              path: /etc/pgpool2/pgpool.conf
+              regexp: '^\s*memqcache_lock_file\s*=\s*''/memq_lock_file'''
+              line: "memqcache_lock_file = '/var/run/pgpool/memq_lock_file'"
+
+          - name: Disable memory cache (safe default)
+            lineinfile:
+              path: /etc/pgpool2/pgpool.conf
+              regexp: '^\s*memory_cache_enabled\s*='
+              line: "memory_cache_enabled = off"
+
+      # ---- systemd override section ----
+
+      - name: Ensure systemd override directory exists
+        file:
+          path: /etc/systemd/system/percona-pgpool2.service.d
+          state: directory
+          mode: "0755"
+
+      - name: Ensure pgpool uses correct config file
+        copy:
+          dest: /etc/systemd/system/percona-pgpool2.service.d/override.conf
+          content: |
+            [Service]
+            ExecStart=
+            ExecStart=/usr/sbin/pgpool -n -f /etc/pgpool2/pgpool.conf
+
+      - name: Reload systemd
+        command: systemctl daemon-reload
 
   - name: Enable llvm-toolset for RHEL8 to install PostGIS
     become: true
