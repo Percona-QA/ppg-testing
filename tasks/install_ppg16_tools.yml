@@ -410,24 +410,24 @@
               regexp: '^\s*memory_cache_enabled\s*='
               line: "memory_cache_enabled = off"
 
-      # ---- systemd override section ----
+  - name: Fix pgpool service ExecStart to use pgpool.conf
+    become: true
+    when:
+      - ansible_os_family == "Debian"
+      - pg_version_to_install | string is version('16.12', '>=', strict=True)
+    block:
 
-      - name: Ensure systemd override directory exists
-        file:
-          path: /etc/systemd/system/percona-pgpool2.service.d
-          state: directory
-          mode: "0755"
+      - name: Ensure ExecStart uses pgpool.conf
+        lineinfile:
+          path: /usr/lib/systemd/system/percona-pgpool2.service
+          regexp: '^ExecStart='
+          line: 'ExecStart=/usr/sbin/pgpool -n -f /etc/pgpool2/pgpool.conf'
+          backup: yes
+        register: pgpool_unit_fix
 
-      - name: Ensure pgpool uses correct config file
-        copy:
-          dest: /etc/systemd/system/percona-pgpool2.service.d/override.conf
-          content: |
-            [Service]
-            ExecStart=
-            ExecStart=/usr/sbin/pgpool -n -f /etc/pgpool2/pgpool.conf
-
-      - name: Reload systemd
+      - name: Reload systemd if unit changed
         command: systemctl daemon-reload
+        when: pgpool_unit_fix.changed
 
   - name: Enable llvm-toolset for RHEL8 to install PostGIS
     become: true
