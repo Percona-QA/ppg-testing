@@ -325,6 +325,27 @@
         - libpgpool2
     when: ansible_os_family == "Debian"
 
+  - name: Fix PgPool paths for Debian/Ubuntu
+    block:
+      - name: Update configuration file paths
+        ansible.builtin.replace:
+          path: "/etc/pgpool2/pgpool.conf"
+          regexp: '^(#\s*)?{{ item.key }}\s*=.*'
+          replace: "{{ item.key }} = '{{ item.value }}'"
+        loop:
+          - { key: 'memq_cache_lock_file', value: '/tmp/memq_lock_file' }
+          - { key: 'pgpool_status_file', value: '/tmp/pgpool_status' }
+        notify: restart pgpool
+
+      - name: Force systemd to use the explicit config path
+        ansible.builtin.lineinfile:
+          path: /usr/lib/systemd/system/percona-pgpool2.service
+          regexp: '^ExecStart='
+          line: "ExecStart=/usr/sbin/pgpool -n -f /etc/pgpool2/pgpool.conf"
+        notify: 
+          - reload systemd
+    when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('16.12', '>=', strict=True))
+
   - name: Enable llvm-toolset for RHEL8 to install PostGIS
     become: true
     command: dnf module enable llvm-toolset -y
