@@ -611,7 +611,11 @@ def test_postgis_binary_presence(host):
     with host.sudo("postgres"):
         if dist.lower() in ["redhat", "centos", "rhel", "rocky", "ol"]:
             postgis_major_version = float(pg_versions['postgis_major_version'])
-            if postgis_major_version >= 3.5:
+            #if postgis_major_version >= 3.5:
+            #    postgis_binaries_path = "/usr/bin"
+            #else:
+            #    postgis_binaries_path = f"/usr/pgsql-{MAJOR_VER}/bin"
+            if float(pg_versions['postgis_version']) == 3.5.4:
                 postgis_binaries_path = "/usr/bin"
             else:
                 postgis_binaries_path = f"/usr/pgsql-{MAJOR_VER}/bin"
