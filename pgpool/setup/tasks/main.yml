@@ -97,6 +97,19 @@
   - debug:
       var: results.stdout_lines
 
+  - name: Ensure pgpool directories exist
+    become: true
+    file:
+      path: "{{ item.path }}"
+      state: directory
+      owner: postgres
+      group: postgres
+      mode: "{{ item.mode }}"
+    loop:
+      - { path: "/var/log/pgpool_log", mode: "0755" }
+      - { path: "/var/lib/pgpool",     mode: "0755" }
+      - { path: "/var/run/pgpool",     mode: "0755" }
+
   - name: Start server 1
     become_user: postgres
     command: /usr/pgsql-{{ major_version }}/bin/pg_ctl -D /tmp/data1 -l logfile-data1 start
