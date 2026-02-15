@@ -147,6 +147,24 @@
     ansible.builtin.pause:
       minutes: 1
 
+  - name: Check pgpool service state
+    command: systemctl is-active pgpool
+    register: pgpool_state
+    failed_when: false
+    changed_when: false
+
+  - debug:
+      var: pgpool_state.stdout
+
+  - name: Get last 100 lines of pgpool logs
+    command: journalctl -u pgpool -n 100
+    register: pgpool_logs
+    changed_when: false
+    failed_when: false
+
+  - debug:
+      var: pgpool_logs.stdout_lines
+
   - name: select datname from pg_database
     become_user: postgres
     command: psql -h 127.0.0.1 -U appuser -p 9999 postgres  -c "select datname from pg_database"
