@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pgstatmon-rhel8-arm-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-05aab2a160c4828b7
+    image: ${ami_rhel8_arm64}
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t4g.large
     ssh_user: ec2-user

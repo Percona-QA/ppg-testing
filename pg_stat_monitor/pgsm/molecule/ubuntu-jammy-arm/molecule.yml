@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pgstatmon-ujammy-arm-${BUILD_NUMBER}
     region: eu-central-1
-    image: ami-0424722f9acea213b
+    image: ${ami_ubuntu22_arm64}
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t4g.xlarge
     ssh_user: ubuntu
