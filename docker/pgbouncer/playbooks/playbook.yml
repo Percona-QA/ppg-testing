@@ -1,0 +1,75 @@
+---
+- name: Converge
+  hosts: all
+  become: true
+  become_method: sudo
+  # Set facts from environment variables (Jenkins job)
+  vars:
+    # Get Docker repository from environment (percona or perconalab)
+    DOCKER_REPOSITORY: "{{ lookup('env', 'REPOSITORY') | default('percona', true) }}"
+    # Get PostgreSQL server version from environment
+    PG_SERVER_VERSION: "{{ lookup('env', 'SERVER_VERSION') | default('18.1', true) }}"
+    # Get PostgreSQL server image tag from environment
+    PG_IMAGE_TAG: "{{ lookup('env', 'DOCKER_SERVER_TAG') | default('18', true) }}"
+    # Component name
+    COMPONENT_NAME: "{{ lookup('env', 'COMPONENT_NAME') | default('pgbouncer', true) }}"
+    # Get pgBouncer component version from environment
+    PGBOUNCER_COMPONENT_VERSION: "{{ lookup('env', 'COMPONENT_VERSION') | default('1.25.0', true) }}"
+    # Get pgBouncer image tag from environment
+    PGBOUNCER_IMAGE_TAG: "{{ lookup('env', 'DOCKER_COMPONENT_TAG') | default('latest', true) }}"
+    # Extract PostgreSQL major version for PG_BIN
+    PG_MAJOR: "{{ (PG_SERVER_VERSION | regex_search('^[0-9]+')) | default('18', true) }}"
+    # TDE is supported only for PostgreSQL 17+
+    WITH_TDE_REQUESTED: "{{ lookup('env', 'WITH_TDE') | default('0', true) }}"
+    WITH_TDE_EFFECTIVE: "{{ (WITH_TDE_REQUESTED | bool and (PG_MAJOR | int) >= 17) | ternary('1', '0') }}"
+
+    max_connections: "{{ lookup('env', 'MAX_CONNECTIONS') | default('100', true) }}"
+    postgres_user: "{{ lookup('env', 'POSTGRES_USER') | default('postgres', true) }}"
+    postgres_password: "{{ lookup('env', 'POSTGRES_PASSWORD') | default('mysecretpassword', true) }}"
+    pgbouncer_admin_user: "{{ lookup('env', 'PGBOUNCER_ADMIN_USER') | default('pgbouncer_admin', true) }}"
+    pgbouncer_admin_pass: "{{ lookup('env', 'PGBOUNCER_ADMIN_PASS') | default('adminpass', true) }}"
+    pgbouncer_port: "{{ lookup('env', 'PGBOUNCER_PORT') | default('6432', true) }}"
+    
+    # Docker images - constructed from repository and tags
+    postgres_test_image: "{{ DOCKER_REPOSITORY }}/percona-distribution-postgresql:{{ PG_IMAGE_TAG }}"
+    pgbouncer_test_image: "{{ DOCKER_REPOSITORY }}/percona-pgbouncer:{{ PGBOUNCER_IMAGE_TAG }}"
+    pg_bin_path: "{{ pg_bin | default('/usr/pgsql-' ~ PG_MAJOR ~ '/bin') }}"
+    postgres_container_name: "ppg_server_primary"
+    pgbouncer_container_name: "ppg_pgbouncer"
+    
+    # Test configuration
+    pgbouncer_test_suite: "{{ test_suite | default('all') }}"
+    pgbouncer_test_log_level: "{{ log_level | default('INFO') }}"
+    pgbouncer_test_cleanup_after: "{{ cleanup_after | default(true) }}"
+    
+    # Verbosity
+    pgbouncer_test_verbose: "{{ verbose | default(false) }}"
+    
+    # Installation settings
+    pgbouncer_test_install_docker: true
+    pgbouncer_test_install_docker_compose: true
+    pgbouncer_test_add_user_to_docker_group: true
+    pgbouncer_test_docker_compose_version: "1.25.0"
+    
+    # Execution settings
+    pgbouncer_test_timeout: 7200  # Timeout in seconds (2 hours default)
+  tasks:
+    - name: Display Docker image configuration
+      debug:
+        msg:
+          - "Docker Repository: {{ DOCKER_REPOSITORY }}"
+          - "Percona PostgreSQL Image: {{ postgres_test_image }}"
+          - "Percona pgBouncer Image: {{ pgbouncer_test_image }}"
+          - "Percona PostgreSQL Image Tag: {{ PG_IMAGE_TAG }}"
+          - "Percona pgBouncer Image Tag: {{ PGBOUNCER_IMAGE_TAG }}"
+          - "Percona PostgreSQL Bin: {{ pg_bin_path }}"
+          - "Percona pgBouncer Container Name: {{ pgbouncer_container_name }}"
+          - "Percona PostgreSQL Container Name: {{ postgres_container_name }}"
+          - "Percona Max Connections: {{ max_connections }}"
+          - "Percona pgBouncer Admin User: {{ pgbouncer_admin_user }}"
+          - "Percona pgBouncer Admin Pass: {{ pgbouncer_admin_pass }}"
+          - "Percona pgBouncer Port: {{ pgbouncer_port }}"
+      tags:
+        - always
+  roles:
+  - role: pgbouncer

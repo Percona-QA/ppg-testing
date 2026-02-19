@@ -1,0 +1,64 @@
+services:
+  pg-primary:
+    image: ${PG_IMAGE}
+    container_name: ${PG_CONTAINER_NAME:-pg_primary}
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mysecretpassword
+      PGDATA: /data/db
+      POSTGRES_DB: ${PG_DB:-postgres}
+      POSTGRES_INITDB_ARGS: "--auth-host=md5 --auth-local=md5"
+      POSTGRES_OPTIONS: "-c max_connections=${MAX_CONNECTIONS}"
+      WITH_TDE: "${WITH_TDE:-0}"
+      ENABLE_PG_TDE: "${WITH_TDE:-0}"
+    volumes:
+      - pgdata:/data/db
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgbouncer:
+    image: ${PGBOUNCER_IMAGE}
+    container_name: ${PGBOUNCER_CONTAINER_NAME:-pgbouncer}
+    volumes:
+      # Removed :ro from userlist.txt to allow runtime 'echo' injections
+      - ./pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./userlist.txt:/etc/pgbouncer/userlist.txt
+    environment:
+      - PGBOUNCER_ADMIN_USER=${PGBOUNCER_ADMIN_USER}
+      - PGBOUNCER_ADMIN_PASS=${PGBOUNCER_ADMIN_PASS}
+    ports:
+      - "${PGBOUNCER_PORT}:${PGBOUNCER_PORT}"
+    restart: always
+    # Using the default entrypoint is usually better for Percona/Bitnami images, 
+    # but if overriding, ensure the config path is correct.
+    command: pgbouncer /etc/pgbouncer/pgbouncer.ini
+    healthcheck:
+      #nc is great, but psql is a more 'authentic' check for pgbouncer
+      test: ["CMD-SHELL", "nc -z localhost ${PGBOUNCER_PORT}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      pg-primary:
+        condition: service_healthy
+
+  pg_client:
+    image: ${PG_IMAGE}
+    container_name: pg_client
+    entrypoint: ["tail", "-f", "/dev/null"]
+    depends_on:
+      pgbouncer:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'client ready'"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
