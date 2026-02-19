@@ -7,7 +7,7 @@ platforms:
   - name: pgstatmon-debian13-${BUILD_NUMBER}
     region: eu-central-1
     image: ami-0aeb8600ead64c406
-    vpc_subnet_id: subnet-0fad4db6fdd8025b6
+    vpc_subnet_id: subnet-0775d65ad1e9703bc
     instance_type: t2.xlarge
     ssh_user: admin
     root_device_name: /dev/xvda

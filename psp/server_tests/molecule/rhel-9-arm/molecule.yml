@@ -7,7 +7,7 @@ platforms:
   - name: psp-rhel9-arm-${BUILD_NUMBER}
     region: eu-central-1
     image: ami-091cd356fd6ad46ec
-    vpc_subnet_id: subnet-0fad4db6fdd8025b6
+    vpc_subnet_id: subnet-0775d65ad1e9703bc
     instance_type: t4g.xlarge
     ssh_user: ec2-user
     root_device_name: /dev/sda1

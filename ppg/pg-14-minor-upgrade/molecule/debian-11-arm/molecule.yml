@@ -7,7 +7,7 @@ platforms:
   - name: debian11-arm-${BUILD_NUMBER}-${JOB_NAME}
     region: eu-central-1
     image: ami-095ac0bb50bd8d45e
-    vpc_subnet_id: subnet-0fad4db6fdd8025b6
+    vpc_subnet_id: subnet-0775d65ad1e9703bc
     instance_type: t4g.small
     ssh_user: admin
     root_device_name: /dev/xvda
