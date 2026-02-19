@@ -2,11 +2,11 @@
 dependency:
   name: galaxy
 driver:
-  name: ec2
+  name: ${driver}
 platforms:
   - name: pgtde-rocky10-arm-${BUILD_NUMBER}
-    region: eu-central-1
-    image: ami-0f6a9ada15335045a
+    region: ${region}
+    image: ${ami_rocky10_arm64}
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t4g.xlarge
     ssh_user: rocky

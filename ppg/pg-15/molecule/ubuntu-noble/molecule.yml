@@ -2,11 +2,11 @@
 dependency:
   name: galaxy
 driver:
-  name: ec2
+  name: ${driver}
 platforms:
   - name: unoble-${BUILD_NUMBER}-${JOB_NAME}
-    region: eu-central-1
-    image: ami-08300f7a0b9e5d5df
+    region: ${region}
+    image: ${ami_ubuntu24_x86_64}
     vpc_subnet_id: jenkins-pg-B2
     instance_type: t2.small
     ssh_user: ubuntu

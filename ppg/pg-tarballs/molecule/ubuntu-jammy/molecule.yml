@@ -2,11 +2,11 @@
 dependency:
   name: galaxy
 driver:
-  name: ec2
+  name: ${driver}
 platforms:
   - name: ujammy-${BUILD_NUMBER}-${JOB_NAME}
-    region: eu-central-1
-    image: ami-0dc33c9c954b3f073
+    region: ${region}
+    image: ${ami_ubuntu22_x86_64}
     vpc_subnet_id: jenkins-pg-B2
     instance_type: t2.small
     ssh_user: ubuntu

@@ -2,11 +2,11 @@
 dependency:
   name: galaxy
 driver:
-  name: ec2
+  name: ${driver}
 platforms:
   - name: debian12-${BUILD_NUMBER}-${JOB_NAME}
-    region: eu-central-1
-    image: ami-089402bc2aa80a5a4
+    region: ${region}
+    image: ${ami_debian12_x86_64}
     vpc_subnet_id: jenkins-pg-B2
     instance_type: t2.small
     ssh_user: admin

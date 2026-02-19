@@ -2,11 +2,11 @@
 dependency:
   name: galaxy
 driver:
-  name: ec2
+  name: ${driver}
 platforms:
   - name: rocky8-arm-${BUILD_NUMBER}-${JOB_NAME}
-    region: eu-central-1
-    image: ami-0ef838b0ab2b120cf
+    region: ${region}
+    image: ${ami_rocky8_arm64}
     vpc_subnet_id: jenkins-pg-B2
     instance_type: t4g.large
     ssh_user: rocky

@@ -2,10 +2,10 @@
 dependency:
   name: galaxy
 driver:
-  name: ec2
+  name: ${driver}
 platforms:
   - name: pgstatmon-unoble-${BUILD_NUMBER}
-    region: eu-central-1
+    region: ${region}
     image: ${ami_ubuntu24_x86}
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t2.xlarge

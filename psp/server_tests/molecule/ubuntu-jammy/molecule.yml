@@ -2,11 +2,11 @@
 dependency:
   name: galaxy
 driver:
-  name: ec2
+  name: ${driver}
 platforms:
   - name: psp-ujammy-${BUILD_NUMBER}
-    region: eu-central-1
-    image: ami-0a87a69d69fa289be
+    region: ${region}
+    image: ${ami_ubuntu22_x86_64}
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t2.xlarge
     ssh_user: ubuntu
