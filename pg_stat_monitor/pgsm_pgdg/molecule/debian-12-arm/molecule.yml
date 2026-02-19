@@ -7,7 +7,7 @@ platforms:
   - name: pgstatmon-debian12-arm-${BUILD_NUMBER}
     region: ${region}
     image: ${ami_debian12_arm64}
-    vpc_subnet_id: subnet-0fad4db6fdd8025b6
+    vpc_subnet_id: ${vpc_subnet_id_aws2}
     instance_type: t4g.xlarge
     ssh_user: admin
     root_device_name: /dev/xvda

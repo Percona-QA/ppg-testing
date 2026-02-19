@@ -7,7 +7,7 @@ platforms:
   - name: psp-rhel8-${BUILD_NUMBER}
     region: ${region}
     image: ${ami_rhel8_x86_64}
-    vpc_subnet_id: subnet-0fad4db6fdd8025b6
+    vpc_subnet_id: ${vpc_subnet_id_aws2}
     instance_type: t3.xlarge
     ssh_user: ec2-user
     root_device_name: /dev/sda1
