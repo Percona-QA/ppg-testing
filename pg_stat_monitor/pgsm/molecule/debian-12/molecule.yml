@@ -6,7 +6,7 @@ driver:
 platforms:
   - name: pgstatmon-debian12-${BUILD_NUMBER}
     region: ${region}
-    image: ${ami_debian12_x86}
+    image: ${ami_debian12_x86_64}
     vpc_subnet_id: subnet-0fad4db6fdd8025b6
     instance_type: t2.xlarge
     ssh_user: admin
