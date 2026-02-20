@@ -130,6 +130,7 @@
     PG_DB: "{{ (pg_db | default('postgres')) }}"
     POSTGRES_USER: "{{ postgres_user }}"
     POSTGRES_PASSWORD: "{{ postgres_password }}"
+    WITH_TDE: "{{ WITH_TDE_EFFECTIVE | default('0') }}"
   when:
     - docker_compose_command | default('') != "ERROR"
   tags:
@@ -278,6 +279,8 @@
     PGBOUNCER_ADMIN_USER: "{{ pgbouncer_admin_user }}"
     PGBOUNCER_ADMIN_PASS: "{{ pgbouncer_admin_pass }}"
     PGBOUNCER_PORT: "{{ pgbouncer_port }}"
+    WITH_TDE: "{{ WITH_TDE_EFFECTIVE | default('0') }}"
+    POSTGRES_PASSWORD: "{{ postgres_password }}"
   register: results
   tags:
     - execute

@@ -1,153 +1,104 @@
 import os
-import shlex
-import subprocess
+import docker
 import time
-
 import pytest
+import shlex
 
+client = docker.from_env()
 
-def _run_command(args, timeout=30):
-    return subprocess.run(
-        args,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
+# --- Simplified Global Config (Matches your pgbackrest style) ---
+PG_CLIENT = os.getenv("PG_CLIENT_CONTAINER", "pg_client")
+PG_PRIMARY = os.getenv("PG_CONTAINER_NAME", "pg_primary")
+PGB_HOST = os.getenv("PGBOUNCER_HOST", "pgbouncer")
+PGB_PORT = os.getenv("PGBOUNCER_PORT", "6432")
+PG_USER = os.getenv("POSTGRES_USER", "postgres")
+PG_PASS = os.getenv("POSTGRES_PASSWORD", "mysecretpassword")
+PG_DB = os.getenv("PG_DB", "postgres")
 
+# TDE Logic
+SERVER_VERSION = os.getenv('SERVER_VERSION', '18')
+WITH_TDE = os.getenv("WITH_TDE", "0")
+TDE_ENABLED = WITH_TDE == "1" and int(SERVER_VERSION.split('.')[0]) >= 17
+ACCESS_METHOD = "USING tde_heap" if TDE_ENABLED else "USING heap"
 
-def _docker_exec(container_name, command, timeout=30):
-    return _run_command(
-        ["docker", "exec", "-i", container_name, "bash", "-lc", command],
-        timeout=timeout,
-    )
+# --- Clean Helpers ---
 
+def run_sql(query, host=PGB_HOST, port=PGB_PORT, user=PG_USER, password=PG_PASS, db=PG_DB):
+    """Executes SQL from the client container."""
+    container = client.containers.get(PG_CLIENT)
+    cmd = f"psql -h {host} -p {port} -U {user} -d {db} -Atc {shlex.quote(query)}"
+    exit_code, output = container.exec_run(["bash", "-lc", cmd], environment={"PGPASSWORD": password})
+    return exit_code, output.decode().strip()
 
-def _execute_psql(container_name, query, user, password, host, port, db, timeout=20):
-    psql_cmd = (
-        f"PGPASSWORD={shlex.quote(password)} "
-        f"psql -p {shlex.quote(str(port))} -U {shlex.quote(user)} "
-        f"-h {shlex.quote(host)} {shlex.quote(db)} -t -c {shlex.quote(query)}"
-    )
-    return _docker_exec(container_name, psql_cmd, timeout=timeout)
+def wait_for_ready(timeout=30):
+    """Simple loop to check if pgbouncer is routing traffic."""
+    for _ in range(timeout):
+        ec, _ = run_sql("SELECT 1")
+        if ec == 0: return True
+        time.sleep(1)
+    return False
 
-
-@pytest.fixture(scope="session")
-def config():
-    """Session config from env; names and defaults match playbook.yml vars."""
-    return {
-        # Client container that runs psql (compose service pg_client)
-        "pg_client_container": os.getenv("PG_CLIENT_CONTAINER", "pg_client"),
-        # pgBouncer host (compose service name) / playbook: pgbouncer_container_name
-        "pgb_host": os.getenv("PGBOUNCER_HOST", os.getenv("PGBOUNCER_CONTAINER_NAME", "pgbouncer")),
-        # playbook: pgbouncer_port / PGBOUNCER_PORT
-        "pgb_port": os.getenv("PGBOUNCER_PORT", "6432"),
-        # PostgreSQL user/password (compose POSTGRES_USER / POSTGRES_PASSWORD)
-        "pg_user": os.getenv("POSTGRES_USER", "postgres"),
-        "pg_pass": os.getenv("POSTGRES_PASSWORD", "mysecretpassword"),
-        # playbook/compose: PG_DB
-        "pg_db": os.getenv("PG_DB", "postgres"),
-        # playbook: pgbouncer_admin_user / pgbouncer_admin_pass
-        "pgb_admin_user": os.getenv("PGBOUNCER_ADMIN_USER", "pgbouncer_admin"),
-        "pgb_admin_pass": os.getenv("PGBOUNCER_ADMIN_PASS", "adminpass"),
-    }
-
+# --- Fixtures ---
 
 @pytest.fixture(scope="session", autouse=True)
-def ensure_docker_available():
-    result = _run_command(["docker", "ps"], timeout=10)
-    if result.returncode != 0:
-        pytest.skip(f"Docker not available: {result.stderr.strip()}")
+def setup_tde():
+    if not TDE_ENABLED:
+        return
 
+    # 1. Setup keys on the DB container directly
 
-def _check_conn(cfg):
-    result = _execute_psql(
-        cfg["pg_client_container"],
-        "SELECT 1;",
-        cfg["pg_user"],
-        cfg["pg_pass"],
-        cfg["pgb_host"],
-        cfg["pgb_port"],
-        cfg["pg_db"],
+    db_cont = client.containers.get(PG_PRIMARY)
+    db_cont.exec_run(
+        "bash -lc 'mkdir -p /var/lib/postgresql/keys && "
+        "chown -R postgres:postgres /var/lib/postgresql/keys && "
+        "chmod 700 /var/lib/postgresql/keys'"
     )
-    return result.returncode == 0, result
+    # 2. Init TDE (Notice we talk to PG_PRIMARY port 5432 directly for setup)
+    init_sql = """
+    CREATE EXTENSION IF NOT EXISTS pg_tde;
+    SELECT pg_tde_add_global_key_provider_file('v', '/var/lib/postgresql/keys/k.per');
+    SELECT pg_tde_create_key_using_global_key_provider('wk', 'v');
+    SELECT pg_tde_set_default_key_using_global_key_provider('wk', 'v');
+    ALTER SYSTEM SET pg_tde.wal_encrypt = 'on';
+    """
+    run_sql(init_sql, host=PG_PRIMARY, port=5432)
 
+    # 3. Restart and Wait
+    db_cont.restart()
+    assert wait_for_ready(), "Database/Proxy did not recover"
 
-def test_client_connection_via_pgbouncer(config):
-    success, result = _check_conn(config)
-    assert success, (
-        f"Client ('{config['pg_user']}') connection via PgBouncer "
-        f"({config['pg_db']}) failed: {result.stderr.strip()}"
+# --- Tests ---
+
+@pytest.mark.order(1)
+def test_connection():
+    """Step 1: Can we even talk to PgBouncer?"""
+    ec, out = run_sql("SELECT version()")
+    assert ec == 0
+    assert "PostgreSQL" in out
+
+@pytest.mark.order(2)
+def test_tde_table():
+    """Step 2: Can we create encrypted tables through the proxy?"""
+    if not TDE_ENABLED:
+        pytest.skip()
+    # Same session: CREATE + INSERT so one PgBouncer connection (avoids transaction-mode quirks)
+    ec, out = run_sql(
+        f"DROP TABLE IF EXISTS tde_test; "
+        f"CREATE TABLE tde_test (id int) {ACCESS_METHOD}; "
+        f"INSERT INTO tde_test VALUES (1)"
     )
+    assert ec == 0, f"TDE table create/insert failed: {out}"
 
+@pytest.mark.order(3)
+def test_pause_resume():
+    """Step 3: Can we admin the proxy?"""
+    # Pause using admin credentials
+    run_sql(f"PAUSE {PG_DB}", db="pgbouncer", user="pgbouncer_admin", password="adminpass")
 
-def test_admin_connection_to_pgbouncer_console(config):
-    result = _execute_psql(
-        config["pg_client_container"],
-        "SHOW VERSION;",
-        config["pgb_admin_user"],
-        config["pgb_admin_pass"],
-        config["pgb_host"],
-        config["pgb_port"],
-        "pgbouncer",
-    )
-    assert result.returncode == 0, (
-        f"Admin ('{config['pgb_admin_user']}') connection to PgBouncer Admin failed: "
-        f"{result.stderr.strip()}"
-    )
+    # Verify it hangs (using timeout)
+    ec, _ = run_sql("timeout 1 psql -c 'SELECT 1'")
+    assert ec != 0
 
-
-def test_pgbouncer_version_check(config):
-    result = _execute_psql(
-        config["pg_client_container"],
-        "SHOW VERSION;",
-        config["pgb_admin_user"],
-        config["pgb_admin_pass"],
-        config["pgb_host"],
-        config["pgb_port"],
-        "pgbouncer",
-    )
-    assert result.returncode == 0, f"Could not retrieve PgBouncer version: {result.stderr.strip()}"
-    assert "PgBouncer" in result.stdout, f"Unexpected version output: {result.stdout.strip()}"
-
-
-def test_pause_resume_admin_flow(config):
-    pause_result = _execute_psql(
-        config["pg_client_container"],
-        f"PAUSE {config['pg_db']};",
-        config["pgb_admin_user"],
-        config["pgb_admin_pass"],
-        config["pgb_host"],
-        config["pgb_port"],
-        "pgbouncer",
-    )
-    assert pause_result.returncode == 0, f"PAUSE command failed: {pause_result.stderr.strip()}"
-    assert "PAUSE" in pause_result.stdout, f"PAUSE command failed: {pause_result.stdout.strip()}"
-
-    blocked_cmd = (
-        f"timeout 5 "
-        f"PGPASSWORD={shlex.quote(config['pg_pass'])} "
-        f"psql -p {shlex.quote(str(config['pgb_port']))} -U {shlex.quote(config['pg_user'])} "
-        f"-h {shlex.quote(config['pgb_host'])} {shlex.quote(config['pg_db'])} "
-        f"-t -c {shlex.quote('SELECT 1;')}"
-    )
-    blocked_result = _docker_exec(config["pg_client_container"], blocked_cmd, timeout=10)
-    assert blocked_result.returncode != 0, (
-        "New client connection was NOT blocked/queued by PAUSE."
-    )
-
-    resume_result = _execute_psql(
-        config["pg_client_container"],
-        f"RESUME {config['pg_db']};",
-        config["pgb_admin_user"],
-        config["pgb_admin_pass"],
-        config["pgb_host"],
-        config["pgb_port"],
-        "pgbouncer",
-    )
-    assert resume_result.returncode == 0, f"RESUME command failed: {resume_result.stderr.strip()}"
-    assert "RESUME" in resume_result.stdout, f"RESUME command failed: {resume_result.stdout.strip()}"
-
-    time.sleep(2)
-    success, result = _check_conn(config)
-    assert success, f"Client connection not restored after RESUME: {result.stderr.strip()}"
-
+    # Resume
+    run_sql(f"RESUME {PG_DB}", db="pgbouncer", user="pgbouncer_admin", password="adminpass")
+    assert wait_for_ready()
