@@ -29,13 +29,15 @@
     pgbouncer_admin_user: "{{ lookup('env', 'PGBOUNCER_ADMIN_USER') | default('pgbouncer_admin', true) }}"
     pgbouncer_admin_pass: "{{ lookup('env', 'PGBOUNCER_ADMIN_PASS') | default('adminpass', true) }}"
     pgbouncer_port: "{{ lookup('env', 'PGBOUNCER_PORT') | default('6432', true) }}"
-    
+    pg_db: "{{ lookup('env', 'PG_DB') | default('postgres', true) }}"
+
     # Docker images - constructed from repository and tags
     postgres_test_image: "{{ DOCKER_REPOSITORY }}/percona-distribution-postgresql:{{ PG_IMAGE_TAG }}"
     pgbouncer_test_image: "{{ DOCKER_REPOSITORY }}/percona-pgbouncer:{{ PGBOUNCER_IMAGE_TAG }}"
     pg_bin_path: "{{ pg_bin | default('/usr/pgsql-' ~ PG_MAJOR ~ '/bin') }}"
     postgres_container_name: "ppg_server_primary"
     pgbouncer_container_name: "ppg_pgbouncer"
+    pg_client_container_name: "ppg_client"
     
     # Test configuration
     pgbouncer_test_suite: "{{ test_suite | default('all') }}"
@@ -65,6 +67,7 @@
           - "Percona PostgreSQL Bin: {{ pg_bin_path }}"
           - "Percona pgBouncer Container Name: {{ pgbouncer_container_name }}"
           - "Percona PostgreSQL Container Name: {{ postgres_container_name }}"
+          - "Percona pgClient Container Name: {{ pg_client_container_name }}"
           - "Percona Max Connections: {{ max_connections }}"
           - "Percona pgBouncer Admin User: {{ pgbouncer_admin_user }}"
           - "Percona pgBouncer Admin Pass: {{ pgbouncer_admin_pass }}"

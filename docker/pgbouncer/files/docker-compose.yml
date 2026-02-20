@@ -49,7 +49,7 @@ services:
 
   pg_client:
     image: ${PG_IMAGE}
-    container_name: pg_client
+    container_name: ${PG_CLIENT_CONTAINER_NAME:-pg_client}
     entrypoint: ["tail", "-f", "/dev/null"]
     depends_on:
       pgbouncer:

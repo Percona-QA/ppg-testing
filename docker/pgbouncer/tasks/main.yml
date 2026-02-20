@@ -118,6 +118,7 @@
     PGBOUNCER_IMAGE: "{{ pgbouncer_test_image }}"
     PG_CONTAINER_NAME: "{{ postgres_container_name }}"
     PGBOUNCER_CONTAINER_NAME: "{{ pgbouncer_container_name }}"
+    PG_CLIENT_CONTAINER_NAME: "{{ pg_client_container_name }}"
     PG_BIN: "{{ pg_bin_path }}"
     SERVER_VERSION: "{{ PG_SERVER_VERSION }}"
     PG_IMAGE_TAG: "{{ PG_IMAGE_TAG }}"
@@ -270,6 +271,8 @@
     PGBOUNCER_IMAGE: "{{ pgbouncer_test_image }}"
     PG_CONTAINER_NAME: "{{ postgres_container_name }}"
     PGBOUNCER_CONTAINER_NAME: "{{ pgbouncer_container_name }}"
+    PGBOUNCER_HOST: "{{ pgbouncer_container_name }}"
+    PG_CLIENT_CONTAINER_NAME: "{{ pg_client_container_name }}"
     PG_BIN: "{{ pg_bin_path }}"
     SERVER_VERSION: "{{ PG_SERVER_VERSION }}"
     PG_IMAGE_TAG: "{{ PG_IMAGE_TAG }}"
@@ -279,8 +282,10 @@
     PGBOUNCER_ADMIN_USER: "{{ pgbouncer_admin_user }}"
     PGBOUNCER_ADMIN_PASS: "{{ pgbouncer_admin_pass }}"
     PGBOUNCER_PORT: "{{ pgbouncer_port }}"
-    WITH_TDE: "{{ WITH_TDE_EFFECTIVE | default('0') }}"
+    POSTGRES_USER: "{{ postgres_user }}"
     POSTGRES_PASSWORD: "{{ postgres_password }}"
+    PG_DB: "{{ (pg_db | default('postgres')) }}"
+    WITH_TDE: "{{ WITH_TDE_EFFECTIVE | default('0') }}"
   register: results
   tags:
     - execute
