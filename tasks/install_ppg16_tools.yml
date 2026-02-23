@@ -210,32 +210,32 @@
         - percona-patroni-doc
     when: ansible_os_family == "Debian"
 
-  - name: Set Patroni configuration location for systemd (Debian 13)
-    become: true
-    ansible.builtin.lineinfile:
-      path: /etc/default/patroni
-      line: 'PATRONI_CONFIG_LOCATION=/etc/patroni/patroni.yml'
-      regexp: '^PATRONI_CONFIG_LOCATION='
-      create: yes
-      owner: root
-      group: root
-      mode: '0644'
-    when: 
-      - ansible_os_family == "Debian"
-      - ansible_distribution_major_version == "13"
+  # - name: Set Patroni configuration location for systemd (Debian 13)
+  #   become: true
+  #   ansible.builtin.lineinfile:
+  #     path: /etc/default/patroni
+  #     line: 'PATRONI_CONFIG_LOCATION=/etc/patroni/patroni.yml'
+  #     regexp: '^PATRONI_CONFIG_LOCATION='
+  #     create: yes
+  #     owner: root
+  #     group: root
+  #     mode: '0644'
+  #   when: 
+  #     - ansible_os_family == "Debian"
+  #     - ansible_distribution_major_version == "13"
 
-  - name: Install DCS python libraries for Patroni (Debian 13)
-    ansible.builtin.apt:
-      name:
-        - python3-etcd3   # Modern Etcd client
-        - python3-etcd    # Legacy Etcd client
-        - python3-psycopg2
-        - python3-yaml
-        - python3-sdnotify # Critical for systemd Type=notify on Debian 13
-      state: present
-    when: 
-      - ansible_os_family == "Debian"
-      - ansible_distribution_major_version == "13"
+  # - name: Install DCS python libraries for Patroni (Debian 13)
+  #   ansible.builtin.apt:
+  #     name:
+  #       - python3-etcd3   # Modern Etcd client
+  #       - python3-etcd    # Legacy Etcd client
+  #       - python3-psycopg2
+  #       - python3-yaml
+  #       - python3-sdnotify # Critical for systemd Type=notify on Debian 13
+  #     state: present
+  #   when: 
+  #     - ansible_os_family == "Debian"
+  #     - ansible_distribution_major_version == "13"
 
   - name: Install pg-stat-monitor RHEL
     yum:
