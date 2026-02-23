@@ -213,7 +213,7 @@ def test_multi_session_consistency():
 
 @pytest.mark.order(7)
 def test_pgbouncer_reload():
-    """Verify that RELOAD works without breaking TDE connectivity."""
+    """Verify that RELOAD works without breaking connectivity."""
     # Check current state
     assert run_sql("SELECT 1")[0] == 0
 
@@ -221,9 +221,10 @@ def test_pgbouncer_reload():
     ec, out = run_sql("RELOAD", db="pgbouncer", user=PGBOUNCER_ADMIN_USER, password=PGBOUNCER_ADMIN_PASS)
     assert ec == 0
 
-    # Verify we can still query TDE data after reload
-    ec, out = run_sql("SELECT count(*) FROM tde_test")
-    assert ec == 0
+    # If TDE is enabled, verify the specific table. If not, just verify basic SQL.
+    query = "SELECT count(*) FROM tde_test" if TDE_ENABLED else "SELECT 1"
+    ec, out = run_sql(query)
+    assert ec == 0, f"Connectivity lost after RELOAD: {out}"
 
 @pytest.mark.order(8)
 def test_unprivileged_user_access():
@@ -273,15 +274,22 @@ def test_pgbouncer_pool_health():
 
 @pytest.mark.order(11)
 def test_transaction_mode_handling():
-    """Verify TDE works correctly if PgBouncer is in transaction pooling mode."""
-    # This assumes your pgbouncer.ini has pool_mode = transaction
-    # We test a multi-statement transaction to ensure the session isn't dropped/corrupted
+    """Verify Transaction pooling works (with TDE if enabled)."""
+    # Use the TDE table if available, otherwise use a standard temp table
+    target_table = "tde_test" if TDE_ENABLED else "tx_pool_test"
+
+    setup_sql = ""
+    if not TDE_ENABLED:
+        setup_sql = f"CREATE TEMP TABLE {target_table} (id int);"
+
     tx_sql = f"""
+    {setup_sql}
     BEGIN;
-    INSERT INTO tde_test VALUES (999);
-    SELECT count(*) FROM tde_test WHERE id = 999;
+    INSERT INTO {target_table} VALUES (999);
+    SELECT count(*) FROM {target_table} WHERE id = 999;
     COMMIT;
     """
     ec, out = run_sql(tx_sql)
-    assert ec == 0
+    assert ec == 0, f"Transaction failed: {out}"
+    # 'out' might contain multiple lines; we check that '1' is the result of the SELECT
     assert "1" in out
