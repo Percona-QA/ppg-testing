@@ -898,7 +898,8 @@ def test_pg_tde_full_lifecycle(host, get_psql_binary_path, get_server_bin_path):
             host.run_expect([0], f"{psql_base} \"ALTER SYSTEM SET pg_tde.wal_encrypt = 'ON'\"")
 
             # --- 4. Persistence Test (Restart) ---
-            cmd = (f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} restart -w -t 120")
+            #cmd = (f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} restart -w -t 120")
+            cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} -m fast restart -w -t 120"
             result = host.run(cmd)
             assert result.rc == 0, f"PostgreSQL failed to restart: {result.stderr}"
 
