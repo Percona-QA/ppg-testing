@@ -907,21 +907,41 @@ def test_pg_tde_full_lifecycle(host, get_psql_binary_path, get_server_bin_path):
             # result = host.run(cmd)
             # assert result.rc == 0, f"PostgreSQL failed to restart: {result.stderr}"
 
+            # # --- 4. Persistence Test (Restart) ---
+            # # 1. Stop it manually (fast)
+            # host.run(f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} stop -m fast")
+
+            # # 2. Start it and capture the immediate output to a temporary file
+            # # We don't use -w here so we don't hang the test; we manually poll instead
+            # start_cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} start -l {DATA_DIR}/startup.log"
+            # host.run(start_cmd)
+
+            # # 3. Wait a few seconds then check the log for FATAL or PANIC
+            # host.run("sleep 3")
+            # startup_logs = host.run(f"cat {DATA_DIR}/startup.log").stdout
+
+            # if "database system is ready to accept connections" not in startup_logs:
+            #     pytest.fail(f"Postgres failed to reach ready state. Logs:\n{startup_logs}")
+
             # --- 4. Persistence Test (Restart) ---
-            # 1. Stop it manually (fast)
+            # Stop and start to bypass the pg_ctl -w hang
             host.run(f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} stop -m fast")
+            host.run(f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} start")
 
-            # 2. Start it and capture the immediate output to a temporary file
-            # We don't use -w here so we don't hang the test; we manually poll instead
-            start_cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} start -l {DATA_DIR}/startup.log"
-            host.run(start_cmd)
+            # Wait for the logging collector to actually write something
+            host.run("sleep 5")
 
-            # 3. Wait a few seconds then check the log for FATAL or PANIC
-            host.run("sleep 3")
-            startup_logs = host.run(f"cat {DATA_DIR}/startup.log").stdout
+            # Find the most recent file in the pg_log directory
+            # Note: Default directory name is usually 'log' or 'pg_log'
+            latest_log = host.run(f"ls -t {DATA_DIR}/pg_log/*.log | head -n 1").stdout.strip()
 
-            if "database system is ready to accept connections" not in startup_logs:
-                pytest.fail(f"Postgres failed to reach ready state. Logs:\n{startup_logs}")
+            if latest_log:
+                real_logs = host.run(f"cat {latest_log}").stdout
+            else:
+                real_logs = "No log files found in pg_log directory."
+
+            if "database system is ready to accept connections" not in real_logs:
+                pytest.fail(f"Postgres failed to reach ready state. Real Logs from {latest_log}:\n{real_logs}")
 
             # Verify data and encryption status after restart
             is_encrypted = host.run(f"{psql_base} \"SELECT pg_tde_is_encrypted('t1')\"").stdout.strip()
