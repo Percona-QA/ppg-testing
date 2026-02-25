@@ -897,7 +897,7 @@ def test_pg_tde_full_lifecycle(host, get_psql_binary_path, get_server_bin_path):
             # Enable WAL Encryption
             host.run_expect([0], f"{psql_base} \"ALTER SYSTEM SET pg_tde.wal_encrypt = 'ON'\"")
 
-            Verify pg_tde is preloaded
+            # Verify pg_tde is preloaded
             check_libs = host.run(f"{psql_base} \"SHOW shared_preload_libraries;\"").stdout
             assert 'pg_tde' in check_libs, "pg_tde must be in shared_preload_libraries for WAL encryption to work"
 
