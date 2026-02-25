@@ -897,11 +897,31 @@ def test_pg_tde_full_lifecycle(host, get_psql_binary_path, get_server_bin_path):
             # Enable WAL Encryption
             host.run_expect([0], f"{psql_base} \"ALTER SYSTEM SET pg_tde.wal_encrypt = 'ON'\"")
 
+            Verify pg_tde is preloaded
+            check_libs = host.run(f"{psql_base} \"SHOW shared_preload_libraries;\"").stdout
+            assert 'pg_tde' in check_libs, "pg_tde must be in shared_preload_libraries for WAL encryption to work"
+
             # --- 4. Persistence Test (Restart) ---
             #cmd = (f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} restart -w -t 120")
-            cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} -m fast restart -w -t 120"
-            result = host.run(cmd)
-            assert result.rc == 0, f"PostgreSQL failed to restart: {result.stderr}"
+            # cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} -m fast restart -w -t 120"
+            # result = host.run(cmd)
+            # assert result.rc == 0, f"PostgreSQL failed to restart: {result.stderr}"
+
+            # --- 4. Persistence Test (Restart) ---
+            # 1. Stop it manually (fast)
+            host.run(f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} stop -m fast")
+
+            # 2. Start it and capture the immediate output to a temporary file
+            # We don't use -w here so we don't hang the test; we manually poll instead
+            start_cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} start -l {DATA_DIR}/startup.log"
+            host.run(start_cmd)
+
+            # 3. Wait a few seconds then check the log for FATAL or PANIC
+            host.run("sleep 3")
+            startup_logs = host.run(f"cat {DATA_DIR}/startup.log").stdout
+
+            if "database system is ready to accept connections" not in startup_logs:
+                pytest.fail(f"Postgres failed to reach ready state. Logs:\n{startup_logs}")
 
             # Verify data and encryption status after restart
             is_encrypted = host.run(f"{psql_base} \"SELECT pg_tde_is_encrypted('t1')\"").stdout.strip()
