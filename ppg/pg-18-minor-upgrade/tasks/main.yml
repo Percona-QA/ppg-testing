@@ -146,12 +146,12 @@
 #          else 'percona-postgresql-common-dev' }}
 #   when: ansible_os_family == "RedHat"
 
-- name: Install PostgreSQL dev package on RHEL
-  yum:
-    name: "{{ pg_dev_package }}"
-    state: latest
-    update_cache: yes
-  when: ansible_os_family == "RedHat"
+# - name: Install PostgreSQL dev package on RHEL
+#   yum:
+#     name: "{{ pg_dev_package }}"
+#     state: latest
+#     update_cache: yes
+#   when: ansible_os_family == "RedHat"
 
 # - name: Install postgresql-server-dev-all RHEL
 #   yum:
