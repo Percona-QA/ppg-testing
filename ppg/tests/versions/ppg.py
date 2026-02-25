@@ -659,6 +659,6 @@ def get_ppg_versions(distro_type):
                                           distros=DISTROS, distro_type=distro_type),
             "ppg-17.9": get_pg17_versions(packages=["2:17.9-1", "1:289-1", '289-1'],
                                           distros=DISTROS, distro_type=distro_type),
-            "ppg-18.3": get_pg18_versions(packages=["2:18.3-1", "1:289-1", '289-1'],
+            "ppg-18.3": get_pg18_versions(packages=["3:18.3-1", "1:289-1", '289-1'],
                                           distros=DISTROS, distro_type=distro_type),
             }
