@@ -54,6 +54,7 @@
       - libssl-dev
       - liblz4-dev
       - libnuma-dev
+      - libzstd-dev
 
 - name: install Percona Platform for PostgreSQL deb packages
   apt:

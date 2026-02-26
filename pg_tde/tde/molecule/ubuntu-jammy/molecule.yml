@@ -2,12 +2,12 @@
 dependency:
   name: galaxy
 driver:
-  name: ec2
+  name: ${driver}
 platforms:
   - name: pgtde-ujammy-${BUILD_NUMBER}
-    region: eu-central-1
-    image: ami-0a87a69d69fa289be
-    vpc_subnet_id: subnet-0fad4db6fdd8025b6
+    region: ${region}
+    image: ${ami_ubuntu22_x86_64}
+    vpc_subnet_id: ${vpc_subnet_id_aws2}
     instance_type: t2.xlarge
     ssh_user: ubuntu
     root_device_name: /dev/sda1

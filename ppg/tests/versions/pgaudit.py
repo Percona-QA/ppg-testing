@@ -110,4 +110,9 @@ pgaudit = {
     "ppg-16.11": {"version": "16.1"},
     "ppg-17.7": {"version": "17.1"},
     "ppg-18.1": {"version": "18.0"},
+    "ppg-14.22": {"version": "1.6.3"},
+    "ppg-15.17": {"version": "1.7.1"},
+    "ppg-16.13": {"version": "16.1"},
+    "ppg-17.9": {"version": "17.1"},
+    "ppg-18.3": {"version": "18.0"},
 }

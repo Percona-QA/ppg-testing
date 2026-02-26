@@ -45,7 +45,7 @@
   - name: Change port of Postgres instance 2
     lineinfile:
       path: /tmp/data2/postgresql.conf
-      line: port = 5233
+      line: port = 5433
 
   - name: Copy pg_hba.conf Server 1
     copy:
@@ -124,6 +124,27 @@
   - name: Create database monitor
     become_user: postgres
     command: psql -c "create database monitor;"
+    register: results
+
+  - name: Create User monitor
+    become_user: postgres
+    command: psql -p 5433 -c "CREATE USER monitor WITH ENCRYPTED PASSWORD 'Monitor@321';"
+    register: results
+
+  - debug:
+      var: results.stdout_lines
+
+  - name: Create User appuser
+    become_user: postgres
+    command: psql -p 5433 -c "CREATE USER appuser WITH  ENCRYPTED PASSWORD 'Appuser@321';"
+    register: results
+
+  - debug:
+      var: results.stdout_lines
+
+  - name: Create database monitor
+    become_user: postgres
+    command: psql -p 5433 -c "create database monitor;"
     register: results
 
   - debug:

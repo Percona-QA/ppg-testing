@@ -2,12 +2,12 @@
 dependency:
   name: galaxy
 driver:
-  name: ec2
+  name: ${driver}
 platforms:
   - name: pgpool-rhel9-arm-${BUILD_NUMBER}
-    region: eu-central-1
-    image: ami-091cd356fd6ad46ec
-    vpc_subnet_id: subnet-0fad4db6fdd8025b6
+    region: ${region}
+    image: ${ami_rhel9_arm64}
+    vpc_subnet_id: ${vpc_subnet_id_aws2}
     instance_type: t4g.medium
     ssh_user: ec2-user
     root_device_name: /dev/sda1

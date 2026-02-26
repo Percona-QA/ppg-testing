@@ -1,7 +1,8 @@
 import os
-import pytest
 import time
+from pathlib import Path
 
+import pytest
 import testinfra.utils.ansible_runner
 
 from .. import settings
@@ -13,7 +14,6 @@ DBNAME = "postgres"
 PORT = "5432"
 DATA_DIR = "/opt/pgdistro/data"
 PG_PATH = f"{INSTALL_PATH}/percona-postgresql{settings.MAJOR_VER}"
-
 
 testinfra_hosts = testinfra.utils.ansible_runner.AnsibleRunner(
     os.environ['MOLECULE_INVENTORY_FILE']).get_hosts('all')
@@ -412,3 +412,27 @@ def test_pg_config_flags(host, get_server_bin_path, flag):
     assert flag not in output, (
         f"PostgreSQL was built with {flag}, but it should NOT be present"
     )
+
+
+def test_no_pyc_files_in_install_path(host):
+    """
+    Checks for .pyc files INSIDE the remote host using Testinfra.
+    """
+    if not INSTALL_PATH:
+        pytest.skip("INSTALL_PATH is not defined.")
+
+    # 1. Use host.file to check directory existence on the remote side
+    if not host.file(INSTALL_PATH).is_directory:
+        pytest.fail(f"Remote path does not exist or is not a directory: {INSTALL_PATH}")
+
+    # 2. Use the 'find' command on the remote host to search recursively
+    # -name "*.pyc" finds the files; -print0 handles weird filenames
+    cmd = host.run(f"find {INSTALL_PATH} -name '*.pyc'")
+    
+    # 3. Process results
+    found_files = cmd.stdout.strip().splitlines()
+
+    if found_files:
+        found_list = "\n".join(found_files[:10])
+        pytest.fail(f"Found {len(found_files)} .pyc files on remote host in {INSTALL_PATH}:\n{found_list}")
+    assert True, "No .pyc files found in INSTALL_PATH"

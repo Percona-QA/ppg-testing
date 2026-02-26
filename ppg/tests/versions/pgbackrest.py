@@ -109,4 +109,9 @@ pgbackrest = {
 "ppg-16.11": {"version": "2.57.0","binary_version": "pgBackRest 2.57.0"},
 "ppg-17.7": {"version": "2.57.0","binary_version": "pgBackRest 2.57.0"},
 "ppg-18.1": {"version": "2.57.0","binary_version": "pgBackRest 2.57.0"},
+"ppg-14.22": {"version": "2.58.0","binary_version": "pgBackRest 2.58.0"},
+"ppg-15.17": {"version": "2.58.0","binary_version": "pgBackRest 2.58.0"},
+"ppg-16.13": {"version": "2.58.0","binary_version": "pgBackRest 2.58.0"},
+"ppg-17.9": {"version": "2.58.0","binary_version": "pgBackRest 2.58.0"},
+"ppg-18.3": {"version": "2.58.0","binary_version": "pgBackRest 2.58.0"},
 }

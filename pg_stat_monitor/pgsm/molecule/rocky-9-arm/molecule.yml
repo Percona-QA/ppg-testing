@@ -2,12 +2,12 @@
 dependency:
   name: galaxy
 driver:
-  name: ec2
+  name: ${driver}
 platforms:
   - name: pgstatmon-rocky9-arm-${BUILD_NUMBER}
-    region: eu-central-1
-    image: ami-0899e48d70f37fb63
-    vpc_subnet_id: subnet-0fad4db6fdd8025b6
+    region: ${region}
+    image: ${ami_rocky9_arm64}
+    vpc_subnet_id: ${vpc_subnet_id_aws2}
     instance_type: t4g.large
     ssh_user: rocky
     root_device_name: /dev/sda1

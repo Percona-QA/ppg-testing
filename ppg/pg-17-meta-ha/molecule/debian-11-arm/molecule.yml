@@ -2,12 +2,12 @@
 dependency:
   name: galaxy
 driver:
-  name: ec2
+  name: ${driver}
 platforms:
   - name: debian11-${BUILD_NUMBER}-${JOB_NAME}
-    region: eu-central-1
-    image: ami-0f41d093198bfb6d5
-    vpc_subnet_id: subnet-0fad4db6fdd8025b6
+    region: ${region}
+    image: ${ami_debian11_arm64}
+    vpc_subnet_id: ${vpc_subnet_id_aws1}
     instance_type: t4g.small
     ssh_user: admin
     root_device_name: /dev/xvda

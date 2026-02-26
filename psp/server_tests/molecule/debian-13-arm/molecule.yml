@@ -2,12 +2,12 @@
 dependency:
   name: galaxy
 driver:
-  name: ec2
+  name: ${driver}
 platforms:
   - name: psp-debian13-arm-${BUILD_NUMBER}
-    region: eu-central-1
-    image: ami-0980e2b579cda3d43
-    vpc_subnet_id: subnet-0fad4db6fdd8025b6
+    region: ${region}
+    image: ${ami_debian13_arm64}
+    vpc_subnet_id: ${vpc_subnet_id_aws2}
     instance_type: t4g.xlarge
     ssh_user: admin
     root_device_name: /dev/xvda

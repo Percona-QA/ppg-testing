@@ -133,24 +133,25 @@
         - percona-postgresql18-pltcl-debuginfo
         - percona-postgresql18-plpython3-debuginfo
         - percona-postgresql18-server-debuginfo
+        - percona-postgresql-common-dev
   when: ansible_os_family == "RedHat"
   environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-- name: Determine required PostgreSQL dev package for RHEL
-  set_fact:
-    pg_dev_package: >-
-      {{ 'percona-postgresql-server-dev-all'
-         if (upgrade_to_pg_version | string is version('18.4', '<=', strict=True))
-         else 'percona-postgresql-common-dev' }}
-  when: ansible_os_family == "RedHat"
+# - name: Determine required PostgreSQL dev package for RHEL
+#   set_fact:
+#     pg_dev_package: >-
+#       {{ 'percona-postgresql-server-dev-all'
+#          if (upgrade_to_pg_version | string is version('18.1', '<=', strict=True))
+#          else 'percona-postgresql-common-dev' }}
+#   when: ansible_os_family == "RedHat"
 
-- name: Install PostgreSQL dev package on RHEL
-  yum:
-    name: "{{ pg_dev_package }}"
-    state: latest
-    update_cache: yes
-  when: ansible_os_family == "RedHat"
+# - name: Install PostgreSQL dev package on RHEL
+#   yum:
+#     name: "{{ pg_dev_package }}"
+#     state: latest
+#     update_cache: yes
+#   when: ansible_os_family == "RedHat"
 
 # - name: Install postgresql-server-dev-all RHEL
 #   yum:

@@ -55,6 +55,11 @@ pgrepack = {
     "16.11": {"version": "1.5.3","binary_version": "pg_repack 1.5.3"},
     "17.7": {"version": "1.5.3","binary_version": "pg_repack 1.5.3"},
     "18.1": {"version": "1.5.3","binary_version": "pg_repack 1.5.3"},
+    "14.22": {"version": "1.5.3","binary_version": "pg_repack 1.5.3"},
+    "15.17": {"version": "1.5.3","binary_version": "pg_repack 1.5.3"},
+    "16.13": {"version": "1.5.3","binary_version": "pg_repack 1.5.3"},
+    "17.9": {"version": "1.5.3","binary_version": "pg_repack 1.5.3"},
+    "18.3": {"version": "1.5.3","binary_version": "pg_repack 1.5.3"},
 }
 
 pgaudit = {
@@ -112,6 +117,11 @@ pgaudit = {
     "16.11": {"version": "16.1"},
     "17.7": {"version": "17.1"},
     "18.1": {"version": "18.0"},
+    "14.22": {"version": "1.6.3"},
+    "15.17": {"version": "1.7.1"},
+    "16.13": {"version": "16.1"},
+    "17.9": {"version": "17.1"},
+    "18.3": {"version": "18.0"},
 }
 
 pg_stat_monitor = {
@@ -169,6 +179,11 @@ pg_stat_monitor = {
     "16.11": {"version": "2.3.1"},
     "17.7": {"version": "2.3.1"},
     "18.1": {"version": "2.3.1"},
+    "14.22": {"version": "2.3.2"},
+    "15.17": {"version": "2.3.2"},
+    "16.13": {"version": "2.3.2"},
+    "17.9": {"version": "2.3.2"},
+    "18.3": {"version": "2.3.2"},
 }
 
 set_user = {
@@ -226,6 +241,11 @@ set_user = {
     "16.11": {"version": "4.2.0"},
     "17.7": {"version": "4.2.0"},
     "18.1": {"version": "4.2.0"},
+    "14.22": {"version": "4.2.0"},
+    "15.17": {"version": "4.2.0"},
+    "16.13": {"version": "4.2.0"},
+    "17.9": {"version": "4.2.0"},
+    "18.3": {"version": "4.2.0"},
 }
 
 wal2json = {
@@ -283,6 +303,11 @@ wal2json = {
     "16.11": {"version": "2.6"},
     "17.7": {"version": "2.6"},
     "18.1": {"version": "2.6"},
+    "14.22": {"version": "2.6"},
+    "15.17": {"version": "2.6"},
+    "16.13": {"version": "2.6"},
+    "17.9": {"version": "2.6"},
+    "18.3": {"version": "2.6"},
 }
 
 pg_telemetry = {
@@ -307,6 +332,11 @@ pg_telemetry = {
             "16.11": {"pg_telemetry_version": "1.2","pg_telemetry_package_version": "1.2.0"},
             "17.7": {"pg_telemetry_version": "1.2","pg_telemetry_package_version": "1.2.0"},
             "18.1": {"pg_telemetry_version": "1.2","pg_telemetry_package_version": "1.2.0"},
+            "14.22": {"pg_telemetry_version": "1.2","pg_telemetry_package_version": "1.2.0"},
+            "15.17": {"pg_telemetry_version": "1.2","pg_telemetry_package_version": "1.2.0"},
+            "16.13": {"pg_telemetry_version": "1.2","pg_telemetry_package_version": "1.2.0"},
+            "17.9": {"pg_telemetry_version": "1.2","pg_telemetry_package_version": "1.2.0"},
+            "18.3": {"pg_telemetry_version": "1.2","pg_telemetry_package_version": "1.2.0"},
 }
 
 patroni = {
@@ -315,11 +345,18 @@ patroni = {
     "16.11": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
     "17.7": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
     "18.1": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
+    "14.22": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
+    "15.17": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
+    "16.13": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
+    "17.9": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
+    "18.3": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
 }
 
 pg_tde = {
     "17.7": {"version": "2.1.1","extension_version": "pg_tde 2.1.1","ext_sql_version": "2.1"},
     "18.1": {"version": "2.1.1","extension_version": "pg_tde 2.1.1","ext_sql_version": "2.1"},
+    "17.9": {"version": "2.1.2","extension_version": "pg_tde 2.1.2","ext_sql_version": "2.2"},
+    "18.3": {"version": "2.1.2","extension_version": "pg_tde 2.1.2","ext_sql_version": "2.2"},
 }
 
 pgbackrest = {
@@ -328,6 +365,11 @@ pgbackrest = {
     "16.11": {"version": "2.57.0","binary_version": "pgBackRest 2.57.0"},
     "17.7": {"version": "2.57.0","binary_version": "pgBackRest 2.57.0"},
     "18.1": {"version": "2.57.0","binary_version": "pgBackRest 2.57.0"},
+    "14.22": {"version": "2.58.0","binary_version": "pgBackRest 2.58.0"},
+    "15.17": {"version": "2.58.0","binary_version": "pgBackRest 2.58.0"},
+    "16.13": {"version": "2.58.0","binary_version": "pgBackRest 2.58.0"},
+    "17.9": {"version": "2.58.0","binary_version": "pgBackRest 2.58.0"},
+    "18.3": {"version": "2.58.0","binary_version": "pgBackRest 2.58.0"},
 }
 
 pgvector = {
@@ -336,6 +378,11 @@ pgvector = {
     "16.11": {"version": "0.8.1", "extension_version": "0.8.1"},
     "17.7": {"version": "0.8.1", "extension_version": "0.8.1"},
     "18.1": {"version": "0.8.1", "extension_version": "0.8.1"},
+    "14.22": {"version": "0.8.1", "extension_version": "0.8.1"},
+    "15.17": {"version": "0.8.1", "extension_version": "0.8.1"},
+    "16.13": {"version": "0.8.1", "extension_version": "0.8.1"},
+    "17.9": {"version": "0.8.1", "extension_version": "0.8.1"},
+    "18.3": {"version": "0.8.1", "extension_version": "0.8.1"},
 }
 
 postgis = {
@@ -344,6 +391,11 @@ postgis = {
     "16.11": {"version": "3.5.4", "major_version": "3.5", "extension_version": "3.5.4"},
     "17.7": {"version": "3.5.4", "major_version": "3.5", "extension_version": "3.5.4"},
     "18.1": {"version": "3.5.4", "major_version": "3.5", "extension_version": "3.5.4"},
+    "14.22": {"version": "3.5.5", "major_version": "3.5", "extension_version": "3.5.5"},
+    "15.17": {"version": "3.5.5", "major_version": "3.5", "extension_version": "3.5.5"},
+    "16.13": {"version": "3.5.5", "major_version": "3.5", "extension_version": "3.5.5"},
+    "17.9": {"version": "3.5.5", "major_version": "3.5", "extension_version": "3.5.5"},
+    "18.3": {"version": "3.5.5", "major_version": "3.5", "extension_version": "3.5.5"},
 }
 
 python3_etcd = {
@@ -352,6 +404,11 @@ python3_etcd = {
     "16.11": {"version": "0.4.5"},
     "17.7": {"version": "0.4.5"},
     "18.1": {"version": "0.4.5"},
+    "14.22": {"version": "0.4.5"},
+    "15.17": {"version": "0.4.5"},
+    "16.13": {"version": "0.4.5"},
+    "17.9": {"version": "0.4.5"},
+    "18.3": {"version": "0.4.5"},
 }
 
 python3_pysyncobj = {
@@ -360,6 +417,11 @@ python3_pysyncobj = {
     "16.11": {"version": "0.3.10"},
     "17.7": {"version": "0.3.10"},
     "18.1": {"version": "0.3.10"},
+    "14.22": {"version": "0.3.10"},
+    "15.17": {"version": "0.3.10"},
+    "16.13": {"version": "0.3.10"},
+    "17.9": {"version": "0.3.10"},
+    "18.3": {"version": "0.3.10"},
 }
 
 python3_ydiff = {
@@ -368,6 +430,11 @@ python3_ydiff = {
     "16.11": {"version": "1.2"},
     "17.7": {"version": "1.2"},
     "18.1": {"version": "1.2"},
+    "14.22": {"version": "1.4.2"},
+    "15.17": {"version": "1.4.2"},
+    "16.13": {"version": "1.4.2"},
+    "17.9": {"version": "1.4.2"},
+    "18.3": {"version": "1.4.2"},
 }
 
 ydiff = {
@@ -376,6 +443,11 @@ ydiff = {
     "16.11": {"version": "1.2"},
     "17.7": {"version": "1.2"},
     "18.1": {"version": "1.2"},
+    "14.22": {"version": "1.4.2"},
+    "15.17": {"version": "1.4.2"},
+    "16.13": {"version": "1.4.2"},
+    "17.9": {"version": "1.4.2"},
+    "18.3": {"version": "1.4.2"},
 }
 
 DOCKER_LIST_EXTENSIONS = ["hstore",
@@ -456,9 +528,7 @@ DOCKER_RPM_PACKAGES_TEMPLATE = ["percona-postgresql{}",
                                 "percona-postgis35_{}-llvmjit",
                                 "percona-postgis35_{}-utils",
                                 "python3-etcd",
-                                "python3-pysyncobj",
-                                "python3-ydiff",
-                                "ydiff"
+                                "python3-ydiff"
                              ]
 
 
@@ -1700,6 +1770,183 @@ ppg_versions = {
             "percona-postgis35_18-llvmjit": postgis["18.1"],
             "percona-postgis35_18-utils": postgis["18.1"],
             "libpq": "Version of libpq: 180001",
+            "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "18"),
+            "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "18"),
+            "extensions": DOCKER_LIST_EXTENSIONS,
+            "binaries": ['clusterdb', 'createdb', 'createuser',
+                        'dropdb', 'dropuser', 'pg_basebackup',
+                        'pg_config', 'pg_dump', 'pg_dumpall',
+                        'pg_isready', 'pg_receivewal', 'pg_recvlogical',
+                        'pg_restore', 'pg_verifybackup', 'psql',
+                        'reindexdb', 'vacuumdb']
+        },
+        "14.22": {
+            "version": "14.22",
+            "percona-postgresql-common": "289",
+            "percona-postgresql-client-common": "289",
+            "libpq_version": "140022",
+            "percona-pgaudit14": pgaudit["14.22"],
+            "percona-pg_repack14": pgrepack["14.22"],
+            "percona-wal2json14": wal2json["14.22"],
+            "percona-pgaudit14_set_user": set_user["14.22"],
+            "percona-pg_stat_monitor14" : pg_stat_monitor["14.22"],
+            "percona-pg-telemetry" : pg_telemetry["14.22"],
+            "libpq": "Version of libpq: 140022",
+            "percona-patroni": patroni["14.22"],
+            "percona-pgbackrest": pgbackrest["14.22"],
+            "percona-pgvector_14": pgvector["14.22"],
+            "percona-pgvector_14-llvmjit": pgvector["14.22"],
+            "python3-etcd": python3_etcd["14.22"],
+            #"python3-pysyncobj": python3_pysyncobj["14.22"],
+            "python3-ydiff": python3_ydiff["14.22"],
+            #"ydiff": ydiff["14.22"],
+            "percona-postgis35_14": postgis["14.22"],
+            "percona-postgis35_14-client": postgis["14.22"],
+            "percona-postgis35_14-gui": postgis["14.22"],
+            "percona-postgis35_14-llvmjit": postgis["14.22"],
+            "percona-postgis35_14-utils": postgis["14.22"],
+            "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "14"),
+            "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "14"),
+            "extensions": DOCKER_LIST_EXTENSIONS,
+            "binaries": ['clusterdb', 'createdb', 'createuser',
+                        'dropdb', 'dropuser', 'pg_basebackup',
+                        'pg_config', 'pg_dump', 'pg_dumpall',
+                        'pg_isready', 'pg_receivewal', 'pg_recvlogical',
+                        'pg_restore', 'pg_verifybackup', 'psql',
+                        'reindexdb', 'vacuumdb']
+        },
+        "15.17": {
+            "version": "15.17",
+            "percona-postgresql-common": "289",
+            "percona-postgresql-client-common": "289",
+            "libpq_version": "150017",
+            "percona-pgaudit15": pgaudit["15.17"],
+            "percona-pg_repack15": pgrepack["15.17"],
+            "percona-wal2json15": wal2json["15.17"],
+            "percona-pgaudit15_set_user": set_user["15.17"],
+            "percona-pg_stat_monitor15" : pg_stat_monitor["15.17"],
+            "percona-pg-telemetry" : pg_telemetry["15.17"],
+            "libpq": "Version of libpq: 150017",
+            "percona-patroni": patroni["15.17"],
+            "percona-pgbackrest": pgbackrest["15.17"],
+            "percona-pgvector_15": pgvector["15.17"],
+            "percona-pgvector_15-llvmjit": pgvector["15.17"],
+            "python3-etcd": python3_etcd["15.17"],
+            #"python3-pysyncobj": python3_pysyncobj["15.17"],
+            "python3-ydiff": python3_ydiff["15.17"],
+            #"ydiff": ydiff["15.17"],
+            "percona-postgis35_15": postgis["15.17"],
+            "percona-postgis35_15-client": postgis["15.17"],
+            "percona-postgis35_15-gui": postgis["15.17"],
+            "percona-postgis35_15-llvmjit": postgis["15.17"],
+            "percona-postgis35_15-utils": postgis["15.17"],
+            "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "15"),
+            "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "15"),
+            "extensions": DOCKER_LIST_EXTENSIONS,
+            "binaries": ['clusterdb', 'createdb', 'createuser',
+                        'dropdb', 'dropuser', 'pg_basebackup',
+                        'pg_config', 'pg_dump', 'pg_dumpall',
+                        'pg_isready', 'pg_receivewal', 'pg_recvlogical',
+                        'pg_restore', 'pg_verifybackup', 'psql',
+                        'reindexdb', 'vacuumdb']
+        },
+        "16.13": {
+            "version": "16.13",
+            "percona-postgresql-common": "289",
+            "percona-postgresql-client-common": "289",
+            "libpq_version": "160013",
+            "percona-pgaudit16": pgaudit["16.13"],
+            "percona-pg_repack16": pgrepack["16.13"],
+            "percona-wal2json16": wal2json["16.13"],
+            "percona-pgaudit16_set_user": set_user["16.13"],
+            "percona-pg_stat_monitor16" : pg_stat_monitor["16.13"],
+            "percona-pg-telemetry" : pg_telemetry["16.13"],
+            "libpq": "Version of libpq: 160013",
+            "percona-patroni": patroni["16.13"],
+            "percona-pgbackrest": pgbackrest["16.13"],
+            "percona-pgvector_16": pgvector["16.13"],
+            "percona-pgvector_16-llvmjit": pgvector["16.13"],
+            "python3-etcd": python3_etcd["16.13"],
+            # "python3-pysyncobj": python3_pysyncobj["16.13"],
+            "python3-ydiff": python3_ydiff["16.13"],
+            # "ydiff": ydiff["16.13"],
+            "percona-postgis35_16": postgis["16.13"],
+            "percona-postgis35_16-client": postgis["16.13"],
+            "percona-postgis35_16-gui": postgis["16.13"],
+            "percona-postgis35_16-llvmjit": postgis["16.13"],
+            "percona-postgis35_16-utils": postgis["16.13"],
+            "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "16"),
+            "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "16"),
+            "extensions": DOCKER_LIST_EXTENSIONS,
+            "binaries": ['clusterdb', 'createdb', 'createuser',
+                        'dropdb', 'dropuser', 'pg_basebackup',
+                        'pg_config', 'pg_dump', 'pg_dumpall',
+                        'pg_isready', 'pg_receivewal', 'pg_recvlogical',
+                        'pg_restore', 'pg_verifybackup', 'psql',
+                        'reindexdb', 'vacuumdb']
+        },
+        "17.9": {
+            "version": "17.9",
+            "percona-version": "17.9.1",
+            "percona-postgresql-common": "289",
+            "percona-postgresql-client-common": "289",
+            "libpq_version": "170009",
+            "percona-pgaudit17": pgaudit["17.9"],
+            "percona-pg_repack17": pgrepack["17.9"],
+            "percona-wal2json17": wal2json["17.9"],
+            "percona-pgaudit17_set_user": set_user["17.9"],
+            "percona-pg_stat_monitor17" : pg_stat_monitor["17.9"],
+            "percona-pg-telemetry" : pg_telemetry["17.9"],
+            "libpq": "Version of libpq: 170009",
+            "percona-patroni": patroni["17.9"],
+            "percona-pg_tde17": pg_tde["17.9"],
+            "percona-pgbackrest": pgbackrest["17.9"],
+            "percona-pgvector_17": pgvector["17.9"],
+            "percona-pgvector_17-llvmjit": pgvector["17.9"],
+            "python3-etcd": python3_etcd["17.9"],
+            #"python3-pysyncobj": python3_pysyncobj["17.9"],
+            "python3-ydiff": python3_ydiff["17.9"],
+            #"ydiff": ydiff["17.9"],
+            "percona-postgis35_17": postgis["17.9"],
+            "percona-postgis35_17-client": postgis["17.9"],
+            "percona-postgis35_17-gui": postgis["17.9"],
+            "percona-postgis35_17-llvmjit": postgis["17.9"],
+            "percona-postgis35_17-utils": postgis["17.9"],
+            "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "17"),
+            "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "17"),
+            "extensions": DOCKER_LIST_EXTENSIONS,
+            "binaries": ['clusterdb', 'createdb', 'createuser',
+                        'dropdb', 'dropuser', 'pg_basebackup',
+                        'pg_config', 'pg_dump', 'pg_dumpall',
+                        'pg_isready', 'pg_receivewal', 'pg_recvlogical',
+                        'pg_restore', 'pg_verifybackup', 'psql',
+                        'reindexdb', 'vacuumdb']
+        },
+        "18.3": {
+            "version": "18.3",
+            "percona-version": "18.3.1",
+            "percona-postgresql-common": "289",
+            "percona-postgresql-client-common": "289",
+            "libpq_version": "180003",
+            "python3-etcd": python3_etcd["18.3"],
+            #"python3-pysyncobj": python3_pysyncobj["18.3"],
+            "python3-ydiff": python3_ydiff["18.3"],
+            #"ydiff": ydiff["18.3"],
+            "percona-postgis35_18": postgis["18.3"],
+            "percona-postgis35_18-client": postgis["18.3"],
+            "percona-postgis35_18-gui": postgis["18.3"],
+            "percona-postgis35_18-llvmjit": postgis["18.3"],
+            "percona-postgis35_18-utils": postgis["18.3"],
+            "python3-etcd": python3_etcd["18.3"],
+            #"python3-pysyncobj": python3_pysyncobj["18.3"],
+            "python3-ydiff": python3_ydiff["18.3"],
+            #"ydiff": ydiff["18.3"],
+            "percona-postgis35_18": postgis["18.3"],
+            "percona-postgis35_18-client": postgis["18.3"],
+            "percona-postgis35_18-gui": postgis["18.3"],
+            "percona-postgis35_18-llvmjit": postgis["18.3"],
+            "percona-postgis35_18-utils": postgis["18.3"],
+            "libpq": "Version of libpq: 180003",
             "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "18"),
             "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "18"),
             "extensions": DOCKER_LIST_EXTENSIONS,
