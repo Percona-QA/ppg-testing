@@ -1,0 +1,34 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: ${driver}
+platforms:
+  - name: rocky9-arm-${BUILD_NUMBER}-${JOB_NAME}
+    region: ${region}
+    image: ${ami_rocky9_arm64}
+    vpc_subnet_id: ${vpc_subnet_id_aws2}
+    instance_type: t4g.large
+    ssh_user: rocky
+    root_device_name: /dev/sda1
+    instance_tags:
+      iit-billing-tag: jenkins-pg-worker
+provisioner:
+  name: ansible
+  log: True
+  playbooks:
+    create: ../../../../playbooks/create.yml
+    destroy: ../../../../playbooks/destroy.yml
+    prepare: ../../../../playbooks/prepare.yml
+    converge: ../../playbooks/playbook.yml
+verifier:
+  name: ansible
+scenario:
+  destroy_sequence:
+    - destroy
+  test_sequence:
+    - destroy
+    - create
+    - prepare
+    - converge
+    - destroy
