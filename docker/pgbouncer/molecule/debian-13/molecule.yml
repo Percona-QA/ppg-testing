@@ -1,0 +1,34 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: ${driver}
+platforms:
+  - name: debian13-${BUILD_NUMBER}-${JOB_NAME}
+    region: ${region}
+    image: ${ami_debian13_x86_64}
+    vpc_subnet_id: ${vpc_subnet_id_aws2}
+    instance_type: t2.medium
+    ssh_user: admin
+    root_device_name: /dev/xvda
+    instance_tags:
+      iit-billing-tag: jenkins-pg-worker
+provisioner:
+  name: ansible
+  log: True
+  playbooks:
+    create: ../../../../playbooks/create.yml
+    destroy: ../../../../playbooks/destroy.yml
+    prepare: ../../../../playbooks/prepare.yml
+    converge: ../../playbooks/playbook.yml
+verifier:
+  name: ansible
+scenario:
+  destroy_sequence:
+    - destroy
+  test_sequence:
+    - destroy
+    - create
+    - prepare
+    - converge
+    - destroy

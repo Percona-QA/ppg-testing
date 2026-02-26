@@ -1,0 +1,1 @@
+# PgBouncer userlist is generated at runtime by the task "Generate PgBouncer userlist.txt at runtime" in tasks/main.yml (copy with content from playbook vars). This file is not used as a template.
