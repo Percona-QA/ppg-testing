@@ -378,11 +378,11 @@ pgvector = {
     "16.11": {"version": "0.8.1", "extension_version": "0.8.1"},
     "17.7": {"version": "0.8.1", "extension_version": "0.8.1"},
     "18.1": {"version": "0.8.1", "extension_version": "0.8.1"},
-    "14.22": {"version": "0.8.1", "extension_version": "0.8.1"},
-    "15.17": {"version": "0.8.1", "extension_version": "0.8.1"},
-    "16.13": {"version": "0.8.1", "extension_version": "0.8.1"},
-    "17.9": {"version": "0.8.1", "extension_version": "0.8.1"},
-    "18.3": {"version": "0.8.1", "extension_version": "0.8.1"},
+    "14.22": {"version": "0.8.2", "extension_version": "0.8.2"},
+    "15.17": {"version": "0.8.2", "extension_version": "0.8.2"},
+    "16.13": {"version": "0.8.2", "extension_version": "0.8.2"},
+    "17.9": {"version": "0.8.2", "extension_version": "0.8.2"},
+    "18.3": {"version": "0.8.2", "extension_version": "0.8.2"},
 }
 
 postgis = {
