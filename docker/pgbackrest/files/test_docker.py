@@ -19,6 +19,15 @@ WITH_TDE = os.getenv("WITH_TDE", "0")
 TDE_ENABLED = WITH_TDE == "1" and MAJOR_VER.isdigit() and int(MAJOR_VER) >= 17
 ACCESS_METHOD = "USING tde_heap" if TDE_ENABLED else "USING heap"
 
+# Red Hat ecosystem required image labels (PPG Docker images); values from playbook when set
+REQUIRED_LABEL_MAINTAINER = os.getenv("PPG_LABEL_MAINTAINER", "Percona Development <info@percona.com>")
+REQUIRED_LABEL_VENDOR = os.getenv("PPG_LABEL_VENDOR", "Percona")
+REQUIRED_LABEL_NAME_PREFIX = "Percona "
+EXPECTED_LABEL_NAME_POSTGRESQL = os.getenv("PPG_LABEL_NAME_POSTGRESQL", "Percona Distribution for PostgreSQL")
+EXPECTED_LABEL_NAME_PGBACKREST = os.getenv("PPG_LABEL_NAME_PGBACKREST", "Percona pgBackRest")
+REQUIRED_LABEL_KEYS = ("name", "vendor", "version", "release", "summary", "description", "maintainer")
+RED_HAT_TRADEMARK_FORBIDDEN = ("Red Hat", "RHEL", "RedHat")
+
 # --- Registration to fix the "UnknownMarkWarning" ---
 def pytest_configure(config):
     config.addinivalue_line("markers", "order: order of execution")
@@ -30,6 +39,59 @@ def pitr_context():
     return {}
 
 # --- Helpers ---
+
+
+def _get_image_labels(image_ref):
+    """Return the labels dict for a Docker image (by name:tag or id)."""
+    img = client.images.get(image_ref)
+    return img.labels or {}
+
+
+def _check_no_redhat_trademark(labels, errors):
+    """Check that name, vendor, maintainer do not violate Red Hat trademark (no forbidden substrings)."""
+    for key in ("name", "vendor", "maintainer"):
+        val = (labels.get(key) or "").strip()
+        for forbidden in RED_HAT_TRADEMARK_FORBIDDEN:
+            if forbidden in val:
+                errors.append(f"label {key!r} must not contain Red Hat trademark {forbidden!r}, got: {repr(labels.get(key))}")
+
+
+def _check_required_labels_present(labels, errors):
+    """Check that all required labels (name, vendor, version, release, summary, description, maintainer) are present."""
+    for key in REQUIRED_LABEL_KEYS:
+        val = labels.get(key)
+        if val is None or (isinstance(val, str) and not val.strip()):
+            errors.append(f"required label {key!r} is missing or empty in container metadata")
+
+
+def _validate_ppg_image_labels(image_ref, expected_name=None):
+    """
+    Validate Red Hat ecosystem required labels on a PPG Docker image.
+    1. No Red Hat trademark in name, vendor, maintainer.
+    2. All required labels (name, vendor, version, release, summary, description, maintainer) are present.
+    3. name, vendor, maintainer have the expected values.
+    """
+    labels = _get_image_labels(image_ref)
+    errors = []
+
+    _check_no_redhat_trademark(labels, errors)
+    _check_required_labels_present(labels, errors)
+
+    name_val = labels.get("name", "").strip()
+    if expected_name is not None:
+        if name_val != expected_name:
+            errors.append(f"label 'name' must be {expected_name!r}, got: {repr(labels.get('name'))}")
+    elif not name_val.startswith(REQUIRED_LABEL_NAME_PREFIX) or len(name_val) <= len(REQUIRED_LABEL_NAME_PREFIX):
+        errors.append(f"label 'name' must be 'Percona <Product Name>', got: {repr(labels.get('name'))}")
+    if labels.get("maintainer") != REQUIRED_LABEL_MAINTAINER:
+        errors.append(f"label 'maintainer' must be {REQUIRED_LABEL_MAINTAINER!r}, got: {repr(labels.get('maintainer'))}")
+    if labels.get("vendor") != REQUIRED_LABEL_VENDOR:
+        errors.append(f"label 'vendor' must be {REQUIRED_LABEL_VENDOR!r}, got: {repr(labels.get('vendor'))}")
+
+    if errors:
+        raise AssertionError(f"Image {image_ref} label validation failed:\n" + "\n".join(errors))
+
+
 def run_pgbackrest(command):
     container = client.containers.get(PGBACKREST_CONTAINER_NAME)
     exit_code, output = container.exec_run(f"pgbackrest {command}")
@@ -144,6 +206,30 @@ def tde_setup():
         ensure_tde_setup()
 
 # --- Tests ---
+
+
+@pytest.mark.order(0)
+def test_ppg_postgres_image_labels():
+    """Validate PostgreSQL image: (1) name/vendor/maintainer do not violate Red Hat trademark;
+    (2) required labels (name, vendor, version, release, summary, description, maintainer) are present;
+    (3) name/vendor/maintainer match expected values (playbook: ppg_label_name_postgresql)."""
+    image_ref = os.getenv("PG_IMAGE")
+    if not image_ref:
+        pytest.skip("PG_IMAGE not set (required for image label validation)")
+    _validate_ppg_image_labels(image_ref, expected_name=EXPECTED_LABEL_NAME_POSTGRESQL)
+
+
+@pytest.mark.order(0)
+def test_ppg_pgbackrest_image_labels():
+    """Validate pgBackRest image: (1) name/vendor/maintainer do not violate Red Hat trademark;
+    (2) required labels (name, vendor, version, release, summary, description, maintainer) are present;
+    (3) name/vendor/maintainer match expected values (playbook: ppg_label_name_pgbackrest)."""
+    image_ref = os.getenv("PGBACKREST_IMAGE")
+    if not image_ref:
+        pytest.skip("PGBACKREST_IMAGE not set (required for image label validation)")
+    _validate_ppg_image_labels(image_ref, expected_name=EXPECTED_LABEL_NAME_PGBACKREST)
+
+
 @pytest.mark.order(0)
 def test_pgbackrest_binary_present():
     """Verify pgBackRest binary exists in the pgbackrest container."""
