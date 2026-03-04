@@ -92,6 +92,24 @@ def _validate_ppg_image_labels(image_ref, expected_name=None):
         raise AssertionError(f"Image {image_ref} label validation failed:\n" + "\n".join(errors))
 
 
+def _check_licenses_at_licenses(image_ref):
+    """
+    Check that terms/conditions and open source licensing are present at /licenses in the image.
+    /licenses must exist and contain content (non-empty file or directory with at least one file).
+    """
+    cmd = [
+        "sh", "-c",
+        "test -e /licenses && (test -f /licenses && test -s /licenses || (test -d /licenses && test $(ls -A /licenses 2>/dev/null | wc -l) -gt 0))",
+    ]
+    try:
+        client.containers.run(image_ref, command=cmd, remove=True, detach=False)
+    except docker.errors.ContainerError as e:
+        raise AssertionError(
+            f"Image {image_ref}: /licenses missing or empty. "
+            "Terms and open source licensing information must be present at /licenses."
+        ) from e
+
+
 def run_pgbackrest(command):
     container = client.containers.get(PGBACKREST_CONTAINER_NAME)
     exit_code, output = container.exec_run(f"pgbackrest {command}")
@@ -228,6 +246,24 @@ def test_ppg_pgbackrest_image_labels():
     if not image_ref:
         pytest.skip("PGBACKREST_IMAGE not set (required for image label validation)")
     _validate_ppg_image_labels(image_ref, expected_name=EXPECTED_LABEL_NAME_PGBACKREST)
+
+
+@pytest.mark.order(0)
+def test_ppg_postgres_image_licenses_at_licenses():
+    """Check that terms/conditions and open source licensing are present at /licenses in the PostgreSQL image."""
+    image_ref = os.getenv("PG_IMAGE")
+    if not image_ref:
+        pytest.skip("PG_IMAGE not set (required for /licenses check)")
+    _check_licenses_at_licenses(image_ref)
+
+
+@pytest.mark.order(0)
+def test_ppg_pgbackrest_image_licenses_at_licenses():
+    """Check that terms/conditions and open source licensing are present at /licenses in the pgBackRest image."""
+    image_ref = os.getenv("PGBACKREST_IMAGE")
+    if not image_ref:
+        pytest.skip("PGBACKREST_IMAGE not set (required for /licenses check)")
+    _check_licenses_at_licenses(image_ref)
 
 
 @pytest.mark.order(0)
