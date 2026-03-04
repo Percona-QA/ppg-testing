@@ -933,6 +933,61 @@ def test_pg_tde_full_lifecycle(host, get_psql_binary_path, get_server_bin_path):
             host.run(f"rm -f {keyring_file}")
 
 
+def test_pgvector_is_installed(host, get_server_path):
+    """Verify pgvector extension files are present in the tarball installation."""
+    ppg_version = float(pg_versions["version"])
+    if ppg_version <= 12.22:
+        pytest.skip("pgvector not available on " + pg_versions["version"])
+    if "pgvector" not in pg_versions:
+        pytest.skip("pgvector not in settings for this version")
+    with host.sudo():
+        vector_so = host.file(f"{get_server_path}/lib/vector.so")
+        vector_control = host.file(f"{get_server_path}/share/extension/vector.control")
+        assert vector_so.exists, f"pgvector library not found: {get_server_path}/lib/vector.so"
+        assert vector_control.exists, f"pgvector control not found: {get_server_path}/share/extension/vector.control"
+        assert pg_versions["pgvector"]["version"] in vector_control.content_string, vector_control.content_string
+
+
+def test_pgvector(host, get_psql_binary_path):
+    """Verify pgvector extension can be created and reports expected version."""
+    ppg_version = float(pg_versions["version"])
+    if ppg_version <= 12.22:
+        pytest.skip("pgvector not available on " + pg_versions["version"])
+    if "pgvector" not in pg_versions:
+        pytest.skip("pgvector not in settings for this version")
+
+    with host.sudo("postgres"):
+        install_extension = host.run(f"{get_psql_binary_path} -c 'CREATE EXTENSION \"vector\";'")
+        try:
+            assert install_extension.rc == 0, install_extension.stdout
+            assert install_extension.stdout.strip("\n") == "CREATE EXTENSION"
+        except AssertionError:
+            pytest.fail(
+                "Return code {}. Stderror: {}. Stdout {}".format(
+                    install_extension.rc, install_extension.stderr, install_extension.stdout
+                )
+            )
+        extensions = host.run(f"{get_psql_binary_path} -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{{print $3}}'")
+        assert extensions.rc == 0
+        assert "vector" in set(extensions.stdout.split())
+
+    with host.sudo("postgres"):
+        extension_version = host.run(
+            f"{get_psql_binary_path} -c \"select extversion from pg_extension where extname = 'vector';\" | awk 'NR==3{{print $1}}'"
+        )
+        try:
+            assert extension_version.rc == 0, extension_version.stdout
+            assert (
+                pg_versions["pgvector"]["extension_version"] in extension_version.stdout.strip("\n")
+            ), extension_version.stdout
+        except AssertionError:
+            pytest.fail(
+                "Return code {}. Stderror: {}. Stdout {}".format(
+                    extension_version.rc, extension_version.stderr, extension_version.stdout
+                )
+            )
+
+
 # f"{get_server_path}/share/extension/postgis.control",
 # f"{get_server_path}/lib/postgis-3.so",]
 # sql_dir = f"{get_server_path}/share/extension/"
