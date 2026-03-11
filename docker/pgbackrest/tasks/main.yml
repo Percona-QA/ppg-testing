@@ -270,6 +270,10 @@
     PG_IMAGE_TAG: "{{ PG_IMAGE_TAG }}"
     DOCKER_REPOSITORY: "{{ DOCKER_REPOSITORY }}"
     COMPONENT_VERSION: "{{ PGBACKREST_COMPONENT_VERSION }}"
+    PPG_LABEL_MAINTAINER: "{{ ppg_label_maintainer }}"
+    PPG_LABEL_VENDOR: "{{ ppg_label_vendor }}"
+    PPG_LABEL_NAME_POSTGRESQL: "{{ ppg_label_name_postgresql }}"
+    PPG_LABEL_NAME_PGBACKREST: "{{ ppg_label_name_pgbackrest }}"
   register: results
   tags:
     - execute

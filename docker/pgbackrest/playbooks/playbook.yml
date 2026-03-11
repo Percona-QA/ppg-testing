@@ -8,13 +8,13 @@
     # Get Docker repository from environment (percona or perconalab)
     DOCKER_REPOSITORY: "{{ lookup('env', 'REPOSITORY') | default('percona', true) }}"
     # Get PostgreSQL server version from environment
-    PG_SERVER_VERSION: "{{ lookup('env', 'SERVER_VERSION') | default('18.1', true) }}"
+    PG_SERVER_VERSION: "{{ lookup('env', 'SERVER_VERSION') | default('18.3', true) }}"
     # Get PostgreSQL server image tag from environment
     PG_IMAGE_TAG: "{{ lookup('env', 'DOCKER_SERVER_TAG') | default('18', true) }}"
     # Component name
     COMPONENT_NAME: "{{ lookup('env', 'COMPONENT_NAME') | default('pgbackrest', true) }}"
     # Get pgBackRest component version from environment
-    PGBACKREST_COMPONENT_VERSION: "{{ lookup('env', 'COMPONENT_VERSION') | default('2.57.0', true) }}"
+    PGBACKREST_COMPONENT_VERSION: "{{ lookup('env', 'COMPONENT_VERSION') | default('2.58.0', true) }}"
     # Get pgBackRest image tag from environment
     PGBACKREST_IMAGE_TAG: "{{ lookup('env', 'DOCKER_COMPONENT_TAG') | default('latest', true) }}"
     # Extract PostgreSQL major version for PG_BIN
@@ -37,7 +37,13 @@
     postgres_container_name: "ppg_server_primary"
     pgbackrest_container_name: "ppg_pgbackrest"
     pgbackrest_stanza_name: "main"
-    
+
+    # Red Hat ecosystem required Docker image labels (for label validation tests in pgbackrest role)
+    ppg_label_name_postgresql: "Percona Distribution for PostgreSQL"
+    ppg_label_name_pgbackrest: "Percona pgBackRest"
+    ppg_label_maintainer: "Percona Development <info@percona.com>"
+    ppg_label_vendor: "Percona"
+
     # Test configuration
     pgbackrest_test_suite: "{{ test_suite | default('all') }}"
     pgbackrest_test_log_level: "{{ log_level | default('INFO') }}"
@@ -50,7 +56,7 @@
     pgbackrest_test_install_docker: true
     pgbackrest_test_install_docker_compose: true
     pgbackrest_test_add_user_to_docker_group: true
-    pgbackrest_test_docker_compose_version: "2.57.0"
+    pgbackrest_test_docker_compose_version: "{{ PGBACKREST_COMPONENT_VERSION }}"
     
     # Execution settings
     pgbackrest_test_timeout: 7200  # Timeout in seconds (2 hours default)
@@ -71,4 +77,4 @@
       tags:
         - always
   roles:
-  - role: pgbackrest
+    - role: pgbackrest

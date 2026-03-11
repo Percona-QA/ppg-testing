@@ -196,6 +196,9 @@
     DOCKER_REPOSITORY: "{{ DOCKER_REPOSITORY }}"
     TAG: "{{ TAG }}"
     WITH_POSTGIS: "{{ WITH_POSTGIS }}"
+    PPG_LABEL_MAINTAINER: "{{ ppg_label_maintainer | default('Percona Development <info@percona.com>') }}"
+    PPG_LABEL_VENDOR: "{{ ppg_label_vendor | default('Percona') }}"
+    PPG_LABEL_NAME_POSTGRESQL: "{{ ppg_label_name_postgresql | default('Percona Distribution for PostgreSQL') }}"
   register: results
 
 - debug: var=results.stdout_lines

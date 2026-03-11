@@ -286,6 +286,10 @@
     POSTGRES_PASSWORD: "{{ postgres_password }}"
     PG_DB: "{{ (pg_db | default('postgres')) }}"
     WITH_TDE: "{{ WITH_TDE_EFFECTIVE | default('0') }}"
+    PPG_LABEL_NAME_POSTGRESQL: "{{ ppg_label_name_postgresql }}"
+    PPG_LABEL_NAME_PGBOUNCER: "{{ ppg_label_name_pgbouncer }}"
+    PPG_LABEL_MAINTAINER: "{{ ppg_label_maintainer }}"
+    PPG_LABEL_VENDOR: "{{ ppg_label_vendor }}"
   register: results
   tags:
     - execute
