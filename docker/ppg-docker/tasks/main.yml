@@ -1,10 +1,10 @@
 ---
 - name: Set Facts.
   set_fact:
-    DOCKER_REPOSITORY: "{{ lookup('env', 'REPOSITORY') | default('percona', true) }}"
-    PPG_VERSION: "{{ lookup('env', 'SERVER_VERSION') | default('18', true) }}"
-    TAG: "{{ lookup('env', 'DOCKER_TAG') | default('18', true) }}"
-    WITH_POSTGIS: "{{ lookup('env', 'WITH_POSTGIS') | default('false', true) }}"
+    DOCKER_REPOSITORY: "{{ lookup('env', 'REPOSITORY') }}"
+    PPG_VERSION: "{{ lookup('env', 'SERVER_VERSION')}}"
+    TAG: "{{ lookup('env', 'DOCKER_TAG')}}"
+    WITH_POSTGIS: "{{ lookup('env', 'WITH_POSTGIS')}}"
     cacheable: true
 
 - name: Print PPG_VERSION and TAG
@@ -154,7 +154,7 @@
 
 - name: Copy settings.py
   copy:
-    src: ../files/settings.py
+    src: settings.py
     dest: /tmp/docker_test/settings.py
     owner: root
     group: root
@@ -162,7 +162,7 @@
 
 - name: Copy test_docker.py
   copy:
-    src: ../files/test_docker.py
+    src: test_docker.py
     dest: /tmp/docker_test/test_docker.py
     owner: root
     group: root
