@@ -1,3 +1,4 @@
+import json
 import os
 import pytest
 import docker
@@ -13,8 +14,10 @@ IMG_TAG = os.getenv('PG_IMAGE_TAG')
 PG_CONTAINER_NAME = os.getenv("PG_CONTAINER_NAME", "pg_primary")
 PGBACKREST_CONTAINER_NAME = os.getenv("PGBACKREST_CONTAINER_NAME", "pgbackrest")
 PGBACKREST_STANZA_NAME = os.getenv("PGBACKREST_STANZA_NAME", "main")
+PG_RESTORED_CONTAINER_NAME = os.getenv("PG_RESTORED_CONTAINER_NAME", "pg_restored")
+LEAVE_RESTORED_RUNNING = os.getenv("PGBACKREST_LEAVE_RESTORED_RUNNING", "0").lower() in ("1", "true", "yes")
 PG_BIN = os.getenv("PG_BIN", f"/usr/pgsql-{MAJOR_VER}/bin")
-PGBACKREST_VERSION = os.getenv('COMPONENT_VERSION')
+PGBACKREST_VERSION = os.getenv('COMPONENT_VERSION', '2.58.0')
 WITH_TDE = os.getenv("WITH_TDE", "0")
 TDE_ENABLED = WITH_TDE == "1" and MAJOR_VER.isdigit() and int(MAJOR_VER) >= 17
 ACCESS_METHOD = "USING tde_heap" if TDE_ENABLED else "USING heap"
@@ -88,11 +91,46 @@ def ensure_postgres_running():
     assert wait_for_postgres(), "PostgreSQL is not ready."
 
 
+def wait_for_postgres_restored(timeout_seconds=60):
+    """Wait for the restored PostgreSQL container to accept connections."""
+    try:
+        container = client.containers.get(PG_RESTORED_CONTAINER_NAME)
+    except docker.errors.NotFound:
+        return False
+    for _ in range(timeout_seconds):
+        container.reload()
+        if container.status != "running":
+            time.sleep(0.5)
+            continue
+        exit_code, _ = container.exec_run(
+            "pg_isready -U postgres -d postgres",
+            environment={"PGPASSWORD": "mysecretpassword"},
+        )
+        if exit_code == 0:
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def run_sql_restored(query):
+    """Run SQL against the restored PostgreSQL container (used to verify backup)."""
+    container = client.containers.get(PG_RESTORED_CONTAINER_NAME)
+    container.reload()
+    if container.status != "running":
+        raise RuntimeError(f"Restored container {PG_RESTORED_CONTAINER_NAME} is not running")
+    exit_code, output = container.exec_run(
+        f"psql -U postgres -Atc \"{query}\"",
+        environment={"PGPASSWORD": "mysecretpassword"},
+    )
+    result = output.decode().strip()
+    return next((line.strip() for line in result.splitlines() if line.strip()), result)
+
+
 def update_restore_command():
     container = client.containers.get(PGBACKREST_CONTAINER_NAME)
     if TDE_ENABLED:
         restore_command = (
-            f"restore_command = 'TMPDIR=/tmp {PG_BIN}/pg_tde_archive_decrypt %f \"%p\" "
+            f"restore_command = '{PG_BIN}/pg_tde_archive_decrypt %f \"%p\" "
             f"\"pgbackrest --config=/etc/pgbackrest.conf --stanza={PGBACKREST_STANZA_NAME} archive-get %f %%p\"'"
         )
     else:
@@ -163,12 +201,23 @@ def test_pgbackrest_binary_version():
     if PGBACKREST_VERSION:
         assert PGBACKREST_VERSION in output_text, output_text
 
+
 @pytest.mark.order(1)
 def test_stanza_creation():
     """Verify pgbackrest can initialize the stanza."""
     exit_code, output = run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} stanza-create")
     assert exit_code == 0, output
     assert "stanza-create command end: completed successfully" in output
+
+
+@pytest.mark.order(1)
+def test_stanza_create_idempotent():
+    """Running stanza-create again (stanza already exists) should succeed or report already exists."""
+    exit_code, output = run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} stanza-create")
+    # Either success or acceptable "already exists" / no-op
+    assert exit_code == 0, output
+    assert "stanza-create command end: completed successfully" in output or "already exists" in output.lower()
+
 
 @pytest.mark.order(2)
 def test_full_backup():
@@ -201,23 +250,25 @@ def test_incremental_backup():
 
 @pytest.mark.order(4)
 def test_initial_backup_and_timestamp(pitr_context):
-    """Inserts 'good' data, and captures the PITR time."""
+    """
+    Inserts 'good_data' into pitr_test, takes a full backup, then captures the PITR target time.
 
+    Order matters: we must take the backup before capturing golden_time so that the backup's
+    stop time is less than the target. pgbackrest PITR requires a backup with stop time < target
+    so it can restore that backup and replay WAL up to the target time.
+    """
     run_sql(f"CREATE TABLE pitr_test (id int, val text){ACCESS_METHOD};")
     run_sql("INSERT INTO pitr_test VALUES (1, 'good_data');")
-    
-    # We force a WAL switch to ensure the data is written to the WAL stream
     run_sql("SELECT pg_switch_wal();")
-    
-    # Capture the exact time AFTER the good data is committed
-    # We use the DB's time to ensure sync with WAL timestamps
-    golden_time = run_sql("SELECT current_timestamp;")
-    pitr_context['target_time'] = golden_time
-    
-    # Take a full backup
+
+    # Take full backup first so its stop time is before we capture the target
     exit_code, output = run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} --type=full backup")
     assert exit_code == 0, output
     assert "backup command end: completed successfully" in output
+
+    # Capture PITR target time after the backup (backup stop time < golden_time)
+    golden_time = run_sql("SELECT current_timestamp;")
+    pitr_context["target_time"] = golden_time
     print(f"\nCaptured PITR Gold Time: {golden_time}")
 
 @pytest.mark.order(5)
@@ -233,6 +284,27 @@ def test_repository_consistency():
     assert "verify command end: completed successfully" in output
 
 
+@pytest.mark.order(5)
+def test_check_command():
+    """
+    Verify pgbackrest check succeeds: validates repo and that archive_command can push WAL.
+    Requires DB running and at least one backup so archive is known.
+    """
+    exit_code, output = run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} check")
+    assert exit_code == 0, output
+    assert "check command end: completed successfully" in output
+
+
+@pytest.mark.order(5)
+def test_differential_backup():
+    """Verify differential backup (--type=diff) works relative to last full backup."""
+    run_sql(f"CREATE TABLE diff_backup_test (id int){ACCESS_METHOD};")
+    run_sql("INSERT INTO diff_backup_test VALUES (1);")
+    run_sql("SELECT pg_switch_wal();")
+    exit_code, output = run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} --type=diff backup")
+    assert exit_code == 0, output
+    assert "backup command end: completed successfully" in output
+
 
 @pytest.mark.order(6)
 def test_backup_info_validity():
@@ -244,36 +316,103 @@ def test_backup_info_validity():
     exit_code, output = run_pgbackrest("info")
     assert exit_code == 0, output
     assert "status: ok" in output
-    # Ensure both full and incr are present
     assert "full backup" in output
     assert "incr backup" in output
+    assert "diff backup" in output
 
 
+@pytest.mark.order(6)
+def test_info_output_json():
+    """Verify info --output=json returns valid JSON with backup list."""
+    exit_code, output = run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} info --output=json")
+    assert exit_code == 0, output
+    data = json.loads(output)
+    assert isinstance(data, list), "info JSON should be a list of stanza info"
+    assert len(data) >= 1, "At least one stanza expected"
+    stanza_info = data[0]
+    assert "name" in stanza_info or "stanza" in stanza_info or "backup" in stanza_info or "archive" in stanza_info, (
+        f"Expected stanza/backup/archive keys in JSON: {list(stanza_info.keys())}"
+    )
+
+
+@pytest.mark.order(6)
+def test_archive_info_present():
+    """Verify info shows archive section (WAL has been pushed via archive_command)."""
+    run_sql("SELECT pg_switch_wal();")
+    exit_code, output = run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} info")
+    assert exit_code == 0, output
+    assert "archive" in output.lower(), "info should include archive section after WAL switch"
+
+
+# Run PITR (order 7–8) before retention (order 9) so the backup from test_initial_backup_and_timestamp
+# (stop time < golden_time) is still present; retention would otherwise expire it.
 @pytest.mark.order(7)
+def test_corruption_and_pitr_restore(pitr_context):
+    """
+    Point-in-time recovery (PITR): restore to a target time after simulating corruption.
+
+    Corrupts pitr_test (sets val to 'corrupted_data'), stops the primary, then runs
+    pgbackrest --delta restore --type=time --target=<target> where target is the
+    timestamp captured in test_initial_backup_and_timestamp (when val was 'good_data').
+    After recovery and promotion, test_verify_recovery_success checks that val is
+    back to 'good_data'. Uses the same recovery-option pattern as other restore tests.
+    """
+    target = pitr_context.get("target_time")
+
+    run_sql("UPDATE pitr_test SET val = 'corrupted_data' WHERE id = 1;")
+
+    pg_container = client.containers.get(PG_CONTAINER_NAME)
+    pg_container.stop()
+
+    restore_command_val = (
+        f'{PG_BIN}/pg_tde_restore_encrypt %f %p '
+        f'"pgbackrest --config=/etc/pgbackrest.conf --stanza={PGBACKREST_STANZA_NAME} archive-get %%f %%p"'
+    ) if TDE_ENABLED else (
+        f'pgbackrest --config=/etc/pgbackrest.conf --stanza={PGBACKREST_STANZA_NAME} archive-get %f %p'
+    )
+    restore_opt = f'restore_command={restore_command_val.replace(chr(34), chr(92) + chr(34))}'
+    restore_cmd = (
+        f"--stanza={PGBACKREST_STANZA_NAME} --delta restore "
+        f'--recovery-option="{restore_opt}" '
+        f"--recovery-option=recovery_target_action=promote "
+        f'--type=time --target="{target}" --target-action=promote'
+    )
+    try:
+        exit_code, output = run_pgbackrest(restore_cmd)
+        assert exit_code == 0, output
+        assert "restore command end: completed successfully" in output
+    finally:
+        pg_container.reload()
+        if pg_container.status != "running":
+            pg_container.start()
+    assert wait_for_postgres(timeout_seconds=60), "PostgreSQL did not become ready after PITR restore."
+
+
+@pytest.mark.order(8)
+def test_verify_recovery_success():
+    """Verify PITR succeeded: pitr_test id=1 should be 'good_data' (state at target time)."""
+    res = run_sql("SELECT val FROM pitr_test WHERE id = 1;")
+    assert res == "good_data", f"PITR verify: expected 'good_data', got {res!r}"
+
+
+@pytest.mark.order(9)
 def test_retention_enforcement():
     """
     Verify that only 'repo1-retention-full' number of backups are kept.
     Even if many backups were created in previous tests, the count should now be 2.
     """
-    # 1. Add more backups to ensure we are well over the limit of 2
     for i in range(3):
         run_sql(f"CREATE TABLE seed_retention_{i} (id int){ACCESS_METHOD};")
         run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} --type=full backup")
-    
-    # 2. Explicitly trigger the expire command (though backup usually does this)
+
     run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} expire")
 
-    # 3. Check info
     exit_code, output = run_pgbackrest("info")
-    
-    # We count how many 'full' backups are currently in the list
     full_backup_count = output.count("full backup:")
-    
-    # Based on our pgbackrest.conf (repo1-retention-full=2), 
-    # the count should strictly be 2.
     assert full_backup_count == 2, f"Expected 2 backups, found {full_backup_count}. Output: {output}"
 
-@pytest.mark.order(8)
+
+@pytest.mark.order(10)
 def test_archive_retention():
     """
     Verify that WAL archives (logs) are cleaned up.
@@ -291,92 +430,124 @@ def test_archive_retention():
     assert exit_code == 0, output
     assert "expire command end: completed successfully" in output
 
-@pytest.mark.order(9)
+@pytest.mark.order(11)
 def test_backup_verify_consistency():
     """Final deep-verify of the remaining 2 backups."""
     exit_code, output = run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} verify")
     assert exit_code == 0, output
 
-
 # --- Restore Tests ---
-# commented out for now as we are not restoring the database
-# having some issues with the restore process
-# will revisit later
-#@pytest.mark.order(10)
-# def test_restore_process():
-#     """Simulates a disaster and restores the database."""
-#     pg_container = client.containers.get(PG_CONTAINER_NAME)
-#     # update_restore_command()
-    
-#     # 1. Stop the database to prevent file locking
-#     pg_container.stop()
+# Restore full backup to a new container and verify backup contents (primary stays running).
+@pytest.mark.order(12)
+def test_restore_to_new_container_and_verify_backup():
+    """
+    Restore the full backup (taken in test_full_backup) to a separate data dir,
+    start a new container from that restore, and verify the backup by querying the restored instance.
+    The primary container is left running; pg_restored is started only for this check then stopped.
+    """
+    try:
+        client.containers.get(PG_RESTORED_CONTAINER_NAME)
+    except docker.errors.NotFound:
+        pytest.skip(
+            f"Container {PG_RESTORED_CONTAINER_NAME} not found. "
+            "Create it with: docker compose --profile restore create pg-restored"
+        )
 
-#     # Define the wrapped command
-#     # Note: we use triple quotes and escapes for the nested pgbackrest call
-#     #tde_wrapper = f"{PG_BIN}/pg_tde_archive_restore %f %p \\\"pgbackrest --stanza={PGBACKREST_STANZA_NAME} archive-get %f %p\\\""
+    # Inner command must use %%f and %%p so postgresql.conf has them; PostgreSQL leaves %%f/%%p as %f/%p
+    # for the wrapper, which then substitutes the temp path for %p (so pgbackrest writes to temp, not pg_wal).
+    restore_command_val = (
+        f'{PG_BIN}/pg_tde_restore_encrypt %f %p '
+        f'"pgbackrest --config=/etc/pgbackrest.conf --stanza={PGBACKREST_STANZA_NAME} archive-get %%f %%p"'
+    ) if TDE_ENABLED else (
+        f'pgbackrest --config=/etc/pgbackrest.conf --stanza={PGBACKREST_STANZA_NAME} archive-get %f %p'
+    )
+    # Shell-safe: wrap value in double quotes and escape inner double quotes
+    restore_opt = f'restore_command={restore_command_val.replace(chr(34), chr(92) + chr(34))}'
+    restore_cmd = (
+        f"--stanza={PGBACKREST_STANZA_NAME} restore "
+        f"--pg1-path=/data/restored "
+        f'--recovery-option="{restore_opt}" '
+        f"--recovery-option=recovery_target_action=promote"
+    )
+    exit_code, output = run_pgbackrest(restore_cmd)
+    assert exit_code == 0, output
+    assert "restore command end: completed successfully" in output
 
-#     # 2. Perform the restore
-#     # --delta allows pgbackrest to use existing files and overwrite them
-#     # --target-action=promote ensures the DB comes out of recovery mode on start
-#     restore_cmd = (
-#     f"--stanza={PGBACKREST_STANZA_NAME} --delta restore "
-#     f"--post-restore-setting=restore_command=\"TMPDIR=/tmp {PG_BIN}/pg_tde_archive_restore %f %p \\\"pgbackrest --stanza={PGBACKREST_STANZA_NAME} archive-get %f %p\\\"\""
-# )
-#     #restore_cmd = f"--stanza={PGBACKREST_STANZA_NAME} --delta restore --post-restore-setting=\"{tde_wrapper}\""
-#     try:
-#         exit_code, output = run_pgbackrest(restore_cmd)
-#         assert exit_code == 0, output
-#         assert "restore command end: completed successfully" in output
-#         #update_restore_command()
-#     finally:
-#         # Always restart the database to avoid cascading failures
-#         if pg_container.status != "running":
-#             pg_container.start()
-    
-#     # 4. Wait for PostgreSQL to recover (recovery.signal processing)
-#     assert wait_for_postgres(), "PostgreSQL did not become ready after restore."
+    # 2. Start the restored-instance container (created by compose with profile restore)
+    restored_container = client.containers.get(PG_RESTORED_CONTAINER_NAME)
+    if restored_container.status != "running":
+        restored_container.start()
+    assert wait_for_postgres_restored(timeout_seconds=60), (
+        f"Restored container {PG_RESTORED_CONTAINER_NAME} did not become ready."
+    )
 
-# @pytest.mark.order(11)
-# def test_verify_restored_data():
-#     """Verify the data exists after the restore."""
-#     val = run_sql("SELECT val FROM restore_val WHERE id = 1;")
-#     assert val == "original_data"
-
-# @pytest.mark.order(12)
-# def test_corruption_and_pitr_restore(pitr_context):
-#     """Simulates disaster and performs PITR restore."""
-#     target = pitr_context.get('target_time')
-    
-#     # Corrupt the data
-#     run_sql("UPDATE pitr_test SET val = 'corrupted_data' WHERE id = 1;")
-    
-#     pg_container = client.containers.get(PG_CONTAINER_NAME)
-#     #update_restore_command()
-#     pg_container.stop()
-
-#     # Define the wrapped command
-#     # Note: we use triple quotes and escapes for the nested pgbackrest call
-#     #tde_wrapper = f"{PG_BIN}/pg_tde_archive_restore %f %p \\\"pgbackrest --stanza={PGBACKREST_STANZA_NAME} archive-get %f %p\\\""
-
-
-#     # Restore to target
-#     restore_cmd = (
-#     f"--stanza={PGBACKREST_STANZA_NAME} --delta restore "
-#     f"--post-restore-setting=restore_command=\"TMPDIR=/tmp {PG_BIN}/pg_tde_archive_restore %f %p \\\"pgbackrest --stanza={PGBACKREST_STANZA_NAME} archive-get %f %p\\\"\""
-# )
-#     #restore_cmd = f'--stanza={PGBACKREST_STANZA_NAME} --delta --type=time "--target={target}" --target-action=promote restore --post-restore-setting=\"{tde_wrapper}\"'
-#     try:
-#         exit_code, output = run_pgbackrest(restore_cmd)
-#         assert exit_code == 0, output
-#         #update_restore_command()
-#     finally:
-#         if pg_container.status != "running":
-#             pg_container.start()
-#     assert wait_for_postgres(), "PostgreSQL did not become ready after PITR restore."
+    try:
+        # 3. Verify backup: data from test_full_backup and test_incremental_backup
+        val = run_sql_restored("SELECT val FROM restore_val WHERE id = 1;")
+        assert val == "original_data", f"restore_val: expected 'original_data', got {val!r}"
+        note = run_sql_restored("SELECT note FROM test_data WHERE id = 1;")
+        assert note == "verification_data", f"test_data: expected 'verification_data', got {note!r}"
+        # 4. Verify expected tables exist on restored instance
+        tables = run_sql_restored(
+            "SELECT string_agg(tablename, ',' ORDER BY tablename) FROM pg_tables WHERE schemaname = 'public';"
+        )
+        for expected in ("restore_val", "test_data", "pitr_test"):
+            assert expected in tables, f"Restored DB should contain table {expected}, got: {tables}"
+    finally:
+        if not LEAVE_RESTORED_RUNNING:
+            restored_container.stop(timeout=30)
 
 
-# @pytest.mark.order(13)
-# def test_verify_recovery_success():
-#     """Final check: Is the data back to 'good_data'?"""
-#     res = run_sql("SELECT val FROM pitr_test WHERE id = 1;")
-#     assert res == 'good_data'
+# In-place restore (stops primary, restores over pgdata, restarts primary).
+# Uses --recovery-option=restore_command so that recovery runs the TDE restore wrapper
+# (e.g. pg_tde_restore_encrypt) which calls pgbackrest archive-get for WAL.
+@pytest.mark.order(13)
+def test_restore_process():
+    """
+    In-place disaster recovery: restore over the primary's data directory and verify data.
+
+    Simulates a disaster by stopping the primary, then runs pgbackrest --delta restore
+    over the same pgdata (no separate path). The primary is restarted and recovers using
+    the restored files and WAL (via restore_command). After promotion, we verify that
+    the data inserted before the backup (restore_val, test_data) is present and correct,
+    confirming the in-place restore and recovery worked.
+    """
+    pg_container = client.containers.get(PG_CONTAINER_NAME)
+
+    # 1. Stop the database to prevent file locking
+    pg_container.stop()
+
+    # 2. Perform the restore using --recovery-option=restore_command (pgbackrest sets recovery target)
+    # --delta allows pgbackrest to use existing files and overwrite them.
+    # Pass recovery-option values without surrounding single quotes (avoids postgresql.auto.conf
+    # ''promote''/''path'' syntax errors). Inner command uses %%f %%p for TDE so wrapper gets temp path.
+    restore_command_val = (
+        f'{PG_BIN}/pg_tde_restore_encrypt %f %p '
+        f'"pgbackrest --config=/etc/pgbackrest.conf --stanza={PGBACKREST_STANZA_NAME} archive-get %%f %%p"'
+    ) if TDE_ENABLED else (
+        f'pgbackrest --config=/etc/pgbackrest.conf --stanza={PGBACKREST_STANZA_NAME} archive-get %f %p'
+    )
+    restore_opt = f'restore_command={restore_command_val.replace(chr(34), chr(92) + chr(34))}'
+    restore_cmd = (
+        f"--stanza={PGBACKREST_STANZA_NAME} --delta restore "
+        f'--recovery-option="{restore_opt}" '
+        f"--recovery-option=recovery_target_action=promote"
+    )
+    try:
+        exit_code, output = run_pgbackrest(restore_cmd)
+        assert exit_code == 0, output
+        assert "restore command end: completed successfully" in output
+    finally:
+        # Always restart the database to avoid cascading failures
+        pg_container.reload()
+        if pg_container.status != "running":
+            pg_container.start()
+
+    # 3. Wait for PostgreSQL to recover and promote; then ready for INSERTs
+    assert wait_for_postgres(timeout_seconds=60), "PostgreSQL did not become ready after restore."
+
+    # 4. Verify backup: same data checks as test_restore_to_new_container (restore_val, test_data)
+    val = run_sql("SELECT val FROM restore_val WHERE id = 1;")
+    assert val == "original_data", f"restore_val after in-place restore: expected 'original_data', got {val!r}"
+    note = run_sql("SELECT note FROM test_data WHERE id = 1;")
+    assert note == "verification_data", f"test_data after in-place restore: expected 'verification_data', got {note!r}"

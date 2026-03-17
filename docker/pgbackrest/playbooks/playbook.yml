@@ -14,7 +14,7 @@
     # Component name
     COMPONENT_NAME: "{{ lookup('env', 'COMPONENT_NAME') | default('pgbackrest', true) }}"
     # Get pgBackRest component version from environment
-    PGBACKREST_COMPONENT_VERSION: "{{ lookup('env', 'COMPONENT_VERSION') | default('2.57.0', true) }}"
+    PGBACKREST_COMPONENT_VERSION: "{{ lookup('env', 'COMPONENT_VERSION') | default('2.58.0', true) }}"
     # Get pgBackRest image tag from environment
     PGBACKREST_IMAGE_TAG: "{{ lookup('env', 'DOCKER_COMPONENT_TAG') | default('latest', true) }}"
     # Extract PostgreSQL major version for PG_BIN
@@ -36,6 +36,7 @@
     pg_bin_path: "{{ pg_bin | default('/usr/pgsql-' ~ PG_MAJOR ~ '/bin') }}"
     postgres_container_name: "ppg_server_primary"
     pgbackrest_container_name: "ppg_pgbackrest"
+    postgres_restored_container_name: "ppg_server_restored"
     pgbackrest_stanza_name: "main"
     
     # Test configuration
@@ -50,7 +51,7 @@
     pgbackrest_test_install_docker: true
     pgbackrest_test_install_docker_compose: true
     pgbackrest_test_add_user_to_docker_group: true
-    pgbackrest_test_docker_compose_version: "2.57.0"
+    pgbackrest_test_docker_compose_version: "{{ PGBACKREST_COMPONENT_VERSION }}"
     
     # Execution settings
     pgbackrest_test_timeout: 7200  # Timeout in seconds (2 hours default)
@@ -66,6 +67,7 @@
           - "Percona PostgreSQL Bin: {{ pg_bin_path }}"
           - "Percona pgBackRest Container Name: {{ pgbackrest_container_name }}"
           - "Percona PostgreSQL Container Name: {{ postgres_container_name }}"
+          - "Percona PostgreSQL Restored Container Name: {{ postgres_restored_container_name }}"
           - "Percona pgBackRest Stanza Name: {{ pgbackrest_stanza_name }}"
           - "WITH_TDE (effective): {{ WITH_TDE_EFFECTIVE }}"
       tags:

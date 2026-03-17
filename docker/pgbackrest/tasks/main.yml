@@ -115,6 +115,7 @@
     PGBACKREST_IMAGE: "{{ pgbackrest_test_image }}"
     PG_CONTAINER_NAME: "{{ postgres_container_name }}"
     PGBACKREST_CONTAINER_NAME: "{{ pgbackrest_container_name }}"
+    PG_RESTORED_CONTAINER_NAME: "{{ postgres_restored_container_name }}"
     PGBACKREST_STANZA_NAME: "{{ pgbackrest_stanza_name }}"
     PG_BIN: "{{ pg_bin_path }}"
     WITH_TDE: "{{ WITH_TDE_EFFECTIVE }}"
@@ -141,6 +142,40 @@
   # Safety: If the container fails or stays 'unhealthy', this task will fail after 60s
   failed_when:
     - pg_health.stdout == "unhealthy" or pg_health.rc != 0
+  tags: [prepare, always]
+
+# Create stanza so archive.info exists before primary ever pushes WAL (avoids
+# "unable to load info file ... archive.info" and archive_command exit 103 on checkpoint).
+- name: Create pgBackRest stanza (so primary archive_command can push WAL immediately)
+  ansible.builtin.shell: |
+    docker exec "{{ pgbackrest_container_name }}" pgbackrest --stanza="{{ pgbackrest_stanza_name }}" stanza-create
+  become: true
+  register: stanza_create_result
+  failed_when:
+    - stanza_create_result.rc != 0
+    - "'already exists' not in (stanza_create_result.stdout | default('')) + (stanza_create_result.stderr | default(''))"
+  when: docker_compose_command | default('') != "ERROR"
+  tags: [prepare, always]
+
+- name: Create pg-restored container (for restore-to-new-container test)
+  ansible.builtin.shell: |
+    {{ docker_compose_command }} -f docker-compose.yml --profile restore create pg-restored
+  args:
+    chdir: "/tmp/docker_test"
+  become: true
+  environment:
+    PG_IMAGE: "{{ postgres_test_image }}"
+    PGBACKREST_IMAGE: "{{ pgbackrest_test_image }}"
+    PG_CONTAINER_NAME: "{{ postgres_container_name }}"
+    PGBACKREST_CONTAINER_NAME: "{{ pgbackrest_container_name }}"
+    PG_RESTORED_CONTAINER_NAME: "{{ postgres_restored_container_name }}"
+    PGBACKREST_STANZA_NAME: "{{ pgbackrest_stanza_name }}"
+    PG_BIN: "{{ pg_bin_path }}"
+    WITH_TDE: "{{ WITH_TDE_EFFECTIVE }}"
+    SERVER_VERSION: "{{ PG_SERVER_VERSION }}"
+    PG_IMAGE_TAG: "{{ PG_IMAGE_TAG }}"
+    DOCKER_REPOSITORY: "{{ DOCKER_REPOSITORY }}"
+  when: docker_compose_command | default('') != "ERROR"
   tags: [prepare, always]
 
 # Test execution tasks
@@ -263,6 +298,7 @@
     PGBACKREST_IMAGE: "{{ pgbackrest_test_image }}"
     PG_CONTAINER_NAME: "{{ postgres_container_name }}"
     PGBACKREST_CONTAINER_NAME: "{{ pgbackrest_container_name }}"
+    PG_RESTORED_CONTAINER_NAME: "{{ postgres_restored_container_name }}"
     PGBACKREST_STANZA_NAME: "{{ pgbackrest_stanza_name }}"
     PG_BIN: "{{ pg_bin_path }}"
     WITH_TDE: "{{ WITH_TDE_EFFECTIVE }}"

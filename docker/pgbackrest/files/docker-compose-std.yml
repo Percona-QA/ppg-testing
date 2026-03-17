@@ -35,10 +35,37 @@ services:
       - repo_data:/var/lib/pgbackrest
       - pg_socket:/var/run/postgresql
       - ./pgbackrest.conf:/etc/pgbackrest.conf:ro
+      # Restore target for "new container from backup" test
+      - pgdata_restored:/data/restored
     depends_on:
       - pg-primary
+
+  # Restored instance: started only after restore; used to verify full backup.
+  pg-restored:
+    profiles:
+      - restore
+    image: ${PG_IMAGE}
+    container_name: ${PG_RESTORED_CONTAINER_NAME:-pg_restored}
+    user: root
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mysecretpassword
+      PGDATA: /data/db
+      WITH_TDE: "${WITH_TDE:-0}"
+      ENABLE_PG_TDE: "${WITH_TDE:-0}"
+    volumes:
+      - pgdata_restored:/data/db
+      - pg_socket_restored:/var/run/postgresql
+      - repo_data:/var/lib/pgbackrest
+      - ./pgbackrest.conf:/etc/pgbackrest.conf:ro
+    ports:
+      - "5433:5432"
+    shm_size: "1g"
+    command: postgres -c 'wal_level=replica' -c 'max_wal_senders=4' -c 'archive_mode=on' -c 'archive_command=pgbackrest --stanza=${PGBACKREST_STANZA_NAME:-main} archive-push %p'
 
 volumes:
   pgdata:
   repo_data:
   pg_socket:
+  pgdata_restored:
+  pg_socket_restored:
