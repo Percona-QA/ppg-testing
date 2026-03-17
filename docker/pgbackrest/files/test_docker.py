@@ -1,5 +1,15 @@
+"""
+pgBackRest Docker test suite – backup, archiving, and restoration.
+
+Testing strategy:
+  1. Fundamental: stanza-create, check, backup types (full / incr / diff), WAL archiving (info).
+  2. Recovery: full cluster restore, PITR (--type=time --target), delta restore (--delta),
+     selective database restore (--db-include).
+  3. Operational: retention & expiration (repo1-retention-full, expire).
+"""
 import json
 import os
+import re
 import pytest
 import docker
 import time
@@ -38,13 +48,14 @@ def run_pgbackrest(command):
     exit_code, output = container.exec_run(f"pgbackrest {command}")
     return exit_code, output.decode()
 
-def run_sql(query):
+def run_sql(query, db=None):
+    """Run SQL on primary. If db is set, connect to that database (e.g. for selective restore tests)."""
     ensure_postgres_running()
     container = client.containers.get(PG_CONTAINER_NAME)
-    # Using your password from docker-compose.yml
+    db_opt = f" -d {db}" if db else ""
     exit_code, output = container.exec_run(
-        f"psql -U postgres -Atc \"{query}\"",
-        environment={"PGPASSWORD": "mysecretpassword"}
+        f"psql -U postgres{db_opt} -Atc \"{query}\"",
+        environment={"PGPASSWORD": "mysecretpassword"},
     )
     result = output.decode().strip()
     return next((line.strip() for line in result.splitlines() if line.strip()), result)
@@ -112,14 +123,15 @@ def wait_for_postgres_restored(timeout_seconds=60):
     return False
 
 
-def run_sql_restored(query):
-    """Run SQL against the restored PostgreSQL container (used to verify backup)."""
+def run_sql_restored(query, db=None):
+    """Run SQL against the restored PostgreSQL container. db=None uses default (postgres)."""
     container = client.containers.get(PG_RESTORED_CONTAINER_NAME)
     container.reload()
     if container.status != "running":
         raise RuntimeError(f"Restored container {PG_RESTORED_CONTAINER_NAME} is not running")
+    db_opt = f" -d {db}" if db else ""
     exit_code, output = container.exec_run(
-        f"psql -U postgres -Atc \"{query}\"",
+        f"psql -U postgres{db_opt} -Atc \"{query}\"",
         environment={"PGPASSWORD": "mysecretpassword"},
     )
     result = output.decode().strip()
@@ -181,8 +193,8 @@ def tde_setup():
     if TDE_ENABLED:
         ensure_tde_setup()
 
-# --- Tests ---
-@pytest.mark.order(0)
+# --- 1. Fundamental: binary, stanza, backup types, WAL archiving ---
+@pytest.mark.order(1)
 def test_pgbackrest_binary_present():
     """Verify pgBackRest binary exists in the pgbackrest container."""
     container = client.containers.get(PGBACKREST_CONTAINER_NAME)
@@ -190,7 +202,7 @@ def test_pgbackrest_binary_present():
     assert exit_code == 0, "pgbackrest binary not found or not executable"
 
 
-@pytest.mark.order(0)
+@pytest.mark.order(2)
 def test_pgbackrest_binary_version():
     """Verify pgBackRest binary reports a version."""
     container = client.containers.get(PGBACKREST_CONTAINER_NAME)
@@ -202,26 +214,26 @@ def test_pgbackrest_binary_version():
         assert PGBACKREST_VERSION in output_text, output_text
 
 
-@pytest.mark.order(1)
+@pytest.mark.order(3)
 def test_stanza_creation():
-    """Verify pgbackrest can initialize the stanza."""
+    """Stanza validation: stanza-create so configuration matches the database cluster."""
     exit_code, output = run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} stanza-create")
     assert exit_code == 0, output
     assert "stanza-create command end: completed successfully" in output
 
 
-@pytest.mark.order(1)
+@pytest.mark.order(4)
 def test_stanza_create_idempotent():
-    """Running stanza-create again (stanza already exists) should succeed or report already exists."""
+    """Stanza validation: stanza-create idempotent (already exists) succeeds or reports same."""
     exit_code, output = run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} stanza-create")
     # Either success or acceptable "already exists" / no-op
     assert exit_code == 0, output
     assert "stanza-create command end: completed successfully" in output or "already exists" in output.lower()
 
 
-@pytest.mark.order(2)
+@pytest.mark.order(5)
 def test_full_backup():
-    """Verify a full backup works. (archive_command is handled by pg_primary)"""
+    """Backup types – full: entire cluster; foundation for incr/diff."""
     run_sql(f"CREATE TABLE restore_val (id int, val text){ACCESS_METHOD};")
     run_sql("INSERT INTO restore_val VALUES (1, 'original_data');")
     run_sql("SELECT pg_switch_wal();")
@@ -233,9 +245,9 @@ def test_full_backup():
     assert exit_code == 0, output
     assert "backup command end: completed successfully" in output
 
-@pytest.mark.order(3)
+@pytest.mark.order(6)
 def test_incremental_backup():
-    """Verify incremental backups track changes correctly."""
+    """Backup types – incremental: changes since last backup (full/diff/incr)."""
     # Insert some data to create a delta
     run_sql(f"CREATE TABLE test_data (id serial primary key, note text){ACCESS_METHOD};")
     run_sql("INSERT INTO test_data (note) VALUES ('verification_data');")
@@ -248,7 +260,7 @@ def test_incremental_backup():
 
 
 
-@pytest.mark.order(4)
+@pytest.mark.order(7)
 def test_initial_backup_and_timestamp(pitr_context):
     """
     Inserts 'good_data' into pitr_test, takes a full backup, then captures the PITR target time.
@@ -271,7 +283,7 @@ def test_initial_backup_and_timestamp(pitr_context):
     pitr_context["target_time"] = golden_time
     print(f"\nCaptured PITR Gold Time: {golden_time}")
 
-@pytest.mark.order(5)
+@pytest.mark.order(8)
 def test_repository_consistency():
     """
     Step 2: Verify the repository integrity.
@@ -284,18 +296,15 @@ def test_repository_consistency():
     assert "verify command end: completed successfully" in output
 
 
-@pytest.mark.order(5)
+@pytest.mark.order(9)
 def test_check_command():
-    """
-    Verify pgbackrest check succeeds: validates repo and that archive_command can push WAL.
-    Requires DB running and at least one backup so archive is known.
-    """
+    """Stanza validation: check confirms config matches cluster and archive_command can push WAL."""
     exit_code, output = run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} check")
     assert exit_code == 0, output
     assert "check command end: completed successfully" in output
 
 
-@pytest.mark.order(5)
+@pytest.mark.order(10)
 def test_differential_backup():
     """Verify differential backup (--type=diff) works relative to last full backup."""
     run_sql(f"CREATE TABLE diff_backup_test (id int){ACCESS_METHOD};")
@@ -305,10 +314,9 @@ def test_differential_backup():
     assert exit_code == 0, output
     assert "backup command end: completed successfully" in output
 
-
-@pytest.mark.order(6)
+@pytest.mark.order(11)
 def test_backup_info_validity():
-    """Check that the info command shows our backups as 'ok'."""
+    """Backup types and status: info shows full/incr/diff backups and status ok."""
     # Data check
     res = run_sql("SELECT val FROM pitr_test WHERE id = 1;")
     assert res == 'good_data'
@@ -321,7 +329,7 @@ def test_backup_info_validity():
     assert "diff backup" in output
 
 
-@pytest.mark.order(6)
+@pytest.mark.order(12)
 def test_info_output_json():
     """Verify info --output=json returns valid JSON with backup list."""
     exit_code, output = run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} info --output=json")
@@ -335,21 +343,29 @@ def test_info_output_json():
     )
 
 
-@pytest.mark.order(6)
-def test_archive_info_present():
-    """Verify info shows archive section (WAL has been pushed via archive_command)."""
+@pytest.mark.order(13)
+def test_wal_archiving_info():
+    """
+    WAL archiving: verify WAL segments are in the repository.
+    pgbackrest info shows archive section with min/max WAL range.
+    """
     run_sql("SELECT pg_switch_wal();")
     exit_code, output = run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} info")
     assert exit_code == 0, output
-    assert "archive" in output.lower(), "info should include archive section after WAL switch"
+    assert "archive" in output.lower(), "info should include archive section"
+    # Info lists archive WAL range (e.g. "full backup" line and WAL segment range)
+    assert "full backup" in output or "incr" in output or "diff" in output, (
+        "info should show backup(s) with archive WAL"
+    )
 
 
-# Run PITR (order 7–8) before retention (order 9) so the backup from test_initial_backup_and_timestamp
-# (stop time < golden_time) is still present; retention would otherwise expire it.
-@pytest.mark.order(7)
+# --- 2. Recovery: PITR, full cluster, delta, selective ---
+# PITR runs before retention (order 16) so the backup with stop time < golden_time is still present.
+@pytest.mark.order(14)
 def test_corruption_and_pitr_restore(pitr_context):
     """
-    Point-in-time recovery (PITR): restore to a target time after simulating corruption.
+    Point-in-time recovery (PITR): --type=time --target to restore to a specific second
+    before simulated data corruption; verify recovery to 'good_data'.
 
     Corrupts pitr_test (sets val to 'corrupted_data'), stops the primary, then runs
     pgbackrest --delta restore --type=time --target=<target> where target is the
@@ -388,18 +404,19 @@ def test_corruption_and_pitr_restore(pitr_context):
     assert wait_for_postgres(timeout_seconds=60), "PostgreSQL did not become ready after PITR restore."
 
 
-@pytest.mark.order(8)
+@pytest.mark.order(15)
 def test_verify_recovery_success():
     """Verify PITR succeeded: pitr_test id=1 should be 'good_data' (state at target time)."""
     res = run_sql("SELECT val FROM pitr_test WHERE id = 1;")
     assert res == "good_data", f"PITR verify: expected 'good_data', got {res!r}"
 
 
-@pytest.mark.order(9)
+# --- 3. Operational: retention & expiration ---
+@pytest.mark.order(16)
 def test_retention_enforcement():
     """
-    Verify that only 'repo1-retention-full' number of backups are kept.
-    Even if many backups were created in previous tests, the count should now be 2.
+    Retention & expiration: repo1-retention-full=2; expire removes older backups.
+    After multiple full backups, only 2 full backups remain.
     """
     for i in range(3):
         run_sql(f"CREATE TABLE seed_retention_{i} (id int){ACCESS_METHOD};")
@@ -412,11 +429,9 @@ def test_retention_enforcement():
     assert full_backup_count == 2, f"Expected 2 backups, found {full_backup_count}. Output: {output}"
 
 
-@pytest.mark.order(10)
+@pytest.mark.order(17)
 def test_archive_retention():
-    """
-    Verify that WAL archives (logs) are cleaned up.
-    """
+    """Retention: WAL archives for expired backups are removed by expire."""
     # Find the directory where WALs are stored
     container = client.containers.get(PGBACKREST_CONTAINER_NAME)
     # Path is usually: repo-path/archive/stanza/version-specific-dir
@@ -430,20 +445,18 @@ def test_archive_retention():
     assert exit_code == 0, output
     assert "expire command end: completed successfully" in output
 
-@pytest.mark.order(11)
+@pytest.mark.order(18)
 def test_backup_verify_consistency():
     """Final deep-verify of the remaining 2 backups."""
     exit_code, output = run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} verify")
     assert exit_code == 0, output
 
-# --- Restore Tests ---
-# Restore full backup to a new container and verify backup contents (primary stays running).
-@pytest.mark.order(12)
-def test_restore_to_new_container_and_verify_backup():
+# --- Recovery (failure) tests: full cluster, PITR, delta, selective ---
+@pytest.mark.order(19)
+def test_full_cluster_restore_to_new_container():
     """
-    Restore the full backup (taken in test_full_backup) to a separate data dir,
-    start a new container from that restore, and verify the backup by querying the restored instance.
-    The primary container is left running; pg_restored is started only for this check then stopped.
+    Full cluster restore: restore entire cluster to a separate data dir,
+    start a new container, verify backup by querying restored instance.
     """
     try:
         client.containers.get(PG_RESTORED_CONTAINER_NAME)
@@ -498,19 +511,12 @@ def test_restore_to_new_container_and_verify_backup():
             restored_container.stop(timeout=30)
 
 
-# In-place restore (stops primary, restores over pgdata, restarts primary).
-# Uses --recovery-option=restore_command so that recovery runs the TDE restore wrapper
-# (e.g. pg_tde_restore_encrypt) which calls pgbackrest archive-get for WAL.
-@pytest.mark.order(13)
-def test_restore_process():
+@pytest.mark.order(20)
+def test_delta_restore_in_place():
     """
-    In-place disaster recovery: restore over the primary's data directory and verify data.
-
-    Simulates a disaster by stopping the primary, then runs pgbackrest --delta restore
-    over the same pgdata (no separate path). The primary is restarted and recovers using
-    the restored files and WAL (via restore_command). After promotion, we verify that
-    the data inserted before the backup (restore_val, test_data) is present and correct,
-    confirming the in-place restore and recovery worked.
+    Delta restore (--delta): restore only files that differ between backup and
+    current data dir over the primary's pgdata, then recover. Simulates disaster
+    recovery where existing files are reused where unchanged.
     """
     pg_container = client.containers.get(PG_CONTAINER_NAME)
 
@@ -551,3 +557,96 @@ def test_restore_process():
     assert val == "original_data", f"restore_val after in-place restore: expected 'original_data', got {val!r}"
     note = run_sql("SELECT note FROM test_data WHERE id = 1;")
     assert note == "verification_data", f"test_data after in-place restore: expected 'verification_data', got {note!r}"
+
+@pytest.mark.order(21)
+def test_create_selective_restore_db():
+    """Create a separate database for testing --db-include selective restore."""
+    run_sql("CREATE DATABASE selective_db;")
+    if TDE_ENABLED:
+        run_sql("CREATE EXTENSION IF NOT EXISTS pg_tde;", db="selective_db")
+        run_sql(
+            "SELECT pg_tde_set_default_key_using_global_key_provider('wal-key', 'wal-vault');",
+            db="selective_db"
+        )
+    run_sql(
+        f"CREATE TABLE selective_verify (id int, val text){ACCESS_METHOD};",
+        db="selective_db"
+    )
+    run_sql("INSERT INTO selective_verify VALUES (1, 'selective_restore_data');", db="selective_db")
+    run_sql("SELECT pg_switch_wal();")
+
+@pytest.mark.order(22)
+def test_selective_database_restore():
+    """
+    Selective database restore (--db-include): restore only specified databases
+    from the backup to /data/restored, start pg_restored, verify selective_db and data.
+
+    Uses the same pg_restored container and pgdata_restored volume as
+    test_full_cluster_restore_to_new_container. No cleanup needed: we stop the container
+    so the volume is not in use, then pgbackrest restore overwrites /data/restored.
+    """
+    try:
+        restored_container = client.containers.get(PG_RESTORED_CONTAINER_NAME)
+    except docker.errors.NotFound:
+        pytest.skip(
+            f"Container {PG_RESTORED_CONTAINER_NAME} not found. "
+            "Create it with: docker compose --profile restore create pg-restored"
+        )
+
+    # Stop so we can overwrite the volume; test_full_cluster_restore_to_new_container
+    # already stops it unless LEAVE_RESTORED_RUNNING, but ensure it's stopped here.
+    restored_container.reload()
+    if restored_container.status == "running":
+        restored_container.stop(timeout=30)
+
+    # Take a full backup that definitely contains selective_db (primary has had it since test 5).
+    run_sql("SELECT pg_switch_wal();")
+    exit_code, output = run_pgbackrest(f"--stanza={PGBACKREST_STANZA_NAME} --type=full backup")
+    assert exit_code == 0, output
+    assert "backup command end: completed successfully" in output
+
+    # Use the backup we just created so restore sees selective_db (avoids [080] when
+    # "latest" would otherwise pick an older backup from retention).
+    exit_code, info_out = run_pgbackrest(
+        f"--stanza={PGBACKREST_STANZA_NAME} info"
+    )
+    assert exit_code == 0, info_out
+    full_labels = re.findall(r"\d{8}-\d{6}F", info_out)
+    assert full_labels, f"No full backup found in info output: {info_out!r}"
+    backup_set = full_labels[-1]
+
+    restore_command_val = (
+        f'{PG_BIN}/pg_tde_restore_encrypt %f %p '
+        f'"pgbackrest --config=/etc/pgbackrest.conf --stanza={PGBACKREST_STANZA_NAME} archive-get %%f %%p"'
+    ) if TDE_ENABLED else (
+        f'pgbackrest --config=/etc/pgbackrest.conf --stanza={PGBACKREST_STANZA_NAME} archive-get %f %p'
+    )
+    restore_opt = f'restore_command={restore_command_val.replace(chr(34), chr(92) + chr(34))}'
+    # --delta: /data/restored already has files from test_full_cluster_restore_to_new_container
+    # System DBs (postgres, template0, etc.) are included by default; only add selective_db
+    restore_cmd = (
+        f"--stanza={PGBACKREST_STANZA_NAME} --set={backup_set} --delta restore "
+        f"--pg1-path=/data/restored "
+        f"--db-include=selective_db "
+        f'--recovery-option="{restore_opt}" '
+        f"--recovery-option=recovery_target_action=promote"
+    )
+    exit_code, output = run_pgbackrest(restore_cmd)
+    assert exit_code == 0, output
+    assert "restore command end: completed successfully" in output
+
+    restored_container = client.containers.get(PG_RESTORED_CONTAINER_NAME)
+    if restored_container.status != "running":
+        restored_container.start()
+    assert wait_for_postgres_restored(timeout_seconds=60), (
+        f"Restored container {PG_RESTORED_CONTAINER_NAME} did not become ready."
+    )
+
+    try:
+        val = run_sql_restored("SELECT val FROM selective_verify WHERE id = 1;", db="selective_db")
+        assert val == "selective_restore_data", (
+            f"selective_verify: expected 'selective_restore_data', got {val!r}"
+        )
+    finally:
+        if not LEAVE_RESTORED_RUNNING:
+            restored_container.stop(timeout=30)
