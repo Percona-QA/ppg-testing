@@ -1,3 +1,4 @@
+import json
 import os
 import pytest
 import subprocess
@@ -19,6 +20,14 @@ DOCKER_RPM_PACKAGES = pg_docker_versions['rpm_packages']
 DOCKER_EXTENSIONS = pg_docker_versions['extensions']
 DOCKER_BINARIES = pg_docker_versions['binaries']
 
+# Red Hat ecosystem required image labels (same as pgbouncer/pgbackrest)
+REQUIRED_LABEL_MAINTAINER = os.getenv("PPG_LABEL_MAINTAINER", "Percona Development <info@percona.com>")
+REQUIRED_LABEL_VENDOR = os.getenv("PPG_LABEL_VENDOR", "Percona")
+REQUIRED_LABEL_NAME_PREFIX = "Percona "
+EXPECTED_LABEL_NAME_POSTGRESQL = os.getenv("PPG_LABEL_NAME_POSTGRESQL", "Percona Distribution for PostgreSQL")
+REQUIRED_LABEL_KEYS = ("name", "vendor", "version", "release", "summary", "description", "maintainer")
+RED_HAT_TRADEMARK_FORBIDDEN = ("Red Hat", "RHEL", "RedHat")
+
 # List of expected PG-18 TDE binaries
 TDE_BINARIES = [
     "pg_tde_archive_decrypt",
@@ -31,16 +40,94 @@ TDE_BINARIES = [
     "pg_tde_waldump",
 ]
 
+def _get_postgres_image_ref():
+    """Return the PostgreSQL Docker image ref used for this run (with or without PostGIS)."""
+    if IS_WITH_POSTGIS:
+        return f"{DOCKER_REPO}/percona-distribution-postgresql-with-postgis:{IMG_TAG}"
+    return f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG}"
+
+
+def _get_image_labels(image_ref):
+    """Return the labels dict for a Docker image (via docker inspect)."""
+    result = subprocess.run(
+        ["docker", "inspect", "--format", "{{json .Config.Labels}}", image_ref],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"docker inspect failed for {image_ref}: {result.stderr}")
+    return json.loads(result.stdout) if result.stdout.strip() else {}
+
+
+def _check_no_redhat_trademark(labels, errors):
+    """Check that name, vendor, maintainer do not violate Red Hat trademark."""
+    for key in ("name", "vendor", "maintainer"):
+        val = (labels.get(key) or "").strip()
+        for forbidden in RED_HAT_TRADEMARK_FORBIDDEN:
+            if forbidden in val:
+                errors.append(
+                    f"label {key!r} must not contain Red Hat trademark {forbidden!r}, got: {repr(labels.get(key))}"
+                )
+
+
+def _check_required_labels_present(labels, errors):
+    """Check that all required labels are present in container metadata."""
+    for key in REQUIRED_LABEL_KEYS:
+        val = labels.get(key)
+        if val is None or (isinstance(val, str) and not val.strip()):
+            errors.append(f"required label {key!r} is missing or empty in container metadata")
+
+
+def _validate_ppg_image_labels(image_ref, expected_name=None):
+    """
+    Validate Red Hat ecosystem required labels on the PPG PostgreSQL image.
+    1. No Red Hat trademark in name, vendor, maintainer.
+    2. All required labels (name, vendor, version, release, summary, description, maintainer) are present.
+    3. name, vendor, maintainer have the expected values.
+    """
+    labels = _get_image_labels(image_ref)
+    errors = []
+
+    _check_no_redhat_trademark(labels, errors)
+    _check_required_labels_present(labels, errors)
+
+    name_val = labels.get("name", "").strip()
+    if expected_name is not None:
+        if name_val != expected_name:
+            errors.append(f"label 'name' must be {expected_name!r}, got: {repr(labels.get('name'))}")
+    elif not name_val.startswith(REQUIRED_LABEL_NAME_PREFIX) or len(name_val) <= len(REQUIRED_LABEL_NAME_PREFIX):
+        errors.append(f"label 'name' must be 'Percona <Product Name>', got: {repr(labels.get('name'))}")
+    if labels.get("maintainer") != REQUIRED_LABEL_MAINTAINER:
+        errors.append(
+            f"label 'maintainer' must be {REQUIRED_LABEL_MAINTAINER!r}, got: {repr(labels.get('maintainer'))}"
+        )
+    if labels.get("vendor") != REQUIRED_LABEL_VENDOR:
+        errors.append(f"label 'vendor' must be {REQUIRED_LABEL_VENDOR!r}, got: {repr(labels.get('vendor'))}")
+
+    if errors:
+        raise AssertionError(f"Image {image_ref} label validation failed:\n" + "\n".join(errors))
+
+
+def _check_licenses_at_licenses(image_ref):
+    """Check that terms/conditions and open source licensing are present at /licenses in the image."""
+    cmd = [
+        "docker", "run", "--rm", image_ref,
+        "sh", "-c",
+        "test -e /licenses && (test -f /licenses && test -s /licenses || (test -d /licenses && test $(ls -A /licenses 2>/dev/null | wc -l) -gt 0))",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise AssertionError(
+            f"Image {image_ref}: /licenses missing or empty. "
+            "Terms and open source licensing information must be present at /licenses."
+        )
+
+
 # scope='session' uses the same container for all the tests;
 @pytest.fixture(scope='session')
 def host(request):
 
-    DOCKER_TO_USE = ""
-
-    if IS_WITH_POSTGIS:
-        DOCKER_TO_USE = f'{DOCKER_REPO}/percona-distribution-postgresql-with-postgis:{IMG_TAG}'
-    else:
-        DOCKER_TO_USE = f'{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG}'
+    DOCKER_TO_USE = _get_postgres_image_ref()
 
     print('Major Version: ' + MAJOR_VER)
     print('Major Minor Version: ' + MAJOR_MINOR_VER)
@@ -73,6 +160,20 @@ def test_wait_docker_load(host):
     dist = host.system_info.distribution
     time.sleep(5)
     assert 0 == 0
+
+
+def test_ppg_postgres_image_labels():
+    """Validate PostgreSQL image: (1) name/vendor/maintainer do not violate Red Hat trademark;
+    (2) required labels (name, vendor, version, release, summary, description, maintainer) are present;
+    (3) name/vendor/maintainer match expected values."""
+    image_ref = _get_postgres_image_ref()
+    _validate_ppg_image_labels(image_ref, expected_name=EXPECTED_LABEL_NAME_POSTGRESQL)
+
+
+def test_ppg_postgres_image_licenses_at_licenses():
+    """Check that terms/conditions and open source licensing are present at /licenses in the PostgreSQL image."""
+    image_ref = _get_postgres_image_ref()
+    _check_licenses_at_licenses(image_ref)
 
 
 @pytest.fixture()

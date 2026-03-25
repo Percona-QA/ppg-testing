@@ -3,5 +3,15 @@
   hosts: all
   become: true
   become_method: sudo
+  vars:
+    # Role root (parent of playbooks/) so import_tasks can find role files/
+    ppg_docker_role_root: "{{ playbook_dir }}/.."
+    # Red Hat ecosystem required Docker image labels (for label validation tests)
+    ppg_label_name_postgresql: "Percona Distribution for PostgreSQL"
+    ppg_label_maintainer: "Percona Development <info@percona.com>"
+    ppg_label_vendor: "Percona"
   roles:
     - role: ppg-docker
+  # tasks:
+  #   - name: Run ppg-docker role tasks
+  #     ansible.builtin.import_tasks: ../tasks/main.yml

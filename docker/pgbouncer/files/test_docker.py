@@ -25,7 +25,94 @@ WITH_TDE = os.getenv("WITH_TDE", "0")
 TDE_ENABLED = WITH_TDE == "1" and int(SERVER_VERSION.split('.')[0]) >= 17
 ACCESS_METHOD = "USING tde_heap" if TDE_ENABLED else "USING heap"
 
+# Red Hat ecosystem required image labels (PPG Docker images); values from playbook vars when set
+# This role only tests pgbouncer + postgres images; pgBackRest is validated in pgbackrest role
+REQUIRED_LABEL_MAINTAINER = os.getenv("PPG_LABEL_MAINTAINER", "Percona Development <info@percona.com>")
+REQUIRED_LABEL_VENDOR = os.getenv("PPG_LABEL_VENDOR", "Percona")
+REQUIRED_LABEL_NAME_PREFIX = "Percona "  # fallback when expected name not from playbook
+EXPECTED_LABEL_NAME_POSTGRESQL = os.getenv("PPG_LABEL_NAME_POSTGRESQL", "Percona Distribution for PostgreSQL")
+EXPECTED_LABEL_NAME_PGBOUNCER = os.getenv("PPG_LABEL_NAME_PGBOUNCER", "Percona PgBouncer")
+
+# Required container metadata labels (must be present); Red Hat ecosystem standard
+REQUIRED_LABEL_KEYS = ("name", "vendor", "version", "release", "summary", "description", "maintainer")
+
+# Substrings that must not appear in name, vendor, maintainer (Red Hat trademark)
+RED_HAT_TRADEMARK_FORBIDDEN = ("Red Hat", "RHEL", "RedHat")
+
 # --- Clean Helpers ---
+
+
+def _get_image_labels(image_ref):
+    """Return the labels dict for a Docker image (by name:tag or id)."""
+    img = client.images.get(image_ref)
+    return img.labels or {}
+
+
+def _check_no_redhat_trademark(labels, errors):
+    """Check that name, vendor, maintainer do not violate Red Hat trademark (no forbidden substrings)."""
+    for key in ("name", "vendor", "maintainer"):
+        val = (labels.get(key) or "").strip()
+        for forbidden in RED_HAT_TRADEMARK_FORBIDDEN:
+            if forbidden in val:
+                errors.append(f"label {key!r} must not contain Red Hat trademark {forbidden!r}, got: {repr(labels.get(key))}")
+
+
+def _check_required_labels_present(labels, errors):
+    """Check that all required labels (name, vendor, version, release, summary, description, maintainer) are present."""
+    for key in REQUIRED_LABEL_KEYS:
+        val = labels.get(key)
+        if val is None or (isinstance(val, str) and not val.strip()):
+            errors.append(f"required label {key!r} is missing or empty in container metadata")
+
+
+def _validate_ppg_image_labels(image_ref, expected_name=None):
+    """
+    Validate Red Hat ecosystem required labels on a PPG Docker image.
+    1. No Red Hat trademark in name, vendor, maintainer.
+    2. All required labels (name, vendor, version, release, summary, description, maintainer) are present.
+    3. name, vendor, maintainer have the expected values.
+    expected_name: exact required value for label "name" (e.g. "Percona PgBouncer").
+                   If None, only checks that name starts with "Percona " and has a product name.
+    Raises AssertionError with details if any check fails.
+    """
+    labels = _get_image_labels(image_ref)
+    errors = []
+
+    _check_no_redhat_trademark(labels, errors)
+    _check_required_labels_present(labels, errors)
+
+    name_val = labels.get("name", "").strip()
+    if expected_name is not None:
+        if name_val != expected_name:
+            errors.append(f"label 'name' must be {expected_name!r}, got: {repr(labels.get('name'))}")
+    elif not name_val.startswith(REQUIRED_LABEL_NAME_PREFIX) or len(name_val) <= len(REQUIRED_LABEL_NAME_PREFIX):
+        errors.append(f"label 'name' must be 'Percona <Product Name>', got: {repr(labels.get('name'))}")
+    if labels.get("maintainer") != REQUIRED_LABEL_MAINTAINER:
+        errors.append(f"label 'maintainer' must be {REQUIRED_LABEL_MAINTAINER!r}, got: {repr(labels.get('maintainer'))}")
+    if labels.get("vendor") != REQUIRED_LABEL_VENDOR:
+        errors.append(f"label 'vendor' must be {REQUIRED_LABEL_VENDOR!r}, got: {repr(labels.get('vendor'))}")
+
+    if errors:
+        raise AssertionError(f"Image {image_ref} label validation failed:\n" + "\n".join(errors))
+
+
+def _check_licenses_at_licenses(image_ref):
+    """
+    Check that terms/conditions and open source licensing are present at /licenses in the image.
+    /licenses must exist and contain content (non-empty file or directory with at least one file).
+    """
+    cmd = [
+        "sh", "-c",
+        "test -e /licenses && (test -f /licenses && test -s /licenses || (test -d /licenses && test $(ls -A /licenses 2>/dev/null | wc -l) -gt 0))",
+    ]
+    try:
+        client.containers.run(image_ref, command=cmd, remove=True, detach=False)
+    except docker.errors.ContainerError as e:
+        raise AssertionError(
+            f"Image {image_ref}: /licenses missing or empty. "
+            "Terms and open source licensing information must be present at /licenses."
+        ) from e
+
 
 def run_sql(query, host=PGB_HOST, port=PGB_PORT, user=PG_USER, password=PG_PASS, db=PG_DB):
     """Executes SQL from the client container."""
@@ -113,6 +200,48 @@ def tde_setup():
         ensure_tde_setup()
 
 # --- Tests ---
+
+
+@pytest.mark.order(0)
+def test_ppg_postgres_image_labels():
+    """Validate PostgreSQL image: (1) name/vendor/maintainer do not violate Red Hat trademark;
+    (2) required labels (name, vendor, version, release, summary, description, maintainer) are present;
+    (3) name/vendor/maintainer match expected values (name from playbook: ppg_label_name_postgresql)."""
+    image_ref = os.getenv("PG_IMAGE")
+    if not image_ref:
+        pytest.skip("PG_IMAGE not set (required for image label validation)")
+    _validate_ppg_image_labels(image_ref, expected_name=EXPECTED_LABEL_NAME_POSTGRESQL)
+
+
+@pytest.mark.order(0)
+def test_ppg_pgbouncer_image_labels():
+    """Validate PgBouncer image: (1) name/vendor/maintainer do not violate Red Hat trademark;
+    (2) required labels (name, vendor, version, release, summary, description, maintainer) are present;
+    (3) name/vendor/maintainer match expected values (name from playbook: ppg_label_name_pgbouncer)."""
+    image_ref = os.getenv("PGBOUNCER_IMAGE")
+    if not image_ref:
+        pytest.skip("PGBOUNCER_IMAGE not set (required for image label validation)")
+    _validate_ppg_image_labels(image_ref, expected_name=EXPECTED_LABEL_NAME_PGBOUNCER)
+
+
+@pytest.mark.order(0)
+def test_ppg_postgres_image_licenses_at_licenses():
+    """Check that terms/conditions and open source licensing are present at /licenses in the PostgreSQL image."""
+    image_ref = os.getenv("PG_IMAGE")
+    if not image_ref:
+        pytest.skip("PG_IMAGE not set (required for /licenses check)")
+    _check_licenses_at_licenses(image_ref)
+
+
+@pytest.mark.order(0)
+def test_ppg_pgbouncer_image_licenses_at_licenses():
+    """Check that terms/conditions and open source licensing are present at /licenses in the PgBouncer image."""
+    image_ref = os.getenv("PGBOUNCER_IMAGE")
+    if not image_ref:
+        pytest.skip("PGBOUNCER_IMAGE not set (required for /licenses check)")
+    _check_licenses_at_licenses(image_ref)
+
+
 @pytest.mark.order(0)
 def test_pgbouncer_binary_present():
     """Verify pgBouncer binary exists in the pgbouncer container."""
