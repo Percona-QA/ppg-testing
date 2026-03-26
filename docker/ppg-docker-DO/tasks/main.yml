@@ -62,6 +62,21 @@
   command: yum -y update
   when: ansible_os_family == "RedHat"
 
+- name: Install python3-psycopg2
+  become: true
+  apt:
+    name: python3-psycopg2
+    state: latest
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: Install python3-psycopg2
+  become: true
+  ansible.builtin.yum:
+    name: python3-psycopg2
+    state: latest
+  when: ansible_os_family == "RedHat"
+
 - name: Install Docker packages
   become: true
   ansible.builtin.yum:
