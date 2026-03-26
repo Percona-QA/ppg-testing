@@ -1,5 +1,6 @@
 #!/bin/bash
 
-source validation/bin/activate 
-pip install pytest-testinfra psycopg2-binary
+source validation/bin/activate
+pip install psycopg2-binary
+pip install pytest-testinfra
 pytest test_docker.py -vv -s -rpfs

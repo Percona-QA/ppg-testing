@@ -9,6 +9,15 @@ import time
 import psycopg2
 from datetime import datetime, timedelta
 
+# Attempt to import psycopg2 with a helpful error for CI logs
+try:
+    import psycopg2
+except ImportError:
+    print("\n[ERROR] psycopg2 not found in the current Python environment.")
+    print(f"[DEBUG] Python Executable: {sys.executable}")
+    print("[FIX] Run: pip install psycopg2-binary\n")
+    sys.exit(2) # Exit with code 2 to indicate a configuration/collection error
+
 MAJOR_VER = os.getenv('VERSION').split('.')[0]
 MAJOR_MINOR_VER = os.getenv('VERSION')
 DOCKER_REPO = os.getenv('DOCKER_REPOSITORY')
