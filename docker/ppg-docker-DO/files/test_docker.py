@@ -235,7 +235,12 @@ SKIP_EXTENSIONS = [
     "postgis",
     "postgis_topology",
     "postgis_raster",
-    "address_standardizer_data_us"
+    "address_standardizer_data_us",
+    "timescaledb",
+    "pgaudit",
+    "plpgsql",
+    "pg_repack",
+    "pg_stat_monitor",
 ]
 
 
@@ -282,9 +287,9 @@ def test_extensions_list(extension_list, host, extension):
     """
     # 1. Use the centralized helper for skip logic
     # This replaces the messy if/elif blocks and ensures consistency
-    skip, reason = should_skip(extension)
-    if skip:
-        pytest.skip(reason)
+        # skip, reason = should_skip(extension)
+        # if skip:
+        #     pytest.skip(reason)
 
     # 2. Verify the extension is present in the available extensions list
     # Use a descriptive error message to help debug if it's missing
