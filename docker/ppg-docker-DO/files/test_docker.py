@@ -269,6 +269,9 @@ def should_skip(extension):
     if major >= 17 and extension == 'adminpack':
         return True, "adminpack removed in PG17+"
 
+    if major < 18 and extension == 'pg_logicalinspect':
+        return True, "pg_logicalinspect only supported in PG18+"
+
     # 4. Feature-flag based skips
     postgis_family = {
         "postgis", "postgis_topology", "postgis_raster", "postgis_sfcgal", 
@@ -285,11 +288,12 @@ def test_extensions_list(extension_list, host, extension):
     """
     Verifies that the extension is available to be installed in the PostgreSQL instance.
     """
-    # 1. Use the centralized helper for skip logic
-    # This replaces the messy if/elif blocks and ensures consistency
-        # skip, reason = should_skip(extension)
-        # if skip:
-        #     pytest.skip(reason)
+    # 1. Version-based removals
+    if major >= 17 and extension == 'adminpack':
+        return True, "adminpack removed in PG17+"
+
+    if major < 18 and extension == 'pg_logicalinspect':
+        return True, "pg_logicalinspect only supported in PG18+"
 
     # 2. Verify the extension is present in the available extensions list
     # Use a descriptive error message to help debug if it's missing
