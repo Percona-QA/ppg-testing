@@ -6,6 +6,8 @@ import testinfra
 import sys
 import settings
 import time
+import psycopg2
+from datetime import datetime, timedelta
 
 MAJOR_VER = os.getenv('VERSION').split('.')[0]
 MAJOR_MINOR_VER = os.getenv('VERSION')
@@ -625,3 +627,97 @@ def test_pgbackrest_version(host):
 #         assert actual_version == expected_version, f"Expected {expected_version}, but found {actual_version}"
 #     else:
 #         assert len(actual_version) > 0, "python3-etcd version could not be determined"
+
+# --- Configuration ---
+DB_PARAMS = {
+    "dbname": "postgres",
+    "user": "postgres",
+    "password": "password",
+    "host": "localhost",
+    "port": "5432"
+}
+
+# --- Fixtures (Internalized conftest logic) ---
+
+@pytest.fixture(scope="session")
+def db_connection():
+    """Establish a session-wide connection to PostgreSQL."""
+    conn = psycopg2.connect(**DB_PARAMS)
+    conn.autocommit = True
+    yield conn
+    conn.close()
+
+@pytest.fixture(scope="function")
+def cursor(db_connection):
+    """Provide a cursor for individual test functions."""
+    cur = db_connection.cursor()
+    yield cur
+    cur.close()
+
+# --- TimescaleDB Test Suite ---
+
+def test_timescaledb_lifecycle(host, cursor):
+    """
+    Full lifecycle test:
+    1. Installation
+    2. Hypertable creation
+    3. Data insertion
+    4. Service restart
+    5. Persistence verification
+    """
+    table_name = "test_metrics"
+
+    try:
+        # --- 1. Extension Setup ---
+        cursor.execute("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;")
+        cursor.execute("SELECT extname FROM pg_extension WHERE extname = 'timescaledb';")
+        assert cursor.fetchone()[0] == 'timescaledb', "Extension failed to load."
+
+        # --- 2. Hypertable Creation ---
+        cursor.execute(f"DROP TABLE IF EXISTS {table_name};")
+        cursor.execute(f"""
+            CREATE TABLE {table_name} (
+                time        TIMESTAMPTZ NOT NULL,
+                device_id   INT,
+                usage       DOUBLE PRECISION
+            );
+        """)
+        cursor.execute(f"SELECT create_hypertable('{table_name}', 'time');")
+
+        # Verify it is recognized as a hypertable
+        cursor.execute(f"SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = '{table_name}';")
+        assert cursor.fetchone()[0] == 1
+
+        # --- 3. Data Insertion ---
+        base_time = datetime.now()
+        test_data = [
+            (base_time, 1, 0.85),
+            (base_time - timedelta(minutes=5), 1, 0.45)
+        ]
+        for row in test_data:
+            cursor.execute(f"INSERT INTO {table_name} VALUES (%s, %s, %s)", row)
+
+        # --- 4. Advanced Persistence Test (The Restart) ---
+        # Note: 'host' is assumed to be a testinfra/fabric object providing sudo access
+        restart_result = host.run("sudo systemctl restart postgresql")
+        assert restart_result.rc == 0, f"PostgreSQL failed to restart: {restart_result.stderr}"
+
+        # --- 5. Post-Restart Verification ---
+        # Verify data count
+        cursor.execute(f"SELECT count(*) FROM {table_name};")
+        assert cursor.fetchone()[0] == 2, "Data was lost after restart."
+
+        # Verify time-series functional query (Average)
+        cursor.execute(f"SELECT avg(usage) FROM {table_name};")
+        avg_usage = cursor.fetchone()[0]
+        assert float(avg_usage) == 0.65, f"Aggregation failed. Expected 0.65, got {avg_usage}"
+
+        # Verify chunk creation (TimescaleDB specific storage)
+        cursor.execute(f"SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name = '{table_name}';")
+        assert cursor.fetchone()[0] >= 1, "No chunks were created for the hypertable."
+
+    finally:
+        # --- 6. Cleanup ---
+        cursor.execute(f"DROP TABLE IF EXISTS {table_name};")
+        # Extension drop is optional depending on if you want a clean slate for next run
+        cursor.execute("DROP EXTENSION IF EXISTS timescaledb CASCADE;")
