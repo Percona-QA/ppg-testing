@@ -11,7 +11,7 @@
     ppg_label_maintainer: "Percona Development <info@percona.com>"
     ppg_label_vendor: "Percona"
   roles:
-    - role: ppg-docker
+    - role: ppg-docker-DO
   # tasks:
   #   - name: Run ppg-docker role tasks
   #     ansible.builtin.import_tasks: ../tasks/main.yml
