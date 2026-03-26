@@ -288,6 +288,8 @@ def test_extensions_list(extension_list, host, extension):
     """
     Verifies that the extension is available to be installed in the PostgreSQL instance.
     """
+    major = int(MAJOR_VER)
+
     # 1. Version-based removals
     if major >= 17 and extension == 'adminpack':
         return True, "adminpack removed in PG17+"
