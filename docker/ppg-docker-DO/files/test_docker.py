@@ -136,9 +136,15 @@ def host(request):
     print('WITH_POSTGIS: ' + str(os.getenv('WITH_POSTGIS')))
     print('DOCKER_TO_USE: ' + DOCKER_TO_USE)
 
+    # Pass the config to load timescaledb and pg_stat_monitor (if needed)
     docker_id = subprocess.check_output(
-        ['docker', 'run', '--name', f'PG{MAJOR_VER}', '-e', 'POSTGRES_PASSWORD=secret', 
-        '-d', DOCKER_TO_USE]).decode().strip()
+        ['docker', 'run',
+         '--name', f'PG{MAJOR_VER}',
+         '-e', 'POSTGRES_PASSWORD=password',
+         '-p', '5432:5432',
+         '-d', DOCKER_TO_USE,
+         '-c', 'shared_preload_libraries=timescaledb,pg_stat_monitor'
+        ]).decode().strip()
 
     # return a testinfra connection to the container
     yield testinfra.get_host("docker://" + docker_id)
@@ -650,9 +656,23 @@ DB_PARAMS = {
 
 @pytest.fixture(scope="session")
 def db_connection():
-    """Establish a session-wide connection to PostgreSQL."""
-    conn = psycopg2.connect(**DB_PARAMS)
-    conn.autocommit = True
+    """Establish a session-wide connection with retries for startup."""
+    max_retries = 15
+    conn = None
+
+    for i in range(max_retries):
+        try:
+            conn = psycopg2.connect(**DB_PARAMS)
+            conn.autocommit = True
+            print("\n[INFO] Connected to PostgreSQL successfully.")
+            break
+        except psycopg2.OperationalError:
+            print(f"[WAIT] Waiting for Postgres to start (attempt {i+1}/{max_retries})...")
+            time.sleep(2)
+
+    if not conn:
+        pytest.fail("Could not connect to PostgreSQL container after 30 seconds.")
+
     yield conn
     conn.close()
 
@@ -668,16 +688,18 @@ def cursor(db_connection):
 def test_timescaledb_lifecycle(host, cursor):
     """
     Full lifecycle test:
-    1. Installation
+    1. Installation & Extension Setup
     2. Hypertable creation
     3. Data insertion
-    4. Service restart
+    4. Service Manual Restart (Stop + Start)
     5. Persistence verification
     """
     table_name = "test_metrics"
+    data_dir = "/data/db/"
 
     try:
         # --- 1. Extension Setup ---
+        # Ensure shared_preload_libraries includes timescaledb in your docker run -c
         cursor.execute("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;")
         cursor.execute("SELECT extname FROM pg_extension WHERE extname = 'timescaledb';")
         assert cursor.fetchone()[0] == 'timescaledb', "Extension failed to load."
@@ -695,7 +717,7 @@ def test_timescaledb_lifecycle(host, cursor):
 
         # Verify it is recognized as a hypertable
         cursor.execute(f"SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = '{table_name}';")
-        assert cursor.fetchone()[0] == 1
+        assert cursor.fetchone()[0] == 1, "Table was not converted to hypertable"
 
         # --- 3. Data Insertion ---
         base_time = datetime.now()
@@ -707,26 +729,52 @@ def test_timescaledb_lifecycle(host, cursor):
             cursor.execute(f"INSERT INTO {table_name} VALUES (%s, %s, %s)", row)
 
         # --- 4. Advanced Persistence Test (The Restart) ---
-        # Note: 'host' is assumed to be a testinfra/fabric object providing sudo access
-        restart_result = host.run("sudo systemctl restart postgresql")
-        assert restart_result.rc == 0, f"PostgreSQL failed to restart: {restart_result.stderr}"
+        print("\n[INFO] Restarting the container from the host to test persistence...")
 
-        # --- 5. Post-Restart Verification ---
-        # Verify data count
-        cursor.execute(f"SELECT count(*) FROM {table_name};")
-        assert cursor.fetchone()[0] == 2, "Data was lost after restart."
+        # We get the container name/ID from the 'host' object or your MAJOR_VER variable
+        container_name = f"PG{MAJOR_VER}"
 
-        # Verify time-series functional query (Average)
-        cursor.execute(f"SELECT avg(usage) FROM {table_name};")
-        avg_usage = cursor.fetchone()[0]
+        # Use subprocess to restart the container from the OUTSIDE
+        subprocess.check_call(['docker', 'restart', container_name])
+
+        print("[INFO] Container restarted. Waiting for engine to recover...")
+
+        # --- 5. Reconnect Phase (The "Polling" Loop) ---
+        # We must wait for the engine to finish WAL recovery before it accepts TCP
+        new_cursor = None
+        new_conn = None
+
+        for i in range(15):
+            try:
+                time.sleep(2)
+                new_conn = psycopg2.connect(**DB_PARAMS)
+                new_conn.autocommit = True
+                new_cursor = new_conn.cursor()
+                print(f"[INFO] Successfully reconnected on attempt {i+1}")
+                break
+            except psycopg2.OperationalError:
+                if i == 14:
+                    pytest.fail("Database failed to recover after container restart.")
+                continue
+
+        # --- 6. Post-Restart Verification ---
+        new_cursor.execute(f"SELECT count(*) FROM {table_name};")
+        assert new_cursor.fetchone()[0] == 2, "Data was lost after restart."
+
+        new_cursor.execute(f"SELECT avg(usage) FROM {table_name};")
+        avg_usage = new_cursor.fetchone()[0]
         assert float(avg_usage) == 0.65, f"Aggregation failed. Expected 0.65, got {avg_usage}"
 
-        # Verify chunk creation (TimescaleDB specific storage)
-        cursor.execute(f"SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name = '{table_name}';")
-        assert cursor.fetchone()[0] >= 1, "No chunks were created for the hypertable."
+        new_cursor.execute(f"SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name = '{table_name}';")
+        assert new_cursor.fetchone()[0] >= 1, "No chunks (partitions) found after restart."
 
     finally:
-        # --- 6. Cleanup ---
-        cursor.execute(f"DROP TABLE IF EXISTS {table_name};")
-        # Extension drop is optional depending on if you want a clean slate for next run
-        cursor.execute("DROP EXTENSION IF EXISTS timescaledb CASCADE;")
+        # Use a fresh, independent connection for cleanup
+        try:
+            cleanup_conn = psycopg2.connect(**DB_PARAMS)
+            cleanup_conn.autocommit = True
+            with cleanup_conn.cursor() as cleanup_cur:
+                cleanup_cur.execute(f"DROP TABLE IF EXISTS {table_name};")
+            cleanup_conn.close()
+        except Exception:
+            pass
