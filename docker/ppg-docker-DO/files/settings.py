@@ -54,6 +54,13 @@ postgis = {
     "18.3": {"version": "3.5.5", "major_version": "3.5", "extension_version": "3.5.5"},
 }
 
+
+pg_telemetry = {
+    "16.13": {"pg_telemetry_version": "1.2","pg_telemetry_package_version": "1.2.0"},
+    "17.9": {"pg_telemetry_version": "1.2","pg_telemetry_package_version": "1.2.0"},
+    "18.3": {"pg_telemetry_version": "1.2","pg_telemetry_package_version": "1.2.0"},
+}
+
 python3_etcd = {
     "16.13": {"version": "0.4.5"},
     "17.9": {"version": "0.4.5"},
