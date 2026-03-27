@@ -153,6 +153,29 @@ def host(request):
     subprocess.check_call(['docker', 'rm', '-f', docker_id])
 
 
+def test_shared_preload_libraries_is_empty(cursor):
+    """
+    Verification: Ensure no libraries are preloaded at startup.
+    This confirms a 'clean' engine state.
+    """
+    # Query the current setting for shared_preload_libraries
+    cursor.execute("SHOW shared_preload_libraries;")
+    setting = cursor.fetchone()[0]
+
+    # Post-processing: SHOW returns a string.
+    # An empty setting is typically an empty string "" or occasionally "none"
+    # depending on the Postgres version/distribution.
+
+    assert setting == "" or setting.lower() == "none", \
+        f"Expected empty shared_preload_libraries, but found: '{setting}'"
+
+    # Optional: Verify via pg_settings table for more metadata
+    cursor.execute("SELECT setting FROM pg_settings WHERE name = 'shared_preload_libraries';")
+    pg_setting = cursor.fetchone()[0]
+
+    assert not pg_setting, f"pg_settings reflects active libraries: {pg_setting}"
+
+
 def test_psql_string(host):
     # 'host' now binds to the container
     assert f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Distribution" in host.check_output('psql -V')
