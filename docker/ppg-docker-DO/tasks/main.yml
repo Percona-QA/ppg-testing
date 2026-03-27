@@ -183,6 +183,14 @@
     group: root
     mode: 0644
 
+- name: Copy test_patroni_ha.py
+  copy:
+    src:  test_patroni_ha.py
+    dest: /tmp/docker_test/test_patroni_ha.py
+    owner: root
+    group: root
+    mode: 0644
+
 - name: Ensure Python virtual environment exists
   ansible.builtin.command: python3 -m venv validation
   args:
