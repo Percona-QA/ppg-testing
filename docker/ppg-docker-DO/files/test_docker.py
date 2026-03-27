@@ -123,11 +123,49 @@ def _check_licenses_at_licenses(image_ref):
         )
 
 
-# scope='session' uses the same container for all the tests;
+# # scope='session' uses the same container for all the tests;
+# @pytest.fixture(scope='session')
+# def host(request):
+
+#     DOCKER_TO_USE = _get_postgres_image_ref()
+
+#     print('Major Version: ' + MAJOR_VER)
+#     print('Major Minor Version: ' + MAJOR_MINOR_VER)
+#     print('Image TAG: ' + IMG_TAG)
+#     print('IS_WITH_POSTGIS: ' + str(IS_WITH_POSTGIS))
+#     print('WITH_POSTGIS: ' + str(os.getenv('WITH_POSTGIS')))
+#     print('DOCKER_TO_USE: ' + DOCKER_TO_USE)
+
+#     # Pass the config to load timescaledb and pg_stat_monitor (if needed)
+#     docker_id = subprocess.check_output(
+#         ['docker', 'run',
+#          '--name', f'PG{MAJOR_VER}',
+#          '-e', 'POSTGRES_PASSWORD=password',
+#          '-p', '5432:5432',
+#          '-d', DOCKER_TO_USE,
+#          '-c', 'shared_preload_libraries=timescaledb,pg_stat_monitor'
+#         ]).decode().strip()
+
+#     # return a testinfra connection to the container
+#     yield testinfra.get_host("docker://" + docker_id)
+
+#     # at the end of the test suite, destroy the container
+#     subprocess.check_call(['docker', 'rm', '-f', docker_id])
+
+
 @pytest.fixture(scope='session')
 def host(request):
-
+    """
+    Dynamically boots PG based on the labels of the tests in the session.
+    """
     DOCKER_TO_USE = _get_postgres_image_ref()
+    container_name = f"PG{MAJOR_VER}"
+
+    # --- The Intelligence Logic ---
+    # Check if ANY test in the current session has the 'needs_preload' mark
+    # This ensures we boot with libs if even one test needs them
+    session_items = request.session.items
+    needs_libs = any(item.get_closest_marker("needs_preload") for item in session_items)
 
     print('Major Version: ' + MAJOR_VER)
     print('Major Minor Version: ' + MAJOR_MINOR_VER)
@@ -135,21 +173,29 @@ def host(request):
     print('IS_WITH_POSTGIS: ' + str(IS_WITH_POSTGIS))
     print('WITH_POSTGIS: ' + str(os.getenv('WITH_POSTGIS')))
     print('DOCKER_TO_USE: ' + DOCKER_TO_USE)
+    print('container_name: ' + container_name)
+    print('needs_libs: ' + str(needs_libs))
 
-    # Pass the config to load timescaledb and pg_stat_monitor (if needed)
-    docker_id = subprocess.check_output(
-        ['docker', 'run',
-         '--name', f'PG{MAJOR_VER}',
-         '-e', 'POSTGRES_PASSWORD=password',
-         '-p', '5432:5432',
-         '-d', DOCKER_TO_USE,
-         '-c', 'shared_preload_libraries=timescaledb,pg_stat_monitor'
-        ]).decode().strip()
+    # Pre-flight cleanup
+    subprocess.run(['docker', 'rm', '-f', container_name], capture_output=True)
 
-    # return a testinfra connection to the container
+    run_cmd = [
+        'docker', 'run', '--name', container_name,
+        '-e', 'POSTGRES_PASSWORD=password',
+        '-p', '5432:5432', '-d', DOCKER_TO_USE
+    ]
+
+    if needs_libs:
+        print("\n[INFO] Booting PG with shared_preload_libraries=timescaledb")
+        run_cmd.extend(['-c', 'shared_preload_libraries=timescaledb,pg_stat_monitor'])
+    else:
+        print("\n[INFO] Booting PG with empty shared_preload_libraries")
+
+    docker_id = subprocess.check_output(run_cmd).decode().strip()
+    time.sleep(5)
+
     yield testinfra.get_host("docker://" + docker_id)
 
-    # at the end of the test suite, destroy the container
     subprocess.check_call(['docker', 'rm', '-f', docker_id])
 
 
@@ -389,7 +435,7 @@ def test_plpgsql_extension(host):
 def test_rpm_package_is_installed(host, package):
     # 1. Centralized Skip Logic
     if not IS_WITH_POSTGIS and "postgis" in package:
-        pytest.skip(f"Docker build is without PostGIS so skipping.")
+        pytest.skip(f"Docker build is without PostGIS so skipping {package}.")
 
     pkg = host.package(package)
 
@@ -397,24 +443,27 @@ def test_rpm_package_is_installed(host, package):
     assert pkg.is_installed, f"Package {package} is not installed"
 
     # 3. Dynamic Version Lookup
-    # We try to find the version in the dictionary with a fallback mechanism
     pkg_data = pg_docker_versions.get(package)
 
     if isinstance(pkg_data, dict):
-        # Handles cases like pg_docker_versions[package]['version']
         expected_version = pkg_data.get('version')
     else:
-        # Handles cases like pg_docker_versions[package] (direct string)
         expected_version = pkg_data
 
     # Fallback to the global 'version' if the specific package isn't mapped
     if not expected_version:
         expected_version = pg_docker_versions.get('version')
 
+    # --- Console Output Enhancement ---
+    print(f"\n[VERIFYING] Package: {package}")
+    print(f"            Expected: {expected_version}")
+    print(f"            Found:    {pkg.version}")
+
     assert pkg.version == expected_version, (
         f"Version mismatch for {package}. Expected: {expected_version}, Found: {pkg.version}"
     )
 
+    print(f"[SUCCESS] {package} version {pkg.version} verified.")
 
 # @pytest.mark.parametrize("package", DOCKER_RPM_PACKAGES)
 # def test_rpm_package_is_installed(host, package):
@@ -434,7 +483,7 @@ def test_rpm_package_is_installed(host, package):
 #     else:
 #         assert pkg.version == pg_docker_versions['version']
 
-
+@pytest.mark.needs_preload
 def test_pg_stat_monitor_extension_version(host):
     # 1. Ensure extension is created
     create_res = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_stat_monitor;'")
@@ -676,7 +725,6 @@ DB_PARAMS = {
 }
 
 # --- Fixtures (Internalized conftest logic) ---
-
 @pytest.fixture(scope="session")
 def db_connection():
     """Establish a session-wide connection with retries for startup."""
@@ -707,25 +755,39 @@ def cursor(db_connection):
     cur.close()
 
 # --- TimescaleDB Test Suite ---
-
+@pytest.mark.needs_preload
 def test_timescaledb_lifecycle(host, cursor):
     """
     Full lifecycle test:
-    1. Installation & Extension Setup
+    1. Installation & Version Verification
     2. Hypertable creation
     3. Data insertion
-    4. Service Manual Restart (Stop + Start)
+    4. Service Manual Restart (Host-side Docker Restart)
     5. Persistence verification
     """
     table_name = "test_metrics"
-    data_dir = "/data/db/"
+
+    # Fetch expected version metadata
+    pkg_key = f"percona-timescaledb_{MAJOR_VER}"
+    if pkg_key not in pg_docker_versions:
+        pytest.fail(f"Metadata key {pkg_key} not found in pg_docker_versions settings.")
+
+    expected_full_version = pg_docker_versions[pkg_key]['version']
 
     try:
-        # --- 1. Extension Setup ---
-        # Ensure shared_preload_libraries includes timescaledb in your docker run -c
+        # --- 1. Extension Setup & Version Check ---
         cursor.execute("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;")
-        cursor.execute("SELECT extname FROM pg_extension WHERE extname = 'timescaledb';")
-        assert cursor.fetchone()[0] == 'timescaledb', "Extension failed to load."
+
+        # Verify Extension Name
+        cursor.execute("SELECT extname, extversion FROM pg_extension WHERE extname = 'timescaledb';")
+        extension_info = cursor.fetchone()
+        assert extension_info is not None, "Extension failed to load into pg_extension catalog."
+
+        actual_db_version = extension_info[1]
+
+        # Verify Version: check if DB version (e.g. 2.13.1) is in the package string (e.g. 2.13.1-1.debian12)
+        assert actual_db_version in expected_full_version, \
+            f"Version mismatch! DB reports {actual_db_version}, but manifest expects {expected_full_version}"
 
         # --- 2. Hypertable Creation ---
         cursor.execute(f"DROP TABLE IF EXISTS {table_name};")
@@ -752,18 +814,11 @@ def test_timescaledb_lifecycle(host, cursor):
             cursor.execute(f"INSERT INTO {table_name} VALUES (%s, %s, %s)", row)
 
         # --- 4. Advanced Persistence Test (The Restart) ---
-        print("\n[INFO] Restarting the container from the host to test persistence...")
-
-        # We get the container name/ID from the 'host' object or your MAJOR_VER variable
+        print(f"\n[INFO] Restarting container PG{MAJOR_VER} from host to test persistence...")
         container_name = f"PG{MAJOR_VER}"
-
-        # Use subprocess to restart the container from the OUTSIDE
         subprocess.check_call(['docker', 'restart', container_name])
 
-        print("[INFO] Container restarted. Waiting for engine to recover...")
-
         # --- 5. Reconnect Phase (The "Polling" Loop) ---
-        # We must wait for the engine to finish WAL recovery before it accepts TCP
         new_cursor = None
         new_conn = None
 
@@ -781,18 +836,25 @@ def test_timescaledb_lifecycle(host, cursor):
                 continue
 
         # --- 6. Post-Restart Verification ---
-        new_cursor.execute(f"SELECT count(*) FROM {table_name};")
-        assert new_cursor.fetchone()[0] == 2, "Data was lost after restart."
+        try:
+            new_cursor.execute(f"SELECT count(*) FROM {table_name};")
+            assert new_cursor.fetchone()[0] == 2, "Data was lost after restart."
 
-        new_cursor.execute(f"SELECT avg(usage) FROM {table_name};")
-        avg_usage = new_cursor.fetchone()[0]
-        assert float(avg_usage) == 0.65, f"Aggregation failed. Expected 0.65, got {avg_usage}"
+            new_cursor.execute(f"SELECT avg(usage) FROM {table_name};")
+            avg_usage = new_cursor.fetchone()[0]
+            # float() conversion handles Decimal types from Postgres
+            assert float(avg_usage) == 0.65, f"Aggregation failed. Expected 0.65, got {avg_usage}"
 
-        new_cursor.execute(f"SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name = '{table_name}';")
-        assert new_cursor.fetchone()[0] >= 1, "No chunks (partitions) found after restart."
+            new_cursor.execute(f"SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name = '{table_name}';")
+            assert cursor.fetchone()[0] >= 1, "No chunks (partitions) found after restart."
+        finally:
+            if new_cursor:
+                new_cursor.close()
+            if new_conn:
+                new_conn.close()
 
     finally:
-        # Use a fresh, independent connection for cleanup
+        # Final cleanup using a fresh connection to ensure it runs even if the test fails
         try:
             cleanup_conn = psycopg2.connect(**DB_PARAMS)
             cleanup_conn.autocommit = True
@@ -800,4 +862,4 @@ def test_timescaledb_lifecycle(host, cursor):
                 cleanup_cur.execute(f"DROP TABLE IF EXISTS {table_name};")
             cleanup_conn.close()
         except Exception:
-            pass
+            pass # DB might be unreachable or table already gone
