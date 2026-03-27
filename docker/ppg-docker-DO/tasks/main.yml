@@ -207,6 +207,8 @@
     pytest test_docker.py -vv -s -rpfs -m "not needs_preload"
     #Run test with shared_preload_libraries (timescaledb and pg_stat_monitor)
     pytest test_docker.py -vv -s -rpfs -m "needs_preload"
+    #Run test for Patroni HA
+    pytest test_patroni_ha.py -vv -s -rpfs
   args:
     executable: /bin/bash
     chdir: /tmp/docker_test
