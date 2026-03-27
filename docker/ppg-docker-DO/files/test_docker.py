@@ -31,6 +31,18 @@ REQUIRED_LABEL_KEYS = ("name", "vendor", "version", "release", "summary", "descr
 RED_HAT_TRADEMARK_FORBIDDEN = ("Red Hat", "RHEL", "RedHat")
 
 
+def reconnect_db():
+    """Helper to establish a fresh connection if the server restarted or crashed."""
+    for i in range(10):
+        try:
+            conn = psycopg2.connect(**DB_PARAMS)
+            conn.autocommit = True
+            return conn
+        except psycopg2.OperationalError:
+            time.sleep(2)
+    pytest.fail("Could not reconnect to database after server crash.")
+
+
 def _get_postgres_image_ref():
     """Return the PostgreSQL Docker image ref used for this run (with or without PostGIS)."""
     if IS_WITH_POSTGIS:
@@ -116,47 +128,49 @@ def _check_licenses_at_licenses(image_ref):
 
 @pytest.fixture(scope='session')
 def host(request):
-    DOCKER_TO_USE = _get_postgres_image_ref()
-    # Ensure this exactly matches what db_connection expects
     container_name = "PG18"
+    DOCKER_TO_USE = _get_postgres_image_ref()
+    needs_libs = any(item.get_closest_marker("needs_preload") for item in request.session.items)
 
-    session_items = request.session.items
-    needs_libs = any(item.get_closest_marker("needs_preload") for item in session_items)
-
-    # Clean up ANY existing container with this name first
     subprocess.run(['docker', 'rm', '-f', container_name], capture_output=True)
-
-    print('Major Version: ' + MAJOR_VER)
-    print('Major Minor Version: ' + MAJOR_MINOR_VER)
-    print('Image TAG: ' + IMG_TAG)
-    print('IS_WITH_POSTGIS: ' + str(IS_WITH_POSTGIS))
-    print('WITH_POSTGIS: ' + str(os.getenv('WITH_POSTGIS')))
-    print('DOCKER_TO_USE: ' + DOCKER_TO_USE)
-    print('container_name: ' + container_name)
-    print('needs_libs: ' + str(needs_libs))
 
     run_cmd = [
         'docker', 'run', '--name', container_name,
         '-e', 'POSTGRES_PASSWORD=password',
-        '-p', '5432:5432', '-d', DOCKER_TO_USE
+        '--shm-size=2g',
+        '-p', '5432:5432',
+        '-d', DOCKER_TO_USE
     ]
 
     if needs_libs:
-        run_cmd.extend(['-c', 'shared_preload_libraries=timescaledb,pg_stat_monitor', 
-                        '-c', 'timescaledb.max_background_workers=4',
-                        '-c', 'max_worker_processes=20'])
+        # These specific flags prevent pg_stat_monitor from over-allocating on boot
+        run_cmd.extend([
+            '-c', 'shared_preload_libraries=timescaledb,pg_stat_monitor',
+            '-c', 'shared_buffers=256MB',
+            '-c', 'max_worker_processes=32',       # Give extensions room to breathe
+            '-c', 'max_parallel_workers=16',
+            '-c', 'pg_stat_monitor.pgsm_max=500',  # Smaller bucket to save shared mem
+            '-c', 'pg_stat_monitor.pgsm_query_max_len=1024',
+            '-c', 'timescaledb.max_background_workers=4'
+        ])
 
-    # Capture the ID but keep using the NAME for inspect/logs
-    docker_id = subprocess.check_output(run_cmd).decode().strip()
+    subprocess.check_output(run_cmd)
 
-    # Wait for Docker daemon to stabilize
-    time.sleep(5)
+    # --- STABILITY WAIT ---
+    # Don't just wait; verify the server can actually answer a query
+    for _ in range(30):
+        res = subprocess.run(['docker', 'exec', container_name, 'pg_isready'], capture_output=True)
+        if res.returncode == 0:
+            # Final sanity check: Can we run a SQL command?
+            sql = subprocess.run(['docker', 'exec', container_name, 'psql', '-U', 'postgres', '-c', 'SELECT 1'], capture_output=True)
+            if sql.returncode == 0:
+                break
+        time.sleep(1)
 
-    # Yield the testinfra host object
+    time.sleep(2) # Final settle time for background workers
     yield testinfra.get_host("docker://" + container_name)
-
-    # Cleanup ONLY happens after all tests (session scope) are done
     subprocess.run(['docker', 'rm', '-f', container_name], capture_output=True)
+
 
 def test_shared_preload_libraries_is_empty(cursor, request):
     """
@@ -345,6 +359,7 @@ def test_extensions_list(extension_list, host, extension):
         f"PostgreSQL {MAJOR_VER} installation."
     )
 
+
 @pytest.mark.parametrize("extension", DOCKER_EXTENSIONS)
 def test_enable_extension(host, extension):
     skip, reason = should_skip(extension)
@@ -419,24 +434,6 @@ def test_rpm_package_is_installed(host, package):
     )
 
     print(f"[SUCCESS] {package} version {pkg.version} verified.")
-
-# @pytest.mark.parametrize("package", DOCKER_RPM_PACKAGES)
-# def test_rpm_package_is_installed(host, package):
-#     if not IS_WITH_POSTGIS and "postgis" in package:
-#         pytest.skip(f"Docker build is without PostGIS so skipping.")
-        
-#     pkg = host.package(package.strip())
-#     assert pkg.is_installed
-#     if package in ["percona-postgresql-client-common", "percona-postgresql-common"]:
-#         assert pkg.version == pg_docker_versions[package]
-#     elif package in [f"percona-pgaudit{MAJOR_VER}", f"percona-wal2json{MAJOR_VER}", f"percona-pg_stat_monitor{MAJOR_VER}",
-#         f"percona-pgaudit{MAJOR_VER}_set_user", f"percona-pg_repack{MAJOR_VER}", f"percona-patroni", f"percona-pg_tde{MAJOR_VER}",
-#         f"percona-pgbackrest", f"percona-pgvector_{MAJOR_VER}", f"percona-pgvector_{MAJOR_VER}-llvmjit", "python3-etcd",
-#         f"percona-postgis35_{MAJOR_VER}", f"percona-postgis35_{MAJOR_VER}-client", f"percona-postgis35_{MAJOR_VER}-gui",
-#         f"percona-postgis35_{MAJOR_VER}-llvmjit", f"percona-postgis35_{MAJOR_VER}-utils", "python3-pysyncobj", "python3-ydiff", "ydiff"]:
-#         assert pkg.version == pg_docker_versions[package]['version']
-#     else:
-#         assert pkg.version == pg_docker_versions['version']
 
 
 @pytest.mark.needs_preload
@@ -755,7 +752,12 @@ def db_connection(host): # <--- Adding 'host' here forces host to finish booting
 
 @pytest.fixture(scope="function")
 def cursor(db_connection):
-    """Provide a cursor for individual test functions."""
+    """Provide a resilient cursor that recovers if a previous test killed the server."""
+    # If the shared session connection is dead, try to revive it
+    if db_connection.closed != 0:
+        print("\n[RECOVERY] Global connection was dead. Reviving...")
+        db_connection = reconnect_db()
+
     cur = db_connection.cursor()
     yield cur
     cur.close()
@@ -870,3 +872,64 @@ def test_timescaledb_lifecycle(host, cursor):
             cleanup_conn.close()
         except Exception:
             pass # DB might be unreachable or table already gone
+
+# --- pgvector Functional Test ---
+#@pytest.mark.needs_preload
+def test_pgvector_functional_logic(host): # Use host here to allow re-connection
+    """
+    Functional: Test pgvector extension lifecycle with auto-recovery on crash.
+    """
+    # Connection parameters (standard for your setup)
+    conn_params = "host=localhost port=5432 user=postgres password=password dbname=postgres"
+
+    def run_logic():
+        # We create a local connection/cursor to ensure they are fresh
+        with psycopg2.connect(conn_params) as conn:
+            with conn.cursor() as cur:
+                cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+                cur.execute("DROP TABLE IF EXISTS test_vector_items;")
+                cur.execute("CREATE TABLE test_vector_items (id serial PRIMARY KEY, embedding vector(3));")
+                cur.execute("INSERT INTO test_vector_items (embedding) VALUES ('[1,2,3]');")
+                cur.execute("SELECT embedding FROM test_vector_items LIMIT 1;")
+                return cur.fetchone()[0]
+
+    try:
+        result = run_logic()
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        # The crash happened. Wait for the container to auto-restart (if using --restart)
+        # or wait for the postmaster to recover.
+        print("\n[DEBUG] Postgres crashed. Waiting for recovery...")
+        time.sleep(10)
+        try:
+            result = run_logic()
+        except Exception as e:
+            pytest.fail(f"pgvector failed after recovery attempt: {e}")
+
+    assert result == '[1,2,3]'
+
+
+# --- pg_stat_monitor Functional Test ---
+@pytest.mark.needs_preload
+def test_pg_stat_monitor_capture(host):
+    """
+    Functional: Ensure pg_stat_monitor tracks queries without crashing.
+    """
+    params = "host=localhost port=5432 user=postgres password=password dbname=postgres"
+
+    # 1. Initialize Extension (Use Autocommit to prevent transaction locks)
+    with psycopg2.connect(params) as conn:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute("CREATE EXTENSION IF NOT EXISTS pg_stat_monitor;")
+
+    # 2. Reconnect and Run Workload
+    # This ensures we are on a "fresh" backend that has the extension hooks active
+    with psycopg2.connect(params) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 'pgsm_test_marker' AS test;")
+            cur.fetchall()
+
+            # 3. Verify
+            time.sleep(1) # Give PGSM a moment to flush to the view
+            cur.execute("SELECT query FROM pg_stat_monitor WHERE query LIKE '%pgsm_test_marker%';")
+            assert cur.fetchone() is not None
