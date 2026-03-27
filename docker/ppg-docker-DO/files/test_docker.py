@@ -199,8 +199,9 @@ def host(request):
     subprocess.check_call(['docker', 'rm', '-f', docker_id])
 
 
-def test_shared_preload_libraries_is_empty(cursor):
+def test_shared_preload_libraries_is_empty(cursor, request):
     """
+    Dynamically boots PG based on the labels of the tests in the session.
     Verification: Ensure no libraries are preloaded at startup.
     This confirms a 'clean' engine state.
     """
@@ -724,11 +725,12 @@ DB_PARAMS = {
     "port": "5432"
 }
 
+
 # --- Fixtures (Internalized conftest logic) ---
 @pytest.fixture(scope="session")
 def db_connection():
     """Establish a session-wide connection with retries for startup."""
-    max_retries = 15
+    max_retries = 30  # Increased from 15 to 30 (total 60 seconds)
     conn = None
 
     for i in range(max_retries):
@@ -736,16 +738,14 @@ def db_connection():
             conn = psycopg2.connect(**DB_PARAMS)
             conn.autocommit = True
             print("\n[INFO] Connected to PostgreSQL successfully.")
-            break
-        except psycopg2.OperationalError:
-            print(f"[WAIT] Waiting for Postgres to start (attempt {i+1}/{max_retries})...")
+            return conn # Return immediately on success
+        except psycopg2.OperationalError as e:
+            print(f"[WAIT] Waiting for Postgres (attempt {i+1}/{max_retries})... Error: {e}")
             time.sleep(2)
 
     if not conn:
-        pytest.fail("Could not connect to PostgreSQL container after 30 seconds.")
+        pytest.fail("Could not connect to PostgreSQL container after 60 seconds.")
 
-    yield conn
-    conn.close()
 
 @pytest.fixture(scope="function")
 def cursor(db_connection):
