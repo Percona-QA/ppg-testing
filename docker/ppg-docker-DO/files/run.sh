@@ -4,4 +4,7 @@ source validation/bin/activate
 pip install --upgrade pip
 pip install psycopg2-binary
 pip install pytest-testinfra
-pytest test_docker.py -vv -s -rpfs
+#Run test without shared_preload_libraries  (default)
+pytest test_docker.py -vv -s -rpfs -m "not needs_preload"
+#Run test with shared_preload_libraries (timescaledb and pg_stat_monitor)
+pytest test_docker.py -vv -s -rpfs -m "needs_preload"

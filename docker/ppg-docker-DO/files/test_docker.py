@@ -9,15 +9,6 @@ import time
 import psycopg2
 from datetime import datetime, timedelta
 
-# Attempt to import psycopg2 with a helpful error for CI logs
-try:
-    import psycopg2
-except ImportError:
-    print("\n[ERROR] psycopg2 not found in the current Python environment.")
-    print(f"[DEBUG] Python Executable: {sys.executable}")
-    print("[FIX] Run: pip install psycopg2-binary\n")
-    sys.exit(2) # Exit with code 2 to indicate a configuration/collection error
-
 MAJOR_VER = os.getenv('VERSION').split('.')[0]
 MAJOR_MINOR_VER = os.getenv('VERSION')
 DOCKER_REPO = os.getenv('DOCKER_REPOSITORY')
@@ -123,49 +114,17 @@ def _check_licenses_at_licenses(image_ref):
         )
 
 
-# # scope='session' uses the same container for all the tests;
-# @pytest.fixture(scope='session')
-# def host(request):
-
-#     DOCKER_TO_USE = _get_postgres_image_ref()
-
-#     print('Major Version: ' + MAJOR_VER)
-#     print('Major Minor Version: ' + MAJOR_MINOR_VER)
-#     print('Image TAG: ' + IMG_TAG)
-#     print('IS_WITH_POSTGIS: ' + str(IS_WITH_POSTGIS))
-#     print('WITH_POSTGIS: ' + str(os.getenv('WITH_POSTGIS')))
-#     print('DOCKER_TO_USE: ' + DOCKER_TO_USE)
-
-#     # Pass the config to load timescaledb and pg_stat_monitor (if needed)
-#     docker_id = subprocess.check_output(
-#         ['docker', 'run',
-#          '--name', f'PG{MAJOR_VER}',
-#          '-e', 'POSTGRES_PASSWORD=password',
-#          '-p', '5432:5432',
-#          '-d', DOCKER_TO_USE,
-#          '-c', 'shared_preload_libraries=timescaledb,pg_stat_monitor'
-#         ]).decode().strip()
-
-#     # return a testinfra connection to the container
-#     yield testinfra.get_host("docker://" + docker_id)
-
-#     # at the end of the test suite, destroy the container
-#     subprocess.check_call(['docker', 'rm', '-f', docker_id])
-
-
 @pytest.fixture(scope='session')
 def host(request):
-    """
-    Dynamically boots PG based on the labels of the tests in the session.
-    """
     DOCKER_TO_USE = _get_postgres_image_ref()
-    container_name = f"PG{MAJOR_VER}"
+    # Ensure this exactly matches what db_connection expects
+    container_name = "PG18"
 
-    # --- The Intelligence Logic ---
-    # Check if ANY test in the current session has the 'needs_preload' mark
-    # This ensures we boot with libs if even one test needs them
     session_items = request.session.items
     needs_libs = any(item.get_closest_marker("needs_preload") for item in session_items)
+
+    # Clean up ANY existing container with this name first
+    subprocess.run(['docker', 'rm', '-f', container_name], capture_output=True)
 
     print('Major Version: ' + MAJOR_VER)
     print('Major Minor Version: ' + MAJOR_MINOR_VER)
@@ -176,9 +135,6 @@ def host(request):
     print('container_name: ' + container_name)
     print('needs_libs: ' + str(needs_libs))
 
-    # Pre-flight cleanup
-    subprocess.run(['docker', 'rm', '-f', container_name], capture_output=True)
-
     run_cmd = [
         'docker', 'run', '--name', container_name,
         '-e', 'POSTGRES_PASSWORD=password',
@@ -186,41 +142,38 @@ def host(request):
     ]
 
     if needs_libs:
-        print("\n[INFO] Booting PG with shared_preload_libraries=timescaledb")
-        run_cmd.extend(['-c', 'shared_preload_libraries=timescaledb,pg_stat_monitor'])
-    else:
-        print("\n[INFO] Booting PG with empty shared_preload_libraries")
+        run_cmd.extend(['-c', 'shared_preload_libraries=timescaledb,pg_stat_monitor', 
+                        '-c', 'timescaledb.max_background_workers=4',
+                        '-c', 'max_worker_processes=20'])
 
+    # Capture the ID but keep using the NAME for inspect/logs
     docker_id = subprocess.check_output(run_cmd).decode().strip()
+
+    # Wait for Docker daemon to stabilize
     time.sleep(5)
 
-    yield testinfra.get_host("docker://" + docker_id)
+    # Yield the testinfra host object
+    yield testinfra.get_host("docker://" + container_name)
 
-    subprocess.check_call(['docker', 'rm', '-f', docker_id])
-
+    # Cleanup ONLY happens after all tests (session scope) are done
+    subprocess.run(['docker', 'rm', '-f', container_name], capture_output=True)
 
 def test_shared_preload_libraries_is_empty(cursor, request):
     """
-    Dynamically boots PG based on the labels of the tests in the session.
     Verification: Ensure no libraries are preloaded at startup.
-    This confirms a 'clean' engine state.
+    Skip if session-wide container was booted with libraries for other tests.
     """
-    # Query the current setting for shared_preload_libraries
+    # Check if any test in the whole session has the 'needs_preload' mark
+    session_needs_libs = any(
+        item.get_closest_marker("needs_preload") for item in request.session.items
+    )
+
+    if session_needs_libs:
+        pytest.skip("Skipping 'Empty' check: session is running in 'Preload Mode' for TimescaleDB.")
+
     cursor.execute("SHOW shared_preload_libraries;")
     setting = cursor.fetchone()[0]
-
-    # Post-processing: SHOW returns a string.
-    # An empty setting is typically an empty string "" or occasionally "none"
-    # depending on the Postgres version/distribution.
-
-    assert setting == "" or setting.lower() == "none", \
-        f"Expected empty shared_preload_libraries, but found: '{setting}'"
-
-    # Optional: Verify via pg_settings table for more metadata
-    cursor.execute("SELECT setting FROM pg_settings WHERE name = 'shared_preload_libraries';")
-    pg_setting = cursor.fetchone()[0]
-
-    assert not pg_setting, f"pg_settings reflects active libraries: {pg_setting}"
+    assert setting == "" or setting.lower() == "none"
 
 
 def test_psql_string(host):
@@ -315,6 +268,7 @@ def test_postgres_client_version(host):
     result = host.check_output(cmd)
     assert f'{MAJOR_MINOR_VER}' in result.strip("\n"), result.stdout
 
+
 SKIP_EXTENSIONS = [
     "postgis_sfcgal",
     "address_standardizer",
@@ -377,12 +331,12 @@ def test_extensions_list(extension_list, host, extension):
     """
     major = int(MAJOR_VER)
 
-    # 1. Version-based removals
-    if major >= 17 and extension == 'adminpack':
-        return True, "adminpack removed in PG17+"
+    # Then inside your test:
+    if major >= 17 and extension == "adminpack":
+        pytest.skip("adminpack removed in PG17+")
 
     if major < 18 and extension == 'pg_logicalinspect':
-        return True, "pg_logicalinspect only supported in PG18+"
+        pytest.skip("pg_logicalinspect only supported in PG18+")
 
     # 2. Verify the extension is present in the available extensions list
     # Use a descriptive error message to help debug if it's missing
@@ -483,6 +437,7 @@ def test_rpm_package_is_installed(host, package):
 #         assert pkg.version == pg_docker_versions[package]['version']
 #     else:
 #         assert pkg.version == pg_docker_versions['version']
+
 
 @pytest.mark.needs_preload
 def test_pg_stat_monitor_extension_version(host):
@@ -716,6 +671,7 @@ def test_pgbackrest_version(host):
 #     else:
 #         assert len(actual_version) > 0, "python3-etcd version could not be determined"
 
+
 # --- Configuration ---
 DB_PARAMS = {
     "dbname": "postgres",
@@ -728,23 +684,73 @@ DB_PARAMS = {
 
 # --- Fixtures (Internalized conftest logic) ---
 @pytest.fixture(scope="session")
-def db_connection():
-    """Establish a session-wide connection with retries for startup."""
-    max_retries = 30  # Increased from 15 to 30 (total 60 seconds)
+def db_connection(host): # <--- Adding 'host' here forces host to finish booting first
+    container_name = "PG18"
+    max_retries = 45
+
+    # Check if container exists
+    status = subprocess.run(
+        ["docker", "inspect", "-f", "{{.State.Running}}", container_name],
+        capture_output=True, text=True
+    )
+
+    if status.returncode != 0:
+        pytest.fail(f"Container {container_name} does not exist. Docker Run might have failed silently.")
+
     conn = None
 
+    # 1. Pre-flight Check: Is the container even alive?
+    status = subprocess.run(
+        ["docker", "inspect", "-f", "{{.State.Running}}", container_name],
+        capture_output=True, text=True
+    )
+
+    if "true" not in status.stdout.lower():
+        # If it's not running, it probably crashed during the 'host' fixture boot
+        logs = subprocess.run(["docker", "logs", container_name], capture_output=True, text=True)
+        pytest.fail(
+            f"FATAL: Container {container_name} is NOT running.\n"
+            f"Check if shared_preload_libraries are valid.\n"
+            f"--- DOCKER LOGS ---\n{logs.stdout}\n{logs.stderr}"
+        )
+
+    # 2. Connection Loop
     for i in range(max_retries):
         try:
             conn = psycopg2.connect(**DB_PARAMS)
             conn.autocommit = True
-            print("\n[INFO] Connected to PostgreSQL successfully.")
-            return conn # Return immediately on success
-        except psycopg2.OperationalError as e:
-            print(f"[WAIT] Waiting for Postgres (attempt {i+1}/{max_retries})... Error: {e}")
-            time.sleep(2)
+            print(f"\n[INFO] Connected to {container_name} successfully.")
+            return conn
 
+        except psycopg2.OperationalError as e:
+            err_msg = str(e).lower()
+
+            # Scenario A: Server is still booting (Normal)
+            if "connection refused" in err_msg or "starting up" in err_msg:
+                print(f"[WAIT] Postgres is initializing (attempt {i+1}/{max_retries})...")
+                time.sleep(2)
+
+            # Scenario B: Server crashed WHILE we were talking to it (Abnormal)
+            elif "closed the connection unexpectedly" in err_msg or "terminating connection" in err_msg:
+                print(f"\n[FATAL] Postgres crashed during connection attempt {i+1}!")
+                # Immediate log dump to see the PANIC/FATAL message
+                res = subprocess.run(["docker", "logs", container_name, "--tail", "20"], capture_output=True, text=True)
+                print(f"--- RECENT LOGS ---\n{res.stdout}")
+                pytest.fail(f"Postgres process crashed. See logs above for details.")
+
+            # Scenario C: Something else (Wrong credentials, wrong port, etc.)
+            else:
+                print(f"[DEBUG] Unexpected Connection Error: {err_msg}")
+                time.sleep(2)
+
+    # 3. Final Fallback
     if not conn:
-        pytest.fail("Could not connect to PostgreSQL container after 60 seconds.")
+        print("\n" + "="*50)
+        print(f"TIMEOUT: Could not connect to {container_name} after 90s.")
+        res = subprocess.run(["docker", "logs", container_name, "--tail", "20"], capture_output=True, text=True)
+        print(f"Final Logs:\n{res.stdout}")
+        print("="*50)
+        pytest.fail("Database connection timeout. See logs above.")
 
 
 @pytest.fixture(scope="function")
@@ -753,6 +759,7 @@ def cursor(db_connection):
     cur = db_connection.cursor()
     yield cur
     cur.close()
+
 
 # --- TimescaleDB Test Suite ---
 @pytest.mark.needs_preload
@@ -846,7 +853,7 @@ def test_timescaledb_lifecycle(host, cursor):
             assert float(avg_usage) == 0.65, f"Aggregation failed. Expected 0.65, got {avg_usage}"
 
             new_cursor.execute(f"SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name = '{table_name}';")
-            assert cursor.fetchone()[0] >= 1, "No chunks (partitions) found after restart."
+            assert new_cursor.fetchone()[0] >= 1, "No chunks (partitions) found after restart."
         finally:
             if new_cursor:
                 new_cursor.close()

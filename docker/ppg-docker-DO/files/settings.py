@@ -234,7 +234,6 @@ DOCKER_LIST_EXTENSIONS = ["hstore",
                 "address_standardizer_data_us",
                 "pg_logicalinspect",
                 "pg_repack",
-                "pg_stat_monitor",
                 "pgaudit",
                 "plpgsql",
                  ]
