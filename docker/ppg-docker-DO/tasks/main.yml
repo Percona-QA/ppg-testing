@@ -191,6 +191,14 @@
     group: root
     mode: 0644
 
+- name: Copy test_pgbackrest.py
+  copy:
+    src:  test_pgbackrest.py
+    dest: /tmp/docker_test/test_pgbackrest.py
+    owner: root
+    group: root
+    mode: 0644
+
 - name: Ensure Python virtual environment exists
   ansible.builtin.command: python3 -m venv validation
   args:
