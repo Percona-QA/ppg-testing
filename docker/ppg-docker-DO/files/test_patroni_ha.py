@@ -12,7 +12,6 @@ import requests
 import textwrap
 
 # --- Configuration ---
-
 MAJOR_VER = os.getenv('VERSION').split('.')[0]
 MAJOR_MINOR_VER = os.getenv('VERSION')
 DOCKER_REPO = os.getenv('DOCKER_REPOSITORY')
@@ -58,16 +57,20 @@ def docker_env():
 
 @pytest.fixture(scope='session')
 def etcd(docker_env):
-    """Start etcd as the Distributed Configuration Store."""
+    """Start etcd as the Distributed Configuration Store (Architecture-Agnostic)."""
     subprocess.run(['docker', 'rm', '-f', ETCD_NAME], capture_output=True)
+
+    # REMOVE '--platform', 'linux/amd64' to allow native execution
     subprocess.run([
         'docker', 'run', '-d', '--name', ETCD_NAME, '--network', NETWORK_NAME,
-        '--platform', 'linux/amd64', 'quay.io/coreos/etcd:v3.5.0',
-        '/usr/local/bin/etcd', 
+        'quay.io/coreos/etcd:v3.5.0',
+        '/usr/local/bin/etcd',
         '--advertise-client-urls', f'http://{ETCD_NAME}:2379',
         '--listen-client-urls', 'http://0.0.0.0:2379'
     ], check=True)
-    time.sleep(3)
+
+    # Increase the sleep slightly for ARM runners which might be slower to initialize
+    time.sleep(5)
     yield ETCD_NAME
     subprocess.run(['docker', 'rm', '-f', ETCD_NAME], capture_output=True)
 

@@ -228,13 +228,23 @@
     PPG_LABEL_MAINTAINER: "{{ ppg_label_maintainer | default('Percona Development <info@percona.com>') }}"
     PPG_LABEL_VENDOR: "{{ ppg_label_vendor | default('Percona') }}"
     PPG_LABEL_NAME_POSTGRESQL: "{{ ppg_label_name_postgresql | default('Percona Distribution for PostgreSQL') }}"
+  ignore_errors: yes
   register: results
 
-- debug: var=results.stdout_lines
+- name: Show stdout of Docker tests
+  debug:
+    var: results.stdout_lines
 
-- name: Show stderr if docker test fails
+- name: Show stderr if Docker tests fails
   debug:
     var: results.stderr_lines
+  when:
+    - results is defined
+    - results.rc != 0
+
+- name: Fail the playbook if Docker tests failed
+  fail:
+    msg: "Docker tests failed with return code {{ regression.rc }}"
   when:
     - results is defined
     - results.rc != 0
