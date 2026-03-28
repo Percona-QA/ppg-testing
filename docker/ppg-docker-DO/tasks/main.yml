@@ -261,7 +261,7 @@
 
 - name: Fail the playbook if Docker tests failed
   fail:
-    msg: "Docker tests failed with return code {{ regression.rc }}"
+    msg: "Docker tests failed with return code {{ results.rc }}"
   when:
     - results is defined
     - results.rc != 0
