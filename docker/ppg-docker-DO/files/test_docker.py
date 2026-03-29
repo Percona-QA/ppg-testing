@@ -14,7 +14,8 @@ MAJOR_MINOR_VER = os.getenv('VERSION')
 DOCKER_REPO = os.getenv('DOCKER_REPOSITORY')
 IMG_TAG = os.getenv('TAG')
 IS_WITH_POSTGIS = os.getenv('WITH_POSTGIS', 'false').lower() == "true"
-
+PG_BIN = f"/usr/pgsql-{MAJOR_VER}/bin"
+PG_DATA = "/data/db"
 pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER)
 
 DOCKER_RHEL_FILES = pg_docker_versions['rhel_files']
@@ -128,7 +129,7 @@ def _check_licenses_at_licenses(image_ref):
 
 @pytest.fixture(scope='session')
 def host(request):
-    container_name = "PG18"
+    container_name = f"PG{MAJOR_VER}"
     DOCKER_TO_USE = _get_postgres_image_ref()
     needs_libs = any(item.get_closest_marker("needs_preload") for item in request.session.items)
 
@@ -145,7 +146,7 @@ def host(request):
     if needs_libs:
         # These specific flags prevent pg_stat_monitor from over-allocating on boot
         run_cmd.extend([
-            '-c', 'shared_preload_libraries=timescaledb,pg_stat_monitor',
+            '-c', 'shared_preload_libraries=timescaledb,pg_stat_monitor,pgaudit,set_user',
             '-c', 'shared_buffers=256MB',
             '-c', 'max_worker_processes=32',       # Give extensions room to breathe
             '-c', 'max_parallel_workers=16',
@@ -218,12 +219,8 @@ def test_ppg_postgres_image_licenses_at_licenses():
 
 @pytest.fixture()
 def postgresql_binary(host):
-    dist = host.system_info.distribution
-    # pg_bin = f"/usr/lib/postgresql/{MAJOR_VER}/bin/postgres"
-    # if dist.lower() in ["redhat", "centos", "rhel", "rocky"]:
-    #     pg_bin = f"/usr/pgsql-{MAJOR_VER}/bin/postgres"
-    pg_bin = f"/usr/pgsql-{MAJOR_VER}/bin/postgres"
-    return host.file(pg_bin)
+    pg_binary = f"{PG_BIN}/postgres"
+    return host.file(pg_binary)
 
 
 @pytest.fixture()
@@ -682,7 +679,7 @@ DB_PARAMS = {
 # --- Fixtures (Internalized conftest logic) ---
 @pytest.fixture(scope="session")
 def db_connection(host): # <--- Adding 'host' here forces host to finish booting first
-    container_name = "PG18"
+    container_name = f"PG{MAJOR_VER}"
     max_retries = 45
 
     # Check if container exists
@@ -933,3 +930,165 @@ def test_pg_stat_monitor_capture(host):
             time.sleep(1) # Give PGSM a moment to flush to the view
             cur.execute("SELECT query FROM pg_stat_monitor WHERE query LIKE '%pgsm_test_marker%';")
             assert cur.fetchone() is not None
+
+
+# Helper to provide isolation for every test
+def manage_postgis(host, action="create"):
+    """Handles extension lifecycle using standard psql calls."""
+    if action == "create":
+        # Create extensions in order of dependency
+        for ext in ["postgis", "postgis_raster", "postgis_topology"]:
+            host.run(f"psql -c 'CREATE EXTENSION IF NOT EXISTS {ext} CASCADE;'")
+    else:
+        # CASCADE ensures dependent objects/extensions are removed
+        host.run("psql -c 'DROP EXTENSION IF EXISTS postgis_topology CASCADE;'")
+        host.run("psql -c 'DROP EXTENSION IF EXISTS postgis CASCADE;'")
+
+def test_postgis_library_linkage(host):
+    """Verifies PostGIS can be enabled and GEOS, PROJ, and GDAL are reachable."""
+    try:
+        manage_postgis(host, "create")
+        version_info = host.run("psql -t -c 'SELECT postgis_full_version();'")
+        # Ensure the underlying engine libraries are properly linked in the image
+        assert all(lib in version_info.stdout for lib in ["GEOS", "PROJ", "GDAL", "LIBXML"])
+    finally:
+        manage_postgis(host, "drop")
+
+def test_postgis_spatial_logic_and_rasters(host):
+    """Verifies distance calculations (PROJ/GEOS) and Raster support (GDAL)."""
+    try:
+        manage_postgis(host, "create")
+
+        # Calculate distance between London and Paris (approx 340km)
+        dist_query = "SELECT ST_Distance(ST_GeogFromText('SRID=4326;POINT(0 51.5)'), ST_GeogFromText('SRID=4326;POINT(2.3 48.8)'));"
+        dist_res = host.run(f"psql -t -c \"{dist_query}\"")
+        assert 330000 < float(dist_res.stdout.strip()) < 350000
+
+        # Verify GDAL Raster support
+        raster_query = "SELECT ST_Width(ST_AddBand(ST_MakeEmptyRaster(10, 10, 0, 0, 1, -1, 0, 0, 4326), 1, '8BUI', 1, 0));"
+        assert "10" in host.run(f"psql -t -c \"{raster_query}\"").stdout
+    finally:
+        manage_postgis(host, "drop")
+
+def test_postgis_srid_transformation(host):
+    """Verifies coordinate reprojection logic (PROJ library check)."""
+    try:
+        manage_postgis(host, "create")
+        # Transform GPS (4326) to Web Mercator (3857)
+        query = "SELECT ST_AsText(ST_Transform(ST_GeomFromText('POINT(0 0)', 4326), 3857));"
+        res = host.run(f"psql -t -c \"{query}\"")
+        assert "POINT(0 0)" in res.stdout
+    finally:
+        manage_postgis(host, "drop")
+
+def test_postgis_indexing_and_joins(host):
+    """Verifies GiST indexing and spatial join performance/logic."""
+    try:
+        manage_postgis(host, "create")
+
+        setup = """
+        CREATE TABLE districts (id int, geom geometry(Polygon, 4326));
+        CREATE INDEX idx_dist_geom ON districts USING GIST (geom);
+        INSERT INTO districts VALUES (1, ST_MakeEnvelope(0, 0, 2, 2, 4326));
+        """
+        host.run(f"psql -c \"{setup}\"")
+
+        # Test Point-in-Polygon join using the GiST index
+        join_query = "SELECT count(*) FROM districts WHERE ST_Contains(geom, ST_GeomFromText('POINT(1 1)', 4326));"
+        assert "1" in host.run(f"psql -t -c \"{join_query}\"").stdout.strip()
+    finally:
+        manage_postgis(host, "drop")
+
+
+# --- PG_REPACK TEST ---
+def test_pg_repack_reorganization(host):
+    """Verifies pg_repack can rebuild a table to remove bloat online."""
+    try:
+        host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_repack;'")
+        host.run("psql -c 'CREATE TABLE repack_test AS SELECT generate_series(1,1000) AS id;'")
+
+        # pg_repack is a binary utility, not just SQL.
+        # We run it against the 'postgres' database.
+        # -t specifies the table
+        repack_cmd = f"{PG_BIN}/pg_repack -d postgres -t repack_test"
+        result = host.run(repack_cmd)
+
+        assert result.rc == 0
+        assert "Successfully repacked" in result.stdout or result.stdout == ""
+
+        # Verify table still exists and is readable
+        check = host.run("psql -t -c 'SELECT count(*) FROM repack_test;'")
+        assert "1000" in check.stdout.strip()
+    finally:
+        host.run("psql -c 'DROP TABLE IF EXISTS repack_test;'")
+        host.run("psql -c 'DROP EXTENSION IF EXISTS pg_repack;'")
+
+# --- PGAUDIT TEST ---
+@pytest.mark.needs_preload
+def test_pgaudit_logging(host):
+    """Verifies that pgaudit captures DDL and DML events in the PG logs."""
+    try:
+        host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pgaudit;'")
+        # Enable auditing for session DDL and Read/Write
+        host.run("psql -c \"ALTER SYSTEM SET pgaudit.log = 'read, write, ddl';\"")
+        host.run("psql -c 'SELECT pg_reload_conf();'")
+
+        # Trigger an audited event
+        host.run("psql -c 'CREATE TABLE audit_test (id int);'")
+        host.run("psql -c 'INSERT INTO audit_test VALUES (1);'")
+
+        # Check the PostgreSQL logs for the pgaudit signature
+        # We look for 'AUDIT: SESSION' which is the default pgaudit prefix
+        log_check = host.run(f"tail -n 100 {PG_DATA}/log/*.log")
+        assert "AUDIT: SESSION" in log_check.stdout
+        assert "CREATE TABLE audit_test" in log_check.stdout
+    finally:
+        host.run("psql -c 'DROP EXTENSION IF EXISTS pgaudit;'")
+
+# --- SET_USER TEST ---
+@pytest.mark.needs_preload
+def test_set_user_escalation(host):
+    """Verifies set_user allows a less-privileged user to flip to a superuser role."""
+    try:
+        # 1. Initialize Extension
+        host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS set_user;'")
+
+        # 2. Setup Roles
+        host.run("psql -c \"CREATE ROLE power_user LOGIN SUPERUSER PASSWORD 'pass';\"")
+        host.run("psql -c \"CREATE ROLE normal_user LOGIN PASSWORD 'pass';\"")
+
+        # 3. Grant Permission to the UNRESTRICTED function
+        # set_user_u is required for non-superuser -> superuser escalation
+        host.run("psql -c 'GRANT EXECUTE ON FUNCTION set_user_u(text) TO normal_user;'")
+
+        # 4. Test: Escalation using the unrestricted function
+        # We use separate -c flags to stay out of a transaction block
+        cmd = (
+            "psql -U normal_user -d postgres -t "
+            "-c \"SELECT set_user_u('power_user');\" "
+            "-c \"SELECT current_user;\""
+        )
+        result = host.run(cmd)
+
+        # Log stderr for visibility if the logic changes
+        if result.rc != 0:
+            print(f"PSQL Stderr: {result.stderr}")
+
+        assert "power_user" in result.stdout
+
+        # 5. Test: De-escalation (NULL always works to return to original user)
+        back_cmd = (
+            "psql -U normal_user -d postgres -t "
+            "-c \"SELECT set_user(NULL);\" "
+            "-c \"SELECT current_user;\""
+        )
+        result_back = host.run(back_cmd)
+        assert "normal_user" in result_back.stdout
+
+    finally:
+        # 6. Cleanup
+        # Revoke from both possible function signatures to be safe
+        host.run("psql -c 'REVOKE ALL ON FUNCTION set_user(text) FROM normal_user;'")
+        host.run("psql -c 'REVOKE ALL ON FUNCTION set_user_u(text) FROM normal_user;'")
+        host.run("psql -c 'DROP ROLE IF EXISTS normal_user;'")
+        host.run("psql -c 'DROP ROLE IF EXISTS power_user;'")
