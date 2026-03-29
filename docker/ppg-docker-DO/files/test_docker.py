@@ -152,7 +152,8 @@ def host(request):
             '-c', 'max_parallel_workers=16',
             '-c', 'pg_stat_monitor.pgsm_max=500',  # Smaller bucket to save shared mem
             '-c', 'pg_stat_monitor.pgsm_query_max_len=1024',
-            '-c', 'timescaledb.max_background_workers=4'
+            '-c', 'timescaledb.max_background_workers=4',
+            '-c', 'wal_level=logical'
         ])
 
     subprocess.check_output(run_cmd)
@@ -1092,3 +1093,41 @@ def test_set_user_escalation(host):
         host.run("psql -c 'REVOKE ALL ON FUNCTION set_user_u(text) FROM normal_user;'")
         host.run("psql -c 'DROP ROLE IF EXISTS normal_user;'")
         host.run("psql -c 'DROP ROLE IF EXISTS power_user;'")
+
+# --- WAL2JSON TEST ---
+@pytest.mark.needs_preload
+def test_wal2json_logical_decoding(host):
+    """Verifies wal2json can decode DML into JSON format using 'kind' keys."""
+    slot_name = "test_slot_wal2json"
+    try:
+        # 1. Check if wal_level is logical
+        wal_level = host.run("psql -t -c 'SHOW wal_level;'").stdout.strip()
+        if wal_level != 'logical':
+            pytest.skip(f"wal_level is {wal_level}; 'logical' is required.")
+
+        # 2. Setup a test table
+        host.run("psql -c 'CREATE TABLE wal_test (id int PRIMARY KEY, name text);'")
+
+        # 3. Create logical replication slot
+        host.run(f"psql -c \"SELECT pg_create_logical_replication_slot('{slot_name}', 'wal2json');\"")
+
+        # 4. Perform DML
+        host.run("psql -c \"INSERT INTO wal_test VALUES (1, 'first'), (2, 'second');\"")
+        host.run("psql -c \"UPDATE wal_test SET name = 'updated' WHERE id = 1;\"")
+        host.run("psql -c \"DELETE FROM wal_test WHERE id = 2;\"")
+
+        # 5. Consume and Verify
+        result = host.run(f"psql -t -c \"SELECT data FROM pg_logical_slot_get_changes('{slot_name}', NULL, NULL);\"")
+        output = result.stdout
+
+        # Updated Assertions based on your log output
+        assert '"table":"wal_test"' in output
+        assert '"kind":"insert"' in output
+        assert '"kind":"update"' in output
+        assert '"kind":"delete"' in output
+        assert '"columnvalues":[1,"updated"]' in output
+
+    finally:
+        # 6. Cleanup
+        host.run(f"psql -c \"SELECT pg_drop_replication_slot('{slot_name}') WHERE EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = '{slot_name}');\"")
+        host.run("psql -c 'DROP TABLE IF EXISTS wal_test;'")
