@@ -10,7 +10,7 @@ MAJOR_VER = os.getenv('VERSION').split('.')[0]
 DOCKER_REPO = os.getenv('DOCKER_REPOSITORY')
 IMG_TAG = os.getenv('TAG')
 IS_WITH_POSTGIS = os.getenv('WITH_POSTGIS', 'false').lower() == "true"
-IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{MAJOR_VER}"
+IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG}"
 
 REQUIRED_LABEL_MAINTAINER = os.getenv("PPG_LABEL_MAINTAINER", "Percona Development <info@percona.com>")
 REQUIRED_LABEL_VENDOR = os.getenv("PPG_LABEL_VENDOR", "Percona")
