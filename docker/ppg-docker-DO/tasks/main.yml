@@ -196,29 +196,21 @@
     update_cache: yes
   when: ansible_os_family == "Debian"
 
-- name: Ensure Python dependencies are installed in venv
-  pip:
-    name:
-      - pip
-      - psycopg2-binary
-      - pytest-testinfra
-      - requests
-      - pytest
-      - pytest-order
-    state: latest
-    virtualenv: /tmp/docker_test/validation
-    virtualenv_command: python3 -m venv
-
-- name: Run consolidated PostgreSQL test suite
+- name: Create python venv and run docker tests
   shell: |
-    # Use the venv python directly to avoid 'source' issues in non-interactive shells
-    ./validation/bin/pytest \
-       test_labels_licences.py \
+    #Activate virtual environment
+    source validation/bin/activate
+
+    #Install dependencies
+    pip install --upgrade pip
+    pip install psycopg2-binary pytest-testinfra requests pytest pytest-order
+
+    #Run test without shared_preload_libraries  (default)
+    pytest test_labels_licences.py \
        test_docker.py \
        test_patroni_ha.py \
        test_pgbackrest.py \
-       -vv -s -rpfs \
-       --junitxml=results.xml
+       -vv -s -rpfs
   args:
     executable: /bin/bash
     chdir: /tmp/docker_test
