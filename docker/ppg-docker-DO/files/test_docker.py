@@ -9,15 +9,19 @@ import time
 import psycopg2
 from datetime import datetime, timedelta
 
+# --- Configuration constants/settings ---
+# Constants
 MAJOR_VER = os.getenv('VERSION').split('.')[0]
 MAJOR_MINOR_VER = os.getenv('VERSION')
 DOCKER_REPO = os.getenv('DOCKER_REPOSITORY')
 IMG_TAG = os.getenv('TAG')
 IS_WITH_POSTGIS = os.getenv('WITH_POSTGIS', 'false').lower() == "true"
-PG_BIN = f"/usr/pgsql-{MAJOR_VER}/bin"
-PG_DATA = "/data/db"
-pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER)
+PG_BIN_DIR = f"/usr/pgsql-{MAJOR_VER}/bin"
+PG_DATA_DIR = "/data/db"
+IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{MAJOR_VER}"
 
+# --- Settings ---
+pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER)
 DOCKER_RHEL_FILES = pg_docker_versions['rhel_files']
 DOCKER_RPM_PACKAGES = pg_docker_versions['rpm_packages']
 DOCKER_EXTENSIONS = pg_docker_versions['extensions']
@@ -44,93 +48,83 @@ def reconnect_db():
     pytest.fail("Could not reconnect to database after server crash.")
 
 
-def _get_postgres_image_ref():
-    """Return the PostgreSQL Docker image ref used for this run (with or without PostGIS)."""
-    if IS_WITH_POSTGIS:
-        return f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG}"
-    return f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG}"
+# --- Fixtures ---
+@pytest.fixture(scope='session')
+def host(request):
+    """Session-wide container. Used for internal filesystem and DB checks."""
+    container_name = f"PG_TEST_{MAJOR_VER}"
 
+    # Cleanup previous runs
+    subprocess.run(['docker', 'rm', '-f', container_name], capture_output=True)
 
-def _get_image_labels(image_ref):
-    """Return the labels dict for a Docker image (via docker inspect)."""
+    run_cmd = [
+        'docker', 'run', '--name', container_name,
+        '-e', 'POSTGRES_PASSWORD=password',
+        '-d', IMAGE
+    ]
+    subprocess.check_output(run_cmd)
+
+    # Wait for the container to actually be ready
+    time.sleep(2)
+
+    yield testinfra.get_host("docker://" + container_name)
+    subprocess.run(['docker', 'rm', '-f', container_name], capture_output=True)
+
+# --- Helper Functions ---
+
+def get_labels():
+    """Fetch image labels via docker inspect."""
     result = subprocess.run(
-        ["docker", "inspect", "--format", "{{json .Config.Labels}}", image_ref],
-        capture_output=True,
-        text=True,
+        ["docker", "inspect", "--format", "{{json .Config.Labels}}", IMAGE],
+        capture_output=True, text=True, check=True
     )
-    if result.returncode != 0:
-        raise RuntimeError(f"docker inspect failed for {image_ref}: {result.stderr}")
     return json.loads(result.stdout) if result.stdout.strip() else {}
 
+# --- Tests ---
 
-def _check_no_redhat_trademark(labels, errors):
-    """Check that name, vendor, maintainer do not violate Red Hat trademark."""
-    for key in ("name", "vendor", "maintainer"):
-        val = (labels.get(key) or "").strip()
-        for forbidden in RED_HAT_TRADEMARK_FORBIDDEN:
-            if forbidden in val:
-                errors.append(
-                    f"label {key!r} must not contain Red Hat trademark {forbidden!r}, got: {repr(labels.get(key))}"
-                )
+def test_ppg_postgres_image_labels():
+    """Validate Red Hat compliance labels and Percona branding."""
+    labels = get_labels()
 
-
-def _check_required_labels_present(labels, errors):
-    """Check that all required labels are present in container metadata."""
+    # 1. Check all required keys exist and are not empty
     for key in REQUIRED_LABEL_KEYS:
-        val = labels.get(key)
-        if val is None or (isinstance(val, str) and not val.strip()):
-            errors.append(f"required label {key!r} is missing or empty in container metadata")
+        assert labels.get(key), f"Required label '{key}' is missing or empty"
 
+    # 2. Trademark Compliance
+    for key in ("name", "vendor", "maintainer"):
+        val = labels.get(key, "")
+        for forbidden in RED_HAT_TRADEMARK_FORBIDDEN:
+            assert forbidden not in val, f"Label '{key}' contains forbidden trademark '{forbidden}'"
 
-def _validate_ppg_image_labels(image_ref, expected_name=None):
-    """
-    Validate Red Hat ecosystem required labels on the PPG PostgreSQL image.
-    1. No Red Hat trademark in name, vendor, maintainer.
-    2. All required labels (name, vendor, version, release, summary, description, maintainer) are present.
-    3. name, vendor, maintainer have the expected values.
-    """
-    labels = _get_image_labels(image_ref)
-    errors = []
+    # 3. Value Accuracy
+    assert labels.get("vendor") == REQUIRED_LABEL_VENDOR
+    assert labels.get("maintainer") == REQUIRED_LABEL_MAINTAINER
+    assert labels.get("name") == EXPECTED_LABEL_NAME_POSTGRESQL
+    assert labels.get("name").startswith(REQUIRED_LABEL_NAME_PREFIX)
 
-    _check_no_redhat_trademark(labels, errors)
-    _check_required_labels_present(labels, errors)
+def test_ppg_postgres_licenses(host):
+    """Verify license information exists inside the container."""
+    license_path = host.file("/licenses")
 
-    name_val = labels.get("name", "").strip()
-    if expected_name is not None:
-        if name_val != expected_name:
-            errors.append(f"label 'name' must be {expected_name!r}, got: {repr(labels.get('name'))}")
-    elif not name_val.startswith(REQUIRED_LABEL_NAME_PREFIX) or len(name_val) <= len(REQUIRED_LABEL_NAME_PREFIX):
-        errors.append(f"label 'name' must be 'Percona <Product Name>', got: {repr(labels.get('name'))}")
-    if labels.get("maintainer") != REQUIRED_LABEL_MAINTAINER:
-        errors.append(
-            f"label 'maintainer' must be {REQUIRED_LABEL_MAINTAINER!r}, got: {repr(labels.get('maintainer'))}"
-        )
-    if labels.get("vendor") != REQUIRED_LABEL_VENDOR:
-        errors.append(f"label 'vendor' must be {REQUIRED_LABEL_VENDOR!r}, got: {repr(labels.get('vendor'))}")
+    assert license_path.exists, "/licenses path is missing in the image"
 
-    if errors:
-        raise AssertionError(f"Image {image_ref} label validation failed:\n" + "\n".join(errors))
+    if license_path.is_directory:
+        # Check that the directory is not empty
+        files = host.check_output("ls -A /licenses")
+        assert len(files.strip()) > 0, "/licenses directory is empty"
+    else:
+        # If it's a file, ensure it's not empty
+        assert license_path.size > 0, "/licenses file is empty"
 
-
-def _check_licenses_at_licenses(image_ref):
-    """Check that terms/conditions and open source licensing are present at /licenses in the image."""
-    cmd = [
-        "docker", "run", "--rm", image_ref,
-        "sh", "-c",
-        "test -e /licenses && (test -f /licenses && test -s /licenses || (test -d /licenses && test $(ls -A /licenses 2>/dev/null | wc -l) -gt 0))",
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise AssertionError(
-            f"Image {image_ref}: /licenses missing or empty. "
-            "Terms and open source licensing information must be present at /licenses."
-        )
+def test_container_user_non_root(host):
+    """Compliance: Ensure the container doesn't run as root by default."""
+    current_user = host.user().name
+    assert current_user != "root", f"Security failure: Container is running as {current_user}"
 
 
 @pytest.fixture(scope='session')
 def host(request):
     container_name = f"PG{MAJOR_VER}"
-    DOCKER_TO_USE = _get_postgres_image_ref()
     needs_libs = any(item.get_closest_marker("needs_preload") for item in request.session.items)
 
     subprocess.run(['docker', 'rm', '-f', container_name], capture_output=True)
@@ -140,7 +134,7 @@ def host(request):
         '-e', 'POSTGRES_PASSWORD=password',
         '--shm-size=2g',
         '-p', '5432:5432',
-        '-d', DOCKER_TO_USE
+        '-d', IMAGE
     ]
 
     if needs_libs:
@@ -203,24 +197,9 @@ def test_wait_docker_load(host):
     time.sleep(5)
     assert 0 == 0
 
-
-def test_ppg_postgres_image_labels():
-    """Validate PostgreSQL image: (1) name/vendor/maintainer do not violate Red Hat trademark;
-    (2) required labels (name, vendor, version, release, summary, description, maintainer) are present;
-    (3) name/vendor/maintainer match expected values."""
-    image_ref = _get_postgres_image_ref()
-    _validate_ppg_image_labels(image_ref, expected_name=EXPECTED_LABEL_NAME_POSTGRESQL)
-
-
-def test_ppg_postgres_image_licenses_at_licenses():
-    """Check that terms/conditions and open source licensing are present at /licenses in the PostgreSQL image."""
-    image_ref = _get_postgres_image_ref()
-    _check_licenses_at_licenses(image_ref)
-
-
 @pytest.fixture()
 def postgresql_binary(host):
-    pg_binary = f"{PG_BIN}/postgres"
+    pg_binary = f"{PG_BIN_DIR}/postgres"
     return host.file(pg_binary)
 
 
@@ -234,14 +213,6 @@ def extension_list(host):
     result = host.check_output("psql -c 'SELECT * FROM pg_available_extensions;' | awk 'NR>=3{print $1}'")
     result = result.split()
     return result
-
-# def test_postgresql_is_running_and_enabled(host):
-#     dist = host.system_info.distribution
-#     service_name = "postgresql"
-#     if dist.lower() in ["redhat", "centos", "rhel", "rocky"]:
-#         service_name = f"postgresql-{MAJOR_VER}"
-#     service = host.service(service_name)
-#     assert service.is_running
 
 
 def postgres_binary(postgresql_binary):
@@ -644,29 +615,6 @@ def test_pgbackrest_version(host):
         assert len(actual_version) > 0 and actual_version[0].isdigit()
 
 
-# def test_python3_etcd_version(host):
-#     # 1. Use Python to print the version of the 'etcd' module
-#     # We use 'import etcd' because that is the internal module name
-#     # for the python-etcd/python3-etcd package.
-#     cmd = "python3 -c 'import etcd; print(etcd.__version__)'"
-#     result = host.run(cmd)
-
-#     # 2. Check if the module is installed and the command succeeded
-#     assert result.rc == 0, f"python3-etcd is not installed or import failed: {result.stderr}"
-
-#     # 3. Parse the version number
-#     actual_version = result.stdout.strip()
-#     print(f"Detected python3-etcd Version: {actual_version}")
-
-#     # 4. Compare with the expected version from your dictionary
-#     expected_version = pg_docker_versions.get("python3_etcd", {}).get("binary_version")
-
-#     if expected_version:
-#         assert actual_version == expected_version, f"Expected {expected_version}, but found {actual_version}"
-#     else:
-#         assert len(actual_version) > 0, "python3-etcd version could not be determined"
-
-
 # --- Configuration ---
 DB_PARAMS = {
     "dbname": "postgres",
@@ -871,6 +819,7 @@ def test_timescaledb_lifecycle(host, cursor):
         except Exception:
             pass # DB might be unreachable or table already gone
 
+
 # --- pgvector Functional Test ---
 #@pytest.mark.needs_preload
 def test_pgvector_functional_logic(host): # Use host here to allow re-connection
@@ -933,7 +882,7 @@ def test_pg_stat_monitor_capture(host):
             assert cur.fetchone() is not None
 
 
-# Helper to provide isolation for every test
+# Helper to provide isolation for every test of PostGIS
 def manage_postgis(host, action="create"):
     """Handles extension lifecycle using standard psql calls."""
     if action == "create":
@@ -945,6 +894,7 @@ def manage_postgis(host, action="create"):
         host.run("psql -c 'DROP EXTENSION IF EXISTS postgis_topology CASCADE;'")
         host.run("psql -c 'DROP EXTENSION IF EXISTS postgis CASCADE;'")
 
+# --- PostGIS TEST ---
 def test_postgis_library_linkage(host):
     """Verifies PostGIS can be enabled and GEOS, PROJ, and GDAL are reachable."""
     try:
@@ -1011,7 +961,7 @@ def test_pg_repack_reorganization(host):
         # pg_repack is a binary utility, not just SQL.
         # We run it against the 'postgres' database.
         # -t specifies the table
-        repack_cmd = f"{PG_BIN}/pg_repack -d postgres -t repack_test"
+        repack_cmd = f"{PG_BIN_DIR}/pg_repack -d postgres -t repack_test"
         result = host.run(repack_cmd)
 
         assert result.rc == 0
@@ -1040,7 +990,7 @@ def test_pgaudit_logging(host):
 
         # Check the PostgreSQL logs for the pgaudit signature
         # We look for 'AUDIT: SESSION' which is the default pgaudit prefix
-        log_check = host.run(f"tail -n 100 {PG_DATA}/log/*.log")
+        log_check = host.run(f"tail -n 100 {PG_DATA_DIR}/log/*.log")
         assert "AUDIT: SESSION" in log_check.stdout
         assert "CREATE TABLE audit_test" in log_check.stdout
     finally:

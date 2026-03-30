@@ -1,26 +1,21 @@
-import json
-import os
 import pytest
 import subprocess
-import testinfra
-import sys
-import settings
 import time
-import psycopg2
-from datetime import datetime, timedelta
-import requests
+import os
 import textwrap
+import requests
+import psycopg2
 
-# --- Configuration ---
+# --- Configuration constants/settings ---
 MAJOR_VER = os.getenv('VERSION').split('.')[0]
 MAJOR_MINOR_VER = os.getenv('VERSION')
 DOCKER_REPO = os.getenv('DOCKER_REPOSITORY')
 IMG_TAG = os.getenv('TAG')
-
 IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG}"
 PG_BIN_DIR = f"/usr/pgsql-{MAJOR_VER}/bin"
 NETWORK_NAME = "patroni_test_net"
 ETCD_NAME = "etcd_node"
+
 
 def get_patroni_status(port):
     """Helper to query the Patroni REST API."""

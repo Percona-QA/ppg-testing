@@ -162,42 +162,25 @@
     update_cache: yes
   when: ansible_os_family == "Debian"
 
-- name: Create /tmp/docker_test directory
+- name: Ensure test directory exists
   file:
     path: /tmp/docker_test
     state: directory
+    mode: 0755
 
-- name: Copy settings.py
+- name: Copy PostgreSQL test files to remote
   copy:
-    src: settings.py
-    dest: /tmp/docker_test/settings.py
+    src: "{{ item }}"
+    dest: "/tmp/docker_test/{{ item }}"
     owner: root
     group: root
     mode: 0644
-
-- name: Copy test_docker.py
-  copy:
-    src: test_docker.py
-    dest: /tmp/docker_test/test_docker.py
-    owner: root
-    group: root
-    mode: 0644
-
-- name: Copy test_patroni_ha.py
-  copy:
-    src:  test_patroni_ha.py
-    dest: /tmp/docker_test/test_patroni_ha.py
-    owner: root
-    group: root
-    mode: 0644
-
-- name: Copy test_pgbackrest.py
-  copy:
-    src:  test_pgbackrest.py
-    dest: /tmp/docker_test/test_pgbackrest.py
-    owner: root
-    group: root
-    mode: 0644
+  loop:
+    - settings.py
+    - test_docker.py
+    - test_patroni_ha.py
+    - test_pgbackrest.py
+    - test_labels_licences.py
 
 - name: Ensure Python virtual environment exists
   ansible.builtin.command: python3 -m venv validation
@@ -213,26 +196,29 @@
     update_cache: yes
   when: ansible_os_family == "Debian"
 
-- name: Create python venv and run docker tests
+- name: Ensure Python dependencies are installed in venv
+  pip:
+    name:
+      - pip
+      - psycopg2-binary
+      - pytest-testinfra
+      - requests
+      - pytest
+      - pytest-order
+    state: latest
+    virtualenv: /tmp/docker_test/validation
+    virtualenv_command: python3 -m venv
+
+- name: Run consolidated PostgreSQL test suite
   shell: |
-    #Activate virtual environment
-    source validation/bin/activate
-
-    #Install dependencies
-    pip install --upgrade pip
-    pip install psycopg2-binary pytest-testinfra requests pytest pytest-order
-
-    #Run test without shared_preload_libraries  (default)
-    pytest test_docker.py -vv -s -rpfs -m "not needs_preload"
-
-    #Run test with shared_preload_libraries (timescaledb and pg_stat_monitor)
-    pytest test_docker.py -vv -s -rpfs -m "needs_preload"
-
-    #Run test for Patroni HA
-    pytest test_patroni_ha.py -vv -s -rpfs
-
-    #Run test for pgbackrest
-    pytest test_pgbackrest.py -vv -s -rpfs
+    # Use the venv python directly to avoid 'source' issues in non-interactive shells
+    ./validation/bin/pytest \
+       test_labels_licences.py \
+       test_docker.py \
+       test_patroni_ha.py \
+       test_pgbackrest.py \
+       -vv -s -rpfs \
+       --junitxml=results.xml
   args:
     executable: /bin/bash
     chdir: /tmp/docker_test
