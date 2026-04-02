@@ -1,0 +1,39 @@
+### --- Core Python & Environment ---
+.venv/
+venv/
+ENV/
+__pycache__/
+*.pyc
+.env
+.claude/
+
+### --- Linting & Tooling Caches ---
+.cache/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+### --- Editor & IDE Settings ---
+.idea/
+.vscode/
+# Ignore all Cursor files except your specific settings
+.cursor/*
+
+### --- Ansible & Local Configs ---
+.ansible/
+.molecule/
+.pre-commit-config.yaml
+.yamllint
+.sqlfluff
+pyproject.toml
+FORMATTING.md
+Makefile
+.cursor/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.cache/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.cache/
