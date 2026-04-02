@@ -1017,3 +1017,278 @@ def test_wal2json_logical_decoding(host):
         # 6. Cleanup
         host.run(f"psql -c \"SELECT pg_drop_replication_slot('{slot_name}') WHERE EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = '{slot_name}');\"")
         host.run("psql -c 'DROP TABLE IF EXISTS wal_test;'")
+
+
+# --- H3 TEST ---
+@pytest.fixture(scope="module")
+def h3_db(host):
+    # Ensure installation
+    setup_cmd = f"{PG_BIN_DIR}/psql -U postgres -d postgres -c 'CREATE EXTENSION IF NOT EXISTS h3_postgis CASCADE;'"
+    setup_result = host.run(setup_cmd)
+
+    # Critical: Check if the installation actually worked
+    assert setup_result.exit_status == 0, f"Failed to install H3: {setup_result.stderr}"
+
+    return host
+
+def test_h3_extension_installed(h3_db):
+    """Verify h3 is in the installed extensions list."""
+    # Simplified command
+    cmd = f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"SELECT count(*) FROM pg_extension WHERE extname = 'h3';\""
+    result = h3_db.run(cmd)
+    assert result.stdout.strip() == "1"
+
+def test_h3_latlng_to_cell(h3_db):
+    """Test using the geometry point signature."""
+    # We create a POINT(longitude latitude) and pass it as a single argument
+    query = "SELECT h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint(-0.1278, 51.5074), 4326), 7);"
+    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+
+    assert result.exit_status == 0, f"SQL Error: {result.stderr}"
+    assert result.stdout.strip().startswith("8719")
+
+def test_h3_postgis_geometry_to_cell(h3_db):
+    """Verify converting a PostGIS Geometry point to an H3 index."""
+    # Since ST_Y/ST_X already return double precision, this signature matches
+    # the 'geometry, resolution' signature in your \df output.
+    query = (
+        "SELECT h3_lat_lng_to_cell("
+        "  ST_SetSRID(ST_MakePoint(-74.0060, 40.7128), 4326), "
+        "  9"
+        ");"
+    )
+    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+
+    assert result.exit_status == 0, f"SQL Error: {result.stderr}"
+    assert len(result.stdout.strip()) == 15
+
+def test_h3_grid_distance(h3_db):
+    """Test distance between two cells using the point-based signature."""
+    # Using the ST_MakePoint method since we know it works from your PASSED tests
+    query = """
+    SELECT h3_grid_distance(
+        h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint(-74.0060, 40.7128), 4326), 10),
+        h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint(-74.0061, 40.7129), 10), 10)
+    );
+    """
+    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+
+    assert result.exit_status == 0, f"SQL Error: {result.stderr}"
+    assert int(result.stdout.strip()) >= 0
+
+def test_h3_latlng_constructor(h3_db):
+    """Test using the geography-to-h3 conversion (the most stable path)."""
+    # We know ST_MakePoint works because your other tests just passed.
+    # We cast to geography to match the 'geography, resolution' signature in your \df.
+    query = "SELECT h3_lat_lng_to_cell(ST_MakePoint(-0.1278, 51.5074)::geography, 7);"
+    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+
+    assert result.exit_status == 0, f"SQL Error: {result.stderr}"
+    assert result.stdout.strip().startswith("8719")
+
+# 1. Test the 'geography' signature (Standard for Global H3)
+def test_h3_signature_geography(h3_db):
+    query = "SELECT h3_latlng_to_cell(ST_MakePoint(-0.1278, 51.5074)::geography, 7);"
+    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+    assert result.exit_status == 0
+    assert result.stdout.strip().startswith("8719")
+
+# 2. Test the 'geometry' signature (Standard for Flat/Projected maps)
+def test_h3_signature_geometry(h3_db):
+    query = "SELECT h3_latlng_to_cell(ST_SetSRID(ST_MakePoint(-0.1278, 51.5074), 4326), 7);"
+    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+    assert result.exit_status == 0
+
+def test_h3_signature_latlng_point(h3_db):
+    # Swap to (lng, lat) for the native point constructor to hit the 8719 index
+    query = "SELECT h3_latlng_to_cell(point(-0.1278, 51.5074), 7);"
+    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+
+    assert result.exit_status == 0
+    assert result.stdout.strip().startswith("8719")
+
+def test_h3_function_signatures_count(h3_db):
+    """
+    Verify the 'Contract': The extension should register exactly 3 overloads
+    for h3_latlng_to_cell, and NONE for raw float8s.
+    """
+    # Count total overloads
+    count_cmd = (
+        f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c "
+        "\"SELECT count(*) FROM pg_proc WHERE proname = 'h3_latlng_to_cell';\""
+    )
+    result = h3_db.run(count_cmd)
+    assert result.stdout.strip() == "3", f"Expected 3 overloads, found {result.stdout}"
+
+    # Specifically verify that the (float8, float8) signature is MISSING
+    # This confirms the 'packaging choice' we discovered.
+    check_float_cmd = (
+        f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c "
+        "\"SELECT count(*) FROM pg_proc WHERE proname = 'h3_latlng_to_cell' "
+        "AND pg_get_function_arguments(oid) LIKE '%double precision, double precision%';\""
+    )
+    result_float = h3_db.run(check_float_cmd)
+    assert result_float.stdout.strip() == "0", "Package unexpectedly contains raw float8 overloads!"
+
+def test_h3_functional_integrity(h3_db):
+    """The gold-standard functional test for this specific package build."""
+    query = "SELECT h3_latlng_to_cell(ST_MakePoint(-0.1278, 51.5074)::geography, 7);"
+    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+
+    assert result.exit_status == 0
+    assert result.stdout.strip().startswith("8719")
+
+def test_h3_binary_integrity(h3_db):
+    """Verify C symbols exist without executing them (prevents segfaults)."""
+    lib_path = "/usr/pgsql-18/lib/h3.so"
+    result = h3_db.run(f"nm -D {lib_path} | grep h3_latlng_to_cell")
+    assert result.exit_status == 0
+    assert "T h3_latlng_to_cell" in result.stdout
+
+def test_h3_standard_geography_path(h3_db):
+    # Longitude first, then Latitude
+    query = "SELECT h3_latlng_to_cell(ST_MakePoint(-0.1278, 51.5074)::geography, 7);"
+    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+
+    assert result.exit_status == 0
+    assert result.stdout.strip().startswith("8719")
+
+def test_h3_internal_point_path(h3_db):
+    """
+    Verify the internal 'latlng point' signature.
+    Note: For this build, point(x, y) maps to point(lng, lat).
+    """
+    # London: -0.1278 (Lng/X), 51.5074 (Lat/Y)
+    query = "SELECT h3_latlng_to_cell(point(-0.1278, 51.5074), 7);"
+    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+
+    assert result.exit_status == 0
+    # This should now return the 8719... prefix
+    assert result.stdout.strip().startswith("8719")
+
+def test_h3_extension_version(host):
+    # 1. Clean slate and recreate
+    # We use CASCADE because h3 often has dependencies (like postgis)
+    host.run("psql -c 'DROP EXTENSION IF EXISTS h3_postgis CASCADE;'")
+    host.run("psql -c 'DROP EXTENSION IF EXISTS h3 CASCADE;'")
+
+    create_res = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS h3_postgis CASCADE;'")
+    assert create_res.rc == 0, create_res.stderr
+
+    # 2. Get the Extension version (SQL Level)
+    query = "SELECT extversion FROM pg_extension WHERE extname = 'h3';"
+    actual_ext_version = host.run(f"psql -t -A -c \"{query}\"").stdout.strip()
+
+    # 3. Get Expected version from dictionary
+    pkg_key = f"percona-h3-pg_{MAJOR_VER}"
+    expected_full_version = pg_docker_versions[pkg_key]['version']
+
+    # 4. Clean the version string (e.g., '4.2.3-1.el9' -> '4.2.3')
+    expected_clean_version = expected_full_version.split('-')[0]
+
+    assert actual_ext_version == expected_clean_version, (
+        f"H3 Extension version {actual_ext_version} does not match "
+        f"expected version {expected_clean_version}"
+    )
+
+    # 5. Cleanup: Drop extension at the end
+    drop_res = host.run("psql -c 'DROP EXTENSION IF EXISTS h3_postgis CASCADE;'")
+    assert drop_res.rc == 0, drop_res.stderr
+
+    drop_res = host.run("psql -c 'DROP EXTENSION IF EXISTS h3 CASCADE;'")
+    assert drop_res.rc == 0, drop_res.stderr
+
+def test_pgrouting_extension_version(host):
+    # 1. Clean slate and recreate
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
+
+    create_res = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pgrouting CASCADE;'")
+    assert create_res.rc == 0, create_res.stderr
+
+    # 2. Get the Extension version (SQL Level)
+    query = "SELECT extversion FROM pg_extension WHERE extname = 'pgrouting';"
+    actual_ext_version = host.run(f"psql -t -A -c \"{query}\"").stdout.strip()
+
+    # 3. Get Expected version from dictionary
+    pkg_key = f"percona-pgrouting_{MAJOR_VER}"
+    expected_full_version = pg_docker_versions[pkg_key]['version']
+
+    # 4. Clean the version string (e.g., '3.6.2-1.el9' -> '3.6.2')
+    expected_clean_version = expected_full_version.split('-')[0]
+
+    assert actual_ext_version == expected_clean_version, (
+        f"pgRouting Extension version {actual_ext_version} does not match "
+        f"expected version {expected_clean_version}"
+    )
+
+    # 5. Cleanup: Drop extension at the end
+    drop_res = host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
+    assert drop_res.rc == 0, drop_res.stderr
+
+def test_pg_routing_functional_dijkstra(host):
+    # 1. Setup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pgrouting CASCADE;'")
+
+    # 2. Execution
+    test_sql = """
+    CREATE TEMP TABLE edges AS 
+    SELECT 1::bigint AS id, 1::bigint AS source, 2::bigint AS target, 1.0::float8 AS cost
+    UNION ALL
+    SELECT 2::bigint AS id, 2::bigint AS source, 3::bigint AS target, 1.0::float8 AS cost;
+     
+    SELECT sum(cost) FROM pgr_dijkstra(
+        'SELECT id, source, target, cost FROM edges',
+        1, 3, false
+    );
+    """
+    result = host.run(f"psql -q -t -A -c \"{test_sql}\"")
+
+    # 3. Validation
+    assert result.rc == 0
+    assert result.stdout.strip().split('\n')[-1] == "2"
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
+
+def test_pg_routing_metadata(host):
+    # 1. Setup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pgrouting CASCADE;'")
+
+    # 2. Check if the extension is recognized by PG
+    query = "SELECT count(*) FROM pg_available_extensions WHERE name = 'pgrouting' AND installed_version IS NOT NULL;"
+    result = host.run(f"psql -t -A -c \"{query}\"")
+
+    # 3. Validation
+    assert result.stdout.strip() == "1", "pgRouting should be marked as installed"
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
+
+def test_pg_routing_functional_bidirectional(host):
+    # 1. Setup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pgrouting CASCADE;'")
+
+    # 2. Execution: Test Bidirectional Dijkstra (Core 4.0 feature)
+    test_sql = """
+    CREATE TEMP TABLE edges AS 
+    SELECT 1::bigint AS id, 1::bigint AS source, 2::bigint AS target, 1.0::float8 AS cost
+    UNION ALL
+    SELECT 2::bigint AS id, 2::bigint AS source, 3::bigint AS target, 1.0::float8 AS cost;
+     
+    SELECT sum(cost) FROM pgr_bdDijkstra(
+        'SELECT id, source, target, cost FROM edges',
+        1, 3, false
+    );
+    """
+    result = host.run(f"psql -q -t -A -c \"{test_sql}\"")
+
+    # 3. Validation
+    assert result.rc == 0, f"pgRouting Bidirectional failed: {result.stderr}"
+    actual_cost = result.stdout.strip().split('\n')[-1]
+    assert actual_cost == "2", f"Expected 2, got {actual_cost}"
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")

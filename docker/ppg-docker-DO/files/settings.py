@@ -126,6 +126,19 @@ timescaledb = {
     "18.3": {"version": "2.26.0"},
 }
 
+h3 = {
+    "16.13": {"version": "4.2.3"},
+    "17.9": {"version": "4.2.3"},
+    "18.3": {"version": "4.2.3"},
+}
+
+pgrouting = {
+    "16.13": {"version": "4.0.1"},
+    "17.9": {"version": "4.0.1"},
+    "18.3": {"version": "4.0.1"},
+}
+
+
 # DOCKER_LIST_EXTENSIONS = ["hstore",
 #                 "adminpack",
 #                 "amcheck",
@@ -307,7 +320,9 @@ DOCKER_RPM_PACKAGES_TEMPLATE = ["percona-postgresql{}",
                                 "percona-postgis35_{}-utils",
                                 "python3-etcd",
                                 "python3-ydiff",
-                                "percona-timescaledb_{}"
+                                "percona-timescaledb_{}",
+                                "percona-h3-pg_{}",
+                                "percona-pgrouting_{}"
                              ]
 
 
@@ -363,6 +378,8 @@ ppg_versions = {
             "percona-postgis35_16-llvmjit": postgis["16.13"],
             "percona-postgis35_16-utils": postgis["16.13"],
             "percona-timescaledb_16": timescaledb["16.13"],
+            "percona-h3-pg_16": h3["16.13"],
+            "percona-pgrouting_16": pgrouting["16.13"],
             "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "16"),
             "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "16"),
             "extensions": DOCKER_LIST_EXTENSIONS,
@@ -400,6 +417,8 @@ ppg_versions = {
             "percona-postgis35_17-llvmjit": postgis["17.9"],
             "percona-postgis35_17-utils": postgis["17.9"],
             "percona-timescaledb_17": timescaledb["17.9"],
+            "percona-h3-pg_17": h3["17.9"],
+            "percona-pgrouting_17": pgrouting["17.9"],
             "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "17"),
             "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "17"),
             "extensions": DOCKER_LIST_EXTENSIONS,
@@ -437,6 +456,8 @@ ppg_versions = {
             "percona-postgis35_18-llvmjit": postgis["18.3"],
             "percona-postgis35_18-utils": postgis["18.3"],
             "percona-timescaledb_18": timescaledb["18.3"],
+            "percona-h3-pg_18": h3["18.3"],
+            "percona-pgrouting_18": pgrouting["18.3"],
             "libpq": "Version of libpq: 180003",
             "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "18"),
             "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "18"),
