@@ -16,6 +16,11 @@ MAJOR_MINOR_VER = os.getenv('VERSION')
 DOCKER_REPO = os.getenv('DOCKER_REPOSITORY')
 IMG_TAG = os.getenv('TAG')
 IS_WITH_POSTGIS = os.getenv('WITH_POSTGIS', 'false').lower() == "true"
+MILESTONE_NUM = os.getenv('MILESTONE')
+if MILESTONE_NUM:
+    MILESTONE_NUM = int(MILESTONE_NUM)
+else:
+    MILESTONE_NUM = 0
 PG_BIN_DIR = f"/usr/pgsql-{MAJOR_VER}/bin"
 PG_DATA_DIR = "/data/db"
 IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG}"
@@ -54,6 +59,15 @@ def host(request):
     needs_libs = any(item.get_closest_marker("needs_preload") for item in request.session.items)
 
     subprocess.run(['docker', 'rm', '-f', container_name], capture_output=True)
+
+    print('------------Settings------------')
+    print('Major Version: ' + MAJOR_VER)
+    print('Major Minor Version: ' + MAJOR_MINOR_VER)
+    print('Image TAG: ' + IMG_TAG)
+    print('IS_WITH_POSTGIS: ' + str(IS_WITH_POSTGIS))
+    print('DOCKER_TO_USE: ' + IMAGE)
+    print('MILESTONE_NUM: ' + MILESTONE_NUM)
+    print('--------------------------------')
 
     run_cmd = [
         'docker', 'run', '--name', container_name,
