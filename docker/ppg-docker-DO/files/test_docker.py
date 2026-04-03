@@ -16,10 +16,15 @@ MAJOR_MINOR_VER = os.getenv("VERSION")
 DOCKER_REPO = os.getenv("DOCKER_REPOSITORY")
 IMG_TAG = os.getenv("TAG")
 IS_WITH_POSTGIS = os.getenv("WITH_POSTGIS", "false").lower() == "true"
-MILESTONE_NUM = os.getenv("MILESTONE")
+MILESTONE = int(os.getenv("MILESTONE", "0"))
 PG_BIN_DIR = f"/usr/pgsql-{MAJOR_VER}/bin"
 PG_DATA_DIR = "/data/db"
 IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG}"
+
+# --- Milestone Markers ---
+milestone_1 = pytest.mark.skipif(MILESTONE < 1, reason=f"MILESTONE={MILESTONE} — requires milestone 1 build - base version.")
+milestone_2 = pytest.mark.skipif(MILESTONE < 2, reason=f"MILESTONE={MILESTONE} — requires milestone 2 build")
+milestone_3 = pytest.mark.skipif(MILESTONE < 3, reason=f"MILESTONE={MILESTONE} — requires milestone 3 build")
 
 # --- Settings ---
 pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER)
@@ -74,7 +79,7 @@ def host(request):
     print(f"Image TAG: {IMG_TAG}")
     print(f"IS_WITH_POSTGIS: {IS_WITH_POSTGIS}")
     print(f"DOCKER_TO_USE: {IMAGE}")
-    print(f"MILESTONE_NUM: {MILESTONE_NUM}")
+    print(f"MILESTONE: {MILESTONE}")
     print("--------------------------------")
 
     run_cmd = [
@@ -891,91 +896,6 @@ def test_pg_stat_monitor_capture(host):
             assert cur.fetchone() is not None
 
 
-# Helper to provide isolation for every test of PostGIS
-def manage_postgis(host, action="create"):
-    """Handles extension lifecycle using standard psql calls."""
-    if action == "create":
-        # Create extensions in order of dependency
-        for ext in ["postgis", "postgis_raster", "postgis_topology"]:
-            host.run(f"psql -c 'CREATE EXTENSION IF NOT EXISTS {ext} CASCADE;'")
-    else:
-        # CASCADE ensures dependent objects/extensions are removed
-        host.run("psql -c 'DROP EXTENSION IF EXISTS postgis_topology CASCADE;'")
-        host.run("psql -c 'DROP EXTENSION IF EXISTS postgis CASCADE;'")
-
-
-# --- PostGIS TEST ---
-
-
-def test_postgis_library_linkage(host):
-    """Verifies PostGIS can be enabled and GEOS, PROJ, and GDAL are reachable."""
-    try:
-        manage_postgis(host, "create")
-        version_info = host.run("psql -t -c 'SELECT postgis_full_version();'")
-        # Ensure the underlying engine libraries are properly linked in the image
-        assert all(lib in version_info.stdout for lib in ["GEOS", "PROJ", "GDAL", "LIBXML"])
-    finally:
-        manage_postgis(host, "drop")
-
-
-def test_postgis_spatial_logic_and_rasters(host):
-    """Verifies distance calculations (PROJ/GEOS) and Raster support (GDAL)."""
-    try:
-        manage_postgis(host, "create")
-
-        # Calculate distance between London and Paris (approx 340km)
-        dist_query = (
-            "SELECT ST_Distance("
-            "ST_GeogFromText('SRID=4326;POINT(0 51.5)'), "
-            "ST_GeogFromText('SRID=4326;POINT(2.3 48.8)'));"
-        )
-        dist_res = host.run(f'psql -t -c "{dist_query}"')
-        assert 330000 < float(dist_res.stdout.strip()) < 350000
-
-        # Verify GDAL Raster support
-        raster_query = (
-            "SELECT ST_Width(ST_AddBand("
-            "ST_MakeEmptyRaster(10, 10, 0, 0, 1, -1, 0, 0, 4326), 1, '8BUI', 1, 0));"
-        )
-        assert "10" in host.run(f'psql -t -c "{raster_query}"').stdout
-    finally:
-        manage_postgis(host, "drop")
-
-
-def test_postgis_srid_transformation(host):
-    """Verifies coordinate reprojection logic (PROJ library check)."""
-    try:
-        manage_postgis(host, "create")
-        # Transform GPS (4326) to Web Mercator (3857)
-        query = "SELECT ST_AsText(ST_Transform(ST_GeomFromText('POINT(0 0)', 4326), 3857));"
-        res = host.run(f'psql -t -c "{query}"')
-        assert "POINT(0 0)" in res.stdout
-    finally:
-        manage_postgis(host, "drop")
-
-
-def test_postgis_indexing_and_joins(host):
-    """Verifies GiST indexing and spatial join performance/logic."""
-    try:
-        manage_postgis(host, "create")
-
-        setup = """
-        CREATE TABLE districts (id int, geom geometry(Polygon, 4326));
-        CREATE INDEX idx_dist_geom ON districts USING GIST (geom);
-        INSERT INTO districts VALUES (1, ST_MakeEnvelope(0, 0, 2, 2, 4326));
-        """
-        host.run(f'psql -c "{setup}"')
-
-        # Test Point-in-Polygon join using the GiST index
-        join_query = (
-            "SELECT count(*) FROM districts "
-            "WHERE ST_Contains(geom, ST_GeomFromText('POINT(1 1)', 4326));"
-        )
-        assert "1" in host.run(f'psql -t -c "{join_query}"').stdout.strip()
-    finally:
-        manage_postgis(host, "drop")
-
-
 # --- PG_REPACK TEST ---
 def test_pg_repack_reorganization(host):
     """Verifies pg_repack can rebuild a table to remove bloat online."""
@@ -1001,8 +921,6 @@ def test_pg_repack_reorganization(host):
 
 
 # --- PGAUDIT TEST ---
-
-
 @pytest.mark.needs_preload
 def test_pgaudit_logging(host):
     """Verifies that pgaudit captures DDL and DML events in the PG logs."""
@@ -1026,8 +944,6 @@ def test_pgaudit_logging(host):
 
 
 # --- SET_USER TEST ---
-
-
 @pytest.mark.needs_preload
 def test_set_user_escalation(host):
     """Verifies set_user allows a less-privileged user to flip to a superuser role."""
@@ -1077,8 +993,6 @@ def test_set_user_escalation(host):
 
 
 # --- WAL2JSON TEST ---
-
-
 @pytest.mark.needs_preload
 def test_wal2json_logical_decoding(host):
     """Verifies wal2json can decode DML into JSON format using 'kind' keys."""
@@ -1126,7 +1040,95 @@ def test_wal2json_logical_decoding(host):
         host.run("psql -c 'DROP TABLE IF EXISTS wal_test;'")
 
 
+# Helper to provide isolation for every test of PostGIS
+def manage_postgis(host, action="create"):
+    """Handles extension lifecycle using standard psql calls."""
+    if action == "create":
+        # Create extensions in order of dependency
+        for ext in ["postgis", "postgis_raster", "postgis_topology"]:
+            host.run(f"psql -c 'CREATE EXTENSION IF NOT EXISTS {ext} CASCADE;'")
+    else:
+        # CASCADE ensures dependent objects/extensions are removed
+        host.run("psql -c 'DROP EXTENSION IF EXISTS postgis_topology CASCADE;'")
+        host.run("psql -c 'DROP EXTENSION IF EXISTS postgis CASCADE;'")
+
+
+# --- PostGIS TEST ---
+@milestone_2
+def test_postgis_library_linkage(host):
+    """Verifies PostGIS can be enabled and GEOS, PROJ, and GDAL are reachable."""
+    try:
+        manage_postgis(host, "create")
+        version_info = host.run("psql -t -c 'SELECT postgis_full_version();'")
+        # Ensure the underlying engine libraries are properly linked in the image
+        assert all(lib in version_info.stdout for lib in ["GEOS", "PROJ", "GDAL", "LIBXML"])
+    finally:
+        manage_postgis(host, "drop")
+
+
+@milestone_2
+def test_postgis_spatial_logic_and_rasters(host):
+    """Verifies distance calculations (PROJ/GEOS) and Raster support (GDAL)."""
+    try:
+        manage_postgis(host, "create")
+
+        # Calculate distance between London and Paris (approx 340km)
+        dist_query = (
+            "SELECT ST_Distance("
+            "ST_GeogFromText('SRID=4326;POINT(0 51.5)'), "
+            "ST_GeogFromText('SRID=4326;POINT(2.3 48.8)'));"
+        )
+        dist_res = host.run(f'psql -t -c "{dist_query}"')
+        assert 330000 < float(dist_res.stdout.strip()) < 350000
+
+        # Verify GDAL Raster support
+        raster_query = (
+            "SELECT ST_Width(ST_AddBand("
+            "ST_MakeEmptyRaster(10, 10, 0, 0, 1, -1, 0, 0, 4326), 1, '8BUI', 1, 0));"
+        )
+        assert "10" in host.run(f'psql -t -c "{raster_query}"').stdout
+    finally:
+        manage_postgis(host, "drop")
+
+
+@milestone_2
+def test_postgis_srid_transformation(host):
+    """Verifies coordinate reprojection logic (PROJ library check)."""
+    try:
+        manage_postgis(host, "create")
+        # Transform GPS (4326) to Web Mercator (3857)
+        query = "SELECT ST_AsText(ST_Transform(ST_GeomFromText('POINT(0 0)', 4326), 3857));"
+        res = host.run(f'psql -t -c "{query}"')
+        assert "POINT(0 0)" in res.stdout
+    finally:
+        manage_postgis(host, "drop")
+
+
+@milestone_2
+def test_postgis_indexing_and_joins(host):
+    """Verifies GiST indexing and spatial join performance/logic."""
+    try:
+        manage_postgis(host, "create")
+
+        setup = """
+        CREATE TABLE districts (id int, geom geometry(Polygon, 4326));
+        CREATE INDEX idx_dist_geom ON districts USING GIST (geom);
+        INSERT INTO districts VALUES (1, ST_MakeEnvelope(0, 0, 2, 2, 4326));
+        """
+        host.run(f'psql -c "{setup}"')
+
+        # Test Point-in-Polygon join using the GiST index
+        join_query = (
+            "SELECT count(*) FROM districts "
+            "WHERE ST_Contains(geom, ST_GeomFromText('POINT(1 1)', 4326));"
+        )
+        assert "1" in host.run(f'psql -t -c "{join_query}"').stdout.strip()
+    finally:
+        manage_postgis(host, "drop")
+
+
 # --- H3 TEST ---
+@milestone_2
 @pytest.fixture(scope="module")
 def h3_db(host):
     # Ensure installation
@@ -1141,7 +1143,7 @@ def h3_db(host):
 
     return host
 
-
+@milestone_2
 def test_h3_extension_installed(h3_db):
     """Verify h3 is in the installed extensions list."""
     # Simplified command
@@ -1153,6 +1155,7 @@ def test_h3_extension_installed(h3_db):
     assert result.stdout.strip() == "1"
 
 
+@milestone_2
 def test_h3_latlng_to_cell(h3_db):
     """Test using the geometry point signature."""
     # We create a POINT(longitude latitude) and pass it as a single argument
@@ -1163,6 +1166,7 @@ def test_h3_latlng_to_cell(h3_db):
     assert result.stdout.strip().startswith("8719")
 
 
+@milestone_2
 def test_h3_postgis_geometry_to_cell(h3_db):
     """Verify converting a PostGIS Geometry point to an H3 index."""
     # Since ST_Y/ST_X already return double precision, this signature matches
@@ -1174,6 +1178,7 @@ def test_h3_postgis_geometry_to_cell(h3_db):
     assert len(result.stdout.strip()) == 15
 
 
+@milestone_2
 def test_h3_grid_distance(h3_db):
     """Test distance between two cells using the point-based signature."""
     # Using the ST_MakePoint method since we know it works from your PASSED tests
@@ -1189,6 +1194,7 @@ def test_h3_grid_distance(h3_db):
     assert int(result.stdout.strip()) >= 0
 
 
+@milestone_2
 def test_h3_latlng_constructor(h3_db):
     """Test using the geography-to-h3 conversion (the most stable path)."""
     # We know ST_MakePoint works because your other tests just passed.
@@ -1201,8 +1207,7 @@ def test_h3_latlng_constructor(h3_db):
 
 
 # 1. Test the 'geography' signature (Standard for Global H3)
-
-
+@milestone_2
 def test_h3_signature_geography(h3_db):
     query = "SELECT h3_latlng_to_cell(ST_MakePoint(-0.1278, 51.5074)::geography, 7);"
     result = h3_db.run(f'{PG_BIN_DIR}/psql -U postgres -d postgres -t -c "{query}"')
@@ -1211,14 +1216,14 @@ def test_h3_signature_geography(h3_db):
 
 
 # 2. Test the 'geometry' signature (Standard for Flat/Projected maps)
-
-
+@milestone_2
 def test_h3_signature_geometry(h3_db):
     query = "SELECT h3_latlng_to_cell(ST_SetSRID(ST_MakePoint(-0.1278, 51.5074), 4326), 7);"
     result = h3_db.run(f'{PG_BIN_DIR}/psql -U postgres -d postgres -t -c "{query}"')
     assert result.exit_status == 0
 
 
+@milestone_2
 def test_h3_signature_latlng_point(h3_db):
     # Swap to (lng, lat) for the native point constructor to hit the 8719 index
     query = "SELECT h3_latlng_to_cell(point(-0.1278, 51.5074), 7);"
@@ -1228,6 +1233,7 @@ def test_h3_signature_latlng_point(h3_db):
     assert result.stdout.strip().startswith("8719")
 
 
+@milestone_2
 def test_h3_function_signatures_count(h3_db):
     """
     Verify the 'Contract': The extension should register exactly 3 overloads
@@ -1254,6 +1260,7 @@ def test_h3_function_signatures_count(h3_db):
     )
 
 
+@milestone_2
 def test_h3_functional_integrity(h3_db):
     """The gold-standard functional test for this specific package build."""
     query = "SELECT h3_latlng_to_cell(ST_MakePoint(-0.1278, 51.5074)::geography, 7);"
@@ -1262,7 +1269,7 @@ def test_h3_functional_integrity(h3_db):
     assert result.exit_status == 0
     assert result.stdout.strip().startswith("8719")
 
-
+@milestone_2
 def test_h3_binary_integrity(h3_db):
     """Verify C symbols exist without executing them (prevents segfaults)."""
     lib_path = f"/usr/pgsql-{MAJOR_VER}/lib/h3.so"
@@ -1271,6 +1278,7 @@ def test_h3_binary_integrity(h3_db):
     assert "T h3_latlng_to_cell" in result.stdout
 
 
+@milestone_2
 def test_h3_standard_geography_path(h3_db):
     # Longitude first, then Latitude
     query = "SELECT h3_latlng_to_cell(ST_MakePoint(-0.1278, 51.5074)::geography, 7);"
@@ -1280,6 +1288,7 @@ def test_h3_standard_geography_path(h3_db):
     assert result.stdout.strip().startswith("8719")
 
 
+@milestone_2
 def test_h3_internal_point_path(h3_db):
     """
     Verify the internal 'latlng point' signature.
@@ -1294,6 +1303,7 @@ def test_h3_internal_point_path(h3_db):
     assert result.stdout.strip().startswith("8719")
 
 
+@milestone_2
 def test_h3_extension_version(host):
     # 1. Clean slate and recreate
     # We use CASCADE because h3 often has dependencies (like postgis)
@@ -1327,6 +1337,7 @@ def test_h3_extension_version(host):
     assert drop_res.rc == 0, drop_res.stderr
 
 
+@milestone_2
 def test_pgrouting_extension_version(host):
     # 1. Clean slate and recreate
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
@@ -1355,6 +1366,7 @@ def test_pgrouting_extension_version(host):
     assert drop_res.rc == 0, drop_res.stderr
 
 
+@milestone_2
 def test_pg_routing_functional_dijkstra(host):
     # 1. Setup
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
@@ -1382,6 +1394,7 @@ def test_pg_routing_functional_dijkstra(host):
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
 
 
+@milestone_2
 def test_pg_routing_metadata(host):
     # 1. Setup
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
@@ -1401,6 +1414,7 @@ def test_pg_routing_metadata(host):
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
 
 
+@milestone_2
 def test_pg_routing_functional_bidirectional(host):
     # 1. Setup
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
