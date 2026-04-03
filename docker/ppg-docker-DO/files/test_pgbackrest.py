@@ -1,13 +1,12 @@
-
+import json
 import os
+import subprocess
 import textwrap
-import requests
+import time
+
 import psycopg2
 import pytest
-import subprocess
 import testinfra
-import time
-import json
 
 # --- Configuration constants/settings ---
 MAJOR_VER = os.getenv('VERSION').split('.')[0]
@@ -21,6 +20,7 @@ PG_BACKREST_REPO_PATH = "/var/lib/pgbackrest"
 CONF_PATH = "/etc/pgbackrest.conf"
 CONTAINER_NAME = "PG18_BACKREST"
 
+
 @pytest.fixture(scope='session')
 def host(request):
     """Starts the container as root and initializes the DB."""
@@ -30,12 +30,12 @@ def host(request):
         'docker', 'run', '--name', CONTAINER_NAME,
         '--user', 'root',
         '-e', 'POSTGRES_PASSWORD=password',
-        '-d', '--entrypoint', '/usr/bin/tail', 
+        '-d', '--entrypoint', '/usr/bin/tail',
         IMAGE, '-f', '/dev/null'
     ]
     subprocess.check_output(run_cmd)
     host_instance = testinfra.get_host("docker://" + CONTAINER_NAME)
-    
+
     # 1. Initialize and Start
     host_instance.run(f"chown postgres:postgres {PG_DATA_DIR}")
     if host_instance.run(f"test -f {PG_DATA_DIR}/PG_VERSION").rc != 0:
@@ -45,6 +45,7 @@ def host(request):
 
     yield host_instance
     subprocess.run(['docker', 'rm', '-f', CONTAINER_NAME], capture_output=True)
+
 
 @pytest.fixture(scope="module")
 def setup_pgbackrest_config(host):
@@ -81,11 +82,14 @@ repo1-retention-full=2
     assert restart.rc == 0
 
 # --- Tests ---
+
+
 @pytest.fixture(scope="module")
 def cleanup_repo(host):
     """Ensures the backup repository is empty before starting the suite."""
     host.run(f"rm -rf {PG_BACKREST_REPO_PATH}/*")
     yield
+
 
 @pytest.mark.order(1)
 def test_stanza_creation(setup_pgbackrest_config, cleanup_repo, host):
@@ -94,6 +98,7 @@ def test_stanza_creation(setup_pgbackrest_config, cleanup_repo, host):
     result = host.run(cmd)
     assert result.rc == 0
     assert "stanza-create command end: completed successfully" in result.stdout
+
 
 @pytest.mark.order(2)
 def test_full_backup(host, setup_pgbackrest_config):
@@ -107,10 +112,11 @@ def test_full_backup(host, setup_pgbackrest_config):
     info_cmd = "runuser -u postgres -- pgbackrest --stanza=testing --output=json info"
     info_result = host.run(info_cmd)
     assert info_result.rc == 0
-    
+
     # Use a more resilient check or JSON parsing
     data = json.loads(info_result.stdout)
     assert data[0]["status"]["message"] == "ok"
+
 
 @pytest.mark.order(3)
 def test_restore_workflow(host, setup_pgbackrest_config):
@@ -119,19 +125,19 @@ def test_restore_workflow(host, setup_pgbackrest_config):
     test_id = 777
     host.run(f"runuser -u postgres -- {PG_BIN_DIR}/psql -c 'CREATE TABLE IF NOT EXISTS backup_test (id int);'")
     host.run(f"runuser -u postgres -- {PG_BIN_DIR}/psql -c 'INSERT INTO backup_test VALUES ({test_id});'")
-    
+
     # 2. Force WAL switch to push the new data to the archive
     host.run(f"runuser -u postgres -- {PG_BIN_DIR}/psql -c 'CHECKPOINT; SELECT pg_switch_wal();'")
-    time.sleep(3) 
+    time.sleep(3)
 
     # 3. Simulate total data loss
     host.run(f"runuser -u postgres -- {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} stop -m immediate")
     host.run(f"rm -rf {PG_DATA_DIR}/*")
-    
+
     # 4. Restore from pgBackRest
     restore_cmd = "runuser -u postgres -- pgbackrest --stanza=testing restore"
     assert host.run(restore_cmd).rc == 0
-    
+
     # 5. Start PG and wait for it to finish replaying WALs
     host.run(f"runuser -u postgres -- {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} start -w")
 
@@ -143,32 +149,34 @@ def test_restore_workflow(host, setup_pgbackrest_config):
             recovery_complete = True
             break
         time.sleep(1)
-    
+
     assert recovery_complete, "Database failed to exit recovery mode in time"
 
     # 6. Verify our unique data survived the restore
     verify = host.run(f"runuser -u postgres -- {PG_BIN_DIR}/psql -t -c 'SELECT count(*) FROM backup_test WHERE id = {test_id};'")
     assert "1" in verify.stdout.strip()
 
+
 @pytest.mark.order(4)
 def test_differential_backup(host, setup_pgbackrest_config):
     """Verifies that a differential backup only records changes since the Full."""
     # 1. Add some data to ensure there's a 'delta' to record
     host.run(f"runuser -u postgres -- {PG_BIN_DIR}/psql -c 'CREATE TABLE diff_test (id int); INSERT INTO diff_test VALUES (1);'")
-    
+
     # 2. Run Differential Backup
     # Note: This requires a prior Full backup to exist (which order(2) provides)
     diff_cmd = "runuser -u postgres -- pgbackrest --stanza=testing --type=diff backup"
     result = host.run(diff_cmd)
     assert result.rc == 0
-    
+
     # 3. Verify in info that we now have a 'diff' type backup
     info_cmd = "runuser -u postgres -- pgbackrest --stanza=testing --output=json info"
     data = json.loads(host.run(info_cmd).stdout)
-    
+
     # Check the backup list for a 'diff' type
     backup_types = [b["type"] for b in data[0]["backup"]]
     assert "diff" in backup_types
+
 
 @pytest.mark.order(5)
 def test_corruption_and_delta_restore(host, setup_pgbackrest_config):
@@ -194,7 +202,7 @@ def test_corruption_and_delta_restore(host, setup_pgbackrest_config):
 
     # 4. Restart and Verify
     host.run(f"runuser -u postgres -- {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} start -w")
-    
+
     # Check recovery status
     recovery_complete = False
     for _ in range(15):
@@ -203,9 +211,9 @@ def test_corruption_and_delta_restore(host, setup_pgbackrest_config):
             recovery_complete = True
             break
         time.sleep(1)
-    
+
     assert recovery_complete
-    
+
     # Ensure our previous data (from the Diff test) is still readable
     verify = host.run(f"runuser -u postgres -- {PG_BIN_DIR}/psql -t -c 'SELECT count(*) FROM diff_test;'")
     assert "1" in verify.stdout.strip()

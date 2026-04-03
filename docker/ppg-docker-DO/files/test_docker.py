@@ -1,13 +1,13 @@
-import json
 import os
-import pytest
 import subprocess
-import testinfra
-import sys
-import settings
 import time
-import psycopg2
 from datetime import datetime, timedelta
+
+import psycopg2
+import pytest
+import testinfra
+
+import settings
 
 # --- Configuration constants/settings ---
 # Constants
@@ -99,7 +99,7 @@ def host(request):
                 break
         time.sleep(1)
 
-    time.sleep(2) # Final settle time for background workers
+    time.sleep(2)  # Final settle time for background workers
     yield testinfra.get_host("docker://" + container_name)
     subprocess.run(['docker', 'rm', '-f', container_name], capture_output=True)
 
@@ -132,6 +132,7 @@ def test_wait_docker_load(host):
     dist = host.system_info.distribution
     time.sleep(5)
     assert 0 == 0
+
 
 @pytest.fixture()
 def postgresql_binary(host):
@@ -234,7 +235,7 @@ def should_skip(extension):
 
     # 4. Feature-flag based skips
     postgis_family = {
-        "postgis", "postgis_topology", "postgis_raster", "postgis_sfcgal", 
+        "postgis", "postgis_topology", "postgis_raster", "postgis_sfcgal",
         "address_standardizer", "postgis_tiger_geocoder", "address_standardizer_data_us"
     }
     if not IS_WITH_POSTGIS and extension in postgis_family:
@@ -382,7 +383,7 @@ def test_build_with_liburing(host):
 
     distribution = host.system_info.distribution.lower()
     if distribution in ["redhat", "centos", "rhel", "rocky", "ol"] and \
-    host.system_info.release.startswith("8"):
+            host.system_info.release.startswith("8"):
         pytest.skip(f"liburing not supported on {distribution} 8 for postgres {MAJOR_VER}")
 
     cmd = "pg_config --configure"
@@ -563,7 +564,7 @@ DB_PARAMS = {
 
 # --- Fixtures (Internalized conftest logic) ---
 @pytest.fixture(scope="session")
-def db_connection(host): # <--- Adding 'host' here forces host to finish booting first
+def db_connection(host):  # <--- Adding 'host' here forces host to finish booting first
     container_name = f"PG{MAJOR_VER}"
     max_retries = 45
 
@@ -624,11 +625,11 @@ def db_connection(host): # <--- Adding 'host' here forces host to finish booting
 
     # 3. Final Fallback
     if not conn:
-        print("\n" + "="*50)
+        print("\n" + "=" * 50)
         print(f"TIMEOUT: Could not connect to {container_name} after 90s.")
         res = subprocess.run(["docker", "logs", container_name, "--tail", "20"], capture_output=True, text=True)
         print(f"Final Logs:\n{res.stdout}")
-        print("="*50)
+        print("=" * 50)
         pytest.fail("Database connection timeout. See logs above.")
 
 
@@ -753,12 +754,12 @@ def test_timescaledb_lifecycle(host, cursor):
                 cleanup_cur.execute(f"DROP TABLE IF EXISTS {table_name};")
             cleanup_conn.close()
         except Exception:
-            pass # DB might be unreachable or table already gone
+            pass  # DB might be unreachable or table already gone
 
 
 # --- pgvector Functional Test ---
-#@pytest.mark.needs_preload
-def test_pgvector_functional_logic(host): # Use host here to allow re-connection
+# @pytest.mark.needs_preload
+def test_pgvector_functional_logic(host):  # Use host here to allow re-connection
     """
     Functional: Test pgvector extension lifecycle with auto-recovery on crash.
     """
@@ -813,7 +814,7 @@ def test_pg_stat_monitor_capture(host):
             cur.fetchall()
 
             # 3. Verify
-            time.sleep(1) # Give PGSM a moment to flush to the view
+            time.sleep(1)  # Give PGSM a moment to flush to the view
             cur.execute("SELECT query FROM pg_stat_monitor WHERE query LIKE '%pgsm_test_marker%';")
             assert cur.fetchone() is not None
 
@@ -831,6 +832,8 @@ def manage_postgis(host, action="create"):
         host.run("psql -c 'DROP EXTENSION IF EXISTS postgis CASCADE;'")
 
 # --- PostGIS TEST ---
+
+
 def test_postgis_library_linkage(host):
     """Verifies PostGIS can be enabled and GEOS, PROJ, and GDAL are reachable."""
     try:
@@ -840,6 +843,7 @@ def test_postgis_library_linkage(host):
         assert all(lib in version_info.stdout for lib in ["GEOS", "PROJ", "GDAL", "LIBXML"])
     finally:
         manage_postgis(host, "drop")
+
 
 def test_postgis_spatial_logic_and_rasters(host):
     """Verifies distance calculations (PROJ/GEOS) and Raster support (GDAL)."""
@@ -857,6 +861,7 @@ def test_postgis_spatial_logic_and_rasters(host):
     finally:
         manage_postgis(host, "drop")
 
+
 def test_postgis_srid_transformation(host):
     """Verifies coordinate reprojection logic (PROJ library check)."""
     try:
@@ -867,6 +872,7 @@ def test_postgis_srid_transformation(host):
         assert "POINT(0 0)" in res.stdout
     finally:
         manage_postgis(host, "drop")
+
 
 def test_postgis_indexing_and_joins(host):
     """Verifies GiST indexing and spatial join performance/logic."""
@@ -911,6 +917,8 @@ def test_pg_repack_reorganization(host):
         host.run("psql -c 'DROP EXTENSION IF EXISTS pg_repack;'")
 
 # --- PGAUDIT TEST ---
+
+
 @pytest.mark.needs_preload
 def test_pgaudit_logging(host):
     """Verifies that pgaudit captures DDL and DML events in the PG logs."""
@@ -933,6 +941,8 @@ def test_pgaudit_logging(host):
         host.run("psql -c 'DROP EXTENSION IF EXISTS pgaudit;'")
 
 # --- SET_USER TEST ---
+
+
 @pytest.mark.needs_preload
 def test_set_user_escalation(host):
     """Verifies set_user allows a less-privileged user to flip to a superuser role."""
@@ -981,6 +991,8 @@ def test_set_user_escalation(host):
         host.run("psql -c 'DROP ROLE IF EXISTS power_user;'")
 
 # --- WAL2JSON TEST ---
+
+
 @pytest.mark.needs_preload
 def test_wal2json_logical_decoding(host):
     """Verifies wal2json can decode DML into JSON format using 'kind' keys."""
@@ -1031,12 +1043,14 @@ def h3_db(host):
 
     return host
 
+
 def test_h3_extension_installed(h3_db):
     """Verify h3 is in the installed extensions list."""
     # Simplified command
     cmd = f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"SELECT count(*) FROM pg_extension WHERE extname = 'h3';\""
     result = h3_db.run(cmd)
     assert result.stdout.strip() == "1"
+
 
 def test_h3_latlng_to_cell(h3_db):
     """Test using the geometry point signature."""
@@ -1046,6 +1060,7 @@ def test_h3_latlng_to_cell(h3_db):
 
     assert result.exit_status == 0, f"SQL Error: {result.stderr}"
     assert result.stdout.strip().startswith("8719")
+
 
 def test_h3_postgis_geometry_to_cell(h3_db):
     """Verify converting a PostGIS Geometry point to an H3 index."""
@@ -1062,6 +1077,7 @@ def test_h3_postgis_geometry_to_cell(h3_db):
     assert result.exit_status == 0, f"SQL Error: {result.stderr}"
     assert len(result.stdout.strip()) == 15
 
+
 def test_h3_grid_distance(h3_db):
     """Test distance between two cells using the point-based signature."""
     # Using the ST_MakePoint method since we know it works from your PASSED tests
@@ -1076,6 +1092,7 @@ def test_h3_grid_distance(h3_db):
     assert result.exit_status == 0, f"SQL Error: {result.stderr}"
     assert int(result.stdout.strip()) >= 0
 
+
 def test_h3_latlng_constructor(h3_db):
     """Test using the geography-to-h3 conversion (the most stable path)."""
     # We know ST_MakePoint works because your other tests just passed.
@@ -1087,6 +1104,8 @@ def test_h3_latlng_constructor(h3_db):
     assert result.stdout.strip().startswith("8719")
 
 # 1. Test the 'geography' signature (Standard for Global H3)
+
+
 def test_h3_signature_geography(h3_db):
     query = "SELECT h3_latlng_to_cell(ST_MakePoint(-0.1278, 51.5074)::geography, 7);"
     result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
@@ -1094,10 +1113,13 @@ def test_h3_signature_geography(h3_db):
     assert result.stdout.strip().startswith("8719")
 
 # 2. Test the 'geometry' signature (Standard for Flat/Projected maps)
+
+
 def test_h3_signature_geometry(h3_db):
     query = "SELECT h3_latlng_to_cell(ST_SetSRID(ST_MakePoint(-0.1278, 51.5074), 4326), 7);"
     result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
     assert result.exit_status == 0
+
 
 def test_h3_signature_latlng_point(h3_db):
     # Swap to (lng, lat) for the native point constructor to hit the 8719 index
@@ -1106,6 +1128,7 @@ def test_h3_signature_latlng_point(h3_db):
 
     assert result.exit_status == 0
     assert result.stdout.strip().startswith("8719")
+
 
 def test_h3_function_signatures_count(h3_db):
     """
@@ -1130,6 +1153,7 @@ def test_h3_function_signatures_count(h3_db):
     result_float = h3_db.run(check_float_cmd)
     assert result_float.stdout.strip() == "0", "Package unexpectedly contains raw float8 overloads!"
 
+
 def test_h3_functional_integrity(h3_db):
     """The gold-standard functional test for this specific package build."""
     query = "SELECT h3_latlng_to_cell(ST_MakePoint(-0.1278, 51.5074)::geography, 7);"
@@ -1138,12 +1162,14 @@ def test_h3_functional_integrity(h3_db):
     assert result.exit_status == 0
     assert result.stdout.strip().startswith("8719")
 
+
 def test_h3_binary_integrity(h3_db):
     """Verify C symbols exist without executing them (prevents segfaults)."""
     lib_path = "/usr/pgsql-{MAJOR_VER}/lib/h3.so"
     result = h3_db.run(f"nm -D {lib_path} | grep h3_latlng_to_cell")
     assert result.exit_status == 0
     assert "T h3_latlng_to_cell" in result.stdout
+
 
 def test_h3_standard_geography_path(h3_db):
     # Longitude first, then Latitude
@@ -1152,6 +1178,7 @@ def test_h3_standard_geography_path(h3_db):
 
     assert result.exit_status == 0
     assert result.stdout.strip().startswith("8719")
+
 
 def test_h3_internal_point_path(h3_db):
     """
@@ -1165,6 +1192,7 @@ def test_h3_internal_point_path(h3_db):
     assert result.exit_status == 0
     # This should now return the 8719... prefix
     assert result.stdout.strip().startswith("8719")
+
 
 def test_h3_extension_version(host):
     # 1. Clean slate and recreate
@@ -1198,6 +1226,7 @@ def test_h3_extension_version(host):
     drop_res = host.run("psql -c 'DROP EXTENSION IF EXISTS h3 CASCADE;'")
     assert drop_res.rc == 0, drop_res.stderr
 
+
 def test_pgrouting_extension_version(host):
     # 1. Clean slate and recreate
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
@@ -1225,6 +1254,7 @@ def test_pgrouting_extension_version(host):
     drop_res = host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
     assert drop_res.rc == 0, drop_res.stderr
 
+
 def test_pg_routing_functional_dijkstra(host):
     # 1. Setup
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
@@ -1232,11 +1262,11 @@ def test_pg_routing_functional_dijkstra(host):
 
     # 2. Execution
     test_sql = """
-    CREATE TEMP TABLE edges AS 
+    CREATE TEMP TABLE edges AS
     SELECT 1::bigint AS id, 1::bigint AS source, 2::bigint AS target, 1.0::float8 AS cost
     UNION ALL
     SELECT 2::bigint AS id, 2::bigint AS source, 3::bigint AS target, 1.0::float8 AS cost;
-     
+
     SELECT sum(cost) FROM pgr_dijkstra(
         'SELECT id, source, target, cost FROM edges',
         1, 3, false
@@ -1250,6 +1280,7 @@ def test_pg_routing_functional_dijkstra(host):
 
     # 4. Cleanup
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
+
 
 def test_pg_routing_metadata(host):
     # 1. Setup
@@ -1266,6 +1297,7 @@ def test_pg_routing_metadata(host):
     # 4. Cleanup
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
 
+
 def test_pg_routing_functional_bidirectional(host):
     # 1. Setup
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
@@ -1273,11 +1305,11 @@ def test_pg_routing_functional_bidirectional(host):
 
     # 2. Execution: Test Bidirectional Dijkstra (Core 4.0 feature)
     test_sql = """
-    CREATE TEMP TABLE edges AS 
+    CREATE TEMP TABLE edges AS
     SELECT 1::bigint AS id, 1::bigint AS source, 2::bigint AS target, 1.0::float8 AS cost
     UNION ALL
     SELECT 2::bigint AS id, 2::bigint AS source, 3::bigint AS target, 1.0::float8 AS cost;
-     
+
     SELECT sum(cost) FROM pgr_bdDijkstra(
         'SELECT id, source, target, cost FROM edges',
         1, 3, false

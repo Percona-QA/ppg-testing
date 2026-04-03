@@ -1,10 +1,11 @@
-import pytest
-import subprocess
-import time
 import os
+import subprocess
 import textwrap
-import requests
+import time
+
 import psycopg2
+import pytest
+import requests
 
 # --- Configuration constants/settings ---
 MAJOR_VER = os.getenv('VERSION').split('.')[0]
@@ -27,6 +28,7 @@ def get_patroni_status(port):
         pass
     return None
 
+
 def wait_for_leader(nodes, timeout=90):
     """Polls until a leader exists and is running."""
     start_time = time.time()
@@ -42,6 +44,7 @@ def wait_for_leader(nodes, timeout=90):
         time.sleep(3)
     return None
 
+
 @pytest.fixture(scope='session', autouse=True)
 def docker_env():
     """Ensure a clean network environment."""
@@ -49,6 +52,7 @@ def docker_env():
     subprocess.run(['docker', 'network', 'create', NETWORK_NAME], check=True)
     yield
     subprocess.run(['docker', 'network', 'rm', NETWORK_NAME], capture_output=True)
+
 
 @pytest.fixture(scope='session')
 def etcd(docker_env):
@@ -69,6 +73,7 @@ def etcd(docker_env):
     yield ETCD_NAME
     subprocess.run(['docker', 'rm', '-f', ETCD_NAME], capture_output=True)
 
+
 @pytest.fixture(scope='session')
 def cluster(etcd):
     """Initialize a 2-node Patroni cluster."""
@@ -83,7 +88,7 @@ def cluster(etcd):
         pg_port = node["pg_port"]
         data_dir = f"/tmp/pdata_{name}"
         conf_path = f"/tmp/patroni_{name}.yaml"
-        
+
         subprocess.run(['docker', 'rm', '-f', name], capture_output=True)
         if os.path.exists(conf_path): os.remove(conf_path)
 
@@ -129,7 +134,7 @@ def cluster(etcd):
             '--network', NETWORK_NAME, '--shm-size=256m',
             '-v', f"{conf_path}:/etc/patroni.yaml:ro",
             '--entrypoint', '/usr/bin/patroni', '--user', 'postgres',
-            '-e', 'PYTHONUNBUFFERED=1', 
+            '-e', 'PYTHONUNBUFFERED=1',
             '-e', 'POSTGRES_PASSWORD=password',
             '-p', f"{api_port}:8008",
             '-p', f"{pg_port}:5432",
@@ -143,34 +148,35 @@ def cluster(etcd):
 
     print("\n[...] Waiting for cluster election...")
     leader = wait_for_leader(nodes, timeout=90)
-    
+
     if not leader:
         res = subprocess.run(['docker', 'logs', 'pg-node-1'], capture_output=True, text=True)
         print(f"\n--- LOGS FROM PG-NODE-1 ---\n{res.stdout}")
         pytest.fail("Cluster failed to elect a leader.")
-    
+
     yield nodes
     for node in nodes.values():
         subprocess.run(['docker', 'rm', '-f', node["name"]], capture_output=True)
 
 # --- Tests ---
 
+
 def test_failover_and_data_persistence(cluster):
     """Verify leader discovery, write data, kill leader, and check standby promotion."""
-    
+
     # 1. Identify roles and WAIT for standby to be ready
     initial_leader = None
     standby = None
-    
+
     # Give the cluster 30 seconds to reach a steady state where both nodes are 'running'
     timeout = time.time() + 60
     while time.time() < timeout:
         states = {n["name"]: get_patroni_status(n["port"]) for n in cluster.values()}
-        
+
         # Check if we have one leader and one running standby
         leader_node = next((n for n in cluster.values() if states[n["name"]] and states[n["name"]].get("role") in ["primary", "master", "leader"]), None)
         standby_node = next((n for n in cluster.values() if n != leader_node), None)
-        
+
         if leader_node and states[standby_node["name"]] and states[standby_node["name"]].get("state") == "running":
             initial_leader = leader_node
             standby = standby_node
@@ -182,7 +188,7 @@ def test_failover_and_data_persistence(cluster):
 
     # 2. Write data to leader
     conn = psycopg2.connect(
-        host='localhost', port=initial_leader['pg_port'], 
+        host='localhost', port=initial_leader['pg_port'],
         user='postgres', password='password'
     )
     conn.autocommit = True
@@ -204,13 +210,13 @@ def test_failover_and_data_persistence(cluster):
     # 5. Wait for standby to promote
     print(f"[...] Waiting for {standby['name']} to promote...")
     new_leader = wait_for_leader({"standby": standby}, timeout=60)
-    
+
     assert new_leader is not None, "Standby failed to promote"
     print(f"[✓] New leader: {new_leader['name']}")
 
     # 6. Verify data
     conn = psycopg2.connect(
-        host='localhost', port=new_leader['pg_port'], 
+        host='localhost', port=new_leader['pg_port'],
         user='postgres', password='password'
     )
     with conn.cursor() as cur:
