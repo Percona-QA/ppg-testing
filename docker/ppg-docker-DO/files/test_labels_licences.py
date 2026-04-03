@@ -7,33 +7,49 @@ import pytest
 import testinfra
 
 # --- Configuration ---
-MAJOR_VER = os.getenv('VERSION').split('.')[0]
-DOCKER_REPO = os.getenv('DOCKER_REPOSITORY')
-IMG_TAG = os.getenv('TAG')
+MAJOR_VER = os.getenv("VERSION").split(".")[0]
+DOCKER_REPO = os.getenv("DOCKER_REPOSITORY")
+IMG_TAG = os.getenv("TAG")
 IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG}"
 
-REQUIRED_LABEL_MAINTAINER = os.getenv("PPG_LABEL_MAINTAINER", "Percona Development <info@percona.com>")
+REQUIRED_LABEL_MAINTAINER = os.getenv(
+    "PPG_LABEL_MAINTAINER", "Percona Development <info@percona.com>"
+)
 REQUIRED_LABEL_VENDOR = os.getenv("PPG_LABEL_VENDOR", "Percona")
 REQUIRED_LABEL_NAME_PREFIX = "Percona "
-EXPECTED_LABEL_NAME_POSTGRESQL = os.getenv("PPG_LABEL_NAME_POSTGRESQL", "Percona Distribution for PostgreSQL")
-REQUIRED_LABEL_KEYS = ("name", "vendor", "version", "release", "summary", "description", "maintainer")
+EXPECTED_LABEL_NAME_POSTGRESQL = os.getenv(
+    "PPG_LABEL_NAME_POSTGRESQL", "Percona Distribution for PostgreSQL"
+)
+REQUIRED_LABEL_KEYS = (
+    "name",
+    "vendor",
+    "version",
+    "release",
+    "summary",
+    "description",
+    "maintainer",
+)
 RED_HAT_TRADEMARK_FORBIDDEN = ("Red Hat", "RHEL", "RedHat")
 
+
 # --- Fixtures ---
-
-
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="session")
 def host(request):
     """Session-wide container. Used for internal filesystem and DB checks."""
     container_name = f"PG_TEST_{MAJOR_VER}"
 
     # Cleanup previous runs
-    subprocess.run(['docker', 'rm', '-f', container_name], capture_output=True)
+    subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
 
     run_cmd = [
-        'docker', 'run', '--name', container_name,
-        '-e', 'POSTGRES_PASSWORD=password',
-        '-d', IMAGE
+        "docker",
+        "run",
+        "--name",
+        container_name,
+        "-e",
+        "POSTGRES_PASSWORD=password",
+        "-d",
+        IMAGE,
     ]
     subprocess.check_output(run_cmd)
 
@@ -41,18 +57,19 @@ def host(request):
     time.sleep(2)
 
     yield testinfra.get_host("docker://" + container_name)
-    subprocess.run(['docker', 'rm', '-f', container_name], capture_output=True)
+    subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
+
 
 # --- Helper Functions ---
-
-
 @pytest.fixture(scope="session")
 def image_labels():
     """Fixture to pull image and return labels once per session."""
     subprocess.run(["docker", "pull", IMAGE], check=True, capture_output=True)
     result = subprocess.run(
         ["docker", "inspect", "--format", "{{json .Config.Labels}}", IMAGE],
-        capture_output=True, text=True, check=True
+        capture_output=True,
+        text=True,
+        check=True,
     )
     return json.loads(result.stdout) if result.stdout.strip() else {}
 
@@ -70,7 +87,9 @@ def test_ppg_postgres_image_labels(image_labels):
     for key in ("name", "vendor", "maintainer"):
         val = image_labels.get(key, "")
         for forbidden in RED_HAT_TRADEMARK_FORBIDDEN:
-            assert forbidden not in val, f"Label '{key}' contains forbidden trademark '{forbidden}'"
+            assert forbidden not in val, (
+                f"Label '{key}' contains forbidden trademark '{forbidden}'"
+            )
 
     # 3. Value Accuracy
     assert image_labels.get("vendor") == REQUIRED_LABEL_VENDOR

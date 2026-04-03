@@ -1,18 +1,16 @@
 import json
 import os
 import subprocess
-import textwrap
 import time
 
-import psycopg2
 import pytest
 import testinfra
 
 # --- Configuration constants/settings ---
-MAJOR_VER = os.getenv('VERSION').split('.')[0]
-MAJOR_MINOR_VER = os.getenv('VERSION')
-DOCKER_REPO = os.getenv('DOCKER_REPOSITORY')
-IMG_TAG = os.getenv('TAG')
+MAJOR_VER = os.getenv("VERSION").split(".")[0]
+MAJOR_MINOR_VER = os.getenv("VERSION")
+DOCKER_REPO = os.getenv("DOCKER_REPOSITORY")
+IMG_TAG = os.getenv("TAG")
 IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG}"
 PG_BIN_DIR = f"/usr/pgsql-{MAJOR_VER}/bin"
 PG_DATA_DIR = "/data/db"
@@ -21,17 +19,26 @@ CONF_PATH = "/etc/pgbackrest.conf"
 CONTAINER_NAME = "PG18_BACKREST"
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="session")
 def host(request):
     """Starts the container as root and initializes the DB."""
-    subprocess.run(['docker', 'rm', '-f', CONTAINER_NAME], capture_output=True)
+    subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True)
 
     run_cmd = [
-        'docker', 'run', '--name', CONTAINER_NAME,
-        '--user', 'root',
-        '-e', 'POSTGRES_PASSWORD=password',
-        '-d', '--entrypoint', '/usr/bin/tail',
-        IMAGE, '-f', '/dev/null'
+        "docker",
+        "run",
+        "--name",
+        CONTAINER_NAME,
+        "--user",
+        "root",
+        "-e",
+        "POSTGRES_PASSWORD=password",
+        "-d",
+        "--entrypoint",
+        "/usr/bin/tail",
+        IMAGE,
+        "-f",
+        "/dev/null",
     ]
     subprocess.check_output(run_cmd)
     host_instance = testinfra.get_host("docker://" + CONTAINER_NAME)
@@ -44,14 +51,16 @@ def host(request):
     host_instance.run(f"runuser -u postgres -- {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} start -w")
 
     yield host_instance
-    subprocess.run(['docker', 'rm', '-f', CONTAINER_NAME], capture_output=True)
+    subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True)
 
 
 @pytest.fixture(scope="module")
 def setup_pgbackrest_config(host):
     """Creates the config file and enables WAL archiving."""
     # 1. Create Repository
-    host.run(f"mkdir -p {PG_BACKREST_REPO_PATH} && chown postgres:postgres {PG_BACKREST_REPO_PATH}")
+    host.run(
+        f"mkdir -p {PG_BACKREST_REPO_PATH} && chown postgres:postgres {PG_BACKREST_REPO_PATH}"
+    )
 
     # 2. Create Global Config File
     # This is the "Magic Fix" that aligns the server and the client
@@ -69,7 +78,7 @@ repo1-retention-full=2
 
     # 3. Apply PG Settings
     def run_pg(cmd):
-        return host.run(f"runuser -u postgres -- {PG_BIN_DIR}/psql -c \"{cmd}\"")
+        return host.run(f'runuser -u postgres -- {PG_BIN_DIR}/psql -c "{cmd}"')
 
     run_pg("ALTER SYSTEM SET archive_mode='on';")
     # Archive command is now simple because it reads the config file!
@@ -78,8 +87,11 @@ repo1-retention-full=2
     run_pg("ALTER SYSTEM SET max_wal_senders=3;")
 
     # 4. Restart to apply
-    restart = host.run(f"runuser -u postgres -- {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} restart -m fast -w")
+    restart = host.run(
+        f"runuser -u postgres -- {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} restart -m fast -w"
+    )
     assert restart.rc == 0
+
 
 # --- Tests ---
 
@@ -123,8 +135,14 @@ def test_restore_workflow(host, setup_pgbackrest_config):
     """Verifies Point-in-Time Recovery (PITR) by restoring a deleted cluster."""
     # 1. Insert unique test data
     test_id = 777
-    host.run(f"runuser -u postgres -- {PG_BIN_DIR}/psql -c 'CREATE TABLE IF NOT EXISTS backup_test (id int);'")
-    host.run(f"runuser -u postgres -- {PG_BIN_DIR}/psql -c 'INSERT INTO backup_test VALUES ({test_id});'")
+    host.run(
+        f"runuser -u postgres -- {PG_BIN_DIR}/psql "
+        f"-c 'CREATE TABLE IF NOT EXISTS backup_test (id int);'"
+    )
+    host.run(
+        f"runuser -u postgres -- {PG_BIN_DIR}/psql "
+        f"-c 'INSERT INTO backup_test VALUES ({test_id});'"
+    )
 
     # 2. Force WAL switch to push the new data to the archive
     host.run(f"runuser -u postgres -- {PG_BIN_DIR}/psql -c 'CHECKPOINT; SELECT pg_switch_wal();'")
@@ -144,7 +162,9 @@ def test_restore_workflow(host, setup_pgbackrest_config):
     # Loop: Wait for recovery mode to end (pg_is_in_recovery() == false)
     recovery_complete = False
     for _ in range(20):
-        status = host.run(f"runuser -u postgres -- {PG_BIN_DIR}/psql -t -c 'SELECT pg_is_in_recovery();'")
+        status = host.run(
+            f"runuser -u postgres -- {PG_BIN_DIR}/psql -t -c 'SELECT pg_is_in_recovery();'"
+        )
         if "f" in status.stdout.strip():
             recovery_complete = True
             break
@@ -153,7 +173,10 @@ def test_restore_workflow(host, setup_pgbackrest_config):
     assert recovery_complete, "Database failed to exit recovery mode in time"
 
     # 6. Verify our unique data survived the restore
-    verify = host.run(f"runuser -u postgres -- {PG_BIN_DIR}/psql -t -c 'SELECT count(*) FROM backup_test WHERE id = {test_id};'")
+    verify = host.run(
+        f"runuser -u postgres -- {PG_BIN_DIR}/psql -t "
+        f"-c 'SELECT count(*) FROM backup_test WHERE id = {test_id};'"
+    )
     assert "1" in verify.stdout.strip()
 
 
@@ -161,7 +184,10 @@ def test_restore_workflow(host, setup_pgbackrest_config):
 def test_differential_backup(host, setup_pgbackrest_config):
     """Verifies that a differential backup only records changes since the Full."""
     # 1. Add some data to ensure there's a 'delta' to record
-    host.run(f"runuser -u postgres -- {PG_BIN_DIR}/psql -c 'CREATE TABLE diff_test (id int); INSERT INTO diff_test VALUES (1);'")
+    host.run(
+        f"runuser -u postgres -- {PG_BIN_DIR}/psql "
+        f"-c 'CREATE TABLE diff_test (id int); INSERT INTO diff_test VALUES (1);'"
+    )
 
     # 2. Run Differential Backup
     # Note: This requires a prior Full backup to exist (which order(2) provides)
@@ -206,7 +232,9 @@ def test_corruption_and_delta_restore(host, setup_pgbackrest_config):
     # Check recovery status
     recovery_complete = False
     for _ in range(15):
-        status = host.run(f"runuser -u postgres -- {PG_BIN_DIR}/psql -t -c 'SELECT pg_is_in_recovery();'")
+        status = host.run(
+            f"runuser -u postgres -- {PG_BIN_DIR}/psql -t -c 'SELECT pg_is_in_recovery();'"
+        )
         if "f" in status.stdout.strip():
             recovery_complete = True
             break
@@ -215,5 +243,7 @@ def test_corruption_and_delta_restore(host, setup_pgbackrest_config):
     assert recovery_complete
 
     # Ensure our previous data (from the Diff test) is still readable
-    verify = host.run(f"runuser -u postgres -- {PG_BIN_DIR}/psql -t -c 'SELECT count(*) FROM diff_test;'")
+    verify = host.run(
+        f"runuser -u postgres -- {PG_BIN_DIR}/psql -t -c 'SELECT count(*) FROM diff_test;'"
+    )
     assert "1" in verify.stdout.strip()

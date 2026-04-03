@@ -11,35 +11,47 @@ import settings
 
 # --- Configuration constants/settings ---
 # Constants
-MAJOR_VER = os.getenv('VERSION').split('.')[0]
-MAJOR_MINOR_VER = os.getenv('VERSION')
-DOCKER_REPO = os.getenv('DOCKER_REPOSITORY')
-IMG_TAG = os.getenv('TAG')
-IS_WITH_POSTGIS = os.getenv('WITH_POSTGIS', 'false').lower() == "true"
-MILESTONE_NUM = os.getenv('MILESTONE')
+MAJOR_VER = os.getenv("VERSION").split(".")[0]
+MAJOR_MINOR_VER = os.getenv("VERSION")
+DOCKER_REPO = os.getenv("DOCKER_REPOSITORY")
+IMG_TAG = os.getenv("TAG")
+IS_WITH_POSTGIS = os.getenv("WITH_POSTGIS", "false").lower() == "true"
+MILESTONE_NUM = os.getenv("MILESTONE")
 PG_BIN_DIR = f"/usr/pgsql-{MAJOR_VER}/bin"
 PG_DATA_DIR = "/data/db"
 IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG}"
 
 # --- Settings ---
 pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER)
-DOCKER_RHEL_FILES = pg_docker_versions['rhel_files']
-DOCKER_RPM_PACKAGES = pg_docker_versions['rpm_packages']
-DOCKER_EXTENSIONS = pg_docker_versions['extensions']
-DOCKER_BINARIES = pg_docker_versions['binaries']
+DOCKER_RHEL_FILES = pg_docker_versions["rhel_files"]
+DOCKER_RPM_PACKAGES = pg_docker_versions["rpm_packages"]
+DOCKER_EXTENSIONS = pg_docker_versions["extensions"]
+DOCKER_BINARIES = pg_docker_versions["binaries"]
 
 # Red Hat ecosystem required image labels (same as pgbouncer/pgbackrest)
-REQUIRED_LABEL_MAINTAINER = os.getenv("PPG_LABEL_MAINTAINER", "Percona Development <info@percona.com>")
+REQUIRED_LABEL_MAINTAINER = os.getenv(
+    "PPG_LABEL_MAINTAINER", "Percona Development <info@percona.com>"
+)
 REQUIRED_LABEL_VENDOR = os.getenv("PPG_LABEL_VENDOR", "Percona")
 REQUIRED_LABEL_NAME_PREFIX = "Percona "
-EXPECTED_LABEL_NAME_POSTGRESQL = os.getenv("PPG_LABEL_NAME_POSTGRESQL", "Percona Distribution for PostgreSQL")
-REQUIRED_LABEL_KEYS = ("name", "vendor", "version", "release", "summary", "description", "maintainer")
+EXPECTED_LABEL_NAME_POSTGRESQL = os.getenv(
+    "PPG_LABEL_NAME_POSTGRESQL", "Percona Distribution for PostgreSQL"
+)
+REQUIRED_LABEL_KEYS = (
+    "name",
+    "vendor",
+    "version",
+    "release",
+    "summary",
+    "description",
+    "maintainer",
+)
 RED_HAT_TRADEMARK_FORBIDDEN = ("Red Hat", "RHEL", "RedHat")
 
 
 def reconnect_db():
     """Helper to establish a fresh connection if the server restarted or crashed."""
-    for i in range(10):
+    for _i in range(10):
         try:
             conn = psycopg2.connect(**DB_PARAMS)
             conn.autocommit = True
@@ -49,12 +61,12 @@ def reconnect_db():
     pytest.fail("Could not reconnect to database after server crash.")
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="session")
 def host(request):
     container_name = f"PG{MAJOR_VER}"
     needs_libs = any(item.get_closest_marker("needs_preload") for item in request.session.items)
 
-    subprocess.run(['docker', 'rm', '-f', container_name], capture_output=True)
+    subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
 
     print("------------Settings--------------")
     print(f"Major Version: {MAJOR_VER}")
@@ -63,45 +75,64 @@ def host(request):
     print(f"IS_WITH_POSTGIS: {IS_WITH_POSTGIS}")
     print(f"DOCKER_TO_USE: {IMAGE}")
     print(f"MILESTONE_NUM: {MILESTONE_NUM}")
-    print('--------------------------------')
+    print("--------------------------------")
 
     run_cmd = [
-        'docker', 'run', '--name', container_name,
-        '-e', 'POSTGRES_PASSWORD=password',
-        '--shm-size=2g',
-        '-p', '5432:5432',
-        '-d', IMAGE
+        "docker",
+        "run",
+        "--name",
+        container_name,
+        "-e",
+        "POSTGRES_PASSWORD=password",
+        "--shm-size=2g",
+        "-p",
+        "5432:5432",
+        "-d",
+        IMAGE,
     ]
 
     if needs_libs:
         # These specific flags prevent pg_stat_monitor from over-allocating on boot
-        run_cmd.extend([
-            '-c', 'shared_preload_libraries=timescaledb,pg_stat_monitor,pgaudit,set_user',
-            '-c', 'shared_buffers=256MB',
-            '-c', 'max_worker_processes=32',       # Give extensions room to breathe
-            '-c', 'max_parallel_workers=16',
-            '-c', 'pg_stat_monitor.pgsm_max=500',  # Smaller bucket to save shared mem
-            '-c', 'pg_stat_monitor.pgsm_query_max_len=1024',
-            '-c', 'timescaledb.max_background_workers=4',
-            '-c', 'wal_level=logical'
-        ])
+        run_cmd.extend(
+            [
+                "-c",
+                "shared_preload_libraries=timescaledb,pg_stat_monitor,pgaudit,set_user",
+                "-c",
+                "shared_buffers=256MB",
+                "-c",
+                "max_worker_processes=32",  # Give extensions room to breathe
+                "-c",
+                "max_parallel_workers=16",
+                "-c",
+                "pg_stat_monitor.pgsm_max=500",  # Smaller bucket to save shared mem
+                "-c",
+                "pg_stat_monitor.pgsm_query_max_len=1024",
+                "-c",
+                "timescaledb.max_background_workers=4",
+                "-c",
+                "wal_level=logical",
+            ]
+        )
 
     subprocess.check_output(run_cmd)
 
     # --- STABILITY WAIT ---
     # Don't just wait; verify the server can actually answer a query
     for _ in range(30):
-        res = subprocess.run(['docker', 'exec', container_name, 'pg_isready'], capture_output=True)
+        res = subprocess.run(["docker", "exec", container_name, "pg_isready"], capture_output=True)
         if res.returncode == 0:
             # Final sanity check: Can we run a SQL command?
-            sql = subprocess.run(['docker', 'exec', container_name, 'psql', '-U', 'postgres', '-c', 'SELECT 1'], capture_output=True)
+            sql = subprocess.run(
+                ["docker", "exec", container_name, "psql", "-U", "postgres", "-c", "SELECT 1"],
+                capture_output=True,
+            )
             if sql.returncode == 0:
                 break
         time.sleep(1)
 
     time.sleep(2)  # Final settle time for background workers
     yield testinfra.get_host("docker://" + container_name)
-    subprocess.run(['docker', 'rm', '-f', container_name], capture_output=True)
+    subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
 
 
 def test_shared_preload_libraries_is_empty(cursor, request):
@@ -115,7 +146,9 @@ def test_shared_preload_libraries_is_empty(cursor, request):
     )
 
     if session_needs_libs:
-        pytest.skip("Skipping 'Empty' check: session is running in 'Preload Mode' for TimescaleDB.")
+        pytest.skip(
+            "Skipping 'Empty' check: session is running in 'Preload Mode' for TimescaleDB."
+        )
 
     cursor.execute("SHOW shared_preload_libraries;")
     setting = cursor.fetchone()[0]
@@ -124,12 +157,14 @@ def test_shared_preload_libraries_is_empty(cursor, request):
 
 def test_psql_string(host):
     # 'host' now binds to the container
-    assert f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Distribution" in host.check_output('psql -V')
-    assert not f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Server for PostgreSQL" in host.check_output('psql -V')
+    psql_output = host.check_output("psql -V")
+    assert f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Distribution" in psql_output
+    assert (
+        f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Server for PostgreSQL" not in psql_output
+    )
 
 
 def test_wait_docker_load(host):
-    dist = host.system_info.distribution
     time.sleep(5)
     assert 0 == 0
 
@@ -145,13 +180,6 @@ def postgresql_query_version(host):
     return host.run("psql -c 'SELECT version()' | awk 'NR==3{print $2}'")
 
 
-@pytest.fixture()
-def extension_list(host):
-    result = host.check_output("psql -c 'SELECT * FROM pg_available_extensions;' | awk 'NR>=3{print $1}'")
-    result = result.split()
-    return result
-
-
 def postgres_binary(postgresql_binary):
     assert postgresql_binary.exists
     assert postgresql_binary.user == "root"
@@ -159,7 +187,6 @@ def postgres_binary(postgresql_binary):
 
 @pytest.mark.parametrize("binary", DOCKER_BINARIES)
 def test_binaries(host, binary):
-    dist = host.system_info.distribution
     # bin_path = f"/usr/lib/postgresql/{MAJOR_VER}/bin/"
     # if dist.lower() in ["redhat", "centos", "rhel", "rocky"]:
     #     bin_path = f"/usr/pgsql-{MAJOR_VER}/bin/"
@@ -173,20 +200,22 @@ def test_pg_config_server_version(host):
     cmd = "pg_config --version"
     try:
         result = host.check_output(cmd)
-        assert f'{MAJOR_MINOR_VER}' in result, result.stdout
+        assert f"{MAJOR_MINOR_VER}" in result, result.stdout
     except AssertionError:
         pytest.mark.xfail(reason="Maybe dev package not install")
 
 
 def test_postgresql_query_version(postgresql_query_version):
     assert postgresql_query_version.rc == 0, postgresql_query_version.stderr
-    assert postgresql_query_version.stdout.strip("\n") == f'{MAJOR_MINOR_VER}', postgresql_query_version.stdout
+    assert postgresql_query_version.stdout.strip("\n") == f"{MAJOR_MINOR_VER}", (
+        postgresql_query_version.stdout
+    )
 
 
 def test_postgres_client_version(host):
     cmd = "psql --version"
     result = host.check_output(cmd)
-    assert f'{MAJOR_MINOR_VER}' in result.strip("\n"), result.stdout
+    assert f"{MAJOR_MINOR_VER}" in result.strip("\n"), result.stdout
 
 
 SKIP_EXTENSIONS = [
@@ -224,19 +253,24 @@ def should_skip(extension):
 
     # 1. Hard skips
     if extension in SKIP_EXTENSIONS:
-        return True, f"Explicitly skipped in SKIP_EXTENSIONS"
+        return True, "Explicitly skipped in SKIP_EXTENSIONS"
 
     # 2. Version-based removals
-    if major >= 17 and extension == 'adminpack':
+    if major >= 17 and extension == "adminpack":
         return True, "adminpack removed in PG17+"
 
-    if major < 18 and extension == 'pg_logicalinspect':
+    if major < 18 and extension == "pg_logicalinspect":
         return True, "pg_logicalinspect only supported in PG18+"
 
     # 4. Feature-flag based skips
     postgis_family = {
-        "postgis", "postgis_topology", "postgis_raster", "postgis_sfcgal",
-        "address_standardizer", "postgis_tiger_geocoder", "address_standardizer_data_us"
+        "postgis",
+        "postgis_topology",
+        "postgis_raster",
+        "postgis_sfcgal",
+        "address_standardizer",
+        "postgis_tiger_geocoder",
+        "address_standardizer_data_us",
     }
     if not IS_WITH_POSTGIS and extension in postgis_family:
         return True, "Docker build is without PostGIS so skipping."
@@ -255,7 +289,7 @@ def test_extensions_list(extension_list, host, extension):
     if major >= 17 and extension == "adminpack":
         pytest.skip("adminpack removed in PG17+")
 
-    if major < 18 and extension == 'pg_logicalinspect':
+    if major < 18 and extension == "pg_logicalinspect":
         pytest.skip("pg_logicalinspect only supported in PG18+")
 
     # 2. Verify the extension is present in the available extensions list
@@ -279,7 +313,7 @@ def test_enable_extension(host, extension):
 
     # 2. Verify existence using SQL count (Reliable replacement for awk)
     check_sql = f"SELECT count(*) FROM pg_extension WHERE extname = '{extension}';"
-    count = host.run(f"psql -t -A -c \"{check_sql}\"").stdout.strip()
+    count = host.run(f'psql -t -A -c "{check_sql}"').stdout.strip()
     assert count == "1", f"Extension {extension} not found in pg_extension table"
 
 
@@ -296,14 +330,14 @@ def test_drop_extension(host, extension):
 
     # 2. Verify it is gone
     check_sql = f"SELECT count(*) FROM pg_extension WHERE extname = '{extension}';"
-    count = host.run(f"psql -t -A -c \"{check_sql}\"").stdout.strip()
+    count = host.run(f'psql -t -A -c "{check_sql}"').stdout.strip()
     assert count == "0", f"Extension {extension} still exists after drop"
 
 
 def test_plpgsql_extension(host):
     # plpgsql is internal and always exists; just check for it directly
     check_sql = "SELECT count(*) FROM pg_extension WHERE extname = 'plpgsql';"
-    count = host.run(f"psql -t -A -c \"{check_sql}\"").stdout.strip()
+    count = host.run(f'psql -t -A -c "{check_sql}"').stdout.strip()
     assert count == "1", "Default extension 'plpgsql' is missing!"
 
 
@@ -322,13 +356,13 @@ def test_rpm_package_is_installed(host, package):
     pkg_data = pg_docker_versions.get(package)
 
     if isinstance(pkg_data, dict):
-        expected_version = pkg_data.get('version')
+        expected_version = pkg_data.get("version")
     else:
         expected_version = pkg_data
 
     # Fallback to the global 'version' if the specific package isn't mapped
     if not expected_version:
-        expected_version = pg_docker_versions.get('version')
+        expected_version = pg_docker_versions.get("version")
 
     # --- Console Output Enhancement ---
     print(f"\n[VERIFYING] Package: {package}")
@@ -351,16 +385,16 @@ def test_pg_stat_monitor_extension_version(host):
     # 2. Get the Extension version (SQL Level)
     # -t: tuples only, -A: unaligned
     query = "SELECT pg_stat_monitor_version();"
-    actual_ext_version = host.run(f"psql -t -A -c \"{query}\"").stdout.strip()
+    actual_ext_version = host.run(f'psql -t -A -c "{query}"').stdout.strip()
 
     # 3. Get Expected version from dictionary
     pkg_key = f"percona-pg_stat_monitor{MAJOR_VER}"
-    expected_full_version = pg_docker_versions[pkg_key]['version']
+    expected_full_version = pg_docker_versions[pkg_key]["version"]
 
     # 4. Clean the version string
     # RPM versions often look like '2.1.0-1.el9'. We need to strip the '-1.el9'
     # part to match the PostgreSQL extension version '2.1.0'.
-    expected_clean_version = expected_full_version.split('-')[0]
+    expected_clean_version = expected_full_version.split("-")[0]
 
     assert actual_ext_version == expected_clean_version, (
         f"Extension version {actual_ext_version} does not match "
@@ -382,13 +416,18 @@ def test_build_with_liburing(host):
         pytest.skip("Skipping, test only for PostgreSQL 18 version")
 
     distribution = host.system_info.distribution.lower()
-    if distribution in ["redhat", "centos", "rhel", "rocky", "ol"] and \
-            host.system_info.release.startswith("8"):
+    if distribution in [
+        "redhat",
+        "centos",
+        "rhel",
+        "rocky",
+        "ol",
+    ] and host.system_info.release.startswith("8"):
         pytest.skip(f"liburing not supported on {distribution} 8 for postgres {MAJOR_VER}")
 
     cmd = "pg_config --configure"
     output = host.check_output(cmd)
-    assert '--with-liburing' in output, "PostgreSQL 18 was built without --with-liburing"
+    assert "--with-liburing" in output, "PostgreSQL 18 was built without --with-liburing"
 
 
 @pytest.mark.parametrize(
@@ -408,9 +447,7 @@ def test_pg_config_flags(host, flag):
     cmd = "pg_config --configure"
     output = host.check_output(cmd)
 
-    assert flag not in output, (
-        f"PostgreSQL was built with {flag}, but it should NOT be present"
-    )
+    assert flag not in output, f"PostgreSQL was built with {flag}, but it should NOT be present"
 
 
 def test_postgis_extension(host):
@@ -434,12 +471,16 @@ def test_postgis_extension(host):
     print(f"Detected PostGIS Extension Version: {actual_version}")
     # Check expected version
 
-    expected_version = pg_docker_versions.get(f"percona-postgis35_{MAJOR_VER}", {}).get("extension_version")
-    assert actual_version == expected_version, f"Expected {expected_version}, but found {actual_version}"
+    expected_version = pg_docker_versions.get(f"percona-postgis35_{MAJOR_VER}", {}).get(
+        "extension_version"
+    )
+    assert actual_version == expected_version, (
+        f"Expected {expected_version}, but found {actual_version}"
+    )
 
     # 4. Functional Check: Verify the extension is actually working
     # This ensures the underlying GEOS and PROJ libraries are linked correctly
-    func_cmd = "psql -t -c \"SELECT postgis_version();\""
+    func_cmd = 'psql -t -c "SELECT postgis_version();"'
     func_result = host.run(func_cmd)
 
     assert func_result.rc == 0
@@ -479,9 +520,13 @@ def test_pgvector_extension(host):
     print(f"Detected pgvector Extension Version: {actual_version}")
 
     # Check against your expected versions dictionary
-    expected_version = pg_docker_versions.get(f"percona-pgvector_{MAJOR_VER}", {}).get("extension_version")
+    expected_version = pg_docker_versions.get(f"percona-pgvector_{MAJOR_VER}", {}).get(
+        "extension_version"
+    )
 
-    assert actual_version == expected_version, f"Expected {expected_version}, but found {actual_version}"
+    assert actual_version == expected_version, (
+        f"Expected {expected_version}, but found {actual_version}"
+    )
 
     # 4. Functional Check: Verify the 'vector' type is usable
     # We cast a string to a vector and check its dimensions to ensure the C library is loaded
@@ -522,7 +567,9 @@ def test_patroni_version(host):
     expected_version = pg_docker_versions.get("percona-patroni", {}).get("binary_version")
 
     if expected_version:
-        assert actual_version == expected_version, f"Expected {expected_version}, but found {actual_version}"
+        assert actual_version == expected_version, (
+            f"Expected {expected_version}, but found {actual_version}"
+        )
     else:
         assert len(actual_version) > 0, "Patroni version could not be determined"
 
@@ -546,7 +593,9 @@ def test_pgbackrest_version(host):
     expected_version = pg_docker_versions.get("percona-pgbackrest", {}).get("binary_version")
 
     if expected_version:
-        assert actual_version == expected_version, f"Expected {expected_version}, but found {actual_version}"
+        assert actual_version == expected_version, (
+            f"Expected {expected_version}, but found {actual_version}"
+        )
     else:
         # Fallback: just ensure we got a valid-looking version string
         assert len(actual_version) > 0 and actual_version[0].isdigit()
@@ -558,7 +607,7 @@ DB_PARAMS = {
     "user": "postgres",
     "password": "password",
     "host": "localhost",
-    "port": "5432"
+    "port": "5432",
 }
 
 
@@ -571,18 +620,22 @@ def db_connection(host):  # <--- Adding 'host' here forces host to finish bootin
     # Check if container exists
     status = subprocess.run(
         ["docker", "inspect", "-f", "{{.State.Running}}", container_name],
-        capture_output=True, text=True
+        capture_output=True,
+        text=True,
     )
 
     if status.returncode != 0:
-        pytest.fail(f"Container {container_name} does not exist. Docker Run might have failed silently.")
+        pytest.fail(
+            f"Container {container_name} does not exist. Docker Run might have failed silently."
+        )
 
     conn = None
 
     # 1. Pre-flight Check: Is the container even alive?
     status = subprocess.run(
         ["docker", "inspect", "-f", "{{.State.Running}}", container_name],
-        capture_output=True, text=True
+        capture_output=True,
+        text=True,
     )
 
     if "true" not in status.stdout.lower():
@@ -607,16 +660,23 @@ def db_connection(host):  # <--- Adding 'host' here forces host to finish bootin
 
             # Scenario A: Server is still booting (Normal)
             if "connection refused" in err_msg or "starting up" in err_msg:
-                print(f"[WAIT] Postgres is initializing (attempt {i+1}/{max_retries})...")
+                print(f"[WAIT] Postgres is initializing (attempt {i + 1}/{max_retries})...")
                 time.sleep(2)
 
             # Scenario B: Server crashed WHILE we were talking to it (Abnormal)
-            elif "closed the connection unexpectedly" in err_msg or "terminating connection" in err_msg:
-                print(f"\n[FATAL] Postgres crashed during connection attempt {i+1}!")
+            elif (
+                "closed the connection unexpectedly" in err_msg
+                or "terminating connection" in err_msg
+            ):
+                print(f"\n[FATAL] Postgres crashed during connection attempt {i + 1}!")
                 # Immediate log dump to see the PANIC/FATAL message
-                res = subprocess.run(["docker", "logs", container_name, "--tail", "20"], capture_output=True, text=True)
+                res = subprocess.run(
+                    ["docker", "logs", container_name, "--tail", "20"],
+                    capture_output=True,
+                    text=True,
+                )
                 print(f"--- RECENT LOGS ---\n{res.stdout}")
-                pytest.fail(f"Postgres process crashed. See logs above for details.")
+                pytest.fail("Postgres process crashed. See logs above for details.")
 
             # Scenario C: Something else (Wrong credentials, wrong port, etc.)
             else:
@@ -627,7 +687,9 @@ def db_connection(host):  # <--- Adding 'host' here forces host to finish bootin
     if not conn:
         print("\n" + "=" * 50)
         print(f"TIMEOUT: Could not connect to {container_name} after 90s.")
-        res = subprocess.run(["docker", "logs", container_name, "--tail", "20"], capture_output=True, text=True)
+        res = subprocess.run(
+            ["docker", "logs", container_name, "--tail", "20"], capture_output=True, text=True
+        )
         print(f"Final Logs:\n{res.stdout}")
         print("=" * 50)
         pytest.fail("Database connection timeout. See logs above.")
@@ -664,22 +726,27 @@ def test_timescaledb_lifecycle(host, cursor):
     if pkg_key not in pg_docker_versions:
         pytest.fail(f"Metadata key {pkg_key} not found in pg_docker_versions settings.")
 
-    expected_full_version = pg_docker_versions[pkg_key]['version']
+    expected_full_version = pg_docker_versions[pkg_key]["version"]
 
     try:
         # --- 1. Extension Setup & Version Check ---
         cursor.execute("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;")
 
         # Verify Extension Name
-        cursor.execute("SELECT extname, extversion FROM pg_extension WHERE extname = 'timescaledb';")
+        cursor.execute(
+            "SELECT extname, extversion FROM pg_extension WHERE extname = 'timescaledb';"
+        )
         extension_info = cursor.fetchone()
         assert extension_info is not None, "Extension failed to load into pg_extension catalog."
 
         actual_db_version = extension_info[1]
 
-        # Verify Version: check if DB version (e.g. 2.13.1) is in the package string (e.g. 2.13.1-1.debian12)
-        assert actual_db_version in expected_full_version, \
-            f"Version mismatch! DB reports {actual_db_version}, but manifest expects {expected_full_version}"
+        # Verify Version: check if DB version (e.g. 2.13.1) is in the
+        # package string (e.g. 2.13.1-1.debian12)
+        assert actual_db_version in expected_full_version, (
+            f"Version mismatch! DB reports {actual_db_version}, "
+            f"but manifest expects {expected_full_version}"
+        )
 
         # --- 2. Hypertable Creation ---
         cursor.execute(f"DROP TABLE IF EXISTS {table_name};")
@@ -693,22 +760,22 @@ def test_timescaledb_lifecycle(host, cursor):
         cursor.execute(f"SELECT create_hypertable('{table_name}', 'time');")
 
         # Verify it is recognized as a hypertable
-        cursor.execute(f"SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name = '{table_name}';")
+        cursor.execute(
+            f"SELECT count(*) FROM timescaledb_information.hypertables "
+            f"WHERE hypertable_name = '{table_name}';"
+        )
         assert cursor.fetchone()[0] == 1, "Table was not converted to hypertable"
 
         # --- 3. Data Insertion ---
         base_time = datetime.now()
-        test_data = [
-            (base_time, 1, 0.85),
-            (base_time - timedelta(minutes=5), 1, 0.45)
-        ]
+        test_data = [(base_time, 1, 0.85), (base_time - timedelta(minutes=5), 1, 0.45)]
         for row in test_data:
             cursor.execute(f"INSERT INTO {table_name} VALUES (%s, %s, %s)", row)
 
         # --- 4. Advanced Persistence Test (The Restart) ---
         print(f"\n[INFO] Restarting container PG{MAJOR_VER} from host to test persistence...")
         container_name = f"PG{MAJOR_VER}"
-        subprocess.check_call(['docker', 'restart', container_name])
+        subprocess.check_call(["docker", "restart", container_name])
 
         # --- 5. Reconnect Phase (The "Polling" Loop) ---
         new_cursor = None
@@ -720,7 +787,7 @@ def test_timescaledb_lifecycle(host, cursor):
                 new_conn = psycopg2.connect(**DB_PARAMS)
                 new_conn.autocommit = True
                 new_cursor = new_conn.cursor()
-                print(f"[INFO] Successfully reconnected on attempt {i+1}")
+                print(f"[INFO] Successfully reconnected on attempt {i + 1}")
                 break
             except psycopg2.OperationalError:
                 if i == 14:
@@ -737,7 +804,10 @@ def test_timescaledb_lifecycle(host, cursor):
             # float() conversion handles Decimal types from Postgres
             assert float(avg_usage) == 0.65, f"Aggregation failed. Expected 0.65, got {avg_usage}"
 
-            new_cursor.execute(f"SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name = '{table_name}';")
+            new_cursor.execute(
+                f"SELECT count(*) FROM timescaledb_information.chunks "
+                f"WHERE hypertable_name = '{table_name}';"
+            )
             assert new_cursor.fetchone()[0] >= 1, "No chunks (partitions) found after restart."
         finally:
             if new_cursor:
@@ -772,7 +842,9 @@ def test_pgvector_functional_logic(host):  # Use host here to allow re-connectio
             with conn.cursor() as cur:
                 cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
                 cur.execute("DROP TABLE IF EXISTS test_vector_items;")
-                cur.execute("CREATE TABLE test_vector_items (id serial PRIMARY KEY, embedding vector(3));")
+                cur.execute(
+                    "CREATE TABLE test_vector_items (id serial PRIMARY KEY, embedding vector(3));"
+                )
                 cur.execute("INSERT INTO test_vector_items (embedding) VALUES ('[1,2,3]');")
                 cur.execute("SELECT embedding FROM test_vector_items LIMIT 1;")
                 return cur.fetchone()[0]
@@ -789,7 +861,7 @@ def test_pgvector_functional_logic(host):  # Use host here to allow re-connectio
         except Exception as e:
             pytest.fail(f"pgvector failed after recovery attempt: {e}")
 
-    assert result == '[1,2,3]'
+    assert result == "[1,2,3]"
 
 
 # --- pg_stat_monitor Functional Test ---
@@ -831,6 +903,7 @@ def manage_postgis(host, action="create"):
         host.run("psql -c 'DROP EXTENSION IF EXISTS postgis_topology CASCADE;'")
         host.run("psql -c 'DROP EXTENSION IF EXISTS postgis CASCADE;'")
 
+
 # --- PostGIS TEST ---
 
 
@@ -851,13 +924,20 @@ def test_postgis_spatial_logic_and_rasters(host):
         manage_postgis(host, "create")
 
         # Calculate distance between London and Paris (approx 340km)
-        dist_query = "SELECT ST_Distance(ST_GeogFromText('SRID=4326;POINT(0 51.5)'), ST_GeogFromText('SRID=4326;POINT(2.3 48.8)'));"
-        dist_res = host.run(f"psql -t -c \"{dist_query}\"")
+        dist_query = (
+            "SELECT ST_Distance("
+            "ST_GeogFromText('SRID=4326;POINT(0 51.5)'), "
+            "ST_GeogFromText('SRID=4326;POINT(2.3 48.8)'));"
+        )
+        dist_res = host.run(f'psql -t -c "{dist_query}"')
         assert 330000 < float(dist_res.stdout.strip()) < 350000
 
         # Verify GDAL Raster support
-        raster_query = "SELECT ST_Width(ST_AddBand(ST_MakeEmptyRaster(10, 10, 0, 0, 1, -1, 0, 0, 4326), 1, '8BUI', 1, 0));"
-        assert "10" in host.run(f"psql -t -c \"{raster_query}\"").stdout
+        raster_query = (
+            "SELECT ST_Width(ST_AddBand("
+            "ST_MakeEmptyRaster(10, 10, 0, 0, 1, -1, 0, 0, 4326), 1, '8BUI', 1, 0));"
+        )
+        assert "10" in host.run(f'psql -t -c "{raster_query}"').stdout
     finally:
         manage_postgis(host, "drop")
 
@@ -868,7 +948,7 @@ def test_postgis_srid_transformation(host):
         manage_postgis(host, "create")
         # Transform GPS (4326) to Web Mercator (3857)
         query = "SELECT ST_AsText(ST_Transform(ST_GeomFromText('POINT(0 0)', 4326), 3857));"
-        res = host.run(f"psql -t -c \"{query}\"")
+        res = host.run(f'psql -t -c "{query}"')
         assert "POINT(0 0)" in res.stdout
     finally:
         manage_postgis(host, "drop")
@@ -884,11 +964,14 @@ def test_postgis_indexing_and_joins(host):
         CREATE INDEX idx_dist_geom ON districts USING GIST (geom);
         INSERT INTO districts VALUES (1, ST_MakeEnvelope(0, 0, 2, 2, 4326));
         """
-        host.run(f"psql -c \"{setup}\"")
+        host.run(f'psql -c "{setup}"')
 
         # Test Point-in-Polygon join using the GiST index
-        join_query = "SELECT count(*) FROM districts WHERE ST_Contains(geom, ST_GeomFromText('POINT(1 1)', 4326));"
-        assert "1" in host.run(f"psql -t -c \"{join_query}\"").stdout.strip()
+        join_query = (
+            "SELECT count(*) FROM districts "
+            "WHERE ST_Contains(geom, ST_GeomFromText('POINT(1 1)', 4326));"
+        )
+        assert "1" in host.run(f'psql -t -c "{join_query}"').stdout.strip()
     finally:
         manage_postgis(host, "drop")
 
@@ -916,6 +999,7 @@ def test_pg_repack_reorganization(host):
         host.run("psql -c 'DROP TABLE IF EXISTS repack_test;'")
         host.run("psql -c 'DROP EXTENSION IF EXISTS pg_repack;'")
 
+
 # --- PGAUDIT TEST ---
 
 
@@ -940,6 +1024,7 @@ def test_pgaudit_logging(host):
     finally:
         host.run("psql -c 'DROP EXTENSION IF EXISTS pgaudit;'")
 
+
 # --- SET_USER TEST ---
 
 
@@ -963,7 +1048,7 @@ def test_set_user_escalation(host):
         cmd = (
             "psql -U normal_user -d postgres -t "
             "-c \"SELECT set_user_u('power_user');\" "
-            "-c \"SELECT current_user;\""
+            '-c "SELECT current_user;"'
         )
         result = host.run(cmd)
 
@@ -976,8 +1061,8 @@ def test_set_user_escalation(host):
         # 5. Test: De-escalation (NULL always works to return to original user)
         back_cmd = (
             "psql -U normal_user -d postgres -t "
-            "-c \"SELECT set_user(NULL);\" "
-            "-c \"SELECT current_user;\""
+            '-c "SELECT set_user(NULL);" '
+            '-c "SELECT current_user;"'
         )
         result_back = host.run(back_cmd)
         assert "normal_user" in result_back.stdout
@@ -990,6 +1075,7 @@ def test_set_user_escalation(host):
         host.run("psql -c 'DROP ROLE IF EXISTS normal_user;'")
         host.run("psql -c 'DROP ROLE IF EXISTS power_user;'")
 
+
 # --- WAL2JSON TEST ---
 
 
@@ -1000,22 +1086,27 @@ def test_wal2json_logical_decoding(host):
     try:
         # 1. Check if wal_level is logical
         wal_level = host.run("psql -t -c 'SHOW wal_level;'").stdout.strip()
-        if wal_level != 'logical':
+        if wal_level != "logical":
             pytest.skip(f"wal_level is {wal_level}; 'logical' is required.")
 
         # 2. Setup a test table
         host.run("psql -c 'CREATE TABLE wal_test (id int PRIMARY KEY, name text);'")
 
         # 3. Create logical replication slot
-        host.run(f"psql -c \"SELECT pg_create_logical_replication_slot('{slot_name}', 'wal2json');\"")
+        host.run(
+            f"psql -c \"SELECT pg_create_logical_replication_slot('{slot_name}', 'wal2json');\""
+        )
 
         # 4. Perform DML
         host.run("psql -c \"INSERT INTO wal_test VALUES (1, 'first'), (2, 'second');\"")
         host.run("psql -c \"UPDATE wal_test SET name = 'updated' WHERE id = 1;\"")
-        host.run("psql -c \"DELETE FROM wal_test WHERE id = 2;\"")
+        host.run('psql -c "DELETE FROM wal_test WHERE id = 2;"')
 
         # 5. Consume and Verify
-        result = host.run(f"psql -t -c \"SELECT data FROM pg_logical_slot_get_changes('{slot_name}', NULL, NULL);\"")
+        result = host.run(
+            f'psql -t -c "SELECT data FROM pg_logical_slot_get_changes('
+            f"'{slot_name}', NULL, NULL);\""
+        )
         output = result.stdout
 
         # Updated Assertions based on your log output
@@ -1027,7 +1118,11 @@ def test_wal2json_logical_decoding(host):
 
     finally:
         # 6. Cleanup
-        host.run(f"psql -c \"SELECT pg_drop_replication_slot('{slot_name}') WHERE EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = '{slot_name}');\"")
+        host.run(
+            f"psql -c \"SELECT pg_drop_replication_slot('{slot_name}') "
+            f"WHERE EXISTS (SELECT 1 FROM pg_replication_slots "
+            f"WHERE slot_name = '{slot_name}');\""
+        )
         host.run("psql -c 'DROP TABLE IF EXISTS wal_test;'")
 
 
@@ -1035,7 +1130,10 @@ def test_wal2json_logical_decoding(host):
 @pytest.fixture(scope="module")
 def h3_db(host):
     # Ensure installation
-    setup_cmd = f"{PG_BIN_DIR}/psql -U postgres -d postgres -c 'CREATE EXTENSION IF NOT EXISTS h3_postgis CASCADE;'"
+    setup_cmd = (
+        f"{PG_BIN_DIR}/psql -U postgres -d postgres "
+        f"-c 'CREATE EXTENSION IF NOT EXISTS h3_postgis CASCADE;'"
+    )
     setup_result = host.run(setup_cmd)
 
     # Critical: Check if the installation actually worked
@@ -1047,7 +1145,10 @@ def h3_db(host):
 def test_h3_extension_installed(h3_db):
     """Verify h3 is in the installed extensions list."""
     # Simplified command
-    cmd = f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"SELECT count(*) FROM pg_extension WHERE extname = 'h3';\""
+    cmd = (
+        f"{PG_BIN_DIR}/psql -U postgres -d postgres -t "
+        f"-c \"SELECT count(*) FROM pg_extension WHERE extname = 'h3';\""
+    )
     result = h3_db.run(cmd)
     assert result.stdout.strip() == "1"
 
@@ -1056,7 +1157,7 @@ def test_h3_latlng_to_cell(h3_db):
     """Test using the geometry point signature."""
     # We create a POINT(longitude latitude) and pass it as a single argument
     query = "SELECT h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint(-0.1278, 51.5074), 4326), 7);"
-    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+    result = h3_db.run(f'{PG_BIN_DIR}/psql -U postgres -d postgres -t -c "{query}"')
 
     assert result.exit_status == 0, f"SQL Error: {result.stderr}"
     assert result.stdout.strip().startswith("8719")
@@ -1066,13 +1167,8 @@ def test_h3_postgis_geometry_to_cell(h3_db):
     """Verify converting a PostGIS Geometry point to an H3 index."""
     # Since ST_Y/ST_X already return double precision, this signature matches
     # the 'geometry, resolution' signature in your \df output.
-    query = (
-        "SELECT h3_lat_lng_to_cell("
-        "  ST_SetSRID(ST_MakePoint(-74.0060, 40.7128), 4326), "
-        "  9"
-        ");"
-    )
-    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+    query = "SELECT h3_lat_lng_to_cell(  ST_SetSRID(ST_MakePoint(-74.0060, 40.7128), 4326),   9);"
+    result = h3_db.run(f'{PG_BIN_DIR}/psql -U postgres -d postgres -t -c "{query}"')
 
     assert result.exit_status == 0, f"SQL Error: {result.stderr}"
     assert len(result.stdout.strip()) == 15
@@ -1087,7 +1183,7 @@ def test_h3_grid_distance(h3_db):
         h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint(-74.0061, 40.7129), 10), 10)
     );
     """
-    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+    result = h3_db.run(f'{PG_BIN_DIR}/psql -U postgres -d postgres -t -c "{query}"')
 
     assert result.exit_status == 0, f"SQL Error: {result.stderr}"
     assert int(result.stdout.strip()) >= 0
@@ -1098,33 +1194,35 @@ def test_h3_latlng_constructor(h3_db):
     # We know ST_MakePoint works because your other tests just passed.
     # We cast to geography to match the 'geography, resolution' signature in your \df.
     query = "SELECT h3_lat_lng_to_cell(ST_MakePoint(-0.1278, 51.5074)::geography, 7);"
-    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+    result = h3_db.run(f'{PG_BIN_DIR}/psql -U postgres -d postgres -t -c "{query}"')
 
     assert result.exit_status == 0, f"SQL Error: {result.stderr}"
     assert result.stdout.strip().startswith("8719")
+
 
 # 1. Test the 'geography' signature (Standard for Global H3)
 
 
 def test_h3_signature_geography(h3_db):
     query = "SELECT h3_latlng_to_cell(ST_MakePoint(-0.1278, 51.5074)::geography, 7);"
-    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+    result = h3_db.run(f'{PG_BIN_DIR}/psql -U postgres -d postgres -t -c "{query}"')
     assert result.exit_status == 0
     assert result.stdout.strip().startswith("8719")
+
 
 # 2. Test the 'geometry' signature (Standard for Flat/Projected maps)
 
 
 def test_h3_signature_geometry(h3_db):
     query = "SELECT h3_latlng_to_cell(ST_SetSRID(ST_MakePoint(-0.1278, 51.5074), 4326), 7);"
-    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+    result = h3_db.run(f'{PG_BIN_DIR}/psql -U postgres -d postgres -t -c "{query}"')
     assert result.exit_status == 0
 
 
 def test_h3_signature_latlng_point(h3_db):
     # Swap to (lng, lat) for the native point constructor to hit the 8719 index
     query = "SELECT h3_latlng_to_cell(point(-0.1278, 51.5074), 7);"
-    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+    result = h3_db.run(f'{PG_BIN_DIR}/psql -U postgres -d postgres -t -c "{query}"')
 
     assert result.exit_status == 0
     assert result.stdout.strip().startswith("8719")
@@ -1151,13 +1249,15 @@ def test_h3_function_signatures_count(h3_db):
         "AND pg_get_function_arguments(oid) LIKE '%double precision, double precision%';\""
     )
     result_float = h3_db.run(check_float_cmd)
-    assert result_float.stdout.strip() == "0", "Package unexpectedly contains raw float8 overloads!"
+    assert result_float.stdout.strip() == "0", (
+        "Package unexpectedly contains raw float8 overloads!"
+    )
 
 
 def test_h3_functional_integrity(h3_db):
     """The gold-standard functional test for this specific package build."""
     query = "SELECT h3_latlng_to_cell(ST_MakePoint(-0.1278, 51.5074)::geography, 7);"
-    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+    result = h3_db.run(f'{PG_BIN_DIR}/psql -U postgres -d postgres -t -c "{query}"')
 
     assert result.exit_status == 0
     assert result.stdout.strip().startswith("8719")
@@ -1174,7 +1274,7 @@ def test_h3_binary_integrity(h3_db):
 def test_h3_standard_geography_path(h3_db):
     # Longitude first, then Latitude
     query = "SELECT h3_latlng_to_cell(ST_MakePoint(-0.1278, 51.5074)::geography, 7);"
-    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+    result = h3_db.run(f'{PG_BIN_DIR}/psql -U postgres -d postgres -t -c "{query}"')
 
     assert result.exit_status == 0
     assert result.stdout.strip().startswith("8719")
@@ -1187,7 +1287,7 @@ def test_h3_internal_point_path(h3_db):
     """
     # London: -0.1278 (Lng/X), 51.5074 (Lat/Y)
     query = "SELECT h3_latlng_to_cell(point(-0.1278, 51.5074), 7);"
-    result = h3_db.run(f"{PG_BIN_DIR}/psql -U postgres -d postgres -t -c \"{query}\"")
+    result = h3_db.run(f'{PG_BIN_DIR}/psql -U postgres -d postgres -t -c "{query}"')
 
     assert result.exit_status == 0
     # This should now return the 8719... prefix
@@ -1205,14 +1305,14 @@ def test_h3_extension_version(host):
 
     # 2. Get the Extension version (SQL Level)
     query = "SELECT extversion FROM pg_extension WHERE extname = 'h3';"
-    actual_ext_version = host.run(f"psql -t -A -c \"{query}\"").stdout.strip()
+    actual_ext_version = host.run(f'psql -t -A -c "{query}"').stdout.strip()
 
     # 3. Get Expected version from dictionary
     pkg_key = f"percona-h3-pg_{MAJOR_VER}"
-    expected_full_version = pg_docker_versions[pkg_key]['version']
+    expected_full_version = pg_docker_versions[pkg_key]["version"]
 
     # 4. Clean the version string (e.g., '4.2.3-1.el9' -> '4.2.3')
-    expected_clean_version = expected_full_version.split('-')[0]
+    expected_clean_version = expected_full_version.split("-")[0]
 
     assert actual_ext_version == expected_clean_version, (
         f"H3 Extension version {actual_ext_version} does not match "
@@ -1236,14 +1336,14 @@ def test_pgrouting_extension_version(host):
 
     # 2. Get the Extension version (SQL Level)
     query = "SELECT extversion FROM pg_extension WHERE extname = 'pgrouting';"
-    actual_ext_version = host.run(f"psql -t -A -c \"{query}\"").stdout.strip()
+    actual_ext_version = host.run(f'psql -t -A -c "{query}"').stdout.strip()
 
     # 3. Get Expected version from dictionary
     pkg_key = f"percona-pgrouting_{MAJOR_VER}"
-    expected_full_version = pg_docker_versions[pkg_key]['version']
+    expected_full_version = pg_docker_versions[pkg_key]["version"]
 
     # 4. Clean the version string (e.g., '3.6.2-1.el9' -> '3.6.2')
-    expected_clean_version = expected_full_version.split('-')[0]
+    expected_clean_version = expected_full_version.split("-")[0]
 
     assert actual_ext_version == expected_clean_version, (
         f"pgRouting Extension version {actual_ext_version} does not match "
@@ -1272,11 +1372,11 @@ def test_pg_routing_functional_dijkstra(host):
         1, 3, false
     );
     """
-    result = host.run(f"psql -q -t -A -c \"{test_sql}\"")
+    result = host.run(f'psql -q -t -A -c "{test_sql}"')
 
     # 3. Validation
     assert result.rc == 0
-    assert result.stdout.strip().split('\n')[-1] == "2"
+    assert result.stdout.strip().split("\n")[-1] == "2"
 
     # 4. Cleanup
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
@@ -1288,8 +1388,11 @@ def test_pg_routing_metadata(host):
     host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pgrouting CASCADE;'")
 
     # 2. Check if the extension is recognized by PG
-    query = "SELECT count(*) FROM pg_available_extensions WHERE name = 'pgrouting' AND installed_version IS NOT NULL;"
-    result = host.run(f"psql -t -A -c \"{query}\"")
+    query = (
+        "SELECT count(*) FROM pg_available_extensions "
+        "WHERE name = 'pgrouting' AND installed_version IS NOT NULL;"
+    )
+    result = host.run(f'psql -t -A -c "{query}"')
 
     # 3. Validation
     assert result.stdout.strip() == "1", "pgRouting should be marked as installed"
@@ -1315,11 +1418,11 @@ def test_pg_routing_functional_bidirectional(host):
         1, 3, false
     );
     """
-    result = host.run(f"psql -q -t -A -c \"{test_sql}\"")
+    result = host.run(f'psql -q -t -A -c "{test_sql}"')
 
     # 3. Validation
     assert result.rc == 0, f"pgRouting Bidirectional failed: {result.stderr}"
-    actual_cost = result.stdout.strip().split('\n')[-1]
+    actual_cost = result.stdout.strip().split("\n")[-1]
     assert actual_cost == "2", f"Expected 2, got {actual_cost}"
 
     # 4. Cleanup

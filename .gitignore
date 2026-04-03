@@ -26,3 +26,14 @@ __pycache__/
 .yamllint
 .sqlfluff
 pyproject.toml
+FORMATTING.md
+Makefile
+.cursor/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.cache/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.cache/

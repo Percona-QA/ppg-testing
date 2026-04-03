@@ -8,10 +8,10 @@ import pytest
 import requests
 
 # --- Configuration constants/settings ---
-MAJOR_VER = os.getenv('VERSION').split('.')[0]
-MAJOR_MINOR_VER = os.getenv('VERSION')
-DOCKER_REPO = os.getenv('DOCKER_REPOSITORY')
-IMG_TAG = os.getenv('TAG')
+MAJOR_VER = os.getenv("VERSION").split(".")[0]
+MAJOR_MINOR_VER = os.getenv("VERSION")
+DOCKER_REPO = os.getenv("DOCKER_REPOSITORY")
+IMG_TAG = os.getenv("TAG")
 IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG}"
 PG_BIN_DIR = f"/usr/pgsql-{MAJOR_VER}/bin"
 NETWORK_NAME = "patroni_test_net"
@@ -45,41 +45,52 @@ def wait_for_leader(nodes, timeout=90):
     return None
 
 
-@pytest.fixture(scope='session', autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def docker_env():
     """Ensure a clean network environment."""
-    subprocess.run(['docker', 'network', 'rm', NETWORK_NAME], capture_output=True)
-    subprocess.run(['docker', 'network', 'create', NETWORK_NAME], check=True)
+    subprocess.run(["docker", "network", "rm", NETWORK_NAME], capture_output=True)
+    subprocess.run(["docker", "network", "create", NETWORK_NAME], check=True)
     yield
-    subprocess.run(['docker', 'network', 'rm', NETWORK_NAME], capture_output=True)
+    subprocess.run(["docker", "network", "rm", NETWORK_NAME], capture_output=True)
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="session")
 def etcd(docker_env):
     """Start etcd as the Distributed Configuration Store (Architecture-Agnostic)."""
-    subprocess.run(['docker', 'rm', '-f', ETCD_NAME], capture_output=True)
+    subprocess.run(["docker", "rm", "-f", ETCD_NAME], capture_output=True)
 
     # REMOVE '--platform', 'linux/amd64' to allow native execution
-    subprocess.run([
-        'docker', 'run', '-d', '--name', ETCD_NAME, '--network', NETWORK_NAME,
-        'quay.io/coreos/etcd:v3.5.0',
-        '/usr/local/bin/etcd',
-        '--advertise-client-urls', f'http://{ETCD_NAME}:2379',
-        '--listen-client-urls', 'http://0.0.0.0:2379'
-    ], check=True)
+    subprocess.run(
+        [
+            "docker",
+            "run",
+            "-d",
+            "--name",
+            ETCD_NAME,
+            "--network",
+            NETWORK_NAME,
+            "quay.io/coreos/etcd:v3.5.0",
+            "/usr/local/bin/etcd",
+            "--advertise-client-urls",
+            f"http://{ETCD_NAME}:2379",
+            "--listen-client-urls",
+            "http://0.0.0.0:2379",
+        ],
+        check=True,
+    )
 
     # Increase the sleep slightly for ARM runners which might be slower to initialize
     time.sleep(5)
     yield ETCD_NAME
-    subprocess.run(['docker', 'rm', '-f', ETCD_NAME], capture_output=True)
+    subprocess.run(["docker", "rm", "-f", ETCD_NAME], capture_output=True)
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="session")
 def cluster(etcd):
     """Initialize a 2-node Patroni cluster."""
     nodes = {
         "node1": {"name": "pg-node-1", "port": 18008, "pg_port": 19008},
-        "node2": {"name": "pg-node-2", "port": 18009, "pg_port": 19009}
+        "node2": {"name": "pg-node-2", "port": 18009, "pg_port": 19009},
     }
 
     for node in nodes.values():
@@ -89,8 +100,9 @@ def cluster(etcd):
         data_dir = f"/tmp/pdata_{name}"
         conf_path = f"/tmp/patroni_{name}.yaml"
 
-        subprocess.run(['docker', 'rm', '-f', name], capture_output=True)
-        if os.path.exists(conf_path): os.remove(conf_path)
+        subprocess.run(["docker", "rm", "-f", name], capture_output=True)
+        if os.path.exists(conf_path):
+            os.remove(conf_path)
 
         config_content = textwrap.dedent(f"""
             scope: test-cluster
@@ -127,36 +139,68 @@ def cluster(etcd):
                 replication: {{username: replicator, password: password}}
         """)
 
-        with open(conf_path, "w") as f: f.write(config_content)
+        with open(conf_path, "w") as f:
+            f.write(config_content)
 
-        subprocess.run([
-            'docker', 'run', '-d', '--name', name, '--hostname', name,
-            '--network', NETWORK_NAME, '--shm-size=256m',
-            '-v', f"{conf_path}:/etc/patroni.yaml:ro",
-            '--entrypoint', '/usr/bin/patroni', '--user', 'postgres',
-            '-e', 'PYTHONUNBUFFERED=1',
-            '-e', 'POSTGRES_PASSWORD=password',
-            '-p', f"{api_port}:8008",
-            '-p', f"{pg_port}:5432",
-            IMAGE, '/etc/patroni.yaml'
-        ], check=True)
+        subprocess.run(
+            [
+                "docker",
+                "run",
+                "-d",
+                "--name",
+                name,
+                "--hostname",
+                name,
+                "--network",
+                NETWORK_NAME,
+                "--shm-size=256m",
+                "-v",
+                f"{conf_path}:/etc/patroni.yaml:ro",
+                "--entrypoint",
+                "/usr/bin/patroni",
+                "--user",
+                "postgres",
+                "-e",
+                "PYTHONUNBUFFERED=1",
+                "-e",
+                "POSTGRES_PASSWORD=password",
+                "-p",
+                f"{api_port}:8008",
+                "-p",
+                f"{pg_port}:5432",
+                IMAGE,
+                "/etc/patroni.yaml",
+            ],
+            check=True,
+        )
 
-        subprocess.run([
-            'docker', 'exec', '--user', 'root', name,
-            'sh', '-c', f'mkdir -p {data_dir} && chown -R postgres:postgres {data_dir} && chmod 700 {data_dir}'
-        ], check=True)
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                "--user",
+                "root",
+                name,
+                "sh",
+                "-c",
+                f"mkdir -p {data_dir} && chown -R postgres:postgres {data_dir}"
+                f" && chmod 700 {data_dir}",
+            ],
+            check=True,
+        )
 
     print("\n[...] Waiting for cluster election...")
     leader = wait_for_leader(nodes, timeout=90)
 
     if not leader:
-        res = subprocess.run(['docker', 'logs', 'pg-node-1'], capture_output=True, text=True)
+        res = subprocess.run(["docker", "logs", "pg-node-1"], capture_output=True, text=True)
         print(f"\n--- LOGS FROM PG-NODE-1 ---\n{res.stdout}")
         pytest.fail("Cluster failed to elect a leader.")
 
     yield nodes
     for node in nodes.values():
-        subprocess.run(['docker', 'rm', '-f', node["name"]], capture_output=True)
+        subprocess.run(["docker", "rm", "-f", node["name"]], capture_output=True)
+
 
 # --- Tests ---
 
@@ -174,10 +218,22 @@ def test_failover_and_data_persistence(cluster):
         states = {n["name"]: get_patroni_status(n["port"]) for n in cluster.values()}
 
         # Check if we have one leader and one running standby
-        leader_node = next((n for n in cluster.values() if states[n["name"]] and states[n["name"]].get("role") in ["primary", "master", "leader"]), None)
+        leader_node = next(
+            (
+                n
+                for n in cluster.values()
+                if states[n["name"]]
+                and states[n["name"]].get("role") in ["primary", "master", "leader"]
+            ),
+            None,
+        )
         standby_node = next((n for n in cluster.values() if n != leader_node), None)
 
-        if leader_node and states[standby_node["name"]] and states[standby_node["name"]].get("state") == "running":
+        if (
+            leader_node
+            and states[standby_node["name"]]
+            and states[standby_node["name"]].get("state") == "running"
+        ):
             initial_leader = leader_node
             standby = standby_node
             break
@@ -188,8 +244,7 @@ def test_failover_and_data_persistence(cluster):
 
     # 2. Write data to leader
     conn = psycopg2.connect(
-        host='localhost', port=initial_leader['pg_port'],
-        user='postgres', password='password'
+        host="localhost", port=initial_leader["pg_port"], user="postgres", password="password"
     )
     conn.autocommit = True
     with conn.cursor() as cur:
@@ -205,7 +260,7 @@ def test_failover_and_data_persistence(cluster):
 
     # 4. Terminate leader
     print(f"[!] Stopping leader: {initial_leader['name']}")
-    subprocess.run(['docker', 'stop', initial_leader['name']], check=True)
+    subprocess.run(["docker", "stop", initial_leader["name"]], check=True)
 
     # 5. Wait for standby to promote
     print(f"[...] Waiting for {standby['name']} to promote...")
@@ -216,13 +271,12 @@ def test_failover_and_data_persistence(cluster):
 
     # 6. Verify data
     conn = psycopg2.connect(
-        host='localhost', port=new_leader['pg_port'],
-        user='postgres', password='password'
+        host="localhost", port=new_leader["pg_port"], user="postgres", password="password"
     )
     with conn.cursor() as cur:
         # Retry logic here is also helpful if the DB is still in 'recovery' mode for a split second
         cur.execute("SELECT val FROM failover_test WHERE id = 1;")
         row = cur.fetchone()
         assert row is not None
-        assert row[0] == 'patroni-ha-test'
+        assert row[0] == "patroni-ha-test"
     conn.close()
