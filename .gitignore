@@ -5,6 +5,7 @@ ENV/
 __pycache__/
 *.pyc
 .env
+.claude/
 
 ### --- Linting & Tooling Caches ---
 .cache/

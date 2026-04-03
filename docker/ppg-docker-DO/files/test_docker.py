@@ -1140,7 +1140,7 @@ def test_h3_functional_integrity(h3_db):
 
 def test_h3_binary_integrity(h3_db):
     """Verify C symbols exist without executing them (prevents segfaults)."""
-    lib_path = "/usr/pgsql-18/lib/h3.so"
+    lib_path = "/usr/pgsql-{MAJOR_VER}/lib/h3.so"
     result = h3_db.run(f"nm -D {lib_path} | grep h3_latlng_to_cell")
     assert result.exit_status == 0
     assert "T h3_latlng_to_cell" in result.stdout
