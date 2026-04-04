@@ -1128,7 +1128,6 @@ def test_postgis_indexing_and_joins(host):
 
 
 # --- H3 TEST ---
-@milestone_2
 @pytest.fixture(scope="module")
 def h3_db(host):
     # Ensure installation
