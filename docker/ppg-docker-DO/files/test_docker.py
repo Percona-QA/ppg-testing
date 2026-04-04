@@ -22,9 +22,15 @@ PG_DATA_DIR = "/data/db"
 IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG}"
 
 # --- Milestone Markers ---
-milestone_1 = pytest.mark.skipif(MILESTONE < 1, reason=f"MILESTONE={MILESTONE} — requires milestone 1 build - base version.")
-milestone_2 = pytest.mark.skipif(MILESTONE < 2, reason=f"MILESTONE={MILESTONE} — requires milestone 2 build")
-milestone_3 = pytest.mark.skipif(MILESTONE < 3, reason=f"MILESTONE={MILESTONE} — requires milestone 3 build")
+milestone_1 = pytest.mark.skipif(
+    MILESTONE < 1, reason=f"MILESTONE={MILESTONE} — requires milestone 1 build - base version."
+)
+milestone_2 = pytest.mark.skipif(
+    MILESTONE < 2, reason=f"MILESTONE={MILESTONE} — requires milestone 2 build"
+)
+milestone_3 = pytest.mark.skipif(
+    MILESTONE < 3, reason=f"MILESTONE={MILESTONE} — requires milestone 3 build"
+)
 
 # --- Settings ---
 pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER)
@@ -351,6 +357,18 @@ def test_rpm_package_is_installed(host, package):
     # 1. Centralized Skip Logic
     if not IS_WITH_POSTGIS and "postgis" in package:
         pytest.skip(f"Docker build is without PostGIS so skipping {package}.")
+
+    milestone_pkg_requirements = {
+        f"percona-h3-pg_{MAJOR_VER}": (2, "h3 extension"),
+        f"percona-pgrouting_{MAJOR_VER}": (2, "pgrouting extension"),
+    }
+
+    for pkg_pattern, (required_milestone, feature_name) in milestone_pkg_requirements.items():
+        if pkg_pattern in package and MILESTONE < required_milestone:
+            pytest.skip(
+                f"MILESTONE={MILESTONE} - "
+                f"requires milestone {required_milestone} build ({feature_name})."
+            )
 
     pkg = host.package(package)
 
@@ -1142,6 +1160,7 @@ def h3_db(host):
 
     return host
 
+
 @milestone_2
 def test_h3_extension_installed(h3_db):
     """Verify h3 is in the installed extensions list."""
@@ -1267,6 +1286,7 @@ def test_h3_functional_integrity(h3_db):
 
     assert result.exit_status == 0
     assert result.stdout.strip().startswith("8719")
+
 
 @milestone_2
 def test_h3_binary_integrity(h3_db):
