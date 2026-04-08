@@ -94,8 +94,6 @@ repo1-retention-full=2
 
 
 # --- Tests ---
-
-
 @pytest.fixture(scope="module")
 def cleanup_repo(host):
     """Ensures the backup repository is empty before starting the suite."""

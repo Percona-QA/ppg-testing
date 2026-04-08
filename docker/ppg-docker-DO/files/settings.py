@@ -136,6 +136,11 @@ pgrouting = {
     "18.3": {"version": "4.0.1"},
 }
 
+
+pg_oidc_validator = {
+    "18.3": {"version": "1.0", "extension_version": "1.0"},
+}
+
 DOCKER_LIST_EXTENSIONS = [
     "hstore",
     "adminpack",
@@ -223,6 +228,7 @@ DOCKER_RPM_PACKAGES_TEMPLATE = [
     "percona-timescaledb_{}",
     "percona-h3-pg_{}",
     "percona-pgrouting_{}",
+    "percona-pg_oidc_validator{}",
 ]
 
 
@@ -380,6 +386,7 @@ ppg_versions = {
         "percona-timescaledb_18": timescaledb["18.3"],
         "percona-h3-pg_18": h3["18.3"],
         "percona-pgrouting_18": pgrouting["18.3"],
+        "percona-pg_oidc_validator18": pg_oidc_validator["18.3"],
         "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "18"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "18"),
         "extensions": DOCKER_LIST_EXTENSIONS,

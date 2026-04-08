@@ -203,8 +203,6 @@ def cluster(etcd):
 
 
 # --- Tests ---
-
-
 def test_failover_and_data_persistence(cluster):
     """Verify leader discovery, write data, kill leader, and check standby promotion."""
 

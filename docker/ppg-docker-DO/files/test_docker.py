@@ -358,6 +358,9 @@ def test_rpm_package_is_installed(host, package):
     if not IS_WITH_POSTGIS and "postgis" in package:
         pytest.skip(f"Docker build is without PostGIS so skipping {package}.")
 
+    if "oidc_validator" in package and int(MAJOR_VER) < 18:
+        pytest.skip(f"Skipping {package} for PostgreSQL {MAJOR_VER} (only supported on 18.2+).")
+
     milestone_pkg_requirements = {
         f"percona-h3-pg_{MAJOR_VER}": (2, "h3 extension"),
         f"percona-pgrouting_{MAJOR_VER}": (2, "pgrouting extension"),
