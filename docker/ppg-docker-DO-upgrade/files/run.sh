@@ -135,12 +135,14 @@ echo "  NEW_DATA           : $NEW_DATA"
 _print_header "Preparing volume directories"
 
 rm -rf "$OLD_DATA" "$NEW_DATA"
-mkdir -p "$OLD_DATA/postgres" "$NEW_DATA/postgres"
-# The container's entrypoint runs chown/chmod on the data directory as the
-# postgres user.  If the directory was created by root (common in CI), the
-# container cannot change its permissions and fails to start.  Set 777 here
-# so the container can take ownership on first boot.
-chmod -R 777 "$OLD_DATA" "$NEW_DATA"
+# Create only the parent directories — NOT the postgres subdirectories.
+# When the container starts with -v $OLD_DATA/postgres:/data/db, Docker
+# creates the postgres subdirectory as root.  The container's entrypoint
+# (which runs as root) then chowns/chmods it to the postgres user.
+# Pre-creating the subdirectory as the CI runner user (e.g. UID 1000) causes
+# the container to fail with "chmod: Operation not permitted" because the
+# postgres user inside the container doesn't own the directory.
+mkdir -p "$OLD_DATA" "$NEW_DATA"
 echo "  Old data dir : $OLD_DATA/postgres"
 echo "  New data dir : $NEW_DATA/postgres"
 

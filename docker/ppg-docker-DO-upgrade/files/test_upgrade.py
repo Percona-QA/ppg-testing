@@ -183,8 +183,11 @@ def upgrade_pipeline():
                 shutil.rmtree(stale_dir)
                 print(f"  Removed stale data dir: {stale_dir}")
 
-        pathlib.Path(OLD_DATA_HOST, "postgres").mkdir(parents=True, exist_ok=True)
-        pathlib.Path(NEW_DATA_HOST, "postgres").mkdir(parents=True, exist_ok=True)
+        # Create only the parent directories — Docker creates the postgres
+        # subdirectory as root when processing the bind mount, allowing the
+        # container's entrypoint to chown/chmod it without permission errors.
+        pathlib.Path(OLD_DATA_HOST).mkdir(parents=True, exist_ok=True)
+        pathlib.Path(NEW_DATA_HOST).mkdir(parents=True, exist_ok=True)
 
         # Start old container with data volume
         _remove_container(OLD_CONTAINER)
