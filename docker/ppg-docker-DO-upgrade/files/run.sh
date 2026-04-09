@@ -135,16 +135,29 @@ echo "  NEW_DATA           : $NEW_DATA"
 _print_header "Preparing volume directories"
 
 rm -rf "$OLD_DATA" "$NEW_DATA"
-# Create only the parent directories — NOT the postgres subdirectories.
-# When the container starts with -v $OLD_DATA/postgres:/data/db, Docker
-# creates the postgres subdirectory as root.  The container's entrypoint
-# (which runs as root) then chowns/chmods it to the postgres user.
-# Pre-creating the subdirectory as the CI runner user (e.g. UID 1000) causes
-# the container to fail with "chmod: Operation not permitted" because the
-# postgres user inside the container doesn't own the directory.
 mkdir -p "$OLD_DATA" "$NEW_DATA"
 echo "  Old data dir : $OLD_DATA/postgres"
 echo "  New data dir : $NEW_DATA/postgres"
+
+# Pre-initialise the OLD data directory using --privileged so the container's
+# entrypoint can chown/chmod the bind-mounted path.  In many CI environments
+# Docker runs in rootless mode or with user-namespace restrictions; without
+# --privileged the postgres user inside the container cannot chmod a directory
+# created (as root) by Docker on the host, causing an immediate startup failure.
+echo "  Pre-initialising old cluster (sets correct bind-mount ownership) ..."
+PREINIT_OLD="ppg_preinit_old_${OLD_MAJOR}"
+docker rm -f "$PREINIT_OLD" > /dev/null 2>&1 || true
+docker run -d \
+    --name "$PREINIT_OLD" \
+    --privileged \
+    -e POSTGRES_PASSWORD=password \
+    --shm-size=2g \
+    -v "$OLD_DATA/postgres:/data/db" \
+    "$OLD_IMAGE"
+_wait_for_pg "$PREINIT_OLD" "$OLD_MAJOR"
+docker stop "$PREINIT_OLD" > /dev/null
+docker rm   "$PREINIT_OLD" > /dev/null
+echo "  Old data directory pre-initialised at $OLD_DATA/postgres"
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Phase 1 — Test OLD version image (seeds $OLD_DATA/postgres as a side-effect)
@@ -189,6 +202,7 @@ echo "  Inserting sentinel row into old cluster ..."
 docker rm -f "$SENTINEL_CONTAINER" > /dev/null 2>&1 || true
 docker run -d \
     --name "$SENTINEL_CONTAINER" \
+    --privileged \
     -e POSTGRES_PASSWORD=password \
     --shm-size=2g \
     -v "$OLD_DATA/postgres:/data/db" \
@@ -217,6 +231,7 @@ if [ "${NEW_MAJOR}" -lt 18 ]; then
     docker rm -f "$PREINIT_CONTAINER" > /dev/null 2>&1 || true
     docker run -d \
         --name "$PREINIT_CONTAINER" \
+        --privileged \
         -e POSTGRES_PASSWORD=password \
         --shm-size=2g \
         -v "$NEW_DATA/postgres:/data/db" \
