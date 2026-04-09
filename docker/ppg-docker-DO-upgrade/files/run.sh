@@ -114,10 +114,33 @@ _wait_for_pg() {
 # PostgreSQL will initialise a new cluster there on first boot.  That same
 # data is then upgraded in Phase 2 and tested again in Phase 3.
 
+_print_header "Configuration"
+echo "  OLD_VERSION        : $OLD_VERSION"
+echo "  NEW_VERSION        : $NEW_VERSION"
+echo "  OLD_MAJOR          : $OLD_MAJOR"
+echo "  NEW_MAJOR          : $NEW_MAJOR"
+echo "  DOCKER_REPOSITORY  : $DOCKER_REPOSITORY"
+echo "  OLD_TAG            : $OLD_TAG"
+echo "  NEW_TAG            : $NEW_TAG"
+echo "  UPGRADE_TAG        : $UPGRADE_TAG"
+echo "  UPGRADE_BASE_DIR   : $UPGRADE_BASE_DIR"
+echo "  MILESTONE          : $MILESTONE"
+echo "  WITH_POSTGIS       : $WITH_POSTGIS"
+echo "  OLD_IMAGE          : $OLD_IMAGE"
+echo "  NEW_IMAGE          : $NEW_IMAGE"
+echo "  UPGRADE_IMAGE      : $UPGRADE_IMAGE"
+echo "  OLD_DATA           : $OLD_DATA"
+echo "  NEW_DATA           : $NEW_DATA"
+
 _print_header "Preparing volume directories"
 
 rm -rf "$OLD_DATA" "$NEW_DATA"
 mkdir -p "$OLD_DATA/postgres" "$NEW_DATA/postgres"
+# The container's entrypoint runs chown/chmod on the data directory as the
+# postgres user.  If the directory was created by root (common in CI), the
+# container cannot change its permissions and fails to start.  Set 777 here
+# so the container can take ownership on first boot.
+chmod -R 777 "$OLD_DATA" "$NEW_DATA"
 echo "  Old data dir : $OLD_DATA/postgres"
 echo "  New data dir : $NEW_DATA/postgres"
 
