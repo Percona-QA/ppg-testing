@@ -20,7 +20,6 @@
 # ────────────────────────────────
 #   OLD_TAG           Tag for old custom image     (default: OLD_VERSION)
 #   NEW_TAG           Tag for new custom image     (default: NEW_VERSION)
-#   UPGRADE_BASE_DIR  Host dir for PG data volumes (default: ~/pgupgrade)
 #   MILESTONE         Milestone level for tests    (default: 0)
 #   WITH_POSTGIS      Enable PostGIS tests         (default: false)
 #
@@ -55,7 +54,7 @@ DOCKER_REPOSITORY="${DOCKER_REPOSITORY:-perconalab}"
 OLD_TAG="${OLD_TAG:-$OLD_VERSION}"
 NEW_TAG="${NEW_TAG:-$NEW_VERSION}"
 : "${UPGRADE_TAG:?UPGRADE_TAG is required. e.g. UPGRADE_TAG=18.3-17.9-16.13-1}"
-UPGRADE_BASE_DIR="${UPGRADE_BASE_DIR:-$PWD/pgupgrade}"
+UPGRADE_BASE_DIR="/tmp/pgupgrade"
 MILESTONE="${MILESTONE:-0}"
 WITH_POSTGIS="${WITH_POSTGIS:-false}"
 

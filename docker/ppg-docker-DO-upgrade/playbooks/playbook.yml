@@ -6,11 +6,8 @@
   vars:
     # Role root (parent of playbooks/) so import_tasks can find role files/
     ppg_docker_role_root: "{{ playbook_dir }}/.."
-    # Upgrade version pair
-    ppg_old_version: "{{ lookup('env', 'OLD_VERSION') | default('17.9', true) }}"
-    ppg_new_version: "{{ lookup('env', 'NEW_VERSION') | default('18.3', true) }}"
+    ppg_label_name_postgresql: "Percona Distribution for PostgreSQL"
+    ppg_label_maintainer: "Percona Development <info@percona.com>"
+    ppg_label_vendor: "Percona"
   roles:
     - role: ppg-docker-DO-upgrade
-  # tasks:
-  #   - name: Run ppg-docker-upgrade role tasks
-  #     ansible.builtin.import_tasks: ../tasks/main.yml
