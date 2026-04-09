@@ -222,9 +222,20 @@ docker rm   "$SENTINEL_CONTAINER" > /dev/null
 echo "  Pre-initialising new cluster ..."
 PREINIT_CONTAINER="ppg_preinit_${OLD_MAJOR}_${NEW_MAJOR}"
 docker rm -f "$PREINIT_CONTAINER" > /dev/null 2>&1 || true
+
+# PG 18+ enables data checksums by default; the old cluster was initialized
+# without checksums, so pg_upgrade requires the new cluster to also have none.
+# Pass --no-data-checksums only for PG 18+ — earlier versions do not support
+# the flag (it was introduced in PG 18) and their default is already no checksums.
+PREINIT_INITDB_ARGS=()
+if [ "${NEW_MAJOR}" -ge 18 ]; then
+    PREINIT_INITDB_ARGS=(-e POSTGRES_INITDB_ARGS="--no-data-checksums")
+fi
+
 docker run -d \
     --name "$PREINIT_CONTAINER" \
     -e POSTGRES_PASSWORD=password \
+    "${PREINIT_INITDB_ARGS[@]}" \
     --shm-size=2g \
     -v "$NEW_VOL:/data/db" \
     "$NEW_IMAGE"
