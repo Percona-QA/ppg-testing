@@ -202,27 +202,36 @@ echo "  Sentinel inserted: ${SENTINEL_TABLE}.val = '${SENTINEL_VALUE}'"
 docker stop "$SENTINEL_CONTAINER" > /dev/null
 docker rm   "$SENTINEL_CONTAINER" > /dev/null
 
-# Pre-initialize the new cluster when the mediator targets PG < 18.
-# The mediator uses --no-data-checksums with initdb, a flag introduced in
-# PG 18.  For older targets initdb exits immediately on the unrecognised flag
-# before touching the directory.  By pre-initialising the new data directory
-# here the mediator's failed initdb leaves it intact, and pg_upgrade then
-# finds a valid cluster to upgrade into.
-if [ "${NEW_MAJOR}" -lt 18 ]; then
-    echo "  Pre-initialising new cluster (PG${NEW_MAJOR} mediator workaround) ..."
-    PREINIT_CONTAINER="ppg_preinit_${OLD_MAJOR}_${NEW_MAJOR}"
-    docker rm -f "$PREINIT_CONTAINER" > /dev/null 2>&1 || true
-    docker run -d \
-        --name "$PREINIT_CONTAINER" \
-        -e POSTGRES_PASSWORD=password \
-        --shm-size=2g \
-        -v "$NEW_VOL:/data/db" \
-        "$NEW_IMAGE"
-    _wait_for_pg "$PREINIT_CONTAINER" "$NEW_MAJOR"
-    docker stop "$PREINIT_CONTAINER" > /dev/null
-    docker rm   "$PREINIT_CONTAINER" > /dev/null
-    echo "  New cluster pre-initialised in volume $NEW_VOL"
-fi
+# Pre-initialise the new cluster volume before running the mediator.
+# This is required for two reasons:
+#
+# 1. Volume root ownership: Docker creates named volume roots as root:root 755.
+#    The mediator's initdb runs after dropping privileges to the postgres user
+#    and cannot chown the volume root directory.  pg_upgrade then fails to
+#    create pg_upgrade_output.d ("Permission denied") because it runs as the
+#    postgres user in a root-owned directory.  Starting the new-version image
+#    here causes its entrypoint (which runs as root before dropping privileges)
+#    to chown/chmod the volume root to the postgres user, giving pg_upgrade
+#    the correct ownership to proceed.
+#
+# 2. Mediator --no-data-checksums flag (PG < 18 only): the mediator passes
+#    this initdb flag which was introduced in PG 18.  For older targets initdb
+#    fails immediately before writing anything.  By pre-initialising here the
+#    cluster already exists when the mediator's initdb fails, and pg_upgrade
+#    finds a valid cluster to upgrade into.
+echo "  Pre-initialising new cluster ..."
+PREINIT_CONTAINER="ppg_preinit_${OLD_MAJOR}_${NEW_MAJOR}"
+docker rm -f "$PREINIT_CONTAINER" > /dev/null 2>&1 || true
+docker run -d \
+    --name "$PREINIT_CONTAINER" \
+    -e POSTGRES_PASSWORD=password \
+    --shm-size=2g \
+    -v "$NEW_VOL:/data/db" \
+    "$NEW_IMAGE"
+_wait_for_pg "$PREINIT_CONTAINER" "$NEW_MAJOR"
+docker stop "$PREINIT_CONTAINER" > /dev/null
+docker rm   "$PREINIT_CONTAINER" > /dev/null
+echo "  New cluster pre-initialised in volume $NEW_VOL"
 
 # Run the pg_upgrade mediator.
 # The named volumes are mounted directly at the paths the mediator expects:
