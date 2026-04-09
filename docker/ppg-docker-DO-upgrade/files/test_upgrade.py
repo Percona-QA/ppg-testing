@@ -68,6 +68,11 @@ IMG_TAG_OLD = os.environ.get("OLD_TAG", OLD_MAJOR_MINOR)
 IMG_TAG_NEW = os.environ.get("NEW_TAG", NEW_MAJOR_MINOR)
 UPGRADE_IMG_TAG = os.environ.get("UPGRADE_TAG", "v2")
 
+# When run.sh drives the upgrade it passes UPGRADE_NEW_VOL (a Docker named
+# volume) instead of a host path.  In standalone mode (SKIP_UPGRADE=false)
+# the fixture manages its own host-path volumes.
+UPGRADE_NEW_VOL = os.environ.get("UPGRADE_NEW_VOL")
+
 OLD_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG_OLD}"
 NEW_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG_NEW}"
 UPGRADE_IMAGE = (
@@ -163,7 +168,10 @@ def upgrade_pipeline():
     print("\n" + "=" * 64)
     print(f"  Upgrade:       PG {OLD_MAJOR_MINOR}  →  PG {NEW_MAJOR_MINOR}")
     print(f"  New image:     {NEW_IMAGE}")
-    print(f"  New data dir:  {NEW_DATA_HOST}/postgres")
+    if UPGRADE_NEW_VOL:
+        print(f"  New data vol:  {UPGRADE_NEW_VOL}")
+    else:
+        print(f"  New data dir:  {NEW_DATA_HOST}/postgres")
     print(f"  SKIP_UPGRADE:  {SKIP_UPGRADE}")
     print("=" * 64)
 
@@ -249,17 +257,38 @@ def upgrade_pipeline():
 
     else:
         # ── External-upgrade mode: upgrade already done by run.sh ─────────────
-        print(
-            "  SKIP_UPGRADE=true — reusing upgraded data from "
-            f"{NEW_DATA_HOST}/postgres"
-        )
-        if not pathlib.Path(NEW_DATA_HOST, "postgres").exists():
-            pytest.fail(
-                f"SKIP_UPGRADE=true but upgraded data not found at "
-                f"{NEW_DATA_HOST}/postgres — did run.sh complete Phase 2?"
+        if UPGRADE_NEW_VOL:
+            print(
+                f"  SKIP_UPGRADE=true — reusing upgraded data from "
+                f"Docker volume {UPGRADE_NEW_VOL!r}"
             )
+            result = subprocess.run(
+                ["docker", "volume", "inspect", UPGRADE_NEW_VOL],
+                capture_output=True,
+            )
+            if result.returncode != 0:
+                pytest.fail(
+                    f"SKIP_UPGRADE=true but Docker volume {UPGRADE_NEW_VOL!r} "
+                    f"not found — did run.sh complete Phase 2?"
+                )
+        else:
+            print(
+                "  SKIP_UPGRADE=true — reusing upgraded data from "
+                f"{NEW_DATA_HOST}/postgres"
+            )
+            if not pathlib.Path(NEW_DATA_HOST, "postgres").exists():
+                pytest.fail(
+                    f"SKIP_UPGRADE=true but upgraded data not found at "
+                    f"{NEW_DATA_HOST}/postgres — did run.sh complete Phase 2?"
+                )
 
     # ── Start new container on the upgraded data ───────────────────────────────
+    # Use the named volume when provided by run.sh; otherwise use the host path.
+    new_data_vol = (
+        f"{UPGRADE_NEW_VOL}:{PG_DATA_DIR}"
+        if UPGRADE_NEW_VOL
+        else f"{NEW_DATA_HOST}/postgres:{PG_DATA_DIR}"
+    )
     _remove_container(NEW_CONTAINER)
     subprocess.run(
         [
@@ -267,7 +296,7 @@ def upgrade_pipeline():
             "--name", NEW_CONTAINER,
             "-e", "POSTGRES_PASSWORD=password",
             "--shm-size=2g",
-            "-v", f"{NEW_DATA_HOST}/postgres:{PG_DATA_DIR}",
+            "-v", new_data_vol,
             NEW_IMAGE,
         ],
         check=True,

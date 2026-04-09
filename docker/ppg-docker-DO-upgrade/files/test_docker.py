@@ -105,13 +105,10 @@ def host(request):
     ]
 
     if UPGRADE_DATA_DIR:
-        # Mount persistent upgrade data directory so the container reuses the
-        # existing cluster from Phase 1 (old version) or Phase 2 (upgraded data).
-        # --privileged is required in CI environments where Docker runs in rootless
-        # mode or with user-namespace restrictions: without it the container's
-        # entrypoint cannot chown/chmod the bind-mounted directory (which was
-        # created/populated by a different container) and fails immediately.
-        run_cmd.extend(["--privileged", "-v", f"{UPGRADE_DATA_DIR}:{PG_DATA_DIR}"])
+        # Mount the named Docker volume so the container reuses the existing
+        # cluster from Phase 1 (old version) or Phase 2 (upgraded data).
+        # Named volumes are fully managed by Docker and have no UID/chmod issues.
+        run_cmd.extend(["-v", f"{UPGRADE_DATA_DIR}:{PG_DATA_DIR}"])
 
     run_cmd.append(IMAGE)
 

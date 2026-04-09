@@ -30,6 +30,13 @@
 #   The older "v2" tag is broken for pre-PG18 targets (uses --no-data-checksums
 #   which was introduced in PG 18) and should not be used.
 #
+# Volume strategy
+# ───────────────
+#   Named Docker volumes are used instead of host bind mounts.  This avoids
+#   chmod/chown permission failures that occur in CI environments running
+#   rootless Docker or Docker-in-Docker, where the container's root user cannot
+#   modify bind-mounted directories owned by a different host UID.
+#
 # Usage examples
 # ──────────────
 #   # PG 17 → PG 18
@@ -54,7 +61,6 @@ DOCKER_REPOSITORY="${DOCKER_REPOSITORY:-perconalab}"
 OLD_TAG="${OLD_TAG:-$OLD_VERSION}"
 NEW_TAG="${NEW_TAG:-$NEW_VERSION}"
 : "${UPGRADE_TAG:?UPGRADE_TAG is required. e.g. UPGRADE_TAG=18.3-17.9-16.13-1}"
-UPGRADE_BASE_DIR="/tmp/pgupgrade"
 MILESTONE="${MILESTONE:-0}"
 WITH_POSTGIS="${WITH_POSTGIS:-false}"
 
@@ -73,8 +79,10 @@ OLD_IMAGE="$DOCKER_REPOSITORY/percona-distribution-postgresql-custom:$OLD_TAG"
 NEW_IMAGE="$DOCKER_REPOSITORY/percona-distribution-postgresql-custom:$NEW_TAG"
 UPGRADE_IMAGE="$DOCKER_REPOSITORY/percona-distribution-postgresql-upgrade-custom:$UPGRADE_TAG"
 
-OLD_DATA="$UPGRADE_BASE_DIR/pg${OLD_MAJOR}olddata"
-NEW_DATA="$UPGRADE_BASE_DIR/pg${NEW_MAJOR}newdata"
+# Named Docker volumes — avoids all bind-mount permission issues in CI.
+# Each run gets a unique suffix so parallel jobs do not collide.
+OLD_VOL="ppg_upgrade_old_${OLD_MAJOR}_${NEW_MAJOR}"
+NEW_VOL="ppg_upgrade_new_${OLD_MAJOR}_${NEW_MAJOR}"
 
 PHASE1_RC=0
 PHASE2_RC=0
@@ -108,11 +116,9 @@ _wait_for_pg() {
     return 1
 }
 
-# ── Volume directories ────────────────────────────────────────────────────────
-# Create fresh volume directories before Phase 1.  test_docker.py's host
-# fixture will start the old container with $OLD_DATA/postgres mounted and
-# PostgreSQL will initialise a new cluster there on first boot.  That same
-# data is then upgraded in Phase 2 and tested again in Phase 3.
+# ── Named Docker volumes ──────────────────────────────────────────────────────
+# Named volumes are fully managed by Docker: no host-path ownership issues,
+# no chmod failures in rootless or DinD CI environments.
 
 _print_header "Configuration"
 echo "  OLD_VERSION        : $OLD_VERSION"
@@ -123,44 +129,24 @@ echo "  DOCKER_REPOSITORY  : $DOCKER_REPOSITORY"
 echo "  OLD_TAG            : $OLD_TAG"
 echo "  NEW_TAG            : $NEW_TAG"
 echo "  UPGRADE_TAG        : $UPGRADE_TAG"
-echo "  UPGRADE_BASE_DIR   : $UPGRADE_BASE_DIR"
 echo "  MILESTONE          : $MILESTONE"
 echo "  WITH_POSTGIS       : $WITH_POSTGIS"
 echo "  OLD_IMAGE          : $OLD_IMAGE"
 echo "  NEW_IMAGE          : $NEW_IMAGE"
 echo "  UPGRADE_IMAGE      : $UPGRADE_IMAGE"
-echo "  OLD_DATA           : $OLD_DATA"
-echo "  NEW_DATA           : $NEW_DATA"
+echo "  OLD_VOL            : $OLD_VOL"
+echo "  NEW_VOL            : $NEW_VOL"
 
-_print_header "Preparing volume directories"
+_print_header "Preparing Docker volumes"
 
-rm -rf "$OLD_DATA" "$NEW_DATA"
-mkdir -p "$OLD_DATA" "$NEW_DATA"
-echo "  Old data dir : $OLD_DATA/postgres"
-echo "  New data dir : $NEW_DATA/postgres"
-
-# Pre-initialise the OLD data directory using --privileged so the container's
-# entrypoint can chown/chmod the bind-mounted path.  In many CI environments
-# Docker runs in rootless mode or with user-namespace restrictions; without
-# --privileged the postgres user inside the container cannot chmod a directory
-# created (as root) by Docker on the host, causing an immediate startup failure.
-echo "  Pre-initialising old cluster (sets correct bind-mount ownership) ..."
-PREINIT_OLD="ppg_preinit_old_${OLD_MAJOR}"
-docker rm -f "$PREINIT_OLD" > /dev/null 2>&1 || true
-docker run -d \
-    --name "$PREINIT_OLD" \
-    --privileged \
-    -e POSTGRES_PASSWORD=password \
-    --shm-size=2g \
-    -v "$OLD_DATA/postgres:/data/db" \
-    "$OLD_IMAGE"
-_wait_for_pg "$PREINIT_OLD" "$OLD_MAJOR"
-docker stop "$PREINIT_OLD" > /dev/null
-docker rm   "$PREINIT_OLD" > /dev/null
-echo "  Old data directory pre-initialised at $OLD_DATA/postgres"
+# Remove any leftover volumes from a previous run, then create fresh ones.
+docker volume rm "$OLD_VOL" "$NEW_VOL" > /dev/null 2>&1 || true
+docker volume create "$OLD_VOL" > /dev/null
+docker volume create "$NEW_VOL" > /dev/null
+echo "  Created Docker volumes: $OLD_VOL  $NEW_VOL"
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Phase 1 — Test OLD version image (seeds $OLD_DATA/postgres as a side-effect)
+# Phase 1 — Test OLD version image
 # ═════════════════════════════════════════════════════════════════════════════
 
 _print_header "Phase 1: Testing PG $OLD_VERSION (pre-upgrade)"
@@ -170,7 +156,7 @@ TAG=$OLD_TAG \
 DOCKER_REPOSITORY=$DOCKER_REPOSITORY \
 MILESTONE=$MILESTONE \
 WITH_POSTGIS=$WITH_POSTGIS \
-UPGRADE_DATA_DIR="$OLD_DATA/postgres" \
+UPGRADE_DATA_DIR="$OLD_VOL" \
 pytest \
     test_labels_licences.py \
     test_docker.py \
@@ -187,12 +173,10 @@ echo "  Phase 1 result: $( [ $PHASE1_RC -eq 0 ] && echo 'PASS' || echo "FAIL (rc
 
 _print_header "Phase 2: Upgrading PG $OLD_VERSION → PG $NEW_VERSION"
 
-# $OLD_DATA/postgres was populated by test_docker.py's session-scoped host
-# fixture during Phase 1 (the container was started with that volume and
-# PostgreSQL initialised the cluster there on first boot).  No seed step is
-# needed here — but we must insert the sentinel row that test_upgrade.py will
-# verify after the upgrade (SKIP_UPGRADE=true mode skips the fixture's own
-# sentinel creation, so run.sh is responsible for it).
+# OLD_VOL was populated by test_docker.py's session-scoped host fixture during
+# Phase 1.  We must insert the sentinel row now — test_upgrade.py will verify
+# it survived the upgrade.  (SKIP_UPGRADE=true skips the fixture's own sentinel
+# creation, so run.sh is responsible for it here.)
 
 SENTINEL_CONTAINER="ppg_sentinel_${OLD_MAJOR}_${NEW_MAJOR}"
 SENTINEL_TABLE="upgrade_sentinel"
@@ -202,10 +186,9 @@ echo "  Inserting sentinel row into old cluster ..."
 docker rm -f "$SENTINEL_CONTAINER" > /dev/null 2>&1 || true
 docker run -d \
     --name "$SENTINEL_CONTAINER" \
-    --privileged \
     -e POSTGRES_PASSWORD=password \
     --shm-size=2g \
-    -v "$OLD_DATA/postgres:/data/db" \
+    -v "$OLD_VOL:/data/db" \
     "$OLD_IMAGE"
 
 _wait_for_pg "$SENTINEL_CONTAINER" "$OLD_MAJOR"
@@ -231,18 +214,20 @@ if [ "${NEW_MAJOR}" -lt 18 ]; then
     docker rm -f "$PREINIT_CONTAINER" > /dev/null 2>&1 || true
     docker run -d \
         --name "$PREINIT_CONTAINER" \
-        --privileged \
         -e POSTGRES_PASSWORD=password \
         --shm-size=2g \
-        -v "$NEW_DATA/postgres:/data/db" \
+        -v "$NEW_VOL:/data/db" \
         "$NEW_IMAGE"
     _wait_for_pg "$PREINIT_CONTAINER" "$NEW_MAJOR"
     docker stop "$PREINIT_CONTAINER" > /dev/null
     docker rm   "$PREINIT_CONTAINER" > /dev/null
-    echo "  New cluster pre-initialised at $NEW_DATA/postgres"
+    echo "  New cluster pre-initialised in volume $NEW_VOL"
 fi
 
-# Run the pg_upgrade mediator
+# Run the pg_upgrade mediator.
+# The named volumes are mounted directly at the paths the mediator expects:
+#   /pgolddata/postgres  — old cluster root
+#   /pgnewdata/postgres  — new cluster root (mediator writes here)
 echo "  Running pg_upgrade mediator ..."
 docker run --rm \
     --name "ppg_upgrade_mediator_${OLD_MAJOR}_${NEW_MAJOR}" \
@@ -250,23 +235,21 @@ docker run --rm \
     -e NEW_VERSION="$NEW_MAJOR" \
     -e OLD_DATABASE_NAME=postgres \
     -e NEW_DATABASE_NAME=postgres \
-    -v "$OLD_DATA:/pgolddata" \
-    -v "$NEW_DATA:/pgnewdata" \
+    -v "$OLD_VOL:/pgolddata/postgres" \
+    -v "$NEW_VOL:/pgnewdata/postgres" \
     "$UPGRADE_IMAGE" || PHASE2_RC=$?
 
 echo "  Upgrade mediator exit code: $PHASE2_RC"
 
-# Print the loadable_libraries report whenever the mediator fails — it lists
-# exactly which .so files pg_upgrade could not find in the new installation.
+# Print the loadable_libraries report when the mediator fails.
 if [ $PHASE2_RC -ne 0 ]; then
-    LIBS_FILE=$(find "$NEW_DATA/postgres/pg_upgrade_output.d" \
-        -name "loadable_libraries.txt" 2>/dev/null | head -1)
-    if [ -n "$LIBS_FILE" ]; then
-        echo ""
-        echo "  ── loadable_libraries.txt ──────────────────────────────────"
-        cat "$LIBS_FILE"
-        echo "  ────────────────────────────────────────────────────────────"
-    fi
+    echo ""
+    echo "  ── loadable_libraries.txt ──────────────────────────────────"
+    docker run --rm \
+        -v "$NEW_VOL:/pgnewdata/postgres" \
+        "$NEW_IMAGE" \
+        sh -c "cat /pgnewdata/postgres/pg_upgrade_output.d/loadable_libraries.txt 2>/dev/null || echo '  (file not found)'"
+    echo "  ────────────────────────────────────────────────────────────"
 fi
 
 # Run upgrade-specific data integrity tests if the upgrade succeeded.
@@ -281,7 +264,7 @@ if [ $PHASE2_RC -eq 0 ]; then
     OLD_TAG=$OLD_TAG \
     NEW_TAG=$NEW_TAG \
     UPGRADE_TAG=$UPGRADE_TAG \
-    UPGRADE_BASE_DIR=$UPGRADE_BASE_DIR \
+    UPGRADE_NEW_VOL=$NEW_VOL \
     SKIP_UPGRADE=true \
     pytest test_upgrade.py -vv -s -rpfs || PHASE2_RC=$?
 else
@@ -302,7 +285,7 @@ TAG=$NEW_TAG \
 DOCKER_REPOSITORY=$DOCKER_REPOSITORY \
 MILESTONE=$MILESTONE \
 WITH_POSTGIS=$WITH_POSTGIS \
-UPGRADE_DATA_DIR="$NEW_DATA/postgres" \
+UPGRADE_DATA_DIR="$NEW_VOL" \
 pytest \
     test_labels_licences.py \
     test_docker.py \
@@ -312,6 +295,14 @@ pytest \
 
 echo ""
 echo "  Phase 3 result: $( [ $PHASE3_RC -eq 0 ] && echo 'PASS' || echo "FAIL (rc=$PHASE3_RC)" )"
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Cleanup
+# ═════════════════════════════════════════════════════════════════════════════
+
+_print_header "Cleanup"
+docker volume rm "$OLD_VOL" "$NEW_VOL" > /dev/null 2>&1 || true
+echo "  Removed Docker volumes: $OLD_VOL  $NEW_VOL"
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Summary
