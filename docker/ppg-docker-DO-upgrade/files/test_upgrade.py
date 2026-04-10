@@ -75,18 +75,14 @@ UPGRADE_NEW_VOL = os.environ.get("UPGRADE_NEW_VOL")
 
 OLD_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG_OLD}"
 NEW_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG_NEW}"
-UPGRADE_IMAGE = (
-    f"{DOCKER_REPO}/percona-distribution-postgresql-upgrade-custom:{UPGRADE_IMG_TAG}"
-)
+UPGRADE_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-upgrade-custom:{UPGRADE_IMG_TAG}"
 
 PG_OLD_BIN_DIR = f"/usr/pgsql-{OLD_MAJOR}/bin"
 PG_NEW_BIN_DIR = f"/usr/pgsql-{NEW_MAJOR}/bin"
 PG_DATA_DIR = "/data/db"
 
 # Host-side volume roots
-UPGRADE_BASE_DIR = os.environ.get(
-    "UPGRADE_BASE_DIR", str(pathlib.Path.home() / "pgupgrade")
-)
+UPGRADE_BASE_DIR = os.environ.get("UPGRADE_BASE_DIR", str(pathlib.Path.home() / "pgupgrade"))
 OLD_DATA_HOST = os.path.join(UPGRADE_BASE_DIR, f"pg{OLD_MAJOR}olddata")
 NEW_DATA_HOST = os.path.join(UPGRADE_BASE_DIR, f"pg{NEW_MAJOR}newdata")
 
@@ -130,9 +126,7 @@ def _wait_for_postgres(container_name: str, bin_dir: str, timeout: int = 60) -> 
         if res.returncode == 0:
             return
         time.sleep(2)
-    raise TimeoutError(
-        f"PostgreSQL in container {container_name!r} not ready after {timeout}s"
-    )
+    raise TimeoutError(f"PostgreSQL in container {container_name!r} not ready after {timeout}s")
 
 
 # ── Upgrade pipeline fixture ──────────────────────────────────────────────────
@@ -201,11 +195,16 @@ def upgrade_pipeline():
         _remove_container(OLD_CONTAINER)
         subprocess.run(
             [
-                "docker", "run", "-d",
-                "--name", OLD_CONTAINER,
-                "-e", "POSTGRES_PASSWORD=password",
+                "docker",
+                "run",
+                "-d",
+                "--name",
+                OLD_CONTAINER,
+                "-e",
+                "POSTGRES_PASSWORD=password",
                 "--shm-size=2g",
-                "-v", f"{OLD_DATA_HOST}/postgres:{PG_DATA_DIR}",
+                "-v",
+                f"{OLD_DATA_HOST}/postgres:{PG_DATA_DIR}",
                 OLD_IMAGE,
             ],
             check=True,
@@ -223,7 +222,7 @@ def upgrade_pipeline():
         # Insert sentinel row — must survive the upgrade
         old_host.run(
             f"{PG_OLD_BIN_DIR}/psql -U postgres -c "
-            f"\"CREATE TABLE {SENTINEL_TABLE} (val TEXT);"
+            f'"CREATE TABLE {SENTINEL_TABLE} (val TEXT);'
             f" INSERT INTO {SENTINEL_TABLE} VALUES ('{SENTINEL_VALUE}');\""
         )
         print(f"  Sentinel inserted: {SENTINEL_TABLE}.val = '{SENTINEL_VALUE}'")
@@ -235,14 +234,23 @@ def upgrade_pipeline():
 
         upgrade_result = subprocess.run(
             [
-                "docker", "run", "--rm",
-                "--name", f"ppg_upgrade_mediator_{OLD_MAJOR}_{NEW_MAJOR}",
-                "-e", f"OLD_VERSION={OLD_MAJOR}",
-                "-e", f"NEW_VERSION={NEW_MAJOR}",
-                "-e", "OLD_DATABASE_NAME=postgres",
-                "-e", "NEW_DATABASE_NAME=postgres",
-                "-v", f"{OLD_DATA_HOST}:/pgolddata",
-                "-v", f"{NEW_DATA_HOST}:/pgnewdata",
+                "docker",
+                "run",
+                "--rm",
+                "--name",
+                f"ppg_upgrade_mediator_{OLD_MAJOR}_{NEW_MAJOR}",
+                "-e",
+                f"OLD_VERSION={OLD_MAJOR}",
+                "-e",
+                f"NEW_VERSION={NEW_MAJOR}",
+                "-e",
+                "OLD_DATABASE_NAME=postgres",
+                "-e",
+                "NEW_DATABASE_NAME=postgres",
+                "-v",
+                f"{OLD_DATA_HOST}:/pgolddata",
+                "-v",
+                f"{NEW_DATA_HOST}:/pgnewdata",
                 UPGRADE_IMAGE,
             ],
             capture_output=True,
@@ -272,10 +280,7 @@ def upgrade_pipeline():
                     f"not found — did run.sh complete Phase 2?"
                 )
         else:
-            print(
-                "  SKIP_UPGRADE=true — reusing upgraded data from "
-                f"{NEW_DATA_HOST}/postgres"
-            )
+            print(f"  SKIP_UPGRADE=true — reusing upgraded data from {NEW_DATA_HOST}/postgres")
             if not pathlib.Path(NEW_DATA_HOST, "postgres").exists():
                 pytest.fail(
                     f"SKIP_UPGRADE=true but upgraded data not found at "
@@ -292,11 +297,16 @@ def upgrade_pipeline():
     _remove_container(NEW_CONTAINER)
     subprocess.run(
         [
-            "docker", "run", "-d",
-            "--name", NEW_CONTAINER,
-            "-e", "POSTGRES_PASSWORD=password",
+            "docker",
+            "run",
+            "-d",
+            "--name",
+            NEW_CONTAINER,
+            "-e",
+            "POSTGRES_PASSWORD=password",
             "--shm-size=2g",
-            "-v", new_data_vol,
+            "-v",
+            new_data_vol,
             NEW_IMAGE,
         ],
         check=True,
@@ -359,9 +369,7 @@ class TestPostUpgradeVersion:
 
     def test_new_postgres_major_version(self, upgrade_pipeline):
         new_host = upgrade_pipeline["new_host"]
-        result = new_host.run(
-            f"{PG_NEW_BIN_DIR}/psql -U postgres -tAc 'SHOW server_version'"
-        )
+        result = new_host.run(f"{PG_NEW_BIN_DIR}/psql -U postgres -tAc 'SHOW server_version'")
         assert result.rc == 0, f"SHOW server_version failed: {result.stderr}"
         assert result.stdout.strip().startswith(NEW_MAJOR), (
             f"Expected version starting with {NEW_MAJOR!r}, got {result.stdout.strip()!r}"
@@ -370,9 +378,7 @@ class TestPostUpgradeVersion:
     def test_new_version_differs_from_old(self, upgrade_pipeline):
         """Server version string on new container must not match the old one."""
         new_host = upgrade_pipeline["new_host"]
-        result = new_host.run(
-            f"{PG_NEW_BIN_DIR}/psql -U postgres -tAc 'SELECT version()'"
-        )
+        result = new_host.run(f"{PG_NEW_BIN_DIR}/psql -U postgres -tAc 'SELECT version()'")
         assert result.rc == 0
         pre = upgrade_pipeline["pre_pg_version"]
         if pre is None:
@@ -389,9 +395,7 @@ class TestPostUpgradeVersion:
 
     def test_psql_accepts_queries(self, upgrade_pipeline):
         new_host = upgrade_pipeline["new_host"]
-        result = new_host.run(
-            f"{PG_NEW_BIN_DIR}/psql -U postgres -c 'SELECT 1 AS ok'"
-        )
+        result = new_host.run(f"{PG_NEW_BIN_DIR}/psql -U postgres -c 'SELECT 1 AS ok'")
         assert result.rc == 0, f"psql query failed: {result.stderr}"
         assert "ok" in result.stdout
 
@@ -416,20 +420,17 @@ class TestPostUpgradeDataIntegrity:
     def test_sentinel_value_intact(self, upgrade_pipeline):
         new_host = upgrade_pipeline["new_host"]
         result = new_host.run(
-            f"{PG_NEW_BIN_DIR}/psql -U postgres -tAc "
-            f"\"SELECT val FROM {SENTINEL_TABLE} LIMIT 1\""
+            f'{PG_NEW_BIN_DIR}/psql -U postgres -tAc "SELECT val FROM {SENTINEL_TABLE} LIMIT 1"'
         )
         assert result.rc == 0
         assert SENTINEL_VALUE in result.stdout, (
-            f"Expected sentinel value {SENTINEL_VALUE!r}, "
-            f"got {result.stdout.strip()!r}"
+            f"Expected sentinel value {SENTINEL_VALUE!r}, got {result.stdout.strip()!r}"
         )
 
     def test_system_catalogs_accessible(self, upgrade_pipeline):
         new_host = upgrade_pipeline["new_host"]
         result = new_host.run(
-            f"{PG_NEW_BIN_DIR}/psql -U postgres -tAc "
-            "'SELECT count(*) FROM pg_catalog.pg_class'"
+            f"{PG_NEW_BIN_DIR}/psql -U postgres -tAc 'SELECT count(*) FROM pg_catalog.pg_class'"
         )
         assert result.rc == 0
         count = int(result.stdout.strip())
@@ -457,28 +458,20 @@ class TestPostUpgradeBinaries:
     def test_expected_binaries_present(self, upgrade_pipeline):
         new_host = upgrade_pipeline["new_host"]
         missing = [
-            b
-            for b in NEW_BINARIES
-            if new_host.run(f"test -f {PG_NEW_BIN_DIR}/{b}").rc != 0
+            b for b in NEW_BINARIES if new_host.run(f"test -f {PG_NEW_BIN_DIR}/{b}").rc != 0
         ]
-        assert not missing, (
-            f"Missing binaries in {PG_NEW_BIN_DIR}: {missing}"
-        )
+        assert not missing, f"Missing binaries in {PG_NEW_BIN_DIR}: {missing}"
 
     def test_pg_upgrade_binary_present(self, upgrade_pipeline):
         """The new image must ship pg_upgrade itself for future upgrades."""
         new_host = upgrade_pipeline["new_host"]
         result = new_host.run(f"test -f {PG_NEW_BIN_DIR}/pg_upgrade")
-        assert result.rc == 0, (
-            f"pg_upgrade binary missing at {PG_NEW_BIN_DIR}/pg_upgrade"
-        )
+        assert result.rc == 0, f"pg_upgrade binary missing at {PG_NEW_BIN_DIR}/pg_upgrade"
 
     def test_initdb_binary_present(self, upgrade_pipeline):
         new_host = upgrade_pipeline["new_host"]
         result = new_host.run(f"test -f {PG_NEW_BIN_DIR}/initdb")
-        assert result.rc == 0, (
-            f"initdb binary missing at {PG_NEW_BIN_DIR}/initdb"
-        )
+        assert result.rc == 0, f"initdb binary missing at {PG_NEW_BIN_DIR}/initdb"
 
 
 # ── Phase 3d: Extensions ──────────────────────────────────────────────────────
@@ -508,7 +501,7 @@ class TestPostUpgradeExtensions:
         for ext in self._LOADABLE_WITHOUT_PRELOAD:
             res = new_host.run(
                 f"{PG_NEW_BIN_DIR}/psql -U postgres -c "
-                f"\"CREATE EXTENSION IF NOT EXISTS \\\"{ext}\\\"\""
+                f'"CREATE EXTENSION IF NOT EXISTS \\"{ext}\\""'
             )
             if res.rc != 0:
                 failed.append((ext, res.stderr.strip()))
@@ -524,9 +517,7 @@ class TestPostUpgradeExtensions:
         assert result.rc == 0
         available = result.stdout.splitlines()
         missing = [ext for ext in NEW_EXTENSIONS if ext not in available]
-        assert not missing, (
-            f"Extensions in settings not available in PG {NEW_MAJOR}: {missing}"
-        )
+        assert not missing, f"Extensions in settings not available in PG {NEW_MAJOR}: {missing}"
 
 
 # ── Phase 3e: Packages ────────────────────────────────────────────────────────
@@ -537,30 +528,19 @@ class TestPostUpgradePackages:
 
     def test_new_version_rpm_packages_installed(self, upgrade_pipeline):
         new_host = upgrade_pipeline["new_host"]
-        missing = [
-            pkg
-            for pkg in NEW_RPM_PACKAGES
-            if new_host.run(f"rpm -q {pkg}").rc != 0
-        ]
-        assert not missing, (
-            f"RPM packages not installed in new image: {missing}"
-        )
+        missing = [pkg for pkg in NEW_RPM_PACKAGES if new_host.run(f"rpm -q {pkg}").rc != 0]
+        assert not missing, f"RPM packages not installed in new image: {missing}"
 
     def test_data_directory_path(self, upgrade_pipeline):
         new_host = upgrade_pipeline["new_host"]
-        result = new_host.run(
-            f"{PG_NEW_BIN_DIR}/psql -U postgres -tAc 'SHOW data_directory'"
-        )
+        result = new_host.run(f"{PG_NEW_BIN_DIR}/psql -U postgres -tAc 'SHOW data_directory'")
         assert result.rc == 0
         assert PG_DATA_DIR in result.stdout, (
-            f"Expected data_directory={PG_DATA_DIR!r}, "
-            f"got {result.stdout.strip()!r}"
+            f"Expected data_directory={PG_DATA_DIR!r}, got {result.stdout.strip()!r}"
         )
 
     def test_config_files_exist(self, upgrade_pipeline):
         new_host = upgrade_pipeline["new_host"]
         config_files = NEW_SETTINGS["rhel_files"]
         missing = [f for f in config_files if not new_host.file(f).exists]
-        assert not missing, (
-            f"PostgreSQL config files missing after upgrade: {missing}"
-        )
+        assert not missing, f"PostgreSQL config files missing after upgrade: {missing}"

@@ -162,8 +162,13 @@ def host(request):
         # recreated in Phase 3 once the new-version container starts.
         subprocess.run(
             [
-                "docker", "exec", container_name,
-                "psql", "-U", "postgres", "-c",
+                "docker",
+                "exec",
+                container_name,
+                "psql",
+                "-U",
+                "postgres",
+                "-c",
                 (
                     # Drop all extensions whose .so files may differ across major
                     # versions or that cannot be loaded without shared_preload_libraries.
@@ -186,16 +191,24 @@ def host(request):
         # does not fail the config-level library check either.
         subprocess.run(
             [
-                "docker", "exec", container_name,
-                "psql", "-U", "postgres", "-c",
+                "docker",
+                "exec",
+                container_name,
+                "psql",
+                "-U",
+                "postgres",
+                "-c",
                 "ALTER SYSTEM RESET shared_preload_libraries",
             ],
             capture_output=True,
         )
         subprocess.run(
             [
-                "docker", "exec", container_name,
-                "sed", "-i",
+                "docker",
+                "exec",
+                container_name,
+                "sed",
+                "-i",
                 r"s/^\s*shared_preload_libraries\s*=.*//",
                 "/data/db/postgresql.conf",
             ],
