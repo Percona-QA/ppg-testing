@@ -147,15 +147,15 @@ hll = {
 }
 
 ip4r = {
-    "16.13": {"version": "2.4.2"},
-    "17.9": {"version": "2.4.2"},
-    "18.3": {"version": "2.4.2"},
+    "16.13": {"version": "2.4.2", "extension_version": "2.4"},
+    "17.9": {"version": "2.4.2", "extension_version": "2.4"},
+    "18.3": {"version": "2.4.2", "extension_version": "2.4"},
 }
 
 pg_cron = {
-    "16.13": {"version": "1.6.7"},
-    "17.9": {"version": "1.6.7"},
-    "18.3": {"version": "1.6.7"},
+    "16.13": {"version": "1.6.7", "extension_version": "1.6"},
+    "17.9": {"version": "1.6.7", "extension_version": "1.6"},
+    "18.3": {"version": "1.6.7", "extension_version": "1.6"},
 }
 
 pg_partman = {
@@ -177,15 +177,15 @@ pgvectorscale = {
 }
 
 rum = {
-    "16.13": {"version": "1.3.15"},
-    "17.9": {"version": "1.3.15"},
-    "18.3": {"version": "1.3.15"},
+    "16.13": {"version": "1.3.15", "extension_version": "1.3"},
+    "17.9": {"version": "1.3.15", "extension_version": "1.3"},
+    "18.3": {"version": "1.3.15", "extension_version": "1.3"},
 }
 
 unit = {
-    "16.13": {"version": "7.10"},
-    "17.9": {"version": "7.10"},
-    "18.3": {"version": "7.10"},
+    "16.13": {"version": "7.10", "extension_version": "7"},
+    "17.9": {"version": "7.10", "extension_version": "7"},
+    "18.3": {"version": "7.10", "extension_version": "7"},
 }
 
 anonymizer = {
