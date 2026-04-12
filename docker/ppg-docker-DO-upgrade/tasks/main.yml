@@ -2,30 +2,44 @@
 - name: Set Facts.
   set_fact:
     DOCKER_REPOSITORY: "{{ lookup('env', 'REPOSITORY') }}"
-    PPG_VERSION: "{{ lookup('env', 'SERVER_VERSION')}}"
-    TAG: "{{ lookup('env', 'DOCKER_TAG')}}"
-    WITH_POSTGIS: "{{ lookup('env', 'WITH_POSTGIS')}}"
-    MILESTONE: "{{ lookup('env', 'MILESTONE')}}"
+    OLD_VERSION: "{{ lookup('env', 'OLD_SERVER_VERSION') | default('17.9', true) }}"
+    NEW_VERSION: "{{ lookup('env', 'NEW_SERVER_VERSION') | default('18.3', true) }}"
+    OLD_TAG: "{{ lookup('env', 'OLD_VERSION_DOCKER_TAG') | default(lookup('env', 'OLD_VERSION'), true) }}"
+    NEW_TAG: "{{ lookup('env', 'NEW_VERSION_DOCKER_TAG') | default(lookup('env', 'NEW_VERSION'), true) }}"
+    UPGRADE_TAG: "{{ lookup('env', 'UPGRADE_DOCKER_TAG') | default('v2', true) }}"
+    WITH_POSTGIS: "{{ lookup('env', 'WITH_POSTGIS') | default('false', true) }}"
+    MILESTONE: "{{ lookup('env', 'MILESTONE') | default('0', true) }}"
     cacheable: true
 
-- name: Print PPG_VERSION and TAG
+- name: Print upgrade pair
   debug:
-    msg: "WITH_POSTGIS: {{ WITH_POSTGIS }}"
+    msg: "Upgrade: PG {{ OLD_VERSION }} → PG {{ NEW_VERSION }}"
 
-- name: Assign TAG based on architecture and version
+- name: Assign OLD_TAG based on architecture
   set_fact:
-    TAG: >-
+    OLD_TAG: >-
       {{
-        TAG if ansible_architecture == 'x86_64' and not TAG|regex_search('multi')
-        else TAG if ansible_architecture == 'aarch64' and (not TAG|regex_search('multi') and TAG|regex_search('-arm64$'))
-        else TAG|string + '-arm64' if ansible_architecture == 'aarch64' and not TAG|regex_search('multi')
-        else TAG
+        OLD_TAG if ansible_architecture == 'x86_64' and not OLD_TAG|regex_search('multi')
+        else OLD_TAG if ansible_architecture == 'aarch64' and (not OLD_TAG|regex_search('multi') and OLD_TAG|regex_search('-arm64$'))
+        else OLD_TAG|string + '-arm64' if ansible_architecture == 'aarch64' and not OLD_TAG|regex_search('multi')
+        else OLD_TAG
       }}
   when: "ansible_architecture == 'x86_64' or ansible_architecture == 'aarch64'"
 
-- name: Print PPG_VERSION and TAG
+- name: Assign NEW_TAG based on architecture
+  set_fact:
+    NEW_TAG: >-
+      {{
+        NEW_TAG if ansible_architecture == 'x86_64' and not NEW_TAG|regex_search('multi')
+        else NEW_TAG if ansible_architecture == 'aarch64' and (not NEW_TAG|regex_search('multi') and NEW_TAG|regex_search('-arm64$'))
+        else NEW_TAG|string + '-arm64' if ansible_architecture == 'aarch64' and not NEW_TAG|regex_search('multi')
+        else NEW_TAG
+      }}
+  when: "ansible_architecture == 'x86_64' or ansible_architecture == 'aarch64'"
+
+- name: Print resolved tags
   debug:
-    msg: "PPG_VERSION: {{ PPG_VERSION }}, TAG: {{ TAG }}"
+    msg: "OLD_TAG: {{ OLD_TAG }}, NEW_TAG: {{ NEW_TAG }}, UPGRADE_TAG: {{ UPGRADE_TAG }}"
 
 - name: Yum update
   become: true
@@ -165,29 +179,31 @@
 
 - name: Ensure test directory exists
   file:
-    path: /tmp/docker_test
+    path: /tmp/docker_upgrade_test
     state: directory
     mode: 0755
 
-- name: Copy PostgreSQL test files to remote
+- name: Copy upgrade test files to remote
   copy:
-    src: "{{ item }}"
-    dest: "/tmp/docker_test/{{ item }}"
+    src: "{{ item.src }}"
+    dest: "/tmp/docker_upgrade_test/{{ item.src }}"
     owner: root
     group: root
-    mode: 0644
+    mode: "{{ item.mode }}"
   loop:
-    - settings.py
-    - test_docker.py
-    - test_patroni_ha.py
-    - test_pgbackrest.py
-    - test_labels_licences.py
+    - { src: settings.py,              mode: "0644" }
+    - { src: test_upgrade.py,          mode: "0644" }
+    - { src: test_docker.py,           mode: "0644" }
+    - { src: test_labels_licences.py,  mode: "0644" }
+    - { src: test_patroni_ha.py,       mode: "0644" }
+    - { src: test_pgbackrest.py,       mode: "0644" }
+    - { src: run.sh,                   mode: "0755" }
 
 - name: Ensure Python virtual environment exists
   ansible.builtin.command: python3 -m venv validation
   args:
-    chdir: /tmp/docker_test
-    creates: /tmp/docker_test/validation
+    chdir: /tmp/docker_upgrade_test
+    creates: /tmp/docker_upgrade_test/validation
 
 - name: Install bash on Debian
   become: true
@@ -197,51 +213,41 @@
     update_cache: yes
   when: ansible_os_family == "Debian"
 
-- name: Create python venv and run docker tests
-  shell: |
-    #Activate virtual environment
-    source validation/bin/activate
-
-    #Install dependencies
-    pip install --upgrade pip
-    pip install psycopg2-binary pytest-testinfra requests pytest pytest-order
-
-    #Run test without shared_preload_libraries  (default)
-    pytest test_labels_licences.py \
-       test_docker.py \
-       test_patroni_ha.py \
-       test_pgbackrest.py \
-       -vv -s -rpfs
+- name: Run full 3-phase upgrade test suite via run.sh
+  shell: ./run.sh
   args:
     executable: /bin/bash
-    chdir: /tmp/docker_test
+    chdir: /tmp/docker_upgrade_test
   become: true
   environment:
-    VERSION: "{{ PPG_VERSION }}"
+    OLD_VERSION: "{{ OLD_VERSION }}"
+    NEW_VERSION: "{{ NEW_VERSION }}"
     DOCKER_REPOSITORY: "{{ DOCKER_REPOSITORY }}"
-    TAG: "{{ TAG }}"
+    OLD_TAG: "{{ OLD_TAG }}"
+    NEW_TAG: "{{ NEW_TAG }}"
+    UPGRADE_TAG: "{{ UPGRADE_TAG }}"
     WITH_POSTGIS: "{{ WITH_POSTGIS }}"
+    MILESTONE: "{{ MILESTONE }}"
     PPG_LABEL_MAINTAINER: "{{ ppg_label_maintainer | default('Percona Development <info@percona.com>') }}"
     PPG_LABEL_VENDOR: "{{ ppg_label_vendor | default('Percona') }}"
     PPG_LABEL_NAME_POSTGRESQL: "{{ ppg_label_name_postgresql | default('Percona Distribution for PostgreSQL') }}"
-    MILESTONE: "{{ MILESTONE }}"
   ignore_errors: true
   register: results
 
-- name: Show stdout of Docker tests
+- name: Show stdout of upgrade tests
   debug:
     var: results.stdout_lines
 
-- name: Show stderr if Docker tests fails
+- name: Show stderr if upgrade tests fail
   debug:
     var: results.stderr_lines
   when:
     - results is defined
     - results.rc != 0
 
-- name: Fail the playbook if Docker tests failed
+- name: Fail the playbook if upgrade tests failed
   fail:
-    msg: "Docker tests failed with return code {{ results.rc }}"
+    msg: "Upgrade tests failed with return code {{ results.rc }}"
   when:
     - results is defined
     - results.rc != 0

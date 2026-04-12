@@ -20,6 +20,7 @@ MILESTONE = int(os.getenv("MILESTONE", "0"))
 PG_BIN_DIR = f"/usr/pgsql-{MAJOR_VER}/bin"
 PG_DATA_DIR = "/data/db"
 IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG}"
+UPGRADE_DATA_DIR = os.getenv("UPGRADE_DATA_DIR")  # host path to mount as PG_DATA_DIR
 
 # --- Milestone Markers ---
 milestone_1 = pytest.mark.skipif(
@@ -87,6 +88,7 @@ def host(request):
     print(f"IS_WITH_POSTGIS: {IS_WITH_POSTGIS}")
     print(f"DOCKER_TO_USE: {IMAGE}")
     print(f"MILESTONE: {MILESTONE}")
+    print(f"UPGRADE_DATA_DIR: {UPGRADE_DATA_DIR or '(none — fresh container)'}")
     print("--------------------------------")
 
     run_cmd = [
@@ -100,8 +102,15 @@ def host(request):
         "-p",
         "5432:5432",
         "-d",
-        IMAGE,
     ]
+
+    if UPGRADE_DATA_DIR:
+        # Mount the named Docker volume so the container reuses the existing
+        # cluster from Phase 1 (old version) or Phase 2 (upgraded data).
+        # Named volumes are fully managed by Docker and have no UID/chmod issues.
+        run_cmd.extend(["-v", f"{UPGRADE_DATA_DIR}:{PG_DATA_DIR}"])
+
+    run_cmd.append(IMAGE)
 
     if needs_libs:
         # These specific flags prevent pg_stat_monitor from over-allocating on boot
@@ -144,6 +153,73 @@ def host(request):
 
     time.sleep(2)  # Final settle time for background workers
     yield testinfra.get_host("docker://" + container_name)
+
+    if UPGRADE_DATA_DIR:
+        # Before stopping: drop extensions that reference external .so libraries.
+        # pg_upgrade checks that every library referenced in pg_proc exists in the
+        # new installation; extension .so names can differ across major versions so
+        # dropping them here avoids "required libraries" failures.  They will be
+        # recreated in Phase 3 once the new-version container starts.
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                container_name,
+                "psql",
+                "-U",
+                "postgres",
+                "-c",
+                (
+                    # Drop all extensions whose .so files may differ across major
+                    # versions or that cannot be loaded without shared_preload_libraries.
+                    # pg_upgrade crashes the old server when it tries to dlopen() these
+                    # during its library-presence check, then fails all subsequent checks.
+                    # ORDER MATTERS: drop dependants before their providers.
+                    "DROP EXTENSION IF EXISTS timescaledb CASCADE; "
+                    "DROP EXTENSION IF EXISTS pg_stat_monitor CASCADE; "
+                    "DROP EXTENSION IF EXISTS pgaudit CASCADE; "
+                    "DROP EXTENSION IF EXISTS set_user CASCADE; "
+                    # PostGIS family — postgis_raster / postgis_topology depend on postgis
+                    "DROP EXTENSION IF EXISTS postgis_raster CASCADE; "
+                    "DROP EXTENSION IF EXISTS postgis_topology CASCADE; "
+                    "DROP EXTENSION IF EXISTS postgis CASCADE;"
+                ),
+            ],
+            capture_output=True,
+        )
+        # Also clear shared_preload_libraries from both config files so pg_upgrade
+        # does not fail the config-level library check either.
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                container_name,
+                "psql",
+                "-U",
+                "postgres",
+                "-c",
+                "ALTER SYSTEM RESET shared_preload_libraries",
+            ],
+            capture_output=True,
+        )
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                container_name,
+                "sed",
+                "-i",
+                r"s/^\s*shared_preload_libraries\s*=.*//",
+                "/data/db/postgresql.conf",
+            ],
+            capture_output=True,
+        )
+
+    # Graceful stop before removal: sends SIGTERM so PostgreSQL writes a clean
+    # shutdown state to pg_control.  This is required when UPGRADE_DATA_DIR is
+    # set — pg_upgrade refuses to upgrade a cluster marked "in production".
+    # docker stop → SIGTERM (clean PG shutdown) → docker rm to clean up.
+    subprocess.run(["docker", "stop", container_name], capture_output=True)
     subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
 
 
@@ -319,9 +395,17 @@ def test_enable_extension(host, extension):
         pytest.skip(reason)
 
     # 1. Install Extension
-    res = host.run(f'psql -c "CREATE EXTENSION \\"{extension}\\";"')
-    assert res.rc == 0, f"Failed to create {extension}: {res.stderr}"
-    assert "CREATE EXTENSION" in res.stdout
+    # When running against an upgraded volume (UPGRADE_DATA_DIR is set) the
+    # extension may already exist — pg_upgrade preserves installed extensions.
+    # Use IF NOT EXISTS so the command succeeds either way, and skip the
+    # stdout content check (which only fires on a fresh install).
+    if UPGRADE_DATA_DIR:
+        res = host.run(f'psql -c "CREATE EXTENSION IF NOT EXISTS \\"{extension}\\";"')
+        assert res.rc == 0, f"Failed to create {extension}: {res.stderr}"
+    else:
+        res = host.run(f'psql -c "CREATE EXTENSION \\"{extension}\\";"')
+        assert res.rc == 0, f"Failed to create {extension}: {res.stderr}"
+        assert "CREATE EXTENSION" in res.stdout
 
     # 2. Verify existence using SQL count (Reliable replacement for awk)
     check_sql = f"SELECT count(*) FROM pg_extension WHERE extname = '{extension}';"
@@ -1133,6 +1217,7 @@ def test_postgis_indexing_and_joins(host):
         manage_postgis(host, "create")
 
         setup = """
+        DROP TABLE IF EXISTS districts CASCADE;
         CREATE TABLE districts (id int, geom geometry(Polygon, 4326));
         CREATE INDEX idx_dist_geom ON districts USING GIST (geom);
         INSERT INTO districts VALUES (1, ST_MakeEnvelope(0, 0, 2, 2, 4326));

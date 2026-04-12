@@ -141,6 +141,12 @@ pg_oidc_validator = {
     "18.3": {"version": "1.0", "extension_version": "1.0"},
 }
 
+# Base extension list — common across all supported major versions.
+# Version-specific lists below add or remove entries as needed.
+#
+# Extension availability by major version:
+#   adminpack        — removed in PG 17+ (deprecated PG 15, dropped PG 17)
+#   pg_logicalinspect — only available in PG 18+
 DOCKER_LIST_EXTENSIONS = [
     "hstore",
     "adminpack",
@@ -200,7 +206,21 @@ DOCKER_LIST_EXTENSIONS = [
     "plpgsql",
 ]
 
+# PG 16: adminpack still present; pg_logicalinspect not yet available.
+DOCKER_LIST_EXTENSIONS_PG16 = [e for e in DOCKER_LIST_EXTENSIONS if e != "pg_logicalinspect"]
 
+# PG 17: adminpack removed; pg_logicalinspect not yet available.
+DOCKER_LIST_EXTENSIONS_PG17 = [
+    e for e in DOCKER_LIST_EXTENSIONS if e not in ("adminpack", "pg_logicalinspect")
+]
+
+# PG 18: adminpack removed; pg_logicalinspect available.
+DOCKER_LIST_EXTENSIONS_PG18 = [e for e in DOCKER_LIST_EXTENSIONS if e != "adminpack"]
+
+
+# Base RPM package template — common to all supported major versions.
+# percona-pg_oidc_validator is excluded here; it is only available for PG 18
+# and is appended to DOCKER_RPM_PACKAGES_TEMPLATE_PG18 below.
 DOCKER_RPM_PACKAGES_TEMPLATE = [
     "percona-postgresql{}",
     "percona-postgresql{}-contrib",
@@ -228,6 +248,10 @@ DOCKER_RPM_PACKAGES_TEMPLATE = [
     "percona-timescaledb_{}",
     "percona-h3-pg_{}",
     "percona-pgrouting_{}",
+]
+
+# PG 18 additionally ships percona-pg_oidc_validator.
+DOCKER_RPM_PACKAGES_TEMPLATE_PG18 = DOCKER_RPM_PACKAGES_TEMPLATE + [
     "percona-pg_oidc_validator{}",
 ]
 
@@ -288,7 +312,7 @@ ppg_versions = {
         "percona-pgrouting_16": pgrouting["16.13"],
         "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "16"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "16"),
-        "extensions": DOCKER_LIST_EXTENSIONS,
+        "extensions": DOCKER_LIST_EXTENSIONS_PG16,
         "binaries": [
             "clusterdb",
             "createdb",
@@ -338,7 +362,7 @@ ppg_versions = {
         "percona-pgrouting_17": pgrouting["17.9"],
         "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "17"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "17"),
-        "extensions": DOCKER_LIST_EXTENSIONS,
+        "extensions": DOCKER_LIST_EXTENSIONS_PG17,
         "binaries": [
             "clusterdb",
             "createdb",
@@ -387,9 +411,9 @@ ppg_versions = {
         "percona-h3-pg_18": h3["18.3"],
         "percona-pgrouting_18": pgrouting["18.3"],
         "percona-pg_oidc_validator18": pg_oidc_validator["18.3"],
-        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "18"),
+        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE_PG18, "18"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "18"),
-        "extensions": DOCKER_LIST_EXTENSIONS,
+        "extensions": DOCKER_LIST_EXTENSIONS_PG18,
         "binaries": [
             "clusterdb",
             "createdb",
