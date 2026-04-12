@@ -136,9 +136,62 @@ pgrouting = {
     "18.3": {"version": "4.0.1"},
 }
 
-
 pg_oidc_validator = {
     "18.3": {"version": "1.0", "extension_version": "1.0"},
+}
+
+hll = {
+    "16.13": {"version": "2.19"},
+    "17.9": {"version": "2.19"},
+    "18.3": {"version": "2.19"},
+}
+
+ip4r = {
+    "16.13": {"version": "2.4.2"},
+    "17.9": {"version": "2.4.2"},
+    "18.3": {"version": "2.4.2"},
+}
+
+pg_cron = {
+    "16.13": {"version": "1.6.7"},
+    "17.9": {"version": "1.6.7"},
+    "18.3": {"version": "1.6.7"},
+}
+
+pg_partman = {
+    "16.13": {"version": "5.4.3"},
+    "17.9": {"version": "5.4.3"},
+    "18.3": {"version": "5.4.3"},
+}
+
+pg_similarity = {
+    "16.13": {"version": "1.0"},
+    "17.9": {"version": "1.0"},
+    "18.3": {"version": "1.0"},
+}
+
+pgvectorscale = {
+    "16.13": {"version": "0.9.0"},
+    "17.9": {"version": "0.9.0"},
+    "18.3": {"version": "0.9.0"},
+}
+
+rum = {
+    "16.13": {"version": "1.3.15"},
+    "17.9": {"version": "1.3.15"},
+    "18.3": {"version": "1.3.15"},
+}
+
+unit = {
+    "16.13": {"version": "7.10"},
+    "17.9": {"version": "7.10"},
+    "18.3": {"version": "7.10"},
+}
+
+anonymizer = {
+    "16.13": {"version": "3.0.13"},
+    "17.9": {"version": "3.0.13"},
+    "18.3": {"version": "3.0.13"},
 }
 
 DOCKER_LIST_EXTENSIONS = [
@@ -200,7 +253,21 @@ DOCKER_LIST_EXTENSIONS = [
     "plpgsql",
 ]
 
+# PG 16: adminpack still present; pg_logicalinspect not yet available.
+DOCKER_LIST_EXTENSIONS_PG16 = [e for e in DOCKER_LIST_EXTENSIONS if e != "pg_logicalinspect"]
 
+# PG 17: adminpack removed; pg_logicalinspect not yet available.
+DOCKER_LIST_EXTENSIONS_PG17 = [
+    e for e in DOCKER_LIST_EXTENSIONS if e not in ("adminpack", "pg_logicalinspect")
+]
+
+# PG 18: adminpack removed; pg_logicalinspect available.
+DOCKER_LIST_EXTENSIONS_PG18 = [e for e in DOCKER_LIST_EXTENSIONS if e != "adminpack"]
+
+
+# Base RPM package template — common to all supported major versions.
+# percona-pg_oidc_validator is excluded here; it is only available for PG 18
+# and is appended to DOCKER_RPM_PACKAGES_TEMPLATE_PG18 below.
 DOCKER_RPM_PACKAGES_TEMPLATE = [
     "percona-postgresql{}",
     "percona-postgresql{}-contrib",
@@ -228,6 +295,19 @@ DOCKER_RPM_PACKAGES_TEMPLATE = [
     "percona-timescaledb_{}",
     "percona-h3-pg_{}",
     "percona-pgrouting_{}",
+    "percona-hll_{}",
+    "percona-ip4r_{}",
+    "percona-pg_cron_{}",
+    "percona-pg_partman_{}",
+    "percona-pg_similarity_{}",
+    "percona-pgvectorscale_{}",
+    "percona-rum_{}",
+    "percona-postgresql-unit_{}",
+    "percona-postgresql_anonymizer_{}",
+]
+
+# PG 18 additionally ships percona-pg_oidc_validator.
+DOCKER_RPM_PACKAGES_TEMPLATE_PG18 = DOCKER_RPM_PACKAGES_TEMPLATE + [
     "percona-pg_oidc_validator{}",
 ]
 
@@ -286,9 +366,18 @@ ppg_versions = {
         "percona-timescaledb_16": timescaledb["16.13"],
         "percona-h3-pg_16": h3["16.13"],
         "percona-pgrouting_16": pgrouting["16.13"],
+        "percona-hll_16": hll["16.13"],
+        "percona-ip4r_16": ip4r["16.13"],
+        "percona-pg_cron_16": pg_cron["16.13"],
+        "percona-pg_partman_16": pg_partman["16.13"],
+        "percona-pg_similarity_16": pg_similarity["16.13"],
+        "percona-pgvectorscale_16": pgvectorscale["16.13"],
+        "percona-rum_16": rum["16.13"],
+        "percona-postgresql-unit_16": unit["16.13"],
+        "percona-postgresql_anonymizer_16": anonymizer["16.13"],
         "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "16"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "16"),
-        "extensions": DOCKER_LIST_EXTENSIONS,
+        "extensions": DOCKER_LIST_EXTENSIONS_PG16,
         "binaries": [
             "clusterdb",
             "createdb",
@@ -336,9 +425,18 @@ ppg_versions = {
         "percona-timescaledb_17": timescaledb["17.9"],
         "percona-h3-pg_17": h3["17.9"],
         "percona-pgrouting_17": pgrouting["17.9"],
+        "percona-hll_17": hll["17.9"],
+        "percona-ip4r_17": ip4r["17.9"],
+        "percona-pg_cron_17": pg_cron["17.9"],
+        "percona-pg_partman_17": pg_partman["17.9"],
+        "percona-pg_similarity_17": pg_similarity["17.9"],
+        "percona-pgvectorscale_17": pgvectorscale["17.9"],
+        "percona-rum_17": rum["17.9"],
+        "percona-postgresql-unit_17": unit["17.9"],
+        "percona-postgresql_anonymizer_17": anonymizer["17.9"],
         "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "17"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "17"),
-        "extensions": DOCKER_LIST_EXTENSIONS,
+        "extensions": DOCKER_LIST_EXTENSIONS_PG17,
         "binaries": [
             "clusterdb",
             "createdb",
@@ -387,9 +485,18 @@ ppg_versions = {
         "percona-h3-pg_18": h3["18.3"],
         "percona-pgrouting_18": pgrouting["18.3"],
         "percona-pg_oidc_validator18": pg_oidc_validator["18.3"],
+        "percona-hll_18": hll["18.3"],
+        "percona-ip4r_18": ip4r["18.3"],
+        "percona-pg_cron_18": pg_cron["18.3"],
+        "percona-pg_partman_18": pg_partman["18.3"],
+        "percona-pg_similarity_18": pg_similarity["18.3"],
+        "percona-pgvectorscale_18": pgvectorscale["18.3"],
+        "percona-rum_18": rum["18.3"],
+        "percona-postgresql-unit_18": unit["18.3"],
+        "percona-postgresql_anonymizer_18": anonymizer["18.3"],
         "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "18"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "18"),
-        "extensions": DOCKER_LIST_EXTENSIONS,
+        "extensions": DOCKER_LIST_EXTENSIONS_PG18,
         "binaries": [
             "clusterdb",
             "createdb",
