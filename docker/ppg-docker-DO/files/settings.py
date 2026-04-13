@@ -194,6 +194,12 @@ anonymizer = {
     "18.3": {"version": "3.0.13"},
 }
 
+# Base extension list — common across all supported major versions.
+# Version-specific lists below add or remove entries as needed.
+#
+# Extension availability by major version:
+#   adminpack        — removed in PG 17+ (deprecated PG 15, dropped PG 17)
+#   pg_logicalinspect — only available in PG 18+
 DOCKER_LIST_EXTENSIONS = [
     "hstore",
     "adminpack",
@@ -494,7 +500,7 @@ ppg_versions = {
         "percona-rum_18": rum["18.3"],
         "percona-postgresql-unit_18": unit["18.3"],
         "percona-postgresql_anonymizer_18": anonymizer["18.3"],
-        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "18"),
+        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE_PG18, "18"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "18"),
         "extensions": DOCKER_LIST_EXTENSIONS_PG18,
         "binaries": [

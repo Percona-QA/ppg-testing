@@ -117,7 +117,7 @@ def host(request):
         run_cmd.extend(
             [
                 "-c",
-                "shared_preload_libraries=timescaledb,pg_stat_monitor,pgaudit,set_user",
+                "shared_preload_libraries=timescaledb,pg_stat_monitor,pgaudit,set_user,pg_cron,anon,pg_partman_bgw",
                 "-c",
                 "shared_buffers=256MB",
                 "-c",
@@ -132,6 +132,12 @@ def host(request):
                 "timescaledb.max_background_workers=4",
                 "-c",
                 "wal_level=logical",
+                "-c",
+                "pg_partman_bgw.dbname=postgres",
+                "-c",
+                "pg_partman_bgw.role=postgres",
+                "-c",
+                "pg_partman_bgw.interval=10",
             ]
         )
 
@@ -179,6 +185,12 @@ def host(request):
                     "DROP EXTENSION IF EXISTS pg_stat_monitor CASCADE; "
                     "DROP EXTENSION IF EXISTS pgaudit CASCADE; "
                     "DROP EXTENSION IF EXISTS set_user CASCADE; "
+                    "DROP EXTENSION IF EXISTS pg_cron CASCADE; "
+                    "DROP EXTENSION IF EXISTS pg_partman_bgw CASCADE; "
+                    "DROP EXTENSION IF EXISTS pg_similarity CASCADE; "
+                    "DROP EXTENSION IF EXISTS pgvectorscale CASCADE; "
+                    "DROP EXTENSION IF EXISTS rum CASCADE; "
+                    "DROP EXTENSION IF EXISTS postgresql_anonymizer CASCADE; "
                     # PostGIS family — postgis_raster / postgis_topology depend on postgis
                     "DROP EXTENSION IF EXISTS postgis_raster CASCADE; "
                     "DROP EXTENSION IF EXISTS postgis_topology CASCADE; "
@@ -1549,3 +1561,696 @@ def test_pg_routing_functional_bidirectional(host):
 
     # 4. Cleanup
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
+
+
+# =============================================================================
+# --- MILESTONE 3 EXTENSION TESTS ---
+# =============================================================================
+
+# --- ip4r ---
+
+
+@milestone_3
+def test_ip4r_extension_version(host):
+    # 1. Clean slate and recreate
+    host.run("psql -c 'DROP EXTENSION IF EXISTS ip4r CASCADE;'")
+    create_res = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS ip4r;'")
+    assert create_res.rc == 0, create_res.stderr
+
+    # 2. Get the extension version (SQL level)
+    query = "SELECT extversion FROM pg_extension WHERE extname = 'ip4r';"
+    actual_ext_version = host.run(f'psql -t -A -c "{query}"').stdout.strip()
+
+    # 3. Get expected version from settings (extension_version = value in .control file)
+    pkg_key = f"percona-ip4r_{MAJOR_VER}"
+    expected_ext_version = pg_docker_versions[pkg_key]["extension_version"]
+
+    assert actual_ext_version == expected_ext_version, (
+        f"ip4r extension version {actual_ext_version!r} does not match "
+        f"expected {expected_ext_version!r}"
+    )
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS ip4r CASCADE;'")
+
+
+@milestone_3
+def test_ip4r_functional(host):
+    # 1. Setup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS ip4r CASCADE;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS ip4r;'")
+
+    # 2. Insert an IPv4 range and verify containment query
+    test_sql = """
+    CREATE TEMP TABLE t_ip4r (net ip4r);
+    INSERT INTO t_ip4r VALUES ('192.168.1.0/24');
+    SELECT count(*) FROM t_ip4r WHERE net >>= '192.168.1.1'::ip4;
+    """
+    result = host.run(f'psql -q -t -A -c "{test_sql}"')
+
+    # 3. Validation
+    assert result.rc == 0, f"ip4r functional test failed: {result.stderr}"
+    assert result.stdout.strip().split("\n")[-1] == "1"
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS ip4r CASCADE;'")
+
+
+# --- hll ---
+
+
+@milestone_3
+def test_hll_extension_version(host):
+    # 1. Clean slate and recreate
+    host.run("psql -c 'DROP EXTENSION IF EXISTS hll CASCADE;'")
+    create_res = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS hll;'")
+    assert create_res.rc == 0, create_res.stderr
+
+    # 2. Get the extension version (SQL level)
+    query = "SELECT extversion FROM pg_extension WHERE extname = 'hll';"
+    actual_ext_version = host.run(f'psql -t -A -c "{query}"').stdout.strip()
+
+    # 3. Get expected version from settings
+    pkg_key = f"percona-hll_{MAJOR_VER}"
+    expected_full_version = pg_docker_versions[pkg_key]["version"]
+    expected_clean_version = expected_full_version.split("-")[0]
+
+    assert actual_ext_version == expected_clean_version, (
+        f"hll extension version {actual_ext_version!r} does not match "
+        f"expected {expected_clean_version!r}"
+    )
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS hll CASCADE;'")
+
+
+@milestone_3
+def test_hll_functional(host):
+    # 1. Setup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS hll CASCADE;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS hll;'")
+
+    # 2. Add integers to an HLL counter and verify non-zero cardinality estimate
+    query = (
+        "SELECT hll_cardinality(hll_add_agg(hll_hash_integer(i))) > 0 "
+        "FROM generate_series(1, 100) AS i;"
+    )
+    result = host.run(f'psql -t -A -c "{query}"')
+
+    # 3. Validation
+    assert result.rc == 0, f"hll functional test failed: {result.stderr}"
+    assert result.stdout.strip() == "t"
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS hll CASCADE;'")
+
+
+# --- pg_cron ---
+
+
+@milestone_3
+def test_pg_cron_extension_version(host):
+    # 1. Clean slate and recreate
+    # Note: pg_cron background worker requires shared_preload_libraries;
+    # version and metadata queries work without it.
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
+    create_res = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_cron;'")
+    assert create_res.rc == 0, create_res.stderr
+
+    # 2. Get the extension version (SQL level)
+    query = "SELECT extversion FROM pg_extension WHERE extname = 'pg_cron';"
+    actual_ext_version = host.run(f'psql -t -A -c "{query}"').stdout.strip()
+
+    # 3. Get expected version from settings (extension_version = value in .control file)
+    pkg_key = f"percona-pg_cron_{MAJOR_VER}"
+    expected_ext_version = pg_docker_versions[pkg_key]["extension_version"]
+
+    assert actual_ext_version == expected_ext_version, (
+        f"pg_cron extension version {actual_ext_version!r} does not match "
+        f"expected {expected_ext_version!r}"
+    )
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
+
+
+@milestone_3
+def test_pg_cron_functional(host):
+    # 1. Setup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_cron;'")
+
+    # 2. Verify cron.job table is accessible (no background worker needed)
+    query = "SELECT count(*) FROM cron.job;"
+    result = host.run(f'psql -t -A -c "{query}"')
+
+    # 3. Validation
+    assert result.rc == 0, f"pg_cron functional test failed: {result.stderr}"
+    assert result.stdout.strip() == "0"
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
+
+
+# --- pg_partman ---
+
+
+@milestone_3
+def test_pg_partman_extension_version(host):
+    # 1. Clean slate and recreate
+    # pg_partman must be installed into a dedicated schema; create it first.
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_partman CASCADE;'")
+    host.run("psql -c 'CREATE SCHEMA IF NOT EXISTS partman;'")
+    create_res = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;'")
+    assert create_res.rc == 0, create_res.stderr
+
+    # 2. Get the extension version (SQL level)
+    query = "SELECT extversion FROM pg_extension WHERE extname = 'pg_partman';"
+    actual_ext_version = host.run(f'psql -t -A -c "{query}"').stdout.strip()
+
+    # 3. Get expected version from settings
+    pkg_key = f"percona-pg_partman_{MAJOR_VER}"
+    expected_full_version = pg_docker_versions[pkg_key]["version"]
+    expected_clean_version = expected_full_version.split("-")[0]
+
+    assert actual_ext_version == expected_clean_version, (
+        f"pg_partman extension version {actual_ext_version!r} does not match "
+        f"expected {expected_clean_version!r}"
+    )
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_partman CASCADE;'")
+    host.run("psql -c 'DROP SCHEMA IF EXISTS partman CASCADE;'")
+
+
+@milestone_3
+def test_pg_partman_functional(host):
+    # 1. Setup — install into the dedicated partman schema
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_partman CASCADE;'")
+    host.run("psql -c 'DROP SCHEMA IF EXISTS partman CASCADE;'")
+    host.run("psql -c 'CREATE SCHEMA partman;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;'")
+
+    # 2. Verify the partman schema and config table are accessible
+    query = "SELECT count(*) FROM partman.part_config;"
+    result = host.run(f'psql -t -A -c "{query}"')
+
+    # 3. Validation
+    assert result.rc == 0, f"pg_partman functional test failed: {result.stderr}"
+    assert result.stdout.strip() == "0"
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_partman CASCADE;'")
+    host.run("psql -c 'DROP SCHEMA IF EXISTS partman CASCADE;'")
+
+
+# --- pg_similarity ---
+
+
+@milestone_3
+def test_pg_similarity_extension_version(host):
+    # 1. Clean slate and recreate
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_similarity CASCADE;'")
+    create_res = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_similarity;'")
+    assert create_res.rc == 0, create_res.stderr
+
+    # 2. Get the extension version (SQL level)
+    query = "SELECT extversion FROM pg_extension WHERE extname = 'pg_similarity';"
+    actual_ext_version = host.run(f'psql -t -A -c "{query}"').stdout.strip()
+
+    # 3. Get expected version from settings
+    pkg_key = f"percona-pg_similarity_{MAJOR_VER}"
+    expected_full_version = pg_docker_versions[pkg_key]["version"]
+    expected_clean_version = expected_full_version.split("-")[0]
+
+    assert actual_ext_version == expected_clean_version, (
+        f"pg_similarity extension version {actual_ext_version!r} does not match "
+        f"expected {expected_clean_version!r}"
+    )
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_similarity CASCADE;'")
+
+
+@milestone_3
+def test_pg_similarity_functional(host):
+    # 1. Setup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_similarity CASCADE;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_similarity;'")
+
+    # 2. Identical strings must return a similarity of 1.0 (Levenshtein-based)
+    query = "SELECT lev('hello', 'hello') = 1.0;"
+    result = host.run(f'psql -t -A -c "{query}"')
+
+    # 3. Validation
+    assert result.rc == 0, f"pg_similarity functional test failed: {result.stderr}"
+    assert result.stdout.strip() == "t"
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_similarity CASCADE;'")
+
+
+# --- vectorscale ---
+
+
+@milestone_3
+def test_vectorscale_extension_version(host):
+    # 1. Clean slate and recreate (CASCADE also installs pgvector if needed)
+    host.run("psql -c 'DROP EXTENSION IF EXISTS vectorscale CASCADE;'")
+    create_res = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;'")
+    assert create_res.rc == 0, create_res.stderr
+
+    # 2. Get the extension version (SQL level)
+    query = "SELECT extversion FROM pg_extension WHERE extname = 'vectorscale';"
+    actual_ext_version = host.run(f'psql -t -A -c "{query}"').stdout.strip()
+
+    # 3. Get expected version from settings
+    pkg_key = f"percona-pgvectorscale_{MAJOR_VER}"
+    expected_full_version = pg_docker_versions[pkg_key]["version"]
+    expected_clean_version = expected_full_version.split("-")[0]
+
+    assert actual_ext_version == expected_clean_version, (
+        f"vectorscale extension version {actual_ext_version!r} does not match "
+        f"expected {expected_clean_version!r}"
+    )
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS vectorscale CASCADE;'")
+
+
+@milestone_3
+def test_vectorscale_functional(host):
+    # 1. Setup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS vectorscale CASCADE;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;'")
+
+    # 2. Create a table with vector embeddings and a DiskANN index
+    test_sql = """
+    CREATE TEMP TABLE test_vscale (id serial, embedding vector(3));
+    INSERT INTO test_vscale (embedding) VALUES ('[1,2,3]'), ('[4,5,6]'), ('[7,8,9]');
+    CREATE INDEX ON test_vscale USING diskann (embedding);
+    SELECT count(*) FROM test_vscale;
+    """
+    result = host.run(f'psql -q -t -A -c "{test_sql}"')
+
+    # 3. Validation
+    assert result.rc == 0, f"vectorscale functional test failed: {result.stderr}"
+    assert result.stdout.strip().split("\n")[-1] == "3"
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS vectorscale CASCADE;'")
+
+
+# --- rum ---
+
+
+@milestone_3
+def test_rum_extension_version(host):
+    # 1. Clean slate and recreate
+    host.run("psql -c 'DROP EXTENSION IF EXISTS rum CASCADE;'")
+    create_res = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS rum;'")
+    assert create_res.rc == 0, create_res.stderr
+
+    # 2. Get the extension version (SQL level)
+    query = "SELECT extversion FROM pg_extension WHERE extname = 'rum';"
+    actual_ext_version = host.run(f'psql -t -A -c "{query}"').stdout.strip()
+
+    # 3. Get expected version from settings (extension_version = value in .control file)
+    pkg_key = f"percona-rum_{MAJOR_VER}"
+    expected_ext_version = pg_docker_versions[pkg_key]["extension_version"]
+
+    assert actual_ext_version == expected_ext_version, (
+        f"rum extension version {actual_ext_version!r} does not match "
+        f"expected {expected_ext_version!r}"
+    )
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS rum CASCADE;'")
+
+
+@milestone_3
+def test_rum_functional(host):
+    # 1. Setup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS rum CASCADE;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS rum;'")
+
+    # 2. Build a RUM index on a tsvector column and run a full-text search
+    test_sql = """
+    CREATE TEMP TABLE test_rum (id serial, t text, a tsvector);
+    INSERT INTO test_rum (t, a) VALUES
+        ('Hello world', to_tsvector('Hello world')),
+        ('Goodbye world', to_tsvector('Goodbye world'));
+    CREATE INDEX test_rum_a_idx ON test_rum USING rum (a rum_tsvector_ops);
+    SELECT count(*) FROM test_rum WHERE a @@ plainto_tsquery('hello');
+    """
+    result = host.run(f'psql -q -t -A -c "{test_sql}"')
+
+    # 3. Validation
+    assert result.rc == 0, f"rum functional test failed: {result.stderr}"
+    assert result.stdout.strip().split("\n")[-1] == "1"
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS rum CASCADE;'")
+
+
+# --- unit ---
+
+
+@milestone_3
+def test_unit_extension_version(host):
+    # 1. Clean slate and recreate
+    host.run("psql -c 'DROP EXTENSION IF EXISTS unit CASCADE;'")
+    create_res = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS unit;'")
+    assert create_res.rc == 0, create_res.stderr
+
+    # 2. Get the extension version (SQL level)
+    query = "SELECT extversion FROM pg_extension WHERE extname = 'unit';"
+    actual_ext_version = host.run(f'psql -t -A -c "{query}"').stdout.strip()
+
+    # 3. Get expected version from settings (extension_version = value in .control file)
+    pkg_key = f"percona-postgresql-unit_{MAJOR_VER}"
+    expected_ext_version = pg_docker_versions[pkg_key]["extension_version"]
+
+    assert actual_ext_version == expected_ext_version, (
+        f"unit extension version {actual_ext_version!r} does not match "
+        f"expected {expected_ext_version!r}"
+    )
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS unit CASCADE;'")
+
+
+@milestone_3
+def test_unit_functional(host):
+    # 1. Setup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS unit CASCADE;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS unit;'")
+
+    # 2. Convert 1 km to metres; result must contain '1000'
+    query = "SELECT '1 km'::unit @ 'm';"
+    result = host.run(f'psql -t -A -c "{query}"')
+
+    # 3. Validation
+    assert result.rc == 0, f"unit functional test failed: {result.stderr}"
+    assert "1000" in result.stdout.strip()
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS unit CASCADE;'")
+
+
+# --- anon (postgresql_anonymizer) ---
+
+
+@milestone_3
+def test_anon_extension_version(host):
+    # 1. Clean slate and recreate
+    # CASCADE installs the required pgcrypto dependency automatically.
+    host.run("psql -c 'DROP EXTENSION IF EXISTS anon CASCADE;'")
+    create_res = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS anon CASCADE;'")
+    assert create_res.rc == 0, create_res.stderr
+
+    # 2. Get the extension version (SQL level)
+    query = "SELECT extversion FROM pg_extension WHERE extname = 'anon';"
+    actual_ext_version = host.run(f'psql -t -A -c "{query}"').stdout.strip()
+
+    # 3. Get expected version from settings
+    pkg_key = f"percona-postgresql_anonymizer_{MAJOR_VER}"
+    expected_full_version = pg_docker_versions[pkg_key]["version"]
+    expected_clean_version = expected_full_version.split("-")[0]
+
+    assert actual_ext_version == expected_clean_version, (
+        f"anon extension version {actual_ext_version!r} does not match "
+        f"expected {expected_clean_version!r}"
+    )
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS anon CASCADE;'")
+
+
+@milestone_3
+def test_anon_functional(host):
+    # 1. Setup
+    # Note: dynamic masking requires shared_preload_libraries; partial() works without it.
+    host.run("psql -c 'DROP EXTENSION IF EXISTS anon CASCADE;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS anon CASCADE;'")
+
+    # 2. Test partial masking — keeps first 1 and last 3 characters
+    query = "SELECT anon.partial('John Doe', 1, '***', 3);"
+    result = host.run(f'psql -t -A -c "{query}"')
+
+    # 3. Validation: output must start with 'J' and end with 'Doe'
+    assert result.rc == 0, f"anon functional test failed: {result.stderr}"
+    output = result.stdout.strip()
+    assert output.startswith("J") and output.endswith("Doe"), (
+        f"Unexpected anon.partial output: {output!r}"
+    )
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS anon CASCADE;'")
+
+
+# =============================================================================
+# --- MILESTONE 3: AVAILABILITY, DEEPER FUNCTIONAL, AND PRELOAD TESTS ---
+# =============================================================================
+
+# --- pg_available_extensions pre-install check ---
+
+MILESTONE_3_EXTENSIONS = [
+    "ip4r",
+    "hll",
+    "pg_cron",
+    "pg_partman",
+    "pg_similarity",
+    "vectorscale",
+    "rum",
+    "unit",
+    "anon",
+]
+
+
+@milestone_3
+@pytest.mark.parametrize("extension", MILESTONE_3_EXTENSIONS)
+def test_milestone3_extension_available(host, extension):
+    """Verify each milestone 3 extension is listed in pg_available_extensions."""
+    query = (
+        f"SELECT count(*) FROM pg_available_extensions WHERE name = '{extension}';"
+    )
+    result = host.run(f'psql -t -A -c "{query}"')
+    assert result.rc == 0
+    assert result.stdout.strip() == "1", (
+        f"{extension!r} not found in pg_available_extensions"
+    )
+
+
+# --- pg_partman: partition creation ---
+
+
+@milestone_3
+def test_pg_partman_create_partitions(host):
+    # 1. Setup
+    host.run("psql -c 'DROP TABLE IF EXISTS public.test_partman_tbl CASCADE;'")
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_partman CASCADE;'")
+    host.run("psql -c 'DROP SCHEMA IF EXISTS partman CASCADE;'")
+    host.run("psql -c 'CREATE SCHEMA partman;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;'")
+
+    # 2. Create a native range-partitioned parent table and hand it to partman
+    test_sql = """
+    CREATE TABLE public.test_partman_tbl (
+        id serial,
+        created_at timestamptz NOT NULL DEFAULT now()
+    ) PARTITION BY RANGE (created_at);
+    SELECT partman.create_parent(
+        p_parent_table => 'public.test_partman_tbl',
+        p_control      => 'created_at',
+        p_interval     => '1 month'
+    );
+    SELECT count(*) FROM partman.part_config
+    WHERE parent_table = 'public.test_partman_tbl';
+    """
+    result = host.run(f'psql -q -t -A -c "{test_sql}"')
+
+    # 3. Validation — create_parent registers exactly one entry in part_config
+    assert result.rc == 0, f"pg_partman create_parent failed: {result.stderr}"
+    assert result.stdout.strip().split("\n")[-1] == "1"
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP TABLE IF EXISTS public.test_partman_tbl CASCADE;'")
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_partman CASCADE;'")
+    host.run("psql -c 'DROP SCHEMA IF EXISTS partman CASCADE;'")
+
+
+# --- vectorscale: approximate nearest-neighbour search ---
+
+
+@milestone_3
+def test_vectorscale_ann_search(host):
+    # 1. Setup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS vectorscale CASCADE;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;'")
+
+    # 2. Populate a table, build a DiskANN index, and run an ANN query
+    test_sql = """
+    CREATE TEMP TABLE test_ann (id serial, embedding vector(3));
+    INSERT INTO test_ann (embedding) VALUES
+        ('[1,2,3]'), ('[4,5,6]'), ('[7,8,9]'), ('[2,2,2]'), ('[9,1,1]');
+    CREATE INDEX ON test_ann USING diskann (embedding);
+    SELECT id FROM test_ann ORDER BY embedding <-> '[1,2,3]' LIMIT 1;
+    """
+    result = host.run(f'psql -q -t -A -c "{test_sql}"')
+
+    # 3. Validation — nearest neighbour to [1,2,3] is itself (id = 1)
+    assert result.rc == 0, f"vectorscale ANN search failed: {result.stderr}"
+    assert result.stdout.strip().split("\n")[-1] == "1"
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS vectorscale CASCADE;'")
+
+
+# --- pg_cron: job scheduling (requires shared_preload_libraries) ---
+
+
+@milestone_3
+@pytest.mark.needs_preload
+def test_pg_cron_schedule_job(host):
+    # 1. Setup
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_cron;'")
+
+    # 2. Schedule a no-op job and verify it is registered
+    schedule_res = host.run(
+        "psql -t -A -c \"SELECT cron.schedule('test-job', '* * * * *', 'SELECT 1;');\""
+    )
+    assert schedule_res.rc == 0, f"cron.schedule() failed: {schedule_res.stderr}"
+
+    query = "SELECT count(*) FROM cron.job WHERE jobname = 'test-job';"
+    count_result = host.run(f'psql -t -A -c "{query}"')
+    assert count_result.rc == 0
+    assert count_result.stdout.strip() == "1", "Scheduled job not found in cron.job"
+
+    # 3. Cleanup
+    host.run("psql -t -A -c \"SELECT cron.unschedule('test-job');\"")
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
+
+
+# --- anon: static masking ---
+# anon.start_dynamic_masking() was removed in pg_anonymizer 3.0.
+# Static anonymization (anon.anonymize_table) works without shared_preload_libraries.
+
+
+@milestone_3
+def test_anon_static_masking(host):
+    # 1. Setup
+    host.run("psql -c 'DROP TABLE IF EXISTS public.test_anon_people CASCADE;'")
+    host.run("psql -c 'DROP EXTENSION IF EXISTS anon CASCADE;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS anon CASCADE;'")
+
+    # 2. Create table, insert data, apply a column masking rule via SECURITY LABEL
+    setup_sql = """
+    CREATE TABLE public.test_anon_people (id int, name text, phone text);
+    INSERT INTO public.test_anon_people VALUES (1, 'Alice', '555-1234');
+    SECURITY LABEL FOR anon ON COLUMN public.test_anon_people.phone
+        IS 'MASKED WITH FUNCTION anon.partial(phone, 2, ''****'', 2)';
+    SELECT anon.anonymize_table('public.test_anon_people');
+    SELECT phone FROM public.test_anon_people WHERE id = 1;
+    """
+    result = host.run(f'psql -q -t -A -c "{setup_sql}"')
+
+    # 3. Validation — partial(phone=555-1234, prefix=2, padding=****,suffix=2) → 55****34
+    assert result.rc == 0, f"anon static masking failed: {result.stderr}"
+    assert result.stdout.strip().split("\n")[-1] == "55****34"
+
+    # 4. Cleanup
+    host.run("psql -c 'DROP TABLE IF EXISTS public.test_anon_people CASCADE;'")
+    host.run("psql -c 'DROP EXTENSION IF EXISTS anon CASCADE;'")
+
+
+# --- pg_partman_bgw: background worker tests ---
+
+
+@milestone_3
+@pytest.mark.needs_preload
+def test_pg_partman_bgw_loaded(host):
+    """Verify pg_partman_bgw is present in shared_preload_libraries."""
+    result = host.run("psql -t -A -c 'SHOW shared_preload_libraries;'")
+    assert result.rc == 0, f"SHOW shared_preload_libraries failed: {result.stderr}"
+    assert "pg_partman_bgw" in result.stdout, (
+        f"pg_partman_bgw not found in shared_preload_libraries: "
+        f"{result.stdout.strip()!r}"
+    )
+
+
+@milestone_3
+@pytest.mark.needs_preload
+def test_pg_partman_bgw_maintenance(host):
+    """Verify run_maintenance() — the function pg_partman_bgw calls on each cycle —
+    enforces a retention policy by dropping old partitions.
+
+    In pg_partman 5.x run_maintenance() only extends the partition set forward from
+    the latest existing partition; it does not recreate gaps or respond to premake
+    bumps on a fully-satisfied window.  The reliably observable side-effect is
+    retention enforcement: setting retention='1 month' with retention_keep_table=false
+    causes run_maintenance() to DROP child partitions older than 1 month.  With the
+    default create_parent() premake=4 a set of 4 past-month partitions is always
+    present, several of which fall outside the retention window.
+    """
+    # 1. Setup — install into dedicated schema
+    host.run("psql -c 'DROP TABLE IF EXISTS public.test_bgw_tbl CASCADE;'")
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_partman CASCADE;'")
+    host.run("psql -c 'DROP SCHEMA IF EXISTS partman CASCADE;'")
+    host.run("psql -c 'CREATE SCHEMA partman;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;'")
+
+    # 2. Register the parent with the default premake (4 future partitions)
+    setup_sql = """
+    CREATE TABLE public.test_bgw_tbl (
+        id serial,
+        created_at timestamptz NOT NULL DEFAULT now()
+    ) PARTITION BY RANGE (created_at);
+    SELECT partman.create_parent(
+        p_parent_table => 'public.test_bgw_tbl',
+        p_control      => 'created_at',
+        p_interval     => '1 month'
+    );
+    """
+    setup_res = host.run(f'psql -q -t -A -c "{setup_sql}"')
+    assert setup_res.rc == 0, f"partman setup failed: {setup_res.stderr}"
+
+    # 3. Record baseline partition count (default: 4 past + current + 4 future + default = 10)
+    count_query = (
+        "SELECT count(*) FROM pg_catalog.pg_class "
+        "WHERE relname LIKE 'test_bgw_tbl_%' AND relkind = 'r';"
+    )
+    baseline_res = host.run(f'psql -t -A -c "{count_query}"')
+    assert baseline_res.rc == 0
+    baseline_count = int(baseline_res.stdout.strip())
+
+    # 4. Enable retention: drop partitions older than 1 month.
+    #    create_parent() created 4 past-month partitions; at least 2–3 will be
+    #    outside the 1-month window and must be dropped by run_maintenance().
+    retention_res = host.run(
+        "psql -c \"UPDATE partman.part_config "
+        "SET retention = '1 month', retention_keep_table = false "
+        "WHERE parent_table = 'public.test_bgw_tbl';\""
+    )
+    assert retention_res.rc == 0, f"retention update failed: {retention_res.stderr}"
+
+    # 5. Call run_maintenance() — the exact function the bgw executes each cycle
+    maint_res = host.run(
+        "psql -t -A -c \"SELECT partman.run_maintenance('public.test_bgw_tbl');\""
+    )
+    assert maint_res.rc == 0, f"run_maintenance() failed: {maint_res.stderr}"
+
+    # 6. Verify old partitions were dropped
+    result = host.run(f'psql -t -A -c "{count_query}"')
+    assert result.rc == 0, f"partition count query failed: {result.stderr}"
+    final_count = int(result.stdout.strip())
+    assert final_count < baseline_count, (
+        f"run_maintenance() did not drop any old partitions with retention='1 month': "
+        f"baseline={baseline_count}, final={final_count}"
+    )
+
+    # 7. Cleanup
+    host.run("psql -c 'DROP TABLE IF EXISTS public.test_bgw_tbl CASCADE;'")
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_partman CASCADE;'")
+    host.run("psql -c 'DROP SCHEMA IF EXISTS partman CASCADE;'")
