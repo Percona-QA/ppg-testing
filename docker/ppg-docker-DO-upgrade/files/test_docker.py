@@ -40,6 +40,12 @@ DOCKER_RPM_PACKAGES = pg_docker_versions["rpm_packages"]
 DOCKER_EXTENSIONS = pg_docker_versions["extensions"]
 DOCKER_BINARIES = pg_docker_versions["binaries"]
 
+# --- PostGIS contrib script paths ---
+POSTGIS_MAJOR_VER = pg_docker_versions[f"percona-postgis35_{MAJOR_VER}"]["major_version"]
+POSTGIS_CONTRIB_DIR = f"/usr/pgsql-{MAJOR_VER}/share/contrib/postgis-{POSTGIS_MAJOR_VER}"
+POSTGIS_LEGACY_SQL = f"{POSTGIS_CONTRIB_DIR}/legacy.sql"
+POSTGIS_UNINSTALL_LEGACY_SQL = f"{POSTGIS_CONTRIB_DIR}/uninstall_legacy.sql"
+
 # Red Hat ecosystem required image labels (same as pgbouncer/pgbackrest)
 REQUIRED_LABEL_MAINTAINER = os.getenv(
     "PPG_LABEL_MAINTAINER", "Percona Development <info@percona.com>"
@@ -1561,6 +1567,122 @@ def test_pg_routing_functional_bidirectional(host):
 
     # 4. Cleanup
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
+
+
+# =============================================================================
+# --- POSTGIS LEGACY SCRIPT TESTS ---
+# =============================================================================
+
+# Fixture: install PostGIS and load legacy.sql once for all legacy function tests.
+# PostGIS is left installed after the fixture teardown because other milestone_2
+# tests (h3, pgrouting) may depend on it being present.
+
+@pytest.fixture(scope="module")
+def postgis_legacy_db(host):
+    """Install PostGIS and load legacy.sql into the postgres database."""
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS postgis CASCADE;'")
+    load_res = host.run(f"psql -f {POSTGIS_LEGACY_SQL}")
+    assert load_res.exit_status == 0, (
+        f"Failed to load {POSTGIS_LEGACY_SQL}: {load_res.stderr}"
+    )
+    yield host
+
+
+@milestone_2
+def test_postgis_legacy_sql_file_exists(host):
+    """Verify legacy.sql is present at the expected contrib path."""
+    result = host.run(f"test -f {POSTGIS_LEGACY_SQL}")
+    assert result.rc == 0, f"legacy.sql not found at {POSTGIS_LEGACY_SQL}"
+
+
+@milestone_2
+def test_postgis_uninstall_legacy_sql_file_exists(host):
+    """Verify uninstall_legacy.sql is present at the expected contrib path."""
+    result = host.run(f"test -f {POSTGIS_UNINSTALL_LEGACY_SQL}")
+    assert result.rc == 0, (
+        f"uninstall_legacy.sql not found at {POSTGIS_UNINSTALL_LEGACY_SQL}"
+    )
+
+
+@milestone_2
+def test_postgis_legacy_sql_loads(host):
+    """Verify legacy.sql executes without errors against a PostGIS-enabled database."""
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS postgis CASCADE;'")
+    result = host.run(f"psql -f {POSTGIS_LEGACY_SQL}")
+    assert result.rc == 0, f"legacy.sql failed to load: {result.stderr}"
+
+
+@milestone_2
+def test_postgis_legacy_st_line_interpolate_point(postgis_legacy_db):
+    """st_line_interpolate_point() is a legacy alias — verify it returns a POINT."""
+    query = (
+        "SELECT ST_AsText("
+        "st_line_interpolate_point(ST_GeomFromText('LINESTRING(0 0, 2 2)'), 0.5)"
+        ");"
+    )
+    result = postgis_legacy_db.run(f'psql -t -A -c "{query}"')
+    assert result.rc == 0, f"st_line_interpolate_point failed: {result.stderr}"
+    assert result.stdout.strip().upper().startswith("POINT"), (
+        f"Unexpected result: {result.stdout.strip()!r}"
+    )
+
+
+@milestone_2
+def test_postgis_legacy_st_force_2d(postgis_legacy_db):
+    """st_force_2d() is a legacy alias — verify it strips the Z coordinate."""
+    query = "SELECT ST_AsText(st_force_2d(ST_GeomFromText('POINT(1 2 3)')));"
+    result = postgis_legacy_db.run(f'psql -t -A -c "{query}"')
+    assert result.rc == 0, f"st_force_2d failed: {result.stderr}"
+    assert result.stdout.strip() == "POINT(1 2)", (
+        f"Unexpected result: {result.stdout.strip()!r}"
+    )
+
+
+@milestone_2
+def test_postgis_legacy_st_numinteriorring(postgis_legacy_db):
+    """st_numinteriorring() is a legacy alias — verify it counts interior rings."""
+    query = (
+        "SELECT st_numinteriorring("
+        "ST_GeomFromText('POLYGON((0 0,0 3,3 3,3 0,0 0),"
+        "(1 1,1 2,2 2,2 1,1 1))')"
+        ");"
+    )
+    result = postgis_legacy_db.run(f'psql -t -A -c "{query}"')
+    assert result.rc == 0, f"st_numinteriorring failed: {result.stderr}"
+    assert result.stdout.strip() == "1", (
+        f"Expected 1 interior ring, got: {result.stdout.strip()!r}"
+    )
+
+
+@milestone_2
+def test_postgis_uninstall_legacy_sql(host):
+    """Verify uninstall_legacy.sql removes the legacy function aliases.
+
+    Steps: install PostGIS → load legacy.sql → confirm a legacy function exists →
+    load uninstall_legacy.sql → confirm the function is gone.
+    """
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS postgis CASCADE;'")
+
+    # 1. Load legacy.sql and confirm st_force_2d is present
+    load_res = host.run(f"psql -f {POSTGIS_LEGACY_SQL}")
+    assert load_res.rc == 0, f"legacy.sql failed: {load_res.stderr}"
+
+    check_query = (
+        "SELECT count(*) FROM pg_proc WHERE proname = 'st_force_2d';"
+    )
+    before = host.run(f'psql -t -A -c "{check_query}"')
+    assert int(before.stdout.strip()) >= 1, "st_force_2d not found after loading legacy.sql"
+
+    # 2. Load uninstall_legacy.sql and confirm st_force_2d is removed
+    uninstall_res = host.run(f"psql -f {POSTGIS_UNINSTALL_LEGACY_SQL}")
+    assert uninstall_res.rc == 0, (
+        f"uninstall_legacy.sql failed: {uninstall_res.stderr}"
+    )
+
+    after = host.run(f'psql -t -A -c "{check_query}"')
+    assert int(after.stdout.strip()) == 0, (
+        "st_force_2d still present after running uninstall_legacy.sql"
+    )
 
 
 # =============================================================================
