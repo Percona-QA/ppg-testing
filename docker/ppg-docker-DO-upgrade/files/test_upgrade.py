@@ -100,6 +100,19 @@ NEW_EXTENSIONS = NEW_SETTINGS["extensions"]
 NEW_BINARIES = NEW_SETTINGS["binaries"]
 NEW_RPM_PACKAGES = NEW_SETTINGS["rpm_packages"]
 
+# PostGIS legacy script paths on the NEW image
+_NEW_POSTGIS_MAJOR_VER = NEW_SETTINGS.get(f"percona-postgis35_{NEW_MAJOR}", {}).get(
+    "major_version", "3.5"
+)
+_NEW_POSTGIS_LEGACY_SQL = (
+    f"/usr/pgsql-{NEW_MAJOR}/share/contrib"
+    f"/postgis-{_NEW_POSTGIS_MAJOR_VER}/legacy.sql"
+)
+_NEW_POSTGIS_UNINSTALL_LEGACY_SQL = (
+    f"/usr/pgsql-{NEW_MAJOR}/share/contrib"
+    f"/postgis-{_NEW_POSTGIS_MAJOR_VER}/uninstall_legacy.sql"
+)
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -544,3 +557,135 @@ class TestPostUpgradePackages:
         config_files = NEW_SETTINGS["rhel_files"]
         missing = [f for f in config_files if not new_host.file(f).exists]
         assert not missing, f"PostgreSQL config files missing after upgrade: {missing}"
+
+
+# ── Phase 3f: Milestone extension file verification ───────────────────────────
+
+
+class TestPostUpgradeExtensionFiles:
+    """Verify that every milestone extension's package files are installed at
+    the correct PostgreSQL prefix in the **new** image.
+
+    pg_upgrade requires all extension ``.control`` files (and the ``.so``
+    libraries they reference) to be present in the *new* PG prefix before it
+    will upgrade a cluster that uses those extensions.  These tests catch:
+
+    * Missing packages in the new image build.
+    * Extensions installed for the wrong PG major version (wrong prefix).
+    * ``.so`` or ``.control`` filename changes between major versions.
+
+    The CI upgrade matrix (e.g. PG 16→17, PG 17→18) covers multiple upgrade
+    paths; a single run covers the ``NEW_MAJOR`` prefix only.
+
+    Extension metadata: ``(label, control_file, so_file | None)``
+
+    ``so_file=None`` means the ``.so`` uses a non-standard versioned filename
+    (timescaledb embeds its version: ``timescaledb-X.Y.Z.so``); it is tested
+    by a dedicated method below.
+    """
+
+    _EXT_SPECS = [
+        # label           control_file               so_file
+        ("timescaledb",   "timescaledb.control",     None),           # versioned .so
+        ("h3",            "h3.control",              "h3.so"),
+        ("h3_postgis",    "h3_postgis.control",      "h3_postgis.so"),
+        ("pgrouting",     "pgrouting.control",       "pgrouting.so"),
+        ("ip4r",          "ip4r.control",            "ip4r.so"),
+        ("hll",           "hll.control",             "hll.so"),
+        ("pg_cron",       "pg_cron.control",         "pg_cron.so"),
+        ("pg_partman",    "pg_partman.control",      "pg_partman.so"),
+        ("pg_similarity", "pg_similarity.control",   "pg_similarity.so"),
+        ("vectorscale",   "vectorscale.control",     "vectorscale.so"),
+        ("rum",           "rum.control",             "rum.so"),
+        ("unit",          "unit.control",            "unit.so"),
+        ("anon",          "anon.control",            "anon.so"),
+    ]
+
+    @pytest.mark.parametrize(
+        "label,control_file,so_file",
+        _EXT_SPECS,
+        ids=[e[0] for e in _EXT_SPECS],
+    )
+    def test_extension_control_file_at_new_pg_prefix(
+        self, upgrade_pipeline, label, control_file, so_file
+    ):
+        """Verify each extension's ``.control`` file is at
+        ``/usr/pgsql-{NEW_MAJOR}/share/extension/``."""
+        new_host = upgrade_pipeline["new_host"]
+        path = f"/usr/pgsql-{NEW_MAJOR}/share/extension/{control_file}"
+        result = new_host.run(f"test -f {path}")
+        assert result.rc == 0, (
+            f"{label}: .control file not found at {path!r} "
+            f"in new PG {NEW_MAJOR} image"
+        )
+
+    @pytest.mark.parametrize(
+        "label,control_file,so_file",
+        [(label, ctrl, so) for label, ctrl, so in _EXT_SPECS if so is not None],
+        ids=[e[0] for e in _EXT_SPECS if e[2] is not None],
+    )
+    def test_extension_so_file_at_new_pg_prefix(
+        self, upgrade_pipeline, label, control_file, so_file
+    ):
+        """Verify each extension's ``.so`` shared library is at
+        ``/usr/pgsql-{NEW_MAJOR}/lib/``."""
+        new_host = upgrade_pipeline["new_host"]
+        path = f"/usr/pgsql-{NEW_MAJOR}/lib/{so_file}"
+        result = new_host.run(f"test -f {path}")
+        assert result.rc == 0, (
+            f"{label}: .so library not found at {path!r} "
+            f"in new PG {NEW_MAJOR} image"
+        )
+
+    def test_timescaledb_so_at_new_pg_prefix(self, upgrade_pipeline):
+        """timescaledb embeds its version in the ``.so`` filename
+        (e.g. ``timescaledb-2.26.0.so``).  Resolve the expected name from
+        ``NEW_SETTINGS`` and verify the file is present."""
+        new_host = upgrade_pipeline["new_host"]
+        ts_version = NEW_SETTINGS[f"percona-timescaledb_{NEW_MAJOR}"]["version"]
+        so_path = f"/usr/pgsql-{NEW_MAJOR}/lib/timescaledb-{ts_version}.so"
+        result = new_host.run(f"test -f {so_path}")
+        assert result.rc == 0, (
+            f"timescaledb .so not found at {so_path!r}.  "
+            f"Expected version {ts_version!r} (from settings)."
+        )
+
+    def test_postgis_legacy_scripts_at_new_pg_prefix(self, upgrade_pipeline):
+        """Verify PostGIS ``legacy.sql`` and ``uninstall_legacy.sql`` are
+        present at the contrib path in the new image.
+
+        These scripts are not extensions but are required by the PostGIS
+        upgrade workflow and must ship at the versioned contrib directory."""
+        new_host = upgrade_pipeline["new_host"]
+        for path in (_NEW_POSTGIS_LEGACY_SQL, _NEW_POSTGIS_UNINSTALL_LEGACY_SQL):
+            result = new_host.run(f"test -f {path}")
+            assert result.rc == 0, (
+                f"PostGIS contrib script not found at {path!r} "
+                f"in new PG {NEW_MAJOR} image"
+            )
+
+    def test_milestone_extensions_in_pg_available_extensions(self, upgrade_pipeline):
+        """Verify all milestone extensions appear in ``pg_available_extensions``
+        on the upgraded cluster.
+
+        This is a catalog-level complement to the file-system checks above:
+        PostgreSQL must be able to see and describe each extension before it
+        can be installed or re-created after the upgrade."""
+        new_host = upgrade_pipeline["new_host"]
+        # All labels from _EXT_SPECS; h3_postgis shares catalog visibility with h3
+        ext_names = [label for label, _, _ in self._EXT_SPECS]
+        missing = []
+        for ext in ext_names:
+            query = (
+                f"SELECT count(*) FROM pg_available_extensions "
+                f"WHERE name = '{ext}';"
+            )
+            result = new_host.run(
+                f'{PG_NEW_BIN_DIR}/psql -U postgres -tAc "{query}"'
+            )
+            if result.rc != 0 or result.stdout.strip() != "1":
+                missing.append(ext)
+        assert not missing, (
+            f"Extensions not visible in pg_available_extensions "
+            f"on new PG {NEW_MAJOR}: {missing}"
+        )
