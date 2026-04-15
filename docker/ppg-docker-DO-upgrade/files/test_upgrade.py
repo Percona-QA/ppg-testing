@@ -573,8 +573,11 @@ class TestPostUpgradePackages:
 #   - plain names      (h3.so, ip4r.so, …)
 #   - pure-SQL exts    (pg_partman — no module_pathname, no .so)
 
+# Extensions present in ALL three PG major versions (16, 17, 18).
+# Each entry: (label, control_file)
+# The label must match the extension name in pg_available_extensions.
 _EXT_SPECS = [
-    # (label,           control_file)
+    # ── milestone-3 batch ────────────────────────────────────────────────────
     ("timescaledb",    "timescaledb.control"),
     ("h3",             "h3.control"),
     ("h3_postgis",     "h3_postgis.control"),
@@ -582,12 +585,36 @@ _EXT_SPECS = [
     ("ip4r",           "ip4r.control"),
     ("hll",            "hll.control"),
     ("pg_cron",        "pg_cron.control"),
-    ("pg_partman",     "pg_partman.control"),
+    ("pg_partman",     "pg_partman.control"),   # pure-SQL: no .so (skipped auto.)
     ("pg_similarity",  "pg_similarity.control"),
     ("vectorscale",    "vectorscale.control"),
     ("rum",            "rum.control"),
     ("unit",           "unit.control"),
     ("anon",           "anon.control"),
+    # ── core / milestone-1-2 batch ───────────────────────────────────────────
+    ("pg_repack",      "pg_repack.control"),
+    ("pgaudit",        "pgaudit.control"),
+    ("pg_stat_monitor","pg_stat_monitor.control"),
+    ("set_user",       "set_user.control"),
+    ("vector",         "vector.control"),       # pgvector; extension name = vector
+    ("postgis",        "postgis.control"),
+]
+
+# Extensions only available for PG 18 (not present in 16 / 17 images).
+_EXT_SPECS_PG18_ONLY = [
+    ("pg_oidc_validator", "pg_oidc_validator.control"),
+]
+
+# wal2json is a logical-replication output plugin, not a regular extension.
+# It has NO .control file and does NOT appear in pg_available_extensions.
+# Verification: check the .so library directly at /usr/pgsql-{major}/lib/.
+_WALJSON_SO = "wal2json.so"
+
+# System-level tools that are not PG extensions and have no per-major-version
+# path.  We verify their binaries are present in the image.
+_SYSTEM_TOOL_BINARIES = [
+    ("patroni",    "/usr/bin/patroni"),
+    ("pgbackrest", "/usr/bin/pgbackrest"),
 ]
 
 # All supported PG major versions shipped inside the upgrade mediator image.
@@ -598,12 +625,18 @@ _UPGRADE_IMAGE_PG_VERSIONS: dict[str, str] = {
     "18": "18.3",
 }
 
-# Pre-built parametrize list for TestUpgradeImageExtensionFiles.
+# Pre-built parametrize lists for TestUpgradeImageExtensionFiles.
 # Cross-product: every PG major version × every extension spec.
 _UPGRADE_IMG_CTRL_PARAMS = [
     (major, label, ctrl)
     for major in _UPGRADE_IMAGE_PG_VERSIONS
     for label, ctrl in _EXT_SPECS
+]
+
+# PG 18-only parametrize entries (used for pg_oidc_validator).
+_UPGRADE_IMG_PG18_PARAMS = [
+    ("18", label, ctrl)
+    for label, ctrl in _EXT_SPECS_PG18_ONLY
 ]
 
 
@@ -737,9 +770,16 @@ class TestPostUpgradeExtensionFiles:
 
         This is a catalog-level complement to the file-system checks above:
         PostgreSQL must be able to see and describe each extension before it
-        can be installed or re-created after the upgrade."""
+        can be installed or re-created after the upgrade.
+
+        Note: ``wal2json`` is excluded (output plugin, not an extension).
+        ``pg_oidc_validator`` is only checked when ``NEW_MAJOR == "18"``."""
         new_host = upgrade_pipeline["new_host"]
         ext_names = [label for label, _ in _EXT_SPECS]
+        # h3_postgis installs via CREATE EXTENSION h3_postgis CASCADE; include it
+        # pg_oidc_validator is PG 18 only — add conditionally
+        if NEW_MAJOR == "18":
+            ext_names += [label for label, _ in _EXT_SPECS_PG18_ONLY]
         missing = []
         for ext in ext_names:
             query = (
@@ -754,6 +794,54 @@ class TestPostUpgradeExtensionFiles:
         assert not missing, (
             f"Extensions not visible in pg_available_extensions "
             f"on new PG {NEW_MAJOR}: {missing}"
+        )
+
+    def test_wal2json_so_at_new_pg_prefix(self, upgrade_pipeline):
+        """``wal2json`` is a logical-replication output plugin with no
+        ``.control`` file.  Verify its ``.so`` is present at the PG lib path."""
+        new_host = upgrade_pipeline["new_host"]
+        path = f"/usr/pgsql-{NEW_MAJOR}/lib/{_WALJSON_SO}"
+        result = new_host.run(f"test -f {path}")
+        assert result.rc == 0, (
+            f"wal2json: {_WALJSON_SO!r} not found at {path!r} "
+            f"in new PG {NEW_MAJOR} image"
+        )
+
+    @pytest.mark.skipif(
+        NEW_MAJOR != "18",
+        reason="pg_oidc_validator is only packaged for PG 18",
+    )
+    def test_pg_oidc_validator_pg18_only(self, upgrade_pipeline):
+        """``pg_oidc_validator`` ships for PG 18 only.  Verify its ``.control``
+        file and ``.so`` library are present at the new-image PG prefix."""
+        new_host = upgrade_pipeline["new_host"]
+        for label, ctrl in _EXT_SPECS_PG18_ONLY:
+            ctrl_path = f"/usr/pgsql-{NEW_MAJOR}/share/extension/{ctrl}"
+            assert new_host.run(f"test -f {ctrl_path}").rc == 0, (
+                f"{label}: .control file not found at {ctrl_path!r}"
+            )
+            so_path, err = _so_from_control(new_host, NEW_MAJOR, ctrl)
+            if err:
+                pytest.fail(f"{label}: {err}")
+            if so_path:
+                assert new_host.run(f"test -f {so_path}").rc == 0, (
+                    f"{label}: .so not found at {so_path!r}"
+                )
+
+    @pytest.mark.parametrize(
+        "label,binary_path",
+        _SYSTEM_TOOL_BINARIES,
+        ids=[e[0] for e in _SYSTEM_TOOL_BINARIES],
+    )
+    def test_system_tool_binary_present(
+        self, upgrade_pipeline, label, binary_path
+    ):
+        """``patroni`` and ``pgbackrest`` are not PG extensions; verify their
+        system binaries are present in the new image."""
+        new_host = upgrade_pipeline["new_host"]
+        result = new_host.run(f"test -f {binary_path}")
+        assert result.rc == 0, (
+            f"{label}: binary not found at {binary_path!r} in new image"
         )
 
 
@@ -886,3 +974,73 @@ class TestUpgradeImageExtensionFiles:
                 f"PostGIS {script!r} missing at {path!r} in upgrade image "
                 f"(PG {major})"
             )
+
+    @pytest.mark.parametrize(
+        "major",
+        list(_UPGRADE_IMAGE_PG_VERSIONS.keys()),
+        ids=[f"pg{m}" for m in _UPGRADE_IMAGE_PG_VERSIONS],
+    )
+    def test_wal2json_so_all_pg_versions(self, upgrade_image_host, major):
+        """``wal2json`` is a logical-replication output plugin with no
+        ``.control`` file.  Verify its ``.so`` for every PG major version."""
+        path = f"/usr/pgsql-{major}/lib/{_WALJSON_SO}"
+        result = upgrade_image_host.run(f"test -f {path}")
+        assert result.rc == 0, (
+            f"wal2json: {_WALJSON_SO!r} missing at {path!r} in upgrade image "
+            f"(PG {major})"
+        )
+
+    @pytest.mark.parametrize(
+        "major,label,control_file",
+        _UPGRADE_IMG_PG18_PARAMS,
+        ids=[f"pg18-{l}" for _, l, _ in _UPGRADE_IMG_PG18_PARAMS],
+    )
+    def test_pg18_only_extension_control_file(
+        self, upgrade_image_host, major, label, control_file
+    ):
+        """``pg_oidc_validator`` is only packaged for PG 18.  Verify its
+        ``.control`` file exists in the upgrade image's PG 18 prefix."""
+        path = f"/usr/pgsql-{major}/share/extension/{control_file}"
+        result = upgrade_image_host.run(f"test -f {path}")
+        assert result.rc == 0, (
+            f"{label}: .control file missing at {path!r} in upgrade image"
+        )
+
+    @pytest.mark.parametrize(
+        "major,label,control_file",
+        _UPGRADE_IMG_PG18_PARAMS,
+        ids=[f"pg18-{l}" for _, l, _ in _UPGRADE_IMG_PG18_PARAMS],
+    )
+    def test_pg18_only_extension_so_via_control_file(
+        self, upgrade_image_host, major, label, control_file
+    ):
+        """``pg_oidc_validator`` is only packaged for PG 18.  Verify its
+        ``.so`` library (derived from ``module_pathname``) is present."""
+        so_path, err = _so_from_control(upgrade_image_host, major, control_file)
+        if err:
+            pytest.fail(f"{label} (PG {major}): {err}")
+        if so_path is None:
+            pytest.skip(
+                f"{label}: no module_pathname in {control_file} "
+                f"— pure-SQL extension, no .so to verify"
+            )
+        result = upgrade_image_host.run(f"test -f {so_path}")
+        assert result.rc == 0, (
+            f"{label}: .so missing at {so_path!r} in upgrade image. "
+            f"Path derived from module_pathname in {control_file}."
+        )
+
+    @pytest.mark.parametrize(
+        "label,binary_path",
+        _SYSTEM_TOOL_BINARIES,
+        ids=[e[0] for e in _SYSTEM_TOOL_BINARIES],
+    )
+    def test_system_tool_binary_present(
+        self, upgrade_image_host, label, binary_path
+    ):
+        """``patroni`` and ``pgbackrest`` are not PG extensions.  Verify their
+        system binaries are present in the upgrade mediator image."""
+        result = upgrade_image_host.run(f"test -f {binary_path}")
+        assert result.rc == 0, (
+            f"{label}: binary not found at {binary_path!r} in upgrade image"
+        )
