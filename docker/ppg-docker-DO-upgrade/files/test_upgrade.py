@@ -558,6 +558,16 @@ class TestPostUpgradePackages:
         missing = [f for f in config_files if not new_host.file(f).exists]
         assert not missing, f"PostgreSQL config files missing after upgrade: {missing}"
 
+    def test_telemetry_packages_not_installed(self, upgrade_pipeline):
+        new_host = upgrade_pipeline["new_host"]
+        excluded = ["percona-telemetry-agent"] + [
+            f"percona-pg-telemetry{ver}" for ver in ["16", "17", "18"] if ver != NEW_MAJOR
+        ]
+        installed = [pkg for pkg in excluded if new_host.run(f"rpm -q {pkg}").rc == 0]
+        assert not installed, (
+            f"Packages that should not be installed in PG{NEW_MAJOR} image: {installed}"
+        )
+
 
 # ── Shared extension metadata ─────────────────────────────────────────────────
 #
@@ -1001,4 +1011,19 @@ class TestUpgradeImageExtensionFiles:
         result = upgrade_image_host.run(f"test -f {so_path}")
         assert result.rc == 0, (
             f"{label}: .so missing at {so_path!r} in upgrade image (PG {major})"
+        )
+
+    def test_telemetry_packages_not_installed(self, upgrade_image_host):
+        """The upgrade mediator image ships PG 16, 17, and 18 simultaneously.
+        None of the version-specific telemetry packages nor the telemetry agent
+        should be installed in it."""
+        excluded = [
+            "percona-telemetry-agent",
+            "percona-pg-telemetry16",
+            "percona-pg-telemetry17",
+            "percona-pg-telemetry18",
+        ]
+        installed = [pkg for pkg in excluded if upgrade_image_host.run(f"rpm -q {pkg}").rc == 0]
+        assert not installed, (
+            f"Packages that should not be installed in the upgrade mediator image: {installed}"
         )

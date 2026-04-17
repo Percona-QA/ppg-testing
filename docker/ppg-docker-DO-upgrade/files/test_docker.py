@@ -40,6 +40,13 @@ DOCKER_RPM_PACKAGES = pg_docker_versions["rpm_packages"]
 DOCKER_EXTENSIONS = pg_docker_versions["extensions"]
 DOCKER_BINARIES = pg_docker_versions["binaries"]
 
+# Packages that must NOT be installed in this image:
+#   - percona-pg-telemetryN for any N != MAJOR_VER
+#   - percona-telemetry-agent (all versions)
+EXCLUDED_TELEMETRY_PACKAGES = ["percona-telemetry-agent"] + [
+    f"percona-pg-telemetry{ver}" for ver in ["16", "17", "18"] if ver != MAJOR_VER
+]
+
 # --- PostGIS contrib script paths ---
 POSTGIS_MAJOR_VER = pg_docker_versions[f"percona-postgis35_{MAJOR_VER}"]["major_version"]
 POSTGIS_CONTRIB_DIR = f"/usr/pgsql-{MAJOR_VER}/share/contrib/postgis-{POSTGIS_MAJOR_VER}"
@@ -503,6 +510,14 @@ def test_rpm_package_is_installed(host, package):
     )
 
     print(f"[SUCCESS] {package} version {pkg.version} verified.")
+
+
+@pytest.mark.parametrize("package", EXCLUDED_TELEMETRY_PACKAGES)
+def test_telemetry_packages_not_installed(host, package):
+    pkg = host.package(package)
+    assert not pkg.is_installed, (
+        f"Package {package} should not be installed in PG{MAJOR_VER} image"
+    )
 
 
 @pytest.mark.needs_preload
