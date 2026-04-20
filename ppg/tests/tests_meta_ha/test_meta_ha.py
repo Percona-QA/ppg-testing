@@ -3,11 +3,24 @@ import pytest
 
 import testinfra.utils.ansible_runner
 
+from .. import settings
+
 testinfra_hosts = testinfra.utils.ansible_runner.AnsibleRunner(
     os.environ['MOLECULE_INVENTORY_FILE']).get_hosts('all')
 
 RPM_PACKAGES = ['percona-patroni', 'etcd', 'percona-haproxy', 'python3-etcd', 'python3.12-etcd']
 DEB_PACKAGES = ['percona-patroni', 'etcd', 'percona-haproxy', 'etcd-client', 'etcd-server']
+
+pg_versions = settings.get_settings(os.environ['MOLECULE_SCENARIO_NAME'])[os.getenv("VERSION")]
+
+# Expected versions for packages that are tracked in the version files.
+# python3-etcd, python3.12-etcd, etcd-client, and etcd-server are not tracked
+# individually so they are printed but not version-asserted.
+EXPECTED_VERSIONS = {
+    "percona-patroni": pg_versions["patroni"]["version"],
+    "etcd":            pg_versions["etcd"]["version"],
+    "percona-haproxy": pg_versions["haproxy"]["version"],
+}
 
 
 @pytest.mark.upgrade
@@ -20,6 +33,15 @@ def test_deb_package_is_installed(host, package):
         pytest.skip("This test not for Debian 12")
     pkg = host.package(package)
     assert pkg.is_installed
+    expected = EXPECTED_VERSIONS.get(package)
+    print(f"\n[VERIFYING] Package: {package}")
+    print(f"            Expected: {expected or '(not tracked)'}")
+    print(f"            Found:    {pkg.version}")
+    if expected:
+        assert pkg.version == expected, (
+            f"Version mismatch for {package}. Expected: {expected}, Found: {pkg.version}"
+        )
+    print(f"[SUCCESS] {package} version {pkg.version} verified.")
 
 
 @pytest.mark.upgrade
@@ -36,3 +58,12 @@ def test_rpm_package_is_installed(host, package):
             pytest.skip("This test only for RHEL based version 8 & 9")
         pkg = host.package(package)
         assert pkg.is_installed
+        expected = EXPECTED_VERSIONS.get(package)
+        print(f"\n[VERIFYING] Package: {package}")
+        print(f"            Expected: {expected or '(not tracked)'}")
+        print(f"            Found:    {pkg.version}")
+        if expected:
+            assert pkg.version == expected, (
+                f"Version mismatch for {package}. Expected: {expected}, Found: {pkg.version}"
+            )
+        print(f"[SUCCESS] {package} version {pkg.version} verified.")
