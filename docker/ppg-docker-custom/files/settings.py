@@ -29,9 +29,9 @@ wal2json = {
 }
 
 patroni = {
-    "16.13": {"version": "4.1.0", "binary_version": "patroni 4.1.0"},
-    "17.9": {"version": "4.1.0", "binary_version": "patroni 4.1.0"},
-    "18.3": {"version": "4.1.0", "binary_version": "patroni 4.1.0"},
+    "16.13": {"version": "4.1.2", "binary_version": "patroni 4.1.2"},
+    "17.9": {"version": "4.1.2", "binary_version": "patroni 4.1.2"},
+    "18.3": {"version": "4.1.2", "binary_version": "patroni 4.1.2"},
 }
 
 pgbackrest = {

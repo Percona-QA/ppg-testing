@@ -345,11 +345,11 @@ patroni = {
     "16.11": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
     "17.7": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
     "18.1": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
-    "14.22": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
-    "15.17": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
-    "16.13": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
-    "17.9": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
-    "18.3": {"version": "4.1.0","binary_version": "patroni 4.1.0"},
+    "14.22": {"version": "4.1.2","binary_version": "patroni 4.1.2"},
+    "15.17": {"version": "4.1.2","binary_version": "patroni 4.1.2"},
+    "16.13": {"version": "4.1.2","binary_version": "patroni 4.1.2"},
+    "17.9": {"version": "4.1.2","binary_version": "patroni 4.1.2"},
+    "18.3": {"version": "4.1.2","binary_version": "patroni 4.1.2"},
 }
 
 pg_tde = {
