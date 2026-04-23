@@ -102,10 +102,13 @@ def host(request):
 
     if needs_libs:
         # These specific flags prevent pg_stat_monitor from over-allocating on boot
+        preload_libs = "pg_stat_monitor,pgaudit,set_user"
+        if int(MAJOR_VER) >= 17:
+            preload_libs = f"pg_tde,{preload_libs}"
         run_cmd.extend(
             [
                 "-c",
-                "shared_preload_libraries=pg_tde,pg_stat_monitor,pgaudit,set_user",
+                f"shared_preload_libraries={preload_libs}",
                 "-c",
                 "shared_buffers=256MB",
                 "-c",
