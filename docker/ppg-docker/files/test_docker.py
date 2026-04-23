@@ -16,7 +16,10 @@ IMG_TAG = os.getenv("TAG")
 IS_WITH_POSTGIS = os.getenv("WITH_POSTGIS", "false").lower() == "true"
 PG_BIN_DIR = f"/usr/pgsql-{MAJOR_VER}/bin"
 PG_DATA_DIR = "/data/db"
-IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG}"
+if IS_WITH_POSTGIS:
+    IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-with-postgis:{IMG_TAG}"
+else:
+    IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG}"
 
 # --- Settings ---
 pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER)
