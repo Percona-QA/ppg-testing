@@ -105,7 +105,7 @@ def host(request):
         run_cmd.extend(
             [
                 "-c",
-                "shared_preload_libraries=pg_stat_monitor,pgaudit,set_user",
+                "shared_preload_libraries=pg_tde,pg_stat_monitor,pgaudit,set_user",
                 "-c",
                 "shared_buffers=256MB",
                 "-c",
@@ -165,10 +165,10 @@ def test_shared_preload_libraries_is_empty(cursor, request):
 def test_psql_string(host):
     # 'host' now binds to the container
     psql_output = host.check_output("psql -V")
-    assert f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Distribution" in psql_output
-    assert (
-        f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Server for PostgreSQL" not in psql_output
-    )
+    if int(MAJOR_VER) in [17, 18]:
+        assert f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Server for PostgreSQL {pg_docker_versions['percona-version']}" in host.check_output('psql -V')
+    else:
+        assert f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Distribution" in host.check_output('psql -V')
 
 
 def test_wait_docker_load(host):
@@ -293,14 +293,11 @@ def test_extensions_list(extension_list, host, extension):
     """
     Verifies that the extension is available to be installed in the PostgreSQL instance.
     """
-    major = int(MAJOR_VER)
-
-    # Then inside your test:
-    if major >= 17 and extension == "adminpack":
-        pytest.skip("adminpack removed in PG17+")
-
-    if major < 18 and extension == "pg_logicalinspect":
-        pytest.skip("pg_logicalinspect only supported in PG18+")
+    # 1. Use the centralized helper for skip logic
+    # This replaces the messy if/elif blocks and ensures consistency
+    skip, reason = should_skip(extension)
+    if skip:
+        pytest.skip(reason)
 
     # 2. Verify the extension is present in the available extensions list
     # Use a descriptive error message to help debug if it's missing
@@ -1101,6 +1098,7 @@ def test_postgis_functional(host):
         host.run("psql -c 'DROP EXTENSION IF EXISTS postgis CASCADE;'")
 
 
+@pytest.mark.needs_preload
 @pytest.mark.parametrize("binary", TDE_BINARIES)
 def test_tde_binaries_present(host, binary):
     """
@@ -1123,6 +1121,7 @@ def test_tde_binaries_present(host, binary):
     assert file.mode & 0o111, f"{binary} exists but is not executable at {bin_path}"
 
 
+@pytest.mark.needs_preload
 def test_pg_tde_extension(host):
     if int(MAJOR_VER) < 17:
         pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
