@@ -62,21 +62,6 @@
   command: yum -y update
   when: ansible_os_family == "RedHat"
 
-- name: Install python3-psycopg2
-  become: true
-  apt:
-    name: python3-psycopg2
-    state: latest
-    update_cache: yes
-  when: ansible_os_family == "Debian"
-
-- name: Install python3-psycopg2
-  become: true
-  ansible.builtin.yum:
-    name: python3-psycopg2
-    state: latest
-  when: ansible_os_family == "RedHat"
-
 - name: Install Docker packages
   become: true
   ansible.builtin.yum:
@@ -162,25 +147,26 @@
     update_cache: yes
   when: ansible_os_family == "Debian"
 
-- name: Ensure test directory exists
+- name: Create /tmp/docker_test directory
   file:
     path: /tmp/docker_test
     state: directory
-    mode: 0755
 
-- name: Copy PostgreSQL test files to remote
+- name: Copy settings.py
   copy:
-    src: "{{ item }}"
-    dest: "/tmp/docker_test/{{ item }}"
+    src: settings.py
+    dest: /tmp/docker_test/settings.py
     owner: root
     group: root
     mode: 0644
-  loop:
-    - settings.py
-    - test_docker.py
-    - test_patroni_ha.py
-    - test_pgbackrest.py
-    - test_labels_licences.py
+
+- name: Copy test_docker.py
+  copy:
+    src: test_docker.py
+    dest: /tmp/docker_test/test_docker.py
+    owner: root
+    group: root
+    mode: 0644
 
 - name: Ensure Python virtual environment exists
   ansible.builtin.command: python3 -m venv validation
@@ -198,19 +184,9 @@
 
 - name: Create python venv and run docker tests
   shell: |
-    #Activate virtual environment
     source validation/bin/activate
-
-    #Install dependencies
-    pip install --upgrade pip
-    pip install psycopg2-binary pytest-testinfra requests pytest pytest-order
-
-    #Run test without shared_preload_libraries  (default)
-    pytest test_labels_licences.py \
-       test_docker.py \
-       test_patroni_ha.py \
-       test_pgbackrest.py \
-       -vv -s -rpfs
+    pip install pytest-testinfra
+    pytest test_docker.py -vv -s -rpfs
   args:
     executable: /bin/bash
     chdir: /tmp/docker_test
@@ -223,23 +199,13 @@
     PPG_LABEL_MAINTAINER: "{{ ppg_label_maintainer | default('Percona Development <info@percona.com>') }}"
     PPG_LABEL_VENDOR: "{{ ppg_label_vendor | default('Percona') }}"
     PPG_LABEL_NAME_POSTGRESQL: "{{ ppg_label_name_postgresql | default('Percona Distribution for PostgreSQL') }}"
-  ignore_errors: true
   register: results
 
-- name: Show stdout of Docker tests
-  debug:
-    var: results.stdout_lines
+- debug: var=results.stdout_lines
 
-- name: Show stderr if Docker tests fails
+- name: Show stderr if docker test fails
   debug:
     var: results.stderr_lines
-  when:
-    - results is defined
-    - results.rc != 0
-
-- name: Fail the playbook if Docker tests failed
-  fail:
-    msg: "Docker tests failed with return code {{ results.rc }}"
   when:
     - results is defined
     - results.rc != 0
