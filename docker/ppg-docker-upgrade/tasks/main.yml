@@ -8,7 +8,6 @@
     NEW_TAG: "{{ lookup('env', 'NEW_VERSION_DOCKER_TAG') | default(lookup('env', 'NEW_VERSION'), true) }}"
     UPGRADE_TAG: "{{ lookup('env', 'UPGRADE_DOCKER_TAG') | default('v2', true) }}"
     WITH_POSTGIS: "{{ lookup('env', 'WITH_POSTGIS') | default('false', true) }}"
-    MILESTONE: "{{ lookup('env', 'MILESTONE') | default('0', true) }}"
     cacheable: true
 
 - name: Print upgrade pair
@@ -227,7 +226,6 @@
     NEW_TAG: "{{ NEW_TAG }}"
     UPGRADE_TAG: "{{ UPGRADE_TAG }}"
     WITH_POSTGIS: "{{ WITH_POSTGIS }}"
-    MILESTONE: "{{ MILESTONE }}"
     PPG_LABEL_MAINTAINER: "{{ ppg_label_maintainer | default('Percona Development <info@percona.com>') }}"
     PPG_LABEL_VENDOR: "{{ ppg_label_vendor | default('Percona') }}"
     PPG_LABEL_NAME_POSTGRESQL: "{{ ppg_label_name_postgresql | default('Percona Distribution for PostgreSQL') }}"

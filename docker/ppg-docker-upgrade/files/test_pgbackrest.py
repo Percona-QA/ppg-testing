@@ -11,12 +11,16 @@ MAJOR_VER = os.getenv("VERSION").split(".")[0]
 MAJOR_MINOR_VER = os.getenv("VERSION")
 DOCKER_REPO = os.getenv("DOCKER_REPOSITORY")
 IMG_TAG = os.getenv("TAG")
-IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG}"
 PG_BIN_DIR = f"/usr/pgsql-{MAJOR_VER}/bin"
 PG_DATA_DIR = "/data/db"
 PG_BACKREST_REPO_PATH = "/var/lib/pgbackrest"
 CONF_PATH = "/etc/pgbackrest.conf"
 CONTAINER_NAME = f"PG{MAJOR_VER}_BACKREST"
+IS_WITH_POSTGIS = os.getenv("WITH_POSTGIS", "false").lower() == "true"
+if IS_WITH_POSTGIS:
+    IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-with-postgis:{IMG_TAG}"
+else:
+    IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG}"
 
 
 @pytest.fixture(scope="session")

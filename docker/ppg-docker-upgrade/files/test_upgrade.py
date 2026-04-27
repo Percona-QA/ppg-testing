@@ -67,14 +67,20 @@ DOCKER_REPO = os.environ.get("DOCKER_REPOSITORY", "perconalab")
 IMG_TAG_OLD = os.environ.get("OLD_TAG", OLD_MAJOR_MINOR)
 IMG_TAG_NEW = os.environ.get("NEW_TAG", NEW_MAJOR_MINOR)
 UPGRADE_IMG_TAG = os.environ.get("UPGRADE_TAG", "v2")
+IS_WITH_POSTGIS = os.getenv("WITH_POSTGIS", "false").lower() == "true"
 
 # When run.sh drives the upgrade it passes UPGRADE_NEW_VOL (a Docker named
 # volume) instead of a host path.  In standalone mode (SKIP_UPGRADE=false)
 # the fixture manages its own host-path volumes.
 UPGRADE_NEW_VOL = os.environ.get("UPGRADE_NEW_VOL")
 
-OLD_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG_OLD}"
-NEW_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG_NEW}"
+if IS_WITH_POSTGIS:
+    OLD_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-with-postgis:{IMG_TAG_OLD}"
+    NEW_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-with-postgis:{IMG_TAG_NEW}"
+else:
+    OLD_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG_OLD}"
+    NEW_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG_NEW}"
+
 UPGRADE_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-upgrade-custom:{UPGRADE_IMG_TAG}"
 
 PG_OLD_BIN_DIR = f"/usr/pgsql-{OLD_MAJOR}/bin"
@@ -99,19 +105,6 @@ NEW_SETTINGS = settings.get_settings(NEW_MAJOR_MINOR)
 NEW_EXTENSIONS = NEW_SETTINGS["extensions"]
 NEW_BINARIES = NEW_SETTINGS["binaries"]
 NEW_RPM_PACKAGES = NEW_SETTINGS["rpm_packages"]
-
-# PostGIS legacy script paths on the NEW image
-_NEW_POSTGIS_MAJOR_VER = NEW_SETTINGS.get(f"percona-postgis35_{NEW_MAJOR}", {}).get(
-    "major_version", "3.5"
-)
-_NEW_POSTGIS_LEGACY_SQL = (
-    f"/usr/pgsql-{NEW_MAJOR}/share/contrib"
-    f"/postgis-{_NEW_POSTGIS_MAJOR_VER}/legacy.sql"
-)
-_NEW_POSTGIS_UNINSTALL_LEGACY_SQL = (
-    f"/usr/pgsql-{NEW_MAJOR}/share/contrib"
-    f"/postgis-{_NEW_POSTGIS_MAJOR_VER}/uninstall_legacy.sql"
-)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -577,37 +570,18 @@ class TestPostUpgradePackages:
 #
 # Each entry: (label, control_file)
 # SO-file verification is done dynamically by reading module_pathname from the
-# .control file — see _so_from_control() below.  This handles all naming
-# conventions automatically:
-#   - versioned names  (pgrouting-4.0.so, timescaledb-2.26.0.so)
-#   - plain names      (h3.so, ip4r.so, …)
-#   - pure-SQL exts    (pg_partman — no module_pathname, no .so)
+# .control file — see _so_from_control() below.
 
 # Extensions present in ALL three PG major versions (16, 17, 18).
 # Each entry: (label, control_file)
 # The label must match the extension name in pg_available_extensions.
 _EXT_SPECS = [
-    # ── milestone-3 batch ────────────────────────────────────────────────────
-    ("timescaledb",    "timescaledb.control"),
-    ("h3",             "h3.control"),
-    ("h3_postgis",     "h3_postgis.control"),
-    ("pgrouting",      "pgrouting.control"),
-    ("ip4r",           "ip4r.control"),
-    ("hll",            "hll.control"),
-    ("pg_cron",        "pg_cron.control"),
-    ("pg_partman",     "pg_partman.control"),   # pure-SQL: no .so (skipped auto.)
-    ("pg_similarity",  "pg_similarity.control"),
-    ("vectorscale",    "vectorscale.control"),
-    ("rum",            "rum.control"),
-    ("unit",           "unit.control"),
-    ("anon",           "anon.control"),
-    # ── core / milestone-1-2 batch ───────────────────────────────────────────
-    ("pg_repack",      "pg_repack.control"),
-    ("pgaudit",        "pgaudit.control"),
-    ("pg_stat_monitor","pg_stat_monitor.control"),
-    ("set_user",       "set_user.control"),
-    ("vector",         "vector.control"),       # pgvector; extension name = vector
-    ("postgis",        "postgis.control"),
+    ("pg_repack",       "pg_repack.control"),
+    ("pgaudit",         "pgaudit.control"),
+    ("pg_stat_monitor", "pg_stat_monitor.control"),
+    ("set_user",        "set_user.control"),
+    ("vector",          "vector.control"),      # pgvector; extension name = vector
+    ("postgis",         "postgis.control"),
 ]
 
 # Preload-only modules available for PG 18 only.
@@ -663,7 +637,7 @@ def _so_from_control(host, major, control_file):
         Absolute path of the ``.so`` library derived from ``module_pathname``.
     ``(None, None)``
         No ``module_pathname`` line found — this is a pure-SQL extension with
-        no shared library (e.g. ``pg_partman``); caller should skip the test.
+        no shared library; caller should skip the test.
     ``(None, error_str)``
         The ``.control`` file could not be read; caller should fail the test.
 
@@ -673,10 +647,9 @@ def _so_from_control(host, major, control_file):
     PostgreSQL passes to ``dlopen()`` at ``CREATE EXTENSION`` time.  Using it
     as the source of truth handles every naming convention automatically:
 
-    * ``pgrouting-4.0``    → ``/usr/pgsql-{major}/lib/pgrouting-4.0.so``
-    * ``timescaledb-2.26.0`` → ``/usr/pgsql-{major}/lib/timescaledb-2.26.0.so``
-    * ``vectorscale``      → ``/usr/pgsql-{major}/lib/vectorscale.so``
-    * *(absent)*           → pure-SQL extension, no ``.so`` to check
+    * ``pg_repack-1.5``  → ``/usr/pgsql-{major}/lib/pg_repack-1.5.so``
+    * ``vector``         → ``/usr/pgsql-{major}/lib/vector.so``
+    * *(absent)*         → pure-SQL extension, no ``.so`` to check
     """
     ctrl_path = f"/usr/pgsql-{major}/share/extension/{control_file}"
     cat = host.run(f"cat {ctrl_path}")
@@ -746,8 +719,7 @@ class TestPostUpgradeExtensionFiles:
         The ``.control`` file is read from the container and its
         ``module_pathname`` value is used to derive the expected ``.so`` path.
         Pure-SQL extensions (no ``module_pathname``) are skipped automatically.
-        Versioned filenames such as ``pgrouting-4.0.so`` and
-        ``timescaledb-2.26.0.so`` are handled transparently."""
+        Versioned filenames are handled transparently via ``module_pathname``."""
         new_host = upgrade_pipeline["new_host"]
         so_path, err = _so_from_control(new_host, NEW_MAJOR, control_file)
         if err:
@@ -763,21 +735,7 @@ class TestPostUpgradeExtensionFiles:
             f"(path derived from module_pathname in {control_file})"
         )
 
-    def test_postgis_legacy_scripts_at_new_pg_prefix(self, upgrade_pipeline):
-        """Verify PostGIS ``legacy.sql`` and ``uninstall_legacy.sql`` are
-        present at the contrib path in the new image.
-
-        These scripts are not extensions but are required by the PostGIS
-        upgrade workflow and must ship at the versioned contrib directory."""
-        new_host = upgrade_pipeline["new_host"]
-        for path in (_NEW_POSTGIS_LEGACY_SQL, _NEW_POSTGIS_UNINSTALL_LEGACY_SQL):
-            result = new_host.run(f"test -f {path}")
-            assert result.rc == 0, (
-                f"PostGIS contrib script not found at {path!r} "
-                f"in new PG {NEW_MAJOR} image"
-            )
-
-    def test_milestone_extensions_in_pg_available_extensions(self, upgrade_pipeline):
+    def test_extensions_in_pg_available_extensions(self, upgrade_pipeline):
         """Verify all milestone extensions appear in ``pg_available_extensions``
         on the upgraded cluster.
 
@@ -906,7 +864,7 @@ class TestUpgradeImageExtensionFiles:
     pinpoint exactly which extension is missing from which PG prefix, e.g.::
 
         FAILED test_upgrade.py::TestUpgradeImageExtensionFiles::
-               test_extension_control_file[pg17-pg_partman]
+               test_extension_control_file[pg17-pgaudit]
     """
 
     @pytest.mark.parametrize(
@@ -938,8 +896,7 @@ class TestUpgradeImageExtensionFiles:
         ``module_pathname`` exists at ``/usr/pgsql-{major}/lib/``.
 
         Pure-SQL extensions (no ``module_pathname``) are skipped.
-        Versioned ``.so`` names (``pgrouting-4.0.so``,
-        ``timescaledb-2.26.0.so``) are resolved automatically from the
+        Versioned ``.so`` names are resolved automatically from the
         ``.control`` file — no hardcoded filenames in the test."""
         so_path, err = _so_from_control(upgrade_image_host, major, control_file)
         if err:
@@ -954,32 +911,6 @@ class TestUpgradeImageExtensionFiles:
             f"{label}: .so missing at {so_path!r} in upgrade image (PG {major}). "
             f"Path derived from module_pathname in {control_file}."
         )
-
-    @pytest.mark.parametrize(
-        "major,major_minor",
-        list(_UPGRADE_IMAGE_PG_VERSIONS.items()),
-        ids=[f"pg{m}" for m in _UPGRADE_IMAGE_PG_VERSIONS],
-    )
-    def test_postgis_legacy_scripts(
-        self, upgrade_image_host, major, major_minor
-    ):
-        """Verify PostGIS ``legacy.sql`` and ``uninstall_legacy.sql`` exist
-        under the correct versioned contrib directory for each PG major version.
-        """
-        ver_settings = settings.get_settings(major_minor)
-        postgis_major = ver_settings.get(
-            f"percona-postgis35_{major}", {}
-        ).get("major_version", "3.5")
-        contrib_dir = (
-            f"/usr/pgsql-{major}/share/contrib/postgis-{postgis_major}"
-        )
-        for script in ("legacy.sql", "uninstall_legacy.sql"):
-            path = f"{contrib_dir}/{script}"
-            result = upgrade_image_host.run(f"test -f {path}")
-            assert result.rc == 0, (
-                f"PostGIS {script!r} missing at {path!r} in upgrade image "
-                f"(PG {major})"
-            )
 
     @pytest.mark.parametrize(
         "major",

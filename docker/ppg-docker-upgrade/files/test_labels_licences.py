@@ -10,7 +10,11 @@ import testinfra
 MAJOR_VER = os.getenv("VERSION").split(".")[0]
 DOCKER_REPO = os.getenv("DOCKER_REPOSITORY")
 IMG_TAG = os.getenv("TAG")
-IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG}"
+IS_WITH_POSTGIS = os.getenv("WITH_POSTGIS", "false").lower() == "true"
+if IS_WITH_POSTGIS:
+    IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-with-postgis:{IMG_TAG}"
+else:
+    IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG}"
 
 REQUIRED_LABEL_MAINTAINER = os.getenv(
     "PPG_LABEL_MAINTAINER", "Percona Development <info@percona.com>"
