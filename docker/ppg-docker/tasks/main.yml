@@ -11,17 +11,6 @@
   debug:
     msg: "WITH_POSTGIS: {{ WITH_POSTGIS }}"
 
-- name: Assign TAG based on architecture and version
-  set_fact:
-    TAG: >-
-      {{
-        TAG if ansible_architecture == 'x86_64' and not TAG|regex_search('multi')
-        else TAG if ansible_architecture == 'aarch64' and (not TAG|regex_search('multi') and TAG|regex_search('-arm64$'))
-        else TAG|string + '-arm64' if ansible_architecture == 'aarch64' and not TAG|regex_search('multi')
-        else TAG
-      }}
-  when: "ansible_architecture == 'x86_64' or ansible_architecture == 'aarch64'"
-
 - name: Print PPG_VERSION and TAG
   debug:
     msg: "PPG_VERSION: {{ PPG_VERSION }}, TAG: {{ TAG }}"
