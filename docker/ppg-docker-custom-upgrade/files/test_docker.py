@@ -1267,6 +1267,82 @@ def test_postgis_indexing_and_joins(host):
         manage_postgis(host, "drop")
 
 
+@milestone_2
+def test_postgis_functional(host):
+    """
+    End-to-end functional test: spatial table, GiST index, proximity query,
+    area calculation, and topology — covering the full PostGIS stack in one workflow.
+    """
+
+    try:
+        host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS postgis CASCADE;'")
+        host.run("psql -c 'DROP TABLE IF EXISTS geo_cities CASCADE;'")
+
+        # 1. Create a table and populate it with European city points
+        setup_sql = """
+        CREATE TABLE geo_cities (
+            id   serial PRIMARY KEY,
+            name text,
+            geom geometry(Point, 4326)
+        );
+        INSERT INTO geo_cities (name, geom) VALUES
+            ('London',    ST_SetSRID(ST_MakePoint(-0.1278,  51.5074), 4326)),
+            ('Paris',     ST_SetSRID(ST_MakePoint( 2.3522,  48.8566), 4326)),
+            ('Berlin',    ST_SetSRID(ST_MakePoint(13.4050,  52.5200), 4326)),
+            ('Madrid',    ST_SetSRID(ST_MakePoint(-3.7038,  40.4168), 4326)),
+            ('Amsterdam', ST_SetSRID(ST_MakePoint( 4.9041,  52.3676), 4326));
+        CREATE INDEX idx_geo_cities_geom ON geo_cities USING GIST (geom);
+        """
+        res = host.run(f'psql -c "{setup_sql}"')
+        assert res.rc == 0, f"Setup failed: {res.stderr}"
+
+        # 2. Proximity query: cities within 600 km of London (geography cast for metres)
+        proximity_sql = (
+            "SELECT count(*) FROM geo_cities "
+            "WHERE ST_DWithin("
+            "  geom::geography,"
+            "  ST_SetSRID(ST_MakePoint(-0.1278, 51.5074), 4326)::geography,"
+            "  600000"
+            ");"
+        )
+        count = host.run(f'psql -t -A -c "{proximity_sql}"').stdout.strip()
+        # London, Paris, Amsterdam are within 600 km; Berlin is ~930 km; Madrid ~1265 km
+        assert count == "3", f"Expected 3 cities within 600 km of London, got {count}"
+
+        # 3. Distance check: London → Paris must be roughly 340 km
+        dist_sql = (
+            "SELECT ST_Distance("
+            "  (SELECT geom::geography FROM geo_cities WHERE name='London'),"
+            "  (SELECT geom::geography FROM geo_cities WHERE name='Paris')"
+            ")::int;"
+        )
+        dist_m = int(host.run(f'psql -t -A -c "{dist_sql}"').stdout.strip())
+        assert 330000 < dist_m < 350000, f"London–Paris distance unexpected: {dist_m} m"
+
+        # 4. Area of a bounding envelope that covers Western Europe (~correct order of magnitude)
+        area_sql = (
+            "SELECT ST_Area(ST_Envelope(ST_Collect(geom))::geography)::bigint "
+            "FROM geo_cities;"
+        )
+        area_m2 = int(host.run(f'psql -t -A -c "{area_sql}"').stdout.strip())
+        assert area_m2 > 1_000_000_000_000, f"Bounding area too small: {area_m2} m²"
+
+        # 5. Nearest-neighbour: closest city to Brussels (4.35, 50.85) should be Paris or Amsterdam
+        nn_sql = (
+            "SELECT name FROM geo_cities "
+            "ORDER BY geom::geography <-> "
+            "ST_SetSRID(ST_MakePoint(4.35, 50.85), 4326)::geography LIMIT 1;"
+        )
+        nearest = host.run(f'psql -t -A -c "{nn_sql}"').stdout.strip()
+        assert nearest in ("Paris", "Amsterdam"), (
+            f"Unexpected nearest city to Brussels: {nearest!r}"
+        )
+
+    finally:
+        host.run("psql -c 'DROP TABLE IF EXISTS geo_cities CASCADE;'")
+        host.run("psql -c 'DROP EXTENSION IF EXISTS postgis CASCADE;'")
+
+
 # --- H3 TEST ---
 @pytest.fixture(scope="module")
 def h3_db(host):
