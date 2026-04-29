@@ -1,4 +1,21 @@
 ---
+  - name: Read OBS project from REPO env var
+    ansible.builtin.set_fact:
+      obs_project: "{{ lookup('env', 'REPO') | default('', true) }}"
+
+  - name: Fail when REPO is empty
+    ansible.builtin.fail:
+      msg: >-
+        REPO env var must be set to an OBS project name (e.g.
+        isv:percona:ppg:18) when using the OBS install path.
+    when: obs_project == ""
+
+  - name: Compute OBS URL path segment and filesystem-safe ids
+    ansible.builtin.set_fact:
+      obs_url_path: "{{ obs_project | regex_replace(':', ':/') }}"
+      obs_safe_id: "{{ obs_project | replace(':', '-') }}"
+      obs_section_id: "{{ obs_project | replace(':', '_') }}"
+
   - name: Map distro to OBS repository directory
     ansible.builtin.set_fact:
       obs_repo_dir: >-
@@ -12,17 +29,17 @@
         UNSUPPORTED
         {%- endif -%}
 
-  - name: Fail when distro is not supported by OBS isv:percona:ppg:18
+  - name: Fail when distro is not supported by OBS project {{ obs_project }}
     ansible.builtin.fail:
       msg: >-
-        OBS project isv:percona:ppg:18 does not publish packages for
+        OBS project {{ obs_project }} does not publish packages for
         {{ ansible_distribution }} {{ ansible_distribution_major_version }}.
         Supported targets: Debian 13, Ubuntu 24.04, Rocky/RHEL 9.
     when: obs_repo_dir == "UNSUPPORTED"
 
   - name: Set OBS base URL
     ansible.builtin.set_fact:
-      obs_base_url: "https://download.opensuse.org/repositories/isv:/percona:/ppg:/18/{{ obs_repo_dir }}"
+      obs_base_url: "https://download.opensuse.org/repositories/{{ obs_url_path }}/{{ obs_repo_dir }}"
 
   - name: Ensure /etc/apt/keyrings exists (Debian/Ubuntu)
     ansible.builtin.file:
@@ -34,17 +51,17 @@
   - name: Download OBS repo signing key (Debian/Ubuntu)
     ansible.builtin.get_url:
       url: "{{ obs_base_url }}/Release.key"
-      dest: /etc/apt/keyrings/isv-percona-ppg-18.asc
+      dest: "/etc/apt/keyrings/{{ obs_safe_id }}.asc"
       mode: "0644"
       force: true
     when: ansible_os_family == "Debian"
 
   - name: Add OBS apt source (Debian/Ubuntu)
     ansible.builtin.copy:
-      dest: /etc/apt/sources.list.d/isv-percona-ppg-18.list
+      dest: "/etc/apt/sources.list.d/{{ obs_safe_id }}.list"
       mode: "0644"
       content: |
-        deb [signed-by=/etc/apt/keyrings/isv-percona-ppg-18.asc] {{ obs_base_url }}/ ./
+        deb [signed-by=/etc/apt/keyrings/{{ obs_safe_id }}.asc] {{ obs_base_url }}/ ./
     when: ansible_os_family == "Debian"
 
   - name: Update apt cache (Debian/Ubuntu)
@@ -54,11 +71,11 @@
 
   - name: Add OBS yum repository (RHEL/Rocky)
     ansible.builtin.copy:
-      dest: /etc/yum.repos.d/isv-percona-ppg-18.repo
+      dest: "/etc/yum.repos.d/{{ obs_safe_id }}.repo"
       mode: "0644"
       content: |
-        [isv_percona_ppg_18]
-        name=Percona Distribution for PostgreSQL 18 (OBS {{ obs_repo_dir }})
+        [{{ obs_section_id }}]
+        name=OBS {{ obs_project }} ({{ obs_repo_dir }})
         type=rpm-md
         baseurl={{ obs_base_url }}/
         gpgcheck=1

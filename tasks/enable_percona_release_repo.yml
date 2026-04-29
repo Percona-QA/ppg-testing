@@ -1,0 +1,31 @@
+  - name: Install percona repository package
+    apt:
+     deb: https://repo.percona.com/apt/percona-release_latest.generic_all.deb
+    when: ansible_os_family == "Debian"
+
+  - name: Install percona-release
+    command: yum -y install https://repo.percona.com/yum/percona-release-latest.noarch.rpm
+    when: ansible_os_family == "RedHat"
+
+  - name: clean and update yum cache
+    shell: |
+      yum clean all
+      yum makecache
+    when: ansible_os_family == "RedHat"
+
+  - set_fact:
+      major_repo: "{{ lookup('env', 'MAJOR_REPO') }}"
+
+  - name: setup repo with percona-release {{ version }} with minor prefix
+    command: percona-release enable-only {{ version }} {{ repo }}
+    vars:
+      repo: "{{ lookup('env', 'REPO') }}"
+      version: "{{ lookup('env', 'VERSION') }}"
+    when: not major_repo
+
+  - name: setup repo with percona-release {{ version }}
+    command: percona-release enable-only ppg-{{ version }} {{ repo }}
+    vars:
+      repo: "{{ lookup('env', 'REPO') }}"
+      version: "{{ lookup('env', 'VERSION').split('.')[0].split('-')[1] }}"
+    when: major_repo
