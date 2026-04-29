@@ -1,0 +1,73 @@
+---
+  - name: Map distro to OBS repository directory
+    ansible.builtin.set_fact:
+      obs_repo_dir: >-
+        {%- if ansible_distribution == 'Debian' and ansible_distribution_major_version == '13' -%}
+        Debian_13
+        {%- elif ansible_distribution == 'Ubuntu' and ansible_distribution_major_version == '24' -%}
+        Ubuntu_24.04
+        {%- elif (ansible_distribution == 'Rocky' or ansible_distribution == 'RedHat') and ansible_distribution_major_version == '9' -%}
+        RockyLinux_9
+        {%- else -%}
+        UNSUPPORTED
+        {%- endif -%}
+
+  - name: Fail when distro is not supported by OBS isv:percona:ppg:18
+    ansible.builtin.fail:
+      msg: >-
+        OBS project isv:percona:ppg:18 does not publish packages for
+        {{ ansible_distribution }} {{ ansible_distribution_major_version }}.
+        Supported targets: Debian 13, Ubuntu 24.04, Rocky/RHEL 9.
+    when: obs_repo_dir == "UNSUPPORTED"
+
+  - name: Set OBS base URL
+    ansible.builtin.set_fact:
+      obs_base_url: "https://download.opensuse.org/repositories/isv:/percona:/ppg:/18/{{ obs_repo_dir }}"
+
+  - name: Ensure /etc/apt/keyrings exists (Debian/Ubuntu)
+    ansible.builtin.file:
+      path: /etc/apt/keyrings
+      state: directory
+      mode: "0755"
+    when: ansible_os_family == "Debian"
+
+  - name: Download OBS repo signing key (Debian/Ubuntu)
+    ansible.builtin.get_url:
+      url: "{{ obs_base_url }}/Release.key"
+      dest: /etc/apt/keyrings/isv-percona-ppg-18.asc
+      mode: "0644"
+      force: true
+    when: ansible_os_family == "Debian"
+
+  - name: Add OBS apt source (Debian/Ubuntu)
+    ansible.builtin.copy:
+      dest: /etc/apt/sources.list.d/isv-percona-ppg-18.list
+      mode: "0644"
+      content: |
+        deb [signed-by=/etc/apt/keyrings/isv-percona-ppg-18.asc] {{ obs_base_url }}/ ./
+    when: ansible_os_family == "Debian"
+
+  - name: Update apt cache (Debian/Ubuntu)
+    ansible.builtin.apt:
+      update_cache: true
+    when: ansible_os_family == "Debian"
+
+  - name: Add OBS yum repository (RHEL/Rocky)
+    ansible.builtin.copy:
+      dest: /etc/yum.repos.d/isv-percona-ppg-18.repo
+      mode: "0644"
+      content: |
+        [isv_percona_ppg_18]
+        name=Percona Distribution for PostgreSQL 18 (OBS {{ obs_repo_dir }})
+        type=rpm-md
+        baseurl={{ obs_base_url }}/
+        gpgcheck=1
+        gpgkey={{ obs_base_url }}/repodata/repomd.xml.key
+        enabled=1
+    when: ansible_os_family == "RedHat"
+
+  - name: Refresh dnf cache (RHEL/Rocky)
+    ansible.builtin.shell: |
+      dnf clean all
+      dnf makecache
+    when: ansible_os_family == "RedHat"

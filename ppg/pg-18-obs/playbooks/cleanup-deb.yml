@@ -1,0 +1,68 @@
+---
+- name: Cleanup
+  hosts: all
+  become: true
+  become_method: sudo
+  tasks:
+    - name: remove Postgresql deb packages
+      apt:
+        name: "{{ packages }}"
+        state: absent
+      vars:
+        packages:
+          - percona-postgresql-18
+          - percona-postgresql-all
+          - percona-postgresql-client-18
+          - percona-postgresql-contrib
+          - percona-postgresql-doc
+          - percona-postgresql-doc-18
+          - percona-postgresql-plperl-18
+          - percona-postgresql-plpython3-18
+          - percona-postgresql-pltcl-18
+          - percona-postgresql-server-dev-18
+          - percona-postgresql-server-dev-all
+          - percona-postgresql-18-dbgsym
+          - percona-postgresql-client-18-dbgsym
+          - percona-postgresql-plperl-18-dbgsym
+          - percona-postgresql-plpython3-18-dbgsym
+          - percona-postgresql-pltcl-18-dbgsym
+          - percona-postgresql-18-pgaudit
+          - percona-postgresql-18-repack
+          - percona-postgresql-18-repack-dbgsym
+          - percona-pgbackrest
+          - percona-pgbackrest-doc
+          - percona-patroni
+          - percona-patroni-dbgsym
+          - percona-pgbadger
+          - percona-pgbouncer
+          - percona-pgaudit18-set-user
+          - percona-pgaudit18-set-user-dbgsym
+          - percona-pgbouncer-dbgsym
+          - percona-postgresql-18-wal2json
+          - percona-postgresql-18-wal2json-dbgsym
+      when: ansible_distribution == "Debian"
+
+    - name: remove patroni ubuntu
+      apt:
+        name: percona-patroni
+        state: absent
+      when: ansible_distribution == "Ubuntu"
+
+    - name: Remove postgresql Debian developer packages
+      apt:
+        name: "{{ packages }}"
+        state: absent
+      vars:
+        packages:
+        - libecpg-compat3
+        - libecpg-compat3-dbgsym
+        - libecpg-dev-dbgsym
+        - libecpg-dev
+        - libecpg6-dbgsym
+        - libecpg6
+        - libpgtypes3
+        - libpgtypes3-dbgsym
+        - libpq-dev
+        - libpq5-dbgsym
+        - libpq5
+      when: ansible_os_family == "Debian"
