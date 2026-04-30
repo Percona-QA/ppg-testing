@@ -102,7 +102,14 @@ def test_deb_package_is_installed(host, package):
         pytest.skip("Skipping for Q2-2025 releses and moving forward.")
     pkg = host.package(package)
     assert pkg.is_installed
-    assert pkg.version in pg_versions['deb_pkg_ver']
+    if ":" in os.environ.get("REPO", ""):
+        # OBS rebuilds append a volatile project-revision suffix (e.g. +2.1)
+        # instead of the percona-release distro suffix (.bookworm). Match the
+        # base version prefix only.
+        base_versions = pg_versions['deb_pkg_ver_base']
+        assert any(pkg.version.startswith(v) for v in base_versions), pkg.version
+    else:
+        assert pkg.version in pg_versions['deb_pkg_ver']
 
 
 @pytest.mark.upgrade

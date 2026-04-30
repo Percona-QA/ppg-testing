@@ -251,7 +251,8 @@ def get_pg11_versions(distros, packages, distro_type):
         "languages": LANGUAGES
                         }
     ppg_11_versions.update({"deb_pkg_ver": fill_package_versions(packages=packages,
-                                                                 distros=distros)})
+                                                                 distros=distros),
+                            "deb_pkg_ver_base": list(packages)})
     return ppg_11_versions
 
 
@@ -273,7 +274,8 @@ def get_pg12_versions(distros, packages, distro_type):
                        "languages": LANGUAGES}
 
     ppg_12_versions.update({"deb_pkg_ver": fill_package_versions(packages=packages,
-                                                                 distros=distros)})
+                                                                 distros=distros),
+                            "deb_pkg_ver_base": list(packages)})
     return ppg_12_versions
 
 
@@ -297,7 +299,8 @@ def get_pg13_versions(distros, packages, distro_type):
                        "languages": LANGUAGES}
 
     ppg_13_versions.update({"deb_pkg_ver": fill_package_versions(packages=packages,
-                                                                 distros=distros)})
+                                                                 distros=distros),
+                            "deb_pkg_ver_base": list(packages)})
     return ppg_13_versions
 
 
@@ -321,7 +324,8 @@ def get_pg14_versions(distros, packages, distro_type):
                        "languages": LANGUAGES}
 
     ppg_14_versions.update({"deb_pkg_ver": fill_package_versions(packages=packages,
-                                                                 distros=distros)})
+                                                                 distros=distros),
+                            "deb_pkg_ver_base": list(packages)})
     return ppg_14_versions
 
 
@@ -345,7 +349,8 @@ def get_pg15_versions(distros, packages, distro_type):
                        "languages": LANGUAGES}
 
     ppg_15_versions.update({"deb_pkg_ver": fill_package_versions(packages=packages,
-                                                                 distros=distros)})
+                                                                 distros=distros),
+                            "deb_pkg_ver_base": list(packages)})
     return ppg_15_versions
 
 
@@ -369,7 +374,8 @@ def get_pg16_versions(distros, packages, distro_type):
                        "languages": LANGUAGES}
 
     ppg_16_versions.update({"deb_pkg_ver": fill_package_versions(packages=packages,
-                                                                 distros=distros)})
+                                                                 distros=distros),
+                            "deb_pkg_ver_base": list(packages)})
     return ppg_16_versions
 
 
@@ -393,7 +399,8 @@ def get_pg17_versions(distros, packages, distro_type):
                        "languages": LANGUAGES}
 
     ppg_17_versions.update({"deb_pkg_ver": fill_package_versions(packages=packages,
-                                                                 distros=distros)})
+                                                                 distros=distros),
+                            "deb_pkg_ver_base": list(packages)})
     return ppg_17_versions
 
 
@@ -417,7 +424,8 @@ def get_pg18_versions(distros, packages, distro_type):
                        "languages": LANGUAGES}
 
     ppg_18_versions.update({"deb_pkg_ver": fill_package_versions(packages=packages,
-                                                                 distros=distros)})
+                                                                 distros=distros),
+                            "deb_pkg_ver_base": list(packages)})
     return ppg_18_versions
 
 
