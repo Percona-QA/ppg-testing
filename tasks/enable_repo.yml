@@ -4,9 +4,9 @@
       is_obs_repo: "{{ ':' in (lookup('env', 'REPO') | default('', true)) }}"
 
   - name: Configure repository (OBS)
-    include_tasks: enable_obs_repo.yml
+    include_tasks: "{{ role_path }}/../../tasks/enable_obs_repo.yml"
     when: is_obs_repo
 
   - name: Configure repository (percona-release)
-    include_tasks: enable_percona_release_repo.yml
+    include_tasks: "{{ role_path }}/../../tasks/enable_percona_release_repo.yml"
     when: not is_obs_repo
