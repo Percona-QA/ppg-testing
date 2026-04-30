@@ -29,6 +29,7 @@ def get_settings(distro_type):
         "ppg-11.22": {
             "version": "11.22",
             "deb_pkg_ver": ppg_versions["ppg-11.22"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-11.22"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-11.22"]["deb_packages"],
             "percona-postgresql-common": "256",
             "percona-postgresql-client-common": "256",
@@ -65,6 +66,7 @@ def get_settings(distro_type):
         "ppg-11.21": {
             "version": "11.21",
             "deb_pkg_ver": ppg_versions["ppg-11.21"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-11.21"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-11.21"]["deb_packages"],
             "percona-postgresql-common": "252",
             "percona-postgresql-client-common": "252",
@@ -101,6 +103,7 @@ def get_settings(distro_type):
         "ppg-11.20": {
             "version": "11.20",
             "deb_pkg_ver": ppg_versions["ppg-11.20"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-11.20"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-11.20"]["deb_packages"],
             "percona-postgresql-common": "250",
             "percona-postgresql-client-common": "250",
@@ -136,6 +139,7 @@ def get_settings(distro_type):
         "ppg-11.19": {
             "version": "11.19",
             "deb_pkg_ver": ppg_versions["ppg-11.19"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-11.19"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-11.19"]["deb_packages"],
             "percona-postgresql-common": "247",
             "percona-postgresql-client-common": "247",
@@ -169,6 +173,7 @@ def get_settings(distro_type):
         "ppg-11.18": {
             "version": "11.18",
             "deb_pkg_ver": ppg_versions["ppg-11.18"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-11.18"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-11.18"]["deb_packages"],
             "percona-postgresql-common": "241",
             "percona-postgresql-client-common": "241",
@@ -201,6 +206,7 @@ def get_settings(distro_type):
         "ppg-11.17": {
             "version": "11.17",
             "deb_pkg_ver": ppg_versions["ppg-11.17"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-11.17"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-11.17"]["deb_packages"],
             "percona-postgresql-common": "241",
             "percona-postgresql-client-common": "241",
@@ -233,6 +239,7 @@ def get_settings(distro_type):
         "ppg-11.16": {
             "version": "11.16",
             "deb_pkg_ver": ppg_versions["ppg-11.16"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-11.16"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-11.16"]["deb_packages"],
             "percona-postgresql-common": "241",
             "percona-postgresql-client-common": "241",
@@ -265,6 +272,7 @@ def get_settings(distro_type):
         "ppg-11.15": {
             "version": "11.15",
             "deb_pkg_ver": ppg_versions["ppg-11.15"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-11.15"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-11.15"]["deb_packages"],
             "percona-postgresql-common": "237",
             "percona-postgresql-client-common": "237",
@@ -296,6 +304,7 @@ def get_settings(distro_type):
         "ppg-11.14": {
             "version": "11.14",
             "deb_pkg_ver": ppg_versions["ppg-11.14"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-11.14"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-11.14"]["deb_packages"],
             "percona-postgresql-common": "230",
             "percona-postgresql-client-common": "230",
@@ -327,6 +336,7 @@ def get_settings(distro_type):
         "ppg-11.13": {
               "version": "11.13",
               "deb_pkg_ver": ppg_versions["ppg-11.13"]["deb_pkg_ver"],
+              "deb_pkg_ver_base": ppg_versions["ppg-11.13"]["deb_pkg_ver_base"],
               "deb_packages": ppg_versions["ppg-11.13"]["deb_packages"],
               "percona-postgresql-common": "226",
               "percona-postgresql-client-common": "226",
@@ -358,6 +368,7 @@ def get_settings(distro_type):
         "ppg-11.12": {
               "version": "11.12",
               "deb_pkg_ver": ppg_versions["ppg-11.12"]["deb_pkg_ver"],
+              "deb_pkg_ver_base": ppg_versions["ppg-11.12"]["deb_pkg_ver_base"],
               "deb_packages": ppg_versions["ppg-11.12"]["deb_packages"],
               "percona-postgresql-common": "226",
               "percona-postgresql-client-common": "226",
@@ -389,6 +400,7 @@ def get_settings(distro_type):
         "ppg-11.11": {
               "version": "11.11",
               "deb_pkg_ver": ppg_versions["ppg-11.11"]["deb_pkg_ver"],
+              "deb_pkg_ver_base": ppg_versions["ppg-11.11"]["deb_pkg_ver_base"],
               "deb_packages": ppg_versions["ppg-11.11"]["deb_packages"],
               "percona-postgresql-common": "225",
               "percona-postgresql-client-common": "225",
@@ -416,6 +428,7 @@ def get_settings(distro_type):
         "ppg-11.10": {
               "version": "11.10",
               "deb_pkg_ver": ppg_versions["ppg-11.10"]["deb_pkg_ver"],
+              "deb_pkg_ver_base": ppg_versions["ppg-11.10"]["deb_pkg_ver_base"],
               "deb_packages": ppg_versions["ppg-11.10"]["deb_packages"],
               "percona-postgresql-common": "223",
               "percona-postgresql-client-common": "223",
@@ -441,6 +454,7 @@ def get_settings(distro_type):
         "ppg-11.9": {
              "version": "11.9",
              "deb_pkg_ver": ppg_versions["ppg-11.9"]["deb_pkg_ver"],
+             "deb_pkg_ver_base": ppg_versions["ppg-11.9"]["deb_pkg_ver_base"],
              "deb_packages": ppg_versions["ppg-11.9"]["deb_packages"],
              "percona-postgresql-common": "216",
              "percona-postgresql-client-common": "216",
@@ -466,6 +480,7 @@ def get_settings(distro_type):
         "ppg-11.8": {
              "version": "11.8",
              "deb_pkg_ver": ppg_versions["ppg-11.8"]["deb_pkg_ver"],
+             "deb_pkg_ver_base": ppg_versions["ppg-11.8"]["deb_pkg_ver_base"],
              "deb_packages": ppg_versions["ppg-11.8"]["deb_packages"],
              "percona-postgresql-common": "215",
              "percona-postgresql-client-common": "215",
@@ -491,6 +506,7 @@ def get_settings(distro_type):
         "ppg-11.7": {
              "version": "11.7",
              "deb_pkg_ver": ppg_versions["ppg-11.7"]["deb_pkg_ver"],
+             "deb_pkg_ver_base": ppg_versions["ppg-11.7"]["deb_pkg_ver_base"],
              "deb_packages": ppg_versions["ppg-11.7"]["deb_packages"],
              "percona-postgresql-common": "214",
              "percona-postgresql-client-common": "214",
@@ -514,6 +530,7 @@ def get_settings(distro_type):
         "ppg-11.6": {
              "version": "11.6",
              "deb_pkg_ver": ppg_versions["ppg-11.6"]["deb_pkg_ver"],
+             "deb_pkg_ver_base": ppg_versions["ppg-11.6"]["deb_pkg_ver_base"],
              "deb_packages": ppg_versions["ppg-11.6"]["deb_packages"],
              "percona-postgresql-common": "210",
              "percona-postgresql-client-common": "210",
@@ -537,6 +554,7 @@ def get_settings(distro_type):
         "ppg-11.5": {
              "version": "11.5",
              "deb_pkg_ver": ppg_versions["ppg-11.5"]["deb_pkg_ver"],
+             "deb_pkg_ver_base": ppg_versions["ppg-11.5"]["deb_pkg_ver_base"],
              "deb_packages": ppg_versions["ppg-11.5"]["deb_packages"],
              "percona-postgresql-common": "204",
              "percona-postgresql-client-common": "204",
@@ -554,6 +572,7 @@ def get_settings(distro_type):
         "ppg-12.2": {
              "version": "12.2",
              "deb_pkg_ver": ppg_versions["ppg-12.2"]["deb_pkg_ver"],
+             "deb_pkg_ver_base": ppg_versions["ppg-12.2"]["deb_pkg_ver_base"],
              "deb_packages": ppg_versions["ppg-12.2"]["deb_packages"],
              "percona-postgresql-common": "214",
              "percona-postgresql-client-common": "214",
@@ -577,6 +596,7 @@ def get_settings(distro_type):
         "ppg-12.3": {
              "version": "12.3",
              "deb_pkg_ver": ppg_versions["ppg-12.3"]["deb_pkg_ver"],
+             "deb_pkg_ver_base": ppg_versions["ppg-12.3"]["deb_pkg_ver_base"],
              "deb_packages": ppg_versions["ppg-12.3"]["deb_packages"],
              "percona-postgresql-common": "215",
              "percona-postgresql-client-common": "215",
@@ -602,6 +622,7 @@ def get_settings(distro_type):
         "ppg-12.4": {
              "version": "12.4",
              "deb_pkg_ver": ppg_versions["ppg-12.4"]["deb_pkg_ver"],
+             "deb_pkg_ver_base": ppg_versions["ppg-12.4"]["deb_pkg_ver_base"],
              "deb_packages": ppg_versions["ppg-12.4"]["deb_packages"],
              "percona-postgresql-common": "216",
              "percona-postgresql-client-common": "216",
@@ -627,6 +648,7 @@ def get_settings(distro_type):
         "ppg-12.5": {
              "version": "12.5",
              "deb_pkg_ver": ppg_versions["ppg-12.5"]["deb_pkg_ver"],
+             "deb_pkg_ver_base": ppg_versions["ppg-12.5"]["deb_pkg_ver_base"],
              "deb_packages": ppg_versions["ppg-12.5"]["deb_packages"],
              "percona-postgresql-common": "223",
              "percona-postgresql-client-common": "223",
@@ -652,6 +674,7 @@ def get_settings(distro_type):
         "ppg-12.6": {
              "version": "12.6",
              "deb_pkg_ver": ppg_versions["ppg-12.6"]["deb_pkg_ver"],
+             "deb_pkg_ver_base": ppg_versions["ppg-12.6"]["deb_pkg_ver_base"],
              "deb_packages": ppg_versions["ppg-12.6"]["deb_packages"],
              "percona-postgresql-common": "225",
              "percona-postgresql-client-common": "225",
@@ -683,6 +706,7 @@ def get_settings(distro_type):
         "ppg-12.7": {
              "version": "12.7",
              "deb_pkg_ver": ppg_versions["ppg-12.7"]["deb_pkg_ver"],
+             "deb_pkg_ver_base": ppg_versions["ppg-12.7"]["deb_pkg_ver_base"],
              "deb_packages": ppg_versions["ppg-12.7"]["deb_packages"],
              "percona-postgresql-common": "226",
              "percona-postgresql-client-common": "226",
@@ -714,6 +738,7 @@ def get_settings(distro_type):
         "ppg-12.8": {
              "version": "12.8",
              "deb_pkg_ver": ppg_versions["ppg-12.8"]["deb_pkg_ver"],
+             "deb_pkg_ver_base": ppg_versions["ppg-12.8"]["deb_pkg_ver_base"],
              "deb_packages": ppg_versions["ppg-12.8"]["deb_packages"],
              "percona-postgresql-common": "226",
              "percona-postgresql-client-common": "226",
@@ -745,6 +770,7 @@ def get_settings(distro_type):
         "ppg-12.9": {
             "version": "12.9",
             "deb_pkg_ver": ppg_versions["ppg-12.9"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-12.9"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-12.9"]["deb_packages"],
             "percona-postgresql-common": "230",
             "percona-postgresql-client-common": "230",
@@ -776,6 +802,7 @@ def get_settings(distro_type):
         "ppg-12.10": {
             "version": "12.10",
             "deb_pkg_ver": ppg_versions["ppg-12.10"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-12.10"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-12.10"]["deb_packages"],
             "percona-postgresql-common": "241",
             "percona-postgresql-client-common": "241",
@@ -807,6 +834,7 @@ def get_settings(distro_type):
         "ppg-12.11": {
             "version": "12.11",
             "deb_pkg_ver": ppg_versions["ppg-12.11"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-12.11"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-12.11"]["deb_packages"],
             "percona-postgresql-common": "237",
             "percona-postgresql-client-common": "237",
@@ -839,6 +867,7 @@ def get_settings(distro_type):
         "ppg-12.12": {
             "version": "12.12",
             "deb_pkg_ver": ppg_versions["ppg-12.12"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-12.12"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-12.12"]["deb_packages"],
             "percona-postgresql-common": "241",
             "percona-postgresql-client-common": "241",
@@ -871,6 +900,7 @@ def get_settings(distro_type):
         "ppg-12.13": {
             "version": "12.13",
             "deb_pkg_ver": ppg_versions["ppg-12.13"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-12.13"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-12.13"]["deb_packages"],
             "percona-postgresql-common": "241",
             "percona-postgresql-client-common": "241",
@@ -903,6 +933,7 @@ def get_settings(distro_type):
         "ppg-12.14": {
             "version": "12.14",
             "deb_pkg_ver": ppg_versions["ppg-12.14"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-12.14"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-12.14"]["deb_packages"],
             "percona-postgresql-common": "247",
             "percona-postgresql-client-common": "247",
@@ -936,6 +967,7 @@ def get_settings(distro_type):
         "ppg-12.15": {
             "version": "12.15",
             "deb_pkg_ver": ppg_versions["ppg-12.15"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-12.15"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-12.15"]["deb_packages"],
             "percona-postgresql-common": "250",
             "percona-postgresql-client-common": "250",
@@ -971,6 +1003,7 @@ def get_settings(distro_type):
         "ppg-12.16": {
             "version": "12.16",
             "deb_pkg_ver": ppg_versions["ppg-12.16"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-12.16"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-12.16"]["deb_packages"],
             "percona-postgresql-common": "252",
             "percona-postgresql-client-common": "252",
@@ -1007,6 +1040,7 @@ def get_settings(distro_type):
         "ppg-12.17": {
             "version": "12.17",
             "deb_pkg_ver": ppg_versions["ppg-12.17"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-12.17"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-12.17"]["deb_packages"],
             "percona-postgresql-common": "256",
             "percona-postgresql-client-common": "256",
@@ -1043,6 +1077,7 @@ def get_settings(distro_type):
         "ppg-12.18": {
             "version": "12.18",
             "deb_pkg_ver": ppg_versions["ppg-12.18"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-12.18"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-12.18"]["deb_packages"],
             "percona-postgresql-common": "256",
             "percona-postgresql-client-common": "256",
@@ -1079,6 +1114,7 @@ def get_settings(distro_type):
         "ppg-12.19": {
             "version": "12.19",
             "deb_pkg_ver": ppg_versions["ppg-12.19"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-12.19"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-12.19"]["deb_packages"],
             "percona-postgresql-common": "259",
             "percona-postgresql-client-common": "259",
@@ -1116,6 +1152,7 @@ def get_settings(distro_type):
         "ppg-12.20": {
             "version": "12.20",
             "deb_pkg_ver": ppg_versions["ppg-12.20"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-12.20"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-12.20"]["deb_packages"],
             "percona-postgresql-common": "261",
             "percona-postgresql-client-common": "261",
@@ -1153,6 +1190,7 @@ def get_settings(distro_type):
         "ppg-12.22": {
             "version": "12.22",
             "deb_pkg_ver": ppg_versions["ppg-12.22"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-12.22"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-12.22"]["deb_packages"],
             "percona-postgresql-common": "266",
             "percona-postgresql-client-common": "266",
@@ -1190,6 +1228,7 @@ def get_settings(distro_type):
         "ppg-13.0": {
              "version": "13.0",
              "deb_pkg_ver": ppg_versions["ppg-13.0"]["deb_pkg_ver"],
+             "deb_pkg_ver_base": ppg_versions["ppg-13.0"]["deb_pkg_ver_base"],
              "deb_packages": ppg_versions["ppg-13.0"]["deb_packages"],
              "percona-postgresql-common": "221",
              "percona-postgresql-client-common": "221",
@@ -1215,6 +1254,7 @@ def get_settings(distro_type):
         "ppg-13.1": {
              "version": "13.1",
              "deb_pkg_ver": ppg_versions["ppg-13.1"]["deb_pkg_ver"],
+             "deb_pkg_ver_base": ppg_versions["ppg-13.1"]["deb_pkg_ver_base"],
              "deb_packages": ppg_versions["ppg-13.1"]["deb_packages"],
              "percona-postgresql-common": "223",
              "percona-postgresql-client-common": "223",
@@ -1240,6 +1280,7 @@ def get_settings(distro_type):
         "ppg-13.2": {
              "version": "13.2",
              "deb_pkg_ver": ppg_versions["ppg-13.2"]["deb_pkg_ver"],
+             "deb_pkg_ver_base": ppg_versions["ppg-13.2"]["deb_pkg_ver_base"],
              "deb_packages": ppg_versions["ppg-13.2"]["deb_packages"],
              "percona-postgresql-common": "225",
              "percona-postgresql-client-common": "225",
@@ -1271,6 +1312,7 @@ def get_settings(distro_type):
         "ppg-13.3": {
              "version": "13.3",
              "deb_pkg_ver": ppg_versions["ppg-13.3"]["deb_pkg_ver"],
+             "deb_pkg_ver_base": ppg_versions["ppg-13.3"]["deb_pkg_ver_base"],
              "deb_packages": ppg_versions["ppg-13.3"]["deb_packages"],
              "percona-postgresql-common": "226",
              "percona-postgresql-client-common": "226",
@@ -1302,6 +1344,7 @@ def get_settings(distro_type):
         "ppg-13.4": {
              "version": "13.4",
              "deb_pkg_ver": ppg_versions["ppg-13.4"]["deb_pkg_ver"],
+             "deb_pkg_ver_base": ppg_versions["ppg-13.4"]["deb_pkg_ver_base"],
              "deb_packages": ppg_versions["ppg-13.4"]["deb_packages"],
              "percona-postgresql-common": "226",
              "percona-postgresql-client-common": "226",
@@ -1333,6 +1376,7 @@ def get_settings(distro_type):
         "ppg-13.5": {
             "version": "13.5",
             "deb_pkg_ver": ppg_versions["ppg-13.5"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-13.5"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-13.5"]["deb_packages"],
             "percona-postgresql-common": "230",
             "percona-postgresql-client-common": "230",
@@ -1364,6 +1408,7 @@ def get_settings(distro_type):
         "ppg-13.6": {
             "version": "13.6",
             "deb_pkg_ver": ppg_versions["ppg-13.6"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-13.6"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-13.6"]["deb_packages"],
             "percona-postgresql-common": "237",
             "percona-postgresql-client-common": "237",
@@ -1395,6 +1440,7 @@ def get_settings(distro_type):
         "ppg-13.7": {
             "version": "13.7",
             "deb_pkg_ver": ppg_versions["ppg-13.7"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-13.7"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-13.7"]["deb_packages"],
             "percona-postgresql-common": "241",
             "percona-postgresql-client-common": "241",
@@ -1427,6 +1473,7 @@ def get_settings(distro_type):
         "ppg-13.8": {
             "version": "13.8",
             "deb_pkg_ver": ppg_versions["ppg-13.8"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-13.8"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-13.8"]["deb_packages"],
             "percona-postgresql-common": "241",
             "percona-postgresql-client-common": "241",
@@ -1459,6 +1506,7 @@ def get_settings(distro_type):
         "ppg-13.9": {
             "version": "13.9",
             "deb_pkg_ver": ppg_versions["ppg-13.9"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-13.9"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-13.9"]["deb_packages"],
             "percona-postgresql-common": "241",
             "percona-postgresql-client-common": "241",
@@ -1491,6 +1539,7 @@ def get_settings(distro_type):
         "ppg-13.10": {
             "version": "13.10",
             "deb_pkg_ver": ppg_versions["ppg-13.10"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-13.10"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-13.10"]["deb_packages"],
             "percona-postgresql-common": "247",
             "percona-postgresql-client-common": "247",
@@ -1524,6 +1573,7 @@ def get_settings(distro_type):
         "ppg-13.11": {
             "version": "13.11",
             "deb_pkg_ver": ppg_versions["ppg-13.11"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-13.11"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-13.11"]["deb_packages"],
             "percona-postgresql-common": "250",
             "percona-postgresql-client-common": "250",
@@ -1559,6 +1609,7 @@ def get_settings(distro_type):
         "ppg-13.12": {
             "version": "13.12",
             "deb_pkg_ver": ppg_versions["ppg-13.12"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-13.12"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-13.12"]["deb_packages"],
             "percona-postgresql-common": "252",
             "percona-postgresql-client-common": "252",
@@ -1595,6 +1646,7 @@ def get_settings(distro_type):
         "ppg-13.13": {
             "version": "13.13",
             "deb_pkg_ver": ppg_versions["ppg-13.13"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-13.13"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-13.13"]["deb_packages"],
             "percona-postgresql-common": "256",
             "percona-postgresql-client-common": "256",
@@ -1631,6 +1683,7 @@ def get_settings(distro_type):
         "ppg-13.14": {
             "version": "13.14",
             "deb_pkg_ver": ppg_versions["ppg-13.14"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-13.14"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-13.14"]["deb_packages"],
             "percona-postgresql-common": "256",
             "percona-postgresql-client-common": "256",
@@ -1667,6 +1720,7 @@ def get_settings(distro_type):
         "ppg-13.15": {
             "version": "13.15",
             "deb_pkg_ver": ppg_versions["ppg-13.15"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-13.15"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-13.15"]["deb_packages"],
             "percona-postgresql-common": "259",
             "percona-postgresql-client-common": "259",
@@ -1704,6 +1758,7 @@ def get_settings(distro_type):
         "ppg-13.16": {
             "version": "13.16",
             "deb_pkg_ver": ppg_versions["ppg-13.16"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-13.16"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-13.16"]["deb_packages"],
             "percona-postgresql-common": "261",
             "percona-postgresql-client-common": "261",
@@ -1741,6 +1796,7 @@ def get_settings(distro_type):
         "ppg-13.18": {
             "version": "13.18",
             "deb_pkg_ver": ppg_versions["ppg-13.18"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-13.18"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-13.18"]["deb_packages"],
             "percona-postgresql-common": "266",
             "percona-postgresql-client-common": "266",
@@ -1781,6 +1837,7 @@ def get_settings(distro_type):
         "ppg-13.20": {
             "version": "13.20",
             "deb_pkg_ver": ppg_versions["ppg-13.20"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-13.20"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-13.20"]["deb_packages"],
             "percona-postgresql-common": "267",
             "percona-postgresql-client-common": "267",
@@ -1821,6 +1878,7 @@ def get_settings(distro_type):
         "ppg-13.21": {
             "version": "13.21",
             "deb_pkg_ver": ppg_versions["ppg-13.21"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-13.21"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-13.21"]["deb_packages"],
             "percona-postgresql-common": "277",
             "percona-postgresql-client-common": "277",
@@ -1861,6 +1919,7 @@ def get_settings(distro_type):
         "ppg-13.22": {
             "version": "13.22",
             "deb_pkg_ver": ppg_versions["ppg-13.22"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-13.22"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-13.22"]["deb_packages"],
             "percona-postgresql-common": "280",
             "percona-postgresql-client-common": "280",
@@ -1901,6 +1960,7 @@ def get_settings(distro_type):
         "ppg-13.23": {
             "version": "13.23",
             "deb_pkg_ver": ppg_versions["ppg-13.23"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-13.23"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-13.23"]["deb_packages"],
             "percona-postgresql-common": "287",
             "percona-postgresql-client-common": "287",
@@ -1942,6 +2002,7 @@ def get_settings(distro_type):
         "ppg-14.0": {
             "version": "14.0",
             "deb_pkg_ver": ppg_versions["ppg-14.0"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.0"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.0"]["deb_packages"],
             "percona-postgresql-common": "226",
             "percona-postgresql-client-common": "226",
@@ -1973,6 +2034,7 @@ def get_settings(distro_type):
         "ppg-14.1": {
             "version": "14.1",
             "deb_pkg_ver": ppg_versions["ppg-14.1"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.1"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.1"]["deb_packages"],
             "percona-postgresql-common": "230",
             "percona-postgresql-client-common": "230",
@@ -2004,6 +2066,7 @@ def get_settings(distro_type):
         "ppg-14.2": {
             "version": "14.2",
             "deb_pkg_ver": ppg_versions["ppg-14.2"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.2"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.2"]["deb_packages"],
             "percona-postgresql-common": "237",
             "percona-postgresql-client-common": "237",
@@ -2035,6 +2098,7 @@ def get_settings(distro_type):
         "ppg-14.3": {
             "version": "14.3",
             "deb_pkg_ver": ppg_versions["ppg-14.3"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.3"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.3"]["deb_packages"],
             "percona-postgresql-common": "241",
             "percona-postgresql-client-common": "241",
@@ -2067,6 +2131,7 @@ def get_settings(distro_type):
         "ppg-14.4": {
             "version": "14.4",
             "deb_pkg_ver": ppg_versions["ppg-14.4"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.4"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.4"]["deb_packages"],
             "percona-postgresql-common": "241",
             "percona-postgresql-client-common": "241",
@@ -2099,6 +2164,7 @@ def get_settings(distro_type):
         "ppg-14.5": {
             "version": "14.5",
             "deb_pkg_ver": ppg_versions["ppg-14.5"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.5"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.5"]["deb_packages"],
             "percona-postgresql-common": "241",
             "percona-postgresql-client-common": "241",
@@ -2131,6 +2197,7 @@ def get_settings(distro_type):
         "ppg-14.6": {
             "version": "14.6",
             "deb_pkg_ver": ppg_versions["ppg-14.6"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.6"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.6"]["deb_packages"],
             "percona-postgresql-common": "241",
             "percona-postgresql-client-common": "241",
@@ -2163,6 +2230,7 @@ def get_settings(distro_type):
         "ppg-14.8": {
             "version": "14.8",
             "deb_pkg_ver": ppg_versions["ppg-14.8"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.8"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.8"]["deb_packages"],
             "percona-postgresql-common": "250",
             "percona-postgresql-client-common": "250",
@@ -2198,6 +2266,7 @@ def get_settings(distro_type):
         "ppg-14.7": {
             "version": "14.7",
             "deb_pkg_ver": ppg_versions["ppg-14.7"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.7"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.7"]["deb_packages"],
             "percona-postgresql-common": "247",
             "percona-postgresql-client-common": "247",
@@ -2231,6 +2300,7 @@ def get_settings(distro_type):
         "ppg-14.9": {
             "version": "14.9",
             "deb_pkg_ver": ppg_versions["ppg-14.9"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.9"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.9"]["deb_packages"],
             "percona-postgresql-common": "252",
             "percona-postgresql-client-common": "252",
@@ -2267,6 +2337,7 @@ def get_settings(distro_type):
         "ppg-14.10": {
             "version": "14.10",
             "deb_pkg_ver": ppg_versions["ppg-14.10"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.10"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.10"]["deb_packages"],
             "percona-postgresql-common": "256",
             "percona-postgresql-client-common": "256",
@@ -2303,6 +2374,7 @@ def get_settings(distro_type):
         "ppg-14.11": {
             "version": "14.11",
             "deb_pkg_ver": ppg_versions["ppg-14.11"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.11"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.11"]["deb_packages"],
             "percona-postgresql-common": "256",
             "percona-postgresql-client-common": "256",
@@ -2339,6 +2411,7 @@ def get_settings(distro_type):
         "ppg-14.12": {
             "version": "14.12",
             "deb_pkg_ver": ppg_versions["ppg-14.12"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.12"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.12"]["deb_packages"],
             "percona-postgresql-common": "259",
             "percona-postgresql-client-common": "259",
@@ -2376,6 +2449,7 @@ def get_settings(distro_type):
         "ppg-14.13": {
             "version": "14.13",
             "deb_pkg_ver": ppg_versions["ppg-14.13"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.13"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.13"]["deb_packages"],
             "percona-postgresql-common": "261",
             "percona-postgresql-client-common": "261",
@@ -2413,6 +2487,7 @@ def get_settings(distro_type):
         "ppg-14.15": {
             "version": "14.15",
             "deb_pkg_ver": ppg_versions["ppg-14.15"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.15"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.15"]["deb_packages"],
             "percona-postgresql-common": "266",
             "percona-postgresql-client-common": "266",
@@ -2453,6 +2528,7 @@ def get_settings(distro_type):
         "ppg-14.17": {
             "version": "14.17",
             "deb_pkg_ver": ppg_versions["ppg-14.17"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.17"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.17"]["deb_packages"],
             "percona-postgresql-common": "267",
             "percona-postgresql-client-common": "267",
@@ -2493,6 +2569,7 @@ def get_settings(distro_type):
         "ppg-14.18": {
             "version": "14.18",
             "deb_pkg_ver": ppg_versions["ppg-14.18"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.18"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.18"]["deb_packages"],
             "percona-postgresql-common": "277",
             "percona-postgresql-client-common": "277",
@@ -2533,6 +2610,7 @@ def get_settings(distro_type):
         "ppg-14.19": {
             "version": "14.19",
             "deb_pkg_ver": ppg_versions["ppg-14.19"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.19"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.19"]["deb_packages"],
             "percona-postgresql-common": "280",
             "percona-postgresql-client-common": "280",
@@ -2573,6 +2651,7 @@ def get_settings(distro_type):
         "ppg-14.20": {
             "version": "14.20",
             "deb_pkg_ver": ppg_versions["ppg-14.20"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.20"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.20"]["deb_packages"],
             "percona-postgresql-common": "287",
             "percona-postgresql-client-common": "287",
@@ -2615,6 +2694,7 @@ def get_settings(distro_type):
         "ppg-14.22": {
             "version": "14.22",
             "deb_pkg_ver": ppg_versions["ppg-14.22"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-14.22"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-14.22"]["deb_packages"],
             "percona-postgresql-common": "289",
             "percona-postgresql-client-common": "289",
@@ -2705,6 +2785,7 @@ def get_settings(distro_type):
         "ppg-15.0": {
             "version": "15.0",
             "deb_pkg_ver": ppg_versions["ppg-15.0"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-15.0"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-15.0"]["deb_packages"],
             "percona-postgresql-common": "241",
             "percona-postgresql-client-common": "241",
@@ -2737,6 +2818,7 @@ def get_settings(distro_type):
         "ppg-15.1": {
             "version": "15.1",
             "deb_pkg_ver": ppg_versions["ppg-15.1"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-15.1"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-15.1"]["deb_packages"],
             "percona-postgresql-common": "241",
             "percona-postgresql-client-common": "241",
@@ -2769,6 +2851,7 @@ def get_settings(distro_type):
         "ppg-15.2": {
             "version": "15.2",
             "deb_pkg_ver": ppg_versions["ppg-15.2"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-15.2"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-15.2"]["deb_packages"],
             "percona-postgresql-common": "247",
             "percona-postgresql-client-common": "247",
@@ -2802,6 +2885,7 @@ def get_settings(distro_type):
         "ppg-15.3": {
             "version": "15.3",
             "deb_pkg_ver": ppg_versions["ppg-15.3"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-15.3"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-15.3"]["deb_packages"],
             "percona-postgresql-common": "250",
             "percona-postgresql-client-common": "250",
@@ -2837,6 +2921,7 @@ def get_settings(distro_type):
         "ppg-15.4": {
             "version": "15.4",
             "deb_pkg_ver": ppg_versions["ppg-15.4"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-15.4"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-15.4"]["deb_packages"],
             "percona-postgresql-common": "252",
             "percona-postgresql-client-common": "252",
@@ -2873,6 +2958,7 @@ def get_settings(distro_type):
         "ppg-15.5": {
             "version": "15.5",
             "deb_pkg_ver": ppg_versions["ppg-15.5"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-15.5"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-15.5"]["deb_packages"],
             "percona-postgresql-common": "256",
             "percona-postgresql-client-common": "256",
@@ -2909,6 +2995,7 @@ def get_settings(distro_type):
         "ppg-15.6": {
             "version": "15.6",
             "deb_pkg_ver": ppg_versions["ppg-15.6"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-15.6"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-15.6"]["deb_packages"],
             "percona-postgresql-common": "256",
             "percona-postgresql-client-common": "256",
@@ -2945,6 +3032,7 @@ def get_settings(distro_type):
         "ppg-15.7": {
             "version": "15.7",
             "deb_pkg_ver": ppg_versions["ppg-15.7"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-15.7"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-15.7"]["deb_packages"],
             "percona-postgresql-common": "259",
             "percona-postgresql-client-common": "259",
@@ -2982,6 +3070,7 @@ def get_settings(distro_type):
         "ppg-15.8": {
             "version": "15.8",
             "deb_pkg_ver": ppg_versions["ppg-15.8"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-15.8"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-15.8"]["deb_packages"],
             "percona-postgresql-common": "261",
             "percona-postgresql-client-common": "261",
@@ -3019,6 +3108,7 @@ def get_settings(distro_type):
         "ppg-15.10": {
             "version": "15.10",
             "deb_pkg_ver": ppg_versions["ppg-15.10"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-15.10"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-15.10"]["deb_packages"],
             "percona-postgresql-common": "266",
             "percona-postgresql-client-common": "266",
@@ -3059,6 +3149,7 @@ def get_settings(distro_type):
         "ppg-15.12": {
             "version": "15.12",
             "deb_pkg_ver": ppg_versions["ppg-15.12"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-15.12"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-15.12"]["deb_packages"],
             "percona-postgresql-common": "267",
             "percona-postgresql-client-common": "267",
@@ -3099,6 +3190,7 @@ def get_settings(distro_type):
         "ppg-15.13": {
             "version": "15.13",
             "deb_pkg_ver": ppg_versions["ppg-15.13"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-15.13"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-15.13"]["deb_packages"],
             "percona-postgresql-common": "277",
             "percona-postgresql-client-common": "277",
@@ -3139,6 +3231,7 @@ def get_settings(distro_type):
         "ppg-15.14": {
             "version": "15.14",
             "deb_pkg_ver": ppg_versions["ppg-15.14"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-15.14"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-15.14"]["deb_packages"],
             "percona-postgresql-common": "280",
             "percona-postgresql-client-common": "280",
@@ -3179,6 +3272,7 @@ def get_settings(distro_type):
         "ppg-15.15": {
             "version": "15.15",
             "deb_pkg_ver": ppg_versions["ppg-15.15"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-15.15"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-15.15"]["deb_packages"],
             "percona-postgresql-common": "287",
             "percona-postgresql-client-common": "287",
@@ -3221,6 +3315,7 @@ def get_settings(distro_type):
         "ppg-15.17": {
             "version": "15.17",
             "deb_pkg_ver": ppg_versions["ppg-15.17"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-15.17"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-15.17"]["deb_packages"],
             "percona-postgresql-common": "289",
             "percona-postgresql-client-common": "289",
@@ -3311,6 +3406,7 @@ def get_settings(distro_type):
         "ppg-16.0": {
             "version": "16.0",
             "deb_pkg_ver": ppg_versions["ppg-16.0"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-16.0"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-16.0"]["deb_packages"],
             "percona-postgresql-common": "253",
             "percona-postgresql-client-common": "253",
@@ -3347,6 +3443,7 @@ def get_settings(distro_type):
         "ppg-16.1": {
             "version": "16.1",
             "deb_pkg_ver": ppg_versions["ppg-16.1"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-16.1"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-16.1"]["deb_packages"],
             "percona-postgresql-common": "256",
             "percona-postgresql-client-common": "256",
@@ -3383,6 +3480,7 @@ def get_settings(distro_type):
         "ppg-16.2": {
             "version": "16.2",
             "deb_pkg_ver": ppg_versions["ppg-16.2"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-16.2"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-16.2"]["deb_packages"],
             "percona-postgresql-common": "256",
             "percona-postgresql-client-common": "256",
@@ -3419,6 +3517,7 @@ def get_settings(distro_type):
         "ppg-16.3": {
             "version": "16.3",
             "deb_pkg_ver": ppg_versions["ppg-16.3"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-16.3"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-16.3"]["deb_packages"],
             "percona-postgresql-common": "259",
             "percona-postgresql-client-common": "259",
@@ -3456,6 +3555,7 @@ def get_settings(distro_type):
         "ppg-16.4": {
             "version": "16.4",
             "deb_pkg_ver": ppg_versions["ppg-16.4"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-16.4"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-16.4"]["deb_packages"],
             "percona-postgresql-common": "261",
             "percona-postgresql-client-common": "261",
@@ -3493,6 +3593,7 @@ def get_settings(distro_type):
         "ppg-16.6": {
             "version": "16.6",
             "deb_pkg_ver": ppg_versions["ppg-16.6"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-16.6"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-16.6"]["deb_packages"],
             "percona-postgresql-common": "266",
             "percona-postgresql-client-common": "266",
@@ -3533,6 +3634,7 @@ def get_settings(distro_type):
         "ppg-16.8": {
             "version": "16.8",
             "deb_pkg_ver": ppg_versions["ppg-16.8"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-16.8"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-16.8"]["deb_packages"],
             "percona-postgresql-common": "267",
             "percona-postgresql-client-common": "267",
@@ -3573,6 +3675,7 @@ def get_settings(distro_type):
         "ppg-16.9": {
             "version": "16.9",
             "deb_pkg_ver": ppg_versions["ppg-16.9"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-16.9"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-16.9"]["deb_packages"],
             "percona-postgresql-common": "277",
             "percona-postgresql-client-common": "277",
@@ -3613,6 +3716,7 @@ def get_settings(distro_type):
         "ppg-16.10": {
             "version": "16.10",
             "deb_pkg_ver": ppg_versions["ppg-16.10"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-16.10"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-16.10"]["deb_packages"],
             "percona-postgresql-common": "280",
             "percona-postgresql-client-common": "280",
@@ -3653,6 +3757,7 @@ def get_settings(distro_type):
         "ppg-16.11": {
             "version": "16.11",
             "deb_pkg_ver": ppg_versions["ppg-16.11"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-16.11"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-16.11"]["deb_packages"],
             "percona-postgresql-common": "287",
             "percona-postgresql-client-common": "287",
@@ -3695,6 +3800,7 @@ def get_settings(distro_type):
         "ppg-16.13": {
             "version": "16.13",
             "deb_pkg_ver": ppg_versions["ppg-16.13"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-16.13"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-16.13"]["deb_packages"],
             "percona-postgresql-common": "289",
             "percona-postgresql-client-common": "289",
@@ -3786,6 +3892,7 @@ def get_settings(distro_type):
             "version": "17.0",
             "percona-version": "17.0.1",
             "deb_pkg_ver": ppg_versions["ppg-17.0"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-17.0"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-17.0"]["deb_packages"],
             "percona-postgresql-common": "264",
             "percona-postgresql-client-common": "264",
@@ -3824,6 +3931,7 @@ def get_settings(distro_type):
             "version": "17.2",
             "percona-version": "17.2.1",
             "deb_pkg_ver": ppg_versions["ppg-17.2"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-17.2"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-17.2"]["deb_packages"],
             "percona-postgresql-common": "266",
             "percona-postgresql-client-common": "266",
@@ -3863,6 +3971,7 @@ def get_settings(distro_type):
             "version": "17.4",
             "percona-version": "17.4.1",
             "deb_pkg_ver": ppg_versions["ppg-17.4"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-17.4"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-17.4"]["deb_packages"],
             "percona-postgresql-common": "267",
             "percona-postgresql-client-common": "267",
@@ -3904,6 +4013,7 @@ def get_settings(distro_type):
             "version": "17.5",
             "percona-version": "17.5.3",
             "deb_pkg_ver": ppg_versions["ppg-17.5"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-17.5"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-17.5"]["deb_packages"],
             "percona-postgresql-common": "277",
             "percona-postgresql-client-common": "277",
@@ -3945,6 +4055,7 @@ def get_settings(distro_type):
             "version": "17.6",
             "percona-version": "17.6.1",
             "deb_pkg_ver": ppg_versions["ppg-17.6"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-17.6"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-17.6"]["deb_packages"],
             "percona-postgresql-common": "280",
             "percona-postgresql-client-common": "280",
@@ -3987,6 +4098,7 @@ def get_settings(distro_type):
             "version": "17.7",
             "percona-version": "17.7.1",
             "deb_pkg_ver": ppg_versions["ppg-17.7"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-17.7"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-17.7"]["deb_packages"],
             "percona-postgresql-common": "287",
             "percona-postgresql-client-common": "287",
@@ -4033,6 +4145,7 @@ def get_settings(distro_type):
             "version": "17.9",
             "percona-version": "17.9.1",
             "deb_pkg_ver": ppg_versions["ppg-17.9"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-17.9"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-17.9"]["deb_packages"],
             "percona-postgresql-common": "289",
             "percona-postgresql-client-common": "289",
@@ -4131,6 +4244,7 @@ def get_settings(distro_type):
             "version": "18.1",
             "percona-version": "18.1.1",
             "deb_pkg_ver": ppg_versions["ppg-18.1"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-18.1"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-18.1"]["deb_packages"],
             "percona-postgresql-common": "287",
             "percona-postgresql-client-common": "287",
@@ -4177,6 +4291,7 @@ def get_settings(distro_type):
             "version": "18.3",
             "percona-version": "18.3.1",
             "deb_pkg_ver": ppg_versions["ppg-18.3"]["deb_pkg_ver"],
+            "deb_pkg_ver_base": ppg_versions["ppg-18.3"]["deb_pkg_ver_base"],
             "deb_packages": ppg_versions["ppg-18.3"]["deb_packages"],
             "percona-postgresql-common": "289",
             "percona-postgresql-client-common": "289",
