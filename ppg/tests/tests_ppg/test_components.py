@@ -86,13 +86,21 @@ def build_libpq_programm(host):
 
 @pytest.mark.parametrize("package", PACKAGES)
 def test_deb_package_is_installed(host, package):
-    os = host.system_info.distribution
-    if os.lower() in ["redhat", "centos", "rhel", "rocky", "ol"]:
+    _os = host.system_info.distribution
+    if _os.lower() in ["redhat", "centos", "rhel", "rocky", "ol"]:
         pytest.skip("This test only for Debian based platforms")
     pkg = host.package(package)
     assert pkg.is_installed
-    assert pkg.version in pg_versions['deb_pkg_ver'],\
-        f"Expected version {pg_versions['deb_pkg_ver']}. Actual version {pkg.version}"
+    if ":" in os.environ.get("REPO", ""):
+        # OBS rebuilds append a volatile project-revision suffix (e.g. +2.1)
+        # instead of the percona-release distro suffix (.bookworm). Match the
+        # base version prefix only.
+        base_versions = pg_versions['deb_pkg_ver_base']
+        assert any(pkg.version.startswith(v) for v in base_versions),\
+            f"Expected version starting with one of {base_versions}. Actual version {pkg.version}"
+    else:
+        assert pkg.version in pg_versions['deb_pkg_ver'],\
+            f"Expected version {pg_versions['deb_pkg_ver']}. Actual version {pkg.version}"
 
 
 def test_build_libpq_programm(host, build_libpq_programm):
