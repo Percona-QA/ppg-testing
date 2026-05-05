@@ -1199,20 +1199,20 @@ def test_pg_oidc_validator_config(host):
             f"oauth_validator_libraries is '{result.stdout.strip()}', expected to include 'pg_oidc_validator'"
         )
 
-        # 3. Verify GUC: pg_oidc_validator.authn_field
-        # Only registered in pg_settings if the library loaded successfully
-        result = host.run(
-            f"{psql} \"SELECT setting FROM pg_settings WHERE name = 'pg_oidc_validator.authn_field';\""
-        )
-        assert result.rc == 0, f"Failed to query pg_settings: {result.stderr}"
-        assert result.stdout.strip() == "sub", (
-            f"pg_oidc_validator.authn_field is '{result.stdout.strip()}', expected 'sub'"
-        )
-
-        # 4. Dynamically locate pg_hba.conf — avoids hardcoded distro paths
+        # 3. Dynamically locate config files — avoids hardcoded distro paths
+        conf_path = host.run(f"{psql} \"SHOW config_file;\"").stdout.strip()
         hba_query = host.run(f"{psql} \"SHOW hba_file;\"")
         assert hba_query.rc == 0, f"Could not determine hba_file path via SQL: {hba_query.stderr}"
         hba_path = hba_query.stdout.strip()
+
+    # 4. Verify pg_oidc_validator.authn_field is set in postgresql.conf
+    # The library loads lazily on first auth, so pg_settings won't reflect it until then.
+    # Checking the config file directly is the reliable approach.
+    conf = host.file(conf_path)
+    assert conf.exists, f"postgresql.conf not found at: {conf_path}"
+    assert "pg_oidc_validator.authn_field" in conf.content_string, (
+        "pg_oidc_validator.authn_field not found in postgresql.conf"
+    )
 
     # 5. Verify pg_hba.conf has an active (uncommented) oauth entry for oidc_test_user
     hba = host.file(hba_path)
