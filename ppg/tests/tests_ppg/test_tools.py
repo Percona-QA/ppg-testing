@@ -1198,12 +1198,14 @@ def test_pg_oidc_validator_config(host):
             f"oauth_validator_libraries is '{result.stdout.strip()}', expected 'pg_oidc_validator'"
         )
 
-        # pg_oidc_validator.authn_field must be present and set
+        # pg_oidc_validator.authn_field must be set to 'sub'
         result = host.run(
             f"{psql} \"SELECT setting FROM pg_settings WHERE name = 'pg_oidc_validator.authn_field';\""
         )
         assert result.rc == 0, result.stderr
-        assert result.stdout.strip() != "", "pg_oidc_validator.authn_field is not set"
+        assert result.stdout.strip() == "sub", (
+            f"pg_oidc_validator.authn_field is '{result.stdout.strip()}', expected 'sub'"
+        )
 
     # pg_hba.conf must contain an oauth entry for oidc_test_user
     if dist in ["ubuntu", "debian"]:
