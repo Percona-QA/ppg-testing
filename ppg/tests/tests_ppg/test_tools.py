@@ -1174,9 +1174,10 @@ def test_pg_oidc_validator_package_version(host):
 def test_pg_oidc_validator_config(host):
     """Verify pg_oidc_validator GUCs and pg_hba.conf are configured correctly.
 
-    Full end-to-end OAuth authentication is covered by a dedicated OIDC job
-    that runs Keycloak. This test only confirms the setup is in place.
+    Full end-to-end OAuth authentication will be covered by a dedicated OIDC job
+    that runs Keycloak. This test confirms the environmental setup is active.
     """
+    # 1. Version guardrails
     major = int(settings.MAJOR_VER)
     if major < 18:
         pytest.skip(f"pg_oidc_validator supported only on PG-18+ (got {major})")
@@ -1185,38 +1186,45 @@ def test_pg_oidc_validator_config(host):
     if version.parse(current_ver_str) < version.parse("18.2"):
         pytest.skip(f"pg_oidc_validator requires PG 18.2+, found {current_ver_str}")
 
-    dist = host.system_info.distribution.lower()
     psql = "psql -t -A -c"
 
     with host.sudo("postgres"):
-        # oauth_validator_libraries must be set to pg_oidc_validator
+        # 2. Verify GUC: oauth_validator_libraries
+        # 'in' handles the case where multiple libraries are configured
         result = host.run(
             f"{psql} \"SELECT setting FROM pg_settings WHERE name = 'oauth_validator_libraries';\""
         )
-        assert result.rc == 0, result.stderr
-        assert result.stdout.strip() == "pg_oidc_validator", (
-            f"oauth_validator_libraries is '{result.stdout.strip()}', expected 'pg_oidc_validator'"
+        assert result.rc == 0, f"Failed to query pg_settings: {result.stderr}"
+        assert "pg_oidc_validator" in result.stdout, (
+            f"oauth_validator_libraries is '{result.stdout.strip()}', expected to include 'pg_oidc_validator'"
         )
 
-        # pg_oidc_validator.authn_field must be set to 'sub'
+        # 3. Verify GUC: pg_oidc_validator.authn_field
+        # Only registered in pg_settings if the library loaded successfully
         result = host.run(
             f"{psql} \"SELECT setting FROM pg_settings WHERE name = 'pg_oidc_validator.authn_field';\""
         )
-        assert result.rc == 0, result.stderr
+        assert result.rc == 0, f"Failed to query pg_settings: {result.stderr}"
         assert result.stdout.strip() == "sub", (
             f"pg_oidc_validator.authn_field is '{result.stdout.strip()}', expected 'sub'"
         )
 
-    # pg_hba.conf must contain an oauth entry for oidc_test_user
-    if dist in ["ubuntu", "debian"]:
-        hba_path = "/etc/postgresql/18/main/pg_hba.conf"
-    else:
-        hba_path = "/var/lib/pgsql/18/data/pg_hba.conf"
+        # 4. Dynamically locate pg_hba.conf — avoids hardcoded distro paths
+        hba_query = host.run(f"{psql} \"SHOW hba_file;\"")
+        assert hba_query.rc == 0, f"Could not determine hba_file path via SQL: {hba_query.stderr}"
+        hba_path = hba_query.stdout.strip()
 
+    # 5. Verify pg_hba.conf has an active (uncommented) oauth entry for oidc_test_user
     hba = host.file(hba_path)
-    assert hba.exists, f"pg_hba.conf not found at {hba_path}"
-    assert "oauth" in hba.content_string, "No oauth entry found in pg_hba.conf"
-    assert "oidc_test_user" in hba.content_string, "oidc_test_user oauth entry missing from pg_hba.conf"
+    assert hba.exists, f"pg_hba.conf not found at: {hba_path}"
+
+    active_oauth_entry = any(
+        line.strip().startswith("host") and "oauth" in line and "oidc_test_user" in line
+        for line in hba.content_string.splitlines()
+    )
+    assert active_oauth_entry, (
+        f"No active (uncommented) oauth entry for 'oidc_test_user' found in {hba_path}"
+    )
 
 
 # def test_pg_telemetry_file_pillar_version(host):
