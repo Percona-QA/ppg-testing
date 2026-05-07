@@ -4,7 +4,7 @@
     pg_version_to_install: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
 
 - name: End play on Ubuntu and versions older than 18.4
-  meta: end_host
+  meta: end_play
   when: ansible_distribution == "Ubuntu" and
     pg_version_to_install | string is version('18.4', '<', strict=True)
 
