@@ -9,7 +9,7 @@ def skip_unsupported_ubuntu(host):
     if dist != "ubuntu":
         return
 
-    if host.system_info.release != "26":
+    if not host.system_info.release.startswith("26"):
         return
 
     ver_str = os.getenv("VERSION", "").replace("ppg-", "")
