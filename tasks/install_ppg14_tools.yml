@@ -408,17 +408,56 @@
         - percona-pg-gather
     when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('14.9', '>=', strict=True))
 
-  - name: Add extensions to postgresql.conf for Debian
-    lineinfile:
-      path: /etc/postgresql/14/main/postgresql.conf
-      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
-    when: ansible_os_family == "Debian"
+  - name: Install pg_cron packages RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-pg_cron_14
+    when:
+      - ansible_os_family == "RedHat"
+      - >-
+        (pg_version_to_install | string is version('14.22', '>', strict=True))
+        or
+        (pg_version_to_install | string is version('14.22', '==', strict=True) and lookup('env', 'REPO') == 'testing')
 
-  - name: Add extensions to postgresql.conf for RHEL
-    lineinfile:
-      path: /var/lib/pgsql/14/data/postgresql.conf
-      line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
-    when: ansible_os_family == "RedHat"
+  - name: Install pg_cron packages Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgresql-14-cron
+    when:
+      - ansible_os_family == "Debian"
+      - >-
+        (pg_version_to_install | string is version('14.22', '>', strict=True))
+        or
+        (pg_version_to_install | string is version('14.22', '==', strict=True) and lookup('env', 'REPO') == 'testing')
+
+  - name: Configure shared_preload_libraries
+    vars:
+      base_extensions: ['pg_stat_monitor', 'pgaudit', 'set_user']
+      final_extensions: >-
+        {{
+          base_extensions
+          + (['pg_cron'] if (
+              (pg_version_to_install | string is version('14.22', '>', strict=True))
+              or
+              (pg_version_to_install | string is version('14.22', '==', strict=True) and lookup('env', 'REPO') == 'testing')
+            ) else [])
+        }}
+      pg_conf_path: "{{ '/etc/postgresql/14/main/postgresql.conf' if ansible_os_family == 'Debian' else '/var/lib/pgsql/14/data/postgresql.conf' }}"
+    ansible.builtin.lineinfile:
+      path: "{{ pg_conf_path }}"
+      regexp: '^#?shared_preload_libraries\s*='
+      line: "shared_preload_libraries = '{{ final_extensions | join(', ') }}'"
+      state: present
+    become: true
+    when: ansible_os_family in ["Debian", "RedHat"]
 
   # - name: Add extensions to postgresql.conf for Debian
   #   lineinfile:

@@ -7,6 +7,12 @@
     pg_version_to_install: "{{ lookup('env', 'FROM_VERSION') | replace('ppg-','') }}"
     upgrade_to_pg_version: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
 
+- name: End play on Ubuntu 26 and versions older than 18.4
+  meta: end_host
+  when: ansible_distribution == "Ubuntu" and
+    ansible_distribution_major_version == "26" and
+    pg_version_to_install | string is version('18.4', '<', strict=True)
+
 - name: Setup initial (old) repository
   command: percona-release enable {{ pg_version }} {{ repo }}
   vars:
