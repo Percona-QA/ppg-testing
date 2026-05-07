@@ -9,6 +9,9 @@ def skip_unsupported_ubuntu(host):
     if dist != "ubuntu":
         return
 
+    if host.system_info.release != "26":
+        return
+
     ver_str = os.getenv("VERSION", "").replace("ppg-", "")
     if ver_str and version.parse(ver_str) < version.parse("18.4"):
-        pytest.skip(f"Ubuntu with PG {ver_str} < 18.4 is not supported")
+        pytest.skip(f"Ubuntu 26 with PG {ver_str} < 18.4 is not supported")
