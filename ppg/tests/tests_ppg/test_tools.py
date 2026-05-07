@@ -1201,30 +1201,20 @@ def test_pg_oidc_validator_config(host):
 
         # 3. Dynamically locate config files — avoids hardcoded distro paths
         conf_path = host.run(f"{psql} \"SHOW config_file;\"").stdout.strip()
-        hba_query = host.run(f"{psql} \"SHOW hba_file;\"")
-        assert hba_query.rc == 0, f"Could not determine hba_file path via SQL: {hba_query.stderr}"
-        hba_path = hba_query.stdout.strip()
+        hba_path = host.run(f"{psql} \"SHOW hba_file;\"").stdout.strip()
 
-    # 4. Verify pg_oidc_validator.authn_field is set in postgresql.conf
-    # The library loads lazily on first auth, so pg_settings won't reflect it until then.
-    # Checking the config file directly is the reliable approach.
-    conf = host.file(conf_path)
-    assert conf.exists, f"postgresql.conf not found at: {conf_path}"
-    assert "pg_oidc_validator.authn_field" in conf.content_string, (
-        "pg_oidc_validator.authn_field not found in postgresql.conf"
-    )
+        # 4. Verify pg_oidc_validator.authn_field is set in postgresql.conf
+        # The library loads lazily on first auth, so pg_settings won't reflect it until then.
+        # Checking the config file directly is the reliable approach.
+        # Both checks run under postgres sudo to ensure access on RHEL (data dir is 700).
+        result = host.run(f"grep -q 'pg_oidc_validator.authn_field' {conf_path}")
+        assert result.rc == 0, f"pg_oidc_validator.authn_field not found in {conf_path}"
 
-    # 5. Verify pg_hba.conf has an active (uncommented) oauth entry for oidc_test_user
-    hba = host.file(hba_path)
-    assert hba.exists, f"pg_hba.conf not found at: {hba_path}"
-
-    active_oauth_entry = any(
-        line.strip().startswith("host") and "oauth" in line and "oidc_test_user" in line
-        for line in hba.content_string.splitlines()
-    )
-    assert active_oauth_entry, (
-        f"No active (uncommented) oauth entry for 'oidc_test_user' found in {hba_path}"
-    )
+        # 5. Verify pg_hba.conf has an active (uncommented) oauth entry for oidc_test_user
+        result = host.run(f"grep -v '^#' {hba_path} | grep -q 'oauth.*oidc_test_user\\|oidc_test_user.*oauth'")
+        assert result.rc == 0, (
+            f"No active (uncommented) oauth entry for 'oidc_test_user' found in {hba_path}"
+        )
 
 
 # def test_pg_telemetry_file_pillar_version(host):
