@@ -27,14 +27,14 @@
   ansible.builtin.command:
     cmd: rpm -q "{{ telemetry_package_name }}"
   register: telemetry_status
-  ignore_errors: yes
+  ignore_errors: true
   when: ansible_facts['os_family'] == 'RedHat'
 
 - name: Check percona-telemetry-agent is installed on RedHat
   ansible.builtin.command:
     cmd: rpm -q percona-telemetry-agent
   register: telemetry_agent_status
-  ignore_errors: yes
+  ignore_errors: true
   when: ansible_facts['os_family'] == 'RedHat'
 
 - name: Print results for "{{telemetry_package_name}}" on RedHat 
@@ -50,13 +50,13 @@
 - name: Check if "{{telemetry_package_name}}" is installed on Debian/Ubuntu
   ansible.builtin.shell: dpkg -l | grep "{{ telemetry_package_name }}"
   register: telemetry_status
-  ignore_errors: yes
+  ignore_errors: true
   when: ansible_facts['os_family'] == 'Debian'
 
 - name: Check if percona-telemetry-agent is installed on Debian/Ubuntu
   ansible.builtin.shell: dpkg -l | grep percona-telemetry-agent
   register: telemetry_agent_status
-  ignore_errors: yes
+  ignore_errors: true
   when: ansible_facts['os_family'] == 'Debian'
 
 - name: Fail if "{{telemetry_package_name}}" is not installed on Debian/Ubuntu
@@ -177,13 +177,13 @@
   ansible.builtin.systemd:
     name: "{{ postgresql_service_name }}"
     state: stopped
-  become: yes
+  become: true
 
 - name: Stop telemetry-agent service
   ansible.builtin.systemd:
     name: percona-telemetry-agent
     state: stopped
-  become: yes
+  become: true
 
 # - name: Append shared_preload_libraries to postgresql.conf
 #   ansible.builtin.lineinfile:
@@ -193,7 +193,7 @@
 #   become: yes
 
 - name: Change TELEMETRY_URL to DEV
-  become: yes
+  become: true
   ansible.builtin.replace:
     path: "{{ telemetry_conf_path }}"
     regexp: 'check\.percona\.com'
@@ -201,7 +201,7 @@
     backup: yes  # Backup the file before changing
 
 - name: Change TELEMETRY_CHECK_INTERVAL to 60
-  become: yes
+  become: true
   ansible.builtin.lineinfile:
     path: "{{ telemetry_conf_path }}"
     regexp: '^PERCONA_TELEMETRY_CHECK_INTERVAL='
@@ -216,13 +216,13 @@
   ansible.builtin.systemd:
     name: "{{ postgresql_service_name }}"
     state: started
-  become: yes
+  become: true
 
 - name: Start telemetry-agent service
   ansible.builtin.systemd:
     name: percona-telemetry-agent
     state: started
-  become: yes
+  become: true
 
 - name: Check if telemetry-agent service is running
   ansible.builtin.systemd:

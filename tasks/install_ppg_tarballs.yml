@@ -119,7 +119,7 @@
       cmd: chown -R  postgres:postgres /opt/pgdistro/
 
   - name: list /home/postgres
-    ignore_errors: yes
+    ignore_errors: true
     become: true
     shell: ls -ltra /home/postgres
     register: results
@@ -127,7 +127,7 @@
   - debug: var=results.stdout_lines
 
   - name: list /opt/pgdistro
-    ignore_errors: yes
+    ignore_errors: true
     become: true
     shell: ls -l /opt/pgdistro
     register: results
@@ -135,7 +135,7 @@
   - debug: var=results.stdout_lines
 
   - name: list /opt/pgdistro server bin dir
-    ignore_errors: yes
+    ignore_errors: true
     become: true
     shell: ls -l /opt/pgdistro/percona-postgresql17/bin
     register: results
@@ -143,7 +143,7 @@
   - debug: var=results.stdout_lines
 
   - name: list /opt/pgdistro percona-pgbackrest bin dir
-    ignore_errors: yes
+    ignore_errors: true
     become: true
     shell: ls -l /opt/pgdistro/percona-pgbackrest/bin
     register: results
@@ -158,7 +158,7 @@
   - name: Find all ELF binaries and libraries in the specified subdirectories
     shell: "find {{ item }} -type f -exec file {} \\; | grep ELF "
     register: file_list
-    ignore_errors: yes
+    ignore_errors: true
     failed_when: false
     with_items:
       - "{{dest_dir}}/percona-haproxy"
@@ -185,7 +185,7 @@
   - name: Filter ELF files and check dependencies with ldd
     shell: "(grep ELF /tmp/abc.list.type| awk -F: '{print $1}' | xargs ldd)> /tmp/check_dependency.log 2>&1"
     register: ldd_output
-    ignore_errors: yes
+    ignore_errors: true
 
   - name: Parse check_dependency.log for missing dependencies
     shell: |
@@ -194,7 +194,7 @@
         /not found/ { print filename; print; print "" }
       ' /tmp/check_dependency.log
     register: missing_deps
-    ignore_errors: yes
+    ignore_errors: true
 
   # - name: Display missing dependencies (if any)
   #   debug:

@@ -663,7 +663,7 @@
       daemon_reload: yes
     async: 180
     poll: 5
-    become: yes
+    become: true
 
   # - name: Install patroni related dependency on Debian 13
   #   apt:
