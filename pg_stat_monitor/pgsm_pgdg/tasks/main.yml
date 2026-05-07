@@ -5,6 +5,24 @@
       major_version: "{{ lookup('env', 'VERSION').split('.')[0].split('-')[1] }}"
       pg_version_to_install: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
       cacheable: true
+
+  - name: End play on Ubuntu 26 if PostgreSQL version is not supported
+    meta: end_host
+    vars:
+      ubuntu26_min_versions:
+        '14': '14.23'
+        '15': '15.18'
+        '16': '16.14'
+        '17': '17.10'
+        '18': '18.4'
+      pg_major: "{{ pg_version_to_install | string | split('.') | first }}"
+      min_ver: "{{ ubuntu26_min_versions[pg_major] | default('0.0') }}"
+    when:
+      - ansible_distribution == "Ubuntu"
+      - ansible_distribution_major_version == "26"
+      - min_ver != '0.0'
+      - pg_version_to_install | string is version(min_ver, '<', strict=True)
+
   - name: Configure repository
     include_tasks: ../../../../tasks/enable_repo.yml
 
