@@ -35,6 +35,15 @@ TDE_BINARIES = [
     "pg_tde_waldump",
 ]
 
+# Minimum PostgreSQL versions where pg_cron is available in tarballs
+PG_CRON_MIN_VERSIONS = {
+    14: version.parse("14.22"),
+    15: version.parse("15.17"),
+    16: version.parse("16.13"),
+    17: version.parse("17.9"),
+    18: version.parse("18.3"),
+}
+
 # Minimum PostgreSQL versions where pg_gather install location changed
 PG_GATHER_MIN_VERSIONS = {
     13: version.parse("13.23"),
@@ -986,6 +995,63 @@ def test_pgvector(host, get_psql_binary_path):
                     extension_version.rc, extension_version.stderr, extension_version.stdout
                 )
             )
+
+
+def _skip_if_pg_cron_unavailable():
+    """Skip if pg_cron is not available for the current PostgreSQL version."""
+    current_ver = version.parse(pg_versions.get("version", "0.0"))
+    min_ver = PG_CRON_MIN_VERSIONS.get(current_ver.major)
+    if min_ver is None or current_ver < min_ver:
+        pytest.skip(f"pg_cron not available on PostgreSQL {pg_versions.get('version')}")
+
+
+def test_pg_cron_is_installed(host, get_server_path):
+    """Verify pg_cron extension files are present in the tarball installation."""
+    _skip_if_pg_cron_unavailable()
+    with host.sudo():
+        files = [
+            f"{get_server_path}/lib/pg_cron.so",
+            f"{get_server_path}/share/extension/pg_cron.control",
+        ]
+        sql_dir = f"{get_server_path}/share/extension/"
+        sql_files = host.run(f"ls {sql_dir}/pg_cron--*.sql").stdout.split()
+        assert len(sql_files) > 0, "No pg_cron SQL files found"
+        files += sql_files
+        for file_name in files:
+            f = host.file(file_name)
+            assert f.exists, f"{file_name} does not exist."
+
+
+def test_pg_cron_extension(host, get_psql_binary_path):
+    """Verify pg_cron extension can be created, used, and removed cleanly."""
+    _skip_if_pg_cron_unavailable()
+    psql = f"{get_psql_binary_path} -t -A -c"
+
+    with host.sudo("postgres"):
+        try:
+            result = host.run(f"{psql} 'CREATE EXTENSION IF NOT EXISTS pg_cron;'")
+            assert result.rc == 0, f"Failed to create pg_cron: {result.stderr}"
+
+            count = host.run(f"{psql} \"SELECT count(*) FROM pg_extension WHERE extname = 'pg_cron';\"").stdout.strip()
+            assert count == "1", "pg_cron extension not found after CREATE"
+
+            sql_version = host.run(f"{psql} \"SELECT extversion FROM pg_extension WHERE extname = 'pg_cron';\"").stdout.strip()
+            expected_sql_v = pg_versions.get("PG_CRON_sql_version")
+            assert sql_version == expected_sql_v, f"pg_cron SQL version mismatch: expected {expected_sql_v}, got {sql_version}"
+
+            schedule = host.run(f"{psql} \"SELECT cron.schedule('pg_cron_test_job', '* * * * *', 'SELECT 1');\"")
+            assert schedule.rc == 0, f"cron.schedule() failed: {schedule.stderr}"
+
+            job_count = host.run(f"{psql} \"SELECT count(*) FROM cron.job WHERE jobname = 'pg_cron_test_job';\"").stdout.strip()
+            assert job_count == "1", "Scheduled job not found in cron.job"
+
+            unschedule = host.run(f"{psql} \"SELECT cron.unschedule('pg_cron_test_job');\"")
+            assert unschedule.rc == 0, f"cron.unschedule() failed: {unschedule.stderr}"
+
+        finally:
+            host.run(f"{psql} 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
+            final_count = host.run(f"{psql} \"SELECT count(*) FROM pg_extension WHERE extname = 'pg_cron';\"").stdout.strip()
+            assert final_count == "0", "Failed to drop pg_cron extension cleanly"
 
 
 # f"{get_server_path}/share/extension/postgis.control",

@@ -117,17 +117,47 @@
     command: dnf module enable llvm-toolset -y
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
-  - name: Configure shared_preload_libraries for PostgreSQL < 17
-    lineinfile:
+  - name: Configure shared_preload_libraries
+    vars:
+      pg_cron_min_versions:
+        '14': '14.22'
+        '15': '15.17'
+        '16': '16.13'
+        '17': '17.9'
+        '18': '18.3'
+      min_pg_cron_ver: "{{ pg_cron_min_versions[major_version | string] | default('0.0') }}"
+      base_extensions: >-
+        {{ ['pg_stat_monitor', 'pgaudit', 'set_user'] + (['pg_tde'] if major_version | int >= 17 else []) }}
+      final_extensions: >-
+        {{
+          base_extensions
+          + (['pg_cron'] if (
+              min_pg_cron_ver != '0.0' and
+              pg_version_to_install | string is version(min_pg_cron_ver, '>=', strict=True)
+            ) else [])
+        }}
+    ansible.builtin.lineinfile:
       path: "{{ data_dir }}/postgresql.conf"
-      line: "shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'"
-    when: major_version | int < 17
+      regexp: '^#?shared_preload_libraries\s*='
+      line: "shared_preload_libraries = '{{ final_extensions | join(', ') }}'"
+      state: present
 
-  - name: Configure shared_preload_libraries for PostgreSQL 17+ (includes pg_tde)
-    lineinfile:
+  - name: Configure pg_cron database name
+    vars:
+      pg_cron_min_versions:
+        '14': '14.22'
+        '15': '15.17'
+        '16': '16.13'
+        '17': '17.9'
+        '18': '18.3'
+      min_pg_cron_ver: "{{ pg_cron_min_versions[major_version | string] | default('0.0') }}"
+    ansible.builtin.lineinfile:
       path: "{{ data_dir }}/postgresql.conf"
-      line: "shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, pg_tde'"
-    when: major_version | int >= 17
+      line: "cron.database_name = 'postgres'"
+      state: present
+    when:
+      - min_pg_cron_ver != '0.0'
+      - pg_version_to_install | string is version(min_pg_cron_ver, '>=', strict=True)
 
   - name: Remove pg_hba.conf
     file:
