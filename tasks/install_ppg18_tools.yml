@@ -363,16 +363,6 @@
         - percona-postgis
     when: ansible_os_family == "Debian"
 
-  - name: Install percona-postgis libsfcgal1 on Ubuntu-18
-    apt:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-        - libsfcgal1
-    when: ansible_os_family == "Debian" and ansible_distribution_major_version == "18"
-
   - name: Install percona-wal2json18 RHEL
     yum:
       name: percona-wal2json18
@@ -569,7 +559,6 @@
         local   replication     all                                     trust
         host    replication     all             127.0.0.1/32            trust
         host    replication     all             ::1/128                 trust
-        host    all             oidc_test_user  127.0.0.1/32            oauth issuer="https://mock-issuer.com", scope="openid"
     when: ansible_os_family == "RedHat"
 
   - name: Edit pg_hba.conf Debian
@@ -584,8 +573,25 @@
         local   replication     all                                     trust
         host    replication     all             127.0.0.1/32            trust
         host    replication     all             ::1/128                 trust
-        host    all             oidc_test_user  127.0.0.1/32            oauth issuer="https://mock-issuer.com", scope="openid"
     when: ansible_os_family == "Debian"
+
+  - name: Add OIDC entry to pg_hba.conf RHEL
+    lineinfile:
+      path: /var/lib/pgsql/18/data/pg_hba.conf
+      line: 'host    all             oidc_test_user  127.0.0.1/32            oauth issuer="https://mock-issuer.com", scope="openid"'
+      state: present
+    when:
+      - ansible_os_family == "RedHat"
+      - pg_version_to_install | string is version('18.2', '>=', strict=True)
+
+  - name: Add OIDC entry to pg_hba.conf Debian
+    lineinfile:
+      path: /etc/postgresql/18/main/pg_hba.conf
+      line: 'host    all             oidc_test_user  127.0.0.1/32            oauth issuer="https://mock-issuer.com", scope="openid"'
+      state: present
+    when:
+      - ansible_os_family == "Debian"
+      - pg_version_to_install | string is version('18.2', '>=', strict=True)
 
   - name: Restart Postgres RHEL
     service:

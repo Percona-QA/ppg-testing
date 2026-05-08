@@ -362,17 +362,6 @@
         - percona-postgis
     when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('14.8', '>=', strict=True))
 
-  - name: Install percona-postgis libsfcgal1 on Ubuntu-18
-    apt:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-        - libsfcgal1
-    when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('14.8', '>=', strict=True)) and
-      ansible_distribution_major_version == "18"
-
   - name: Install percona-wal2json14 RHEL
     yum:
       name: percona-wal2json14
