@@ -20,7 +20,6 @@
 # ────────────────────────────────
 #   OLD_TAG           Tag for old image            (default: OLD_VERSION)
 #   NEW_TAG           Tag for new image            (default: NEW_VERSION)
-#   MILESTONE         Milestone level for tests    (default: 0)
 #   WITH_POSTGIS      Enable PostGIS tests         (default: false)
 #
 # Mediator tag
@@ -42,12 +41,12 @@
 #   # PG 17 → PG 18
 #   OLD_VERSION=17.10 NEW_VERSION=18.4 DOCKER_REPOSITORY=perconalab \
 #       OLD_TAG=17.10 NEW_TAG=18.4 UPGRADE_TAG=18-17-16-15-14 \
-#       MILESTONE=2 WITH_POSTGIS=true ./run.sh
+#       WITH_POSTGIS=true ./run.sh
 #
 #   # PG 16 → PG 17
 #   OLD_VERSION=16.14 NEW_VERSION=17.10 DOCKER_REPOSITORY=perconalab \
 #       OLD_TAG=16.14 NEW_TAG=17.10 UPGRADE_TAG=18-17-16-15-14 \
-#       MILESTONE=2 WITH_POSTGIS=true ./run.sh
+#       WITH_POSTGIS=true ./run.sh
 # =============================================================================
 set -uo pipefail
 
@@ -61,7 +60,6 @@ DOCKER_REPOSITORY="${DOCKER_REPOSITORY:-perconalab}"
 OLD_TAG="${OLD_TAG:-$OLD_VERSION}"
 NEW_TAG="${NEW_TAG:-$NEW_VERSION}"
 : "${UPGRADE_TAG:?UPGRADE_TAG is required. e.g. UPGRADE_TAG=18-17-16-15-14}"
-MILESTONE="${MILESTONE:-0}"
 WITH_POSTGIS="${WITH_POSTGIS:-false}"
 
 # Warn if the broken legacy "v2" mediator tag is used — it passes
@@ -129,7 +127,6 @@ echo "  DOCKER_REPOSITORY  : $DOCKER_REPOSITORY"
 echo "  OLD_TAG            : $OLD_TAG"
 echo "  NEW_TAG            : $NEW_TAG"
 echo "  UPGRADE_TAG        : $UPGRADE_TAG"
-echo "  MILESTONE          : $MILESTONE"
 echo "  WITH_POSTGIS       : $WITH_POSTGIS"
 echo "  OLD_IMAGE          : $OLD_IMAGE"
 echo "  NEW_IMAGE          : $NEW_IMAGE"
@@ -154,7 +151,6 @@ _print_header "Phase 1: Testing PG $OLD_VERSION (pre-upgrade)"
 VERSION=$OLD_VERSION \
 TAG=$OLD_TAG \
 DOCKER_REPOSITORY=$DOCKER_REPOSITORY \
-MILESTONE=$MILESTONE \
 WITH_POSTGIS=$WITH_POSTGIS \
 UPGRADE_DATA_DIR="$OLD_VOL" \
 pytest \
@@ -303,7 +299,6 @@ _print_header "Phase 3: Testing PG $NEW_VERSION (post-upgrade)"
 VERSION=$NEW_VERSION \
 TAG=$NEW_TAG \
 DOCKER_REPOSITORY=$DOCKER_REPOSITORY \
-MILESTONE=$MILESTONE \
 WITH_POSTGIS=$WITH_POSTGIS \
 UPGRADE_DATA_DIR="$NEW_VOL" \
 pytest \

@@ -674,11 +674,11 @@ def _so_from_control(host, major, control_file):
     return None, None  # no module_pathname → pure-SQL extension
 
 
-# ── Phase 3f: Milestone extension file verification (new image) ───────────────
+# ── Phase 3f: Extension file verification (new image) ────────────────────────
 
 
 class TestPostUpgradeExtensionFiles:
-    """Verify that every milestone extension's package files are installed at
+    """Verify that every key extension's package files are installed at
     the correct PostgreSQL prefix in the **new** image.
 
     pg_upgrade requires all extension ``.control`` files (and the ``.so``
@@ -742,7 +742,7 @@ class TestPostUpgradeExtensionFiles:
         )
 
     def test_extensions_in_pg_available_extensions(self, upgrade_pipeline):
-        """Verify all milestone extensions appear in ``pg_available_extensions``
+        """Verify all key extensions appear in ``pg_available_extensions``
         on the upgraded cluster.
 
         This is a catalog-level complement to the file-system checks above:
@@ -850,7 +850,7 @@ def upgrade_image_host():
 
 
 class TestUpgradeImageExtensionFiles:
-    """Verify that every milestone extension is installed for **all three**
+    """Verify that every key extension is installed for **all three**
     PostgreSQL major versions (16, 17, 18) inside the upgrade mediator image.
 
     The upgrade mediator image must ship complete extension packages for every

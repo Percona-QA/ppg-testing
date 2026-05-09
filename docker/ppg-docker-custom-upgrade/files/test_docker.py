@@ -16,22 +16,10 @@ MAJOR_MINOR_VER = os.getenv("VERSION")
 DOCKER_REPO = os.getenv("DOCKER_REPOSITORY")
 IMG_TAG = os.getenv("TAG")
 IS_WITH_POSTGIS = os.getenv("WITH_POSTGIS", "false").lower() == "true"
-MILESTONE = int(os.getenv("MILESTONE", "0"))
 PG_BIN_DIR = f"/usr/pgsql-{MAJOR_VER}/bin"
 PG_DATA_DIR = "/data/db"
 IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG}"
 UPGRADE_DATA_DIR = os.getenv("UPGRADE_DATA_DIR")  # host path to mount as PG_DATA_DIR
-
-# --- Milestone Markers ---
-milestone_1 = pytest.mark.skipif(
-    MILESTONE < 1, reason=f"MILESTONE={MILESTONE} — requires milestone 1 build - base version."
-)
-milestone_2 = pytest.mark.skipif(
-    MILESTONE < 2, reason=f"MILESTONE={MILESTONE} — requires milestone 2 build"
-)
-milestone_3 = pytest.mark.skipif(
-    MILESTONE < 3, reason=f"MILESTONE={MILESTONE} — requires milestone 3 build"
-)
 
 # --- Settings ---
 pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER)
@@ -100,7 +88,6 @@ def host(request):
     print(f"Image TAG: {IMG_TAG}")
     print(f"IS_WITH_POSTGIS: {IS_WITH_POSTGIS}")
     print(f"DOCKER_TO_USE: {IMAGE}")
-    print(f"MILESTONE: {MILESTONE}")
     print(f"UPGRADE_DATA_DIR: {UPGRADE_DATA_DIR or '(none — fresh container)'}")
     print("--------------------------------")
 
@@ -470,18 +457,6 @@ def test_rpm_package_is_installed(host, package):
 
     if "oidc_validator" in package and int(MAJOR_VER) < 18:
         pytest.skip(f"Skipping {package} for PostgreSQL {MAJOR_VER} (only supported on 18.2+).")
-
-    milestone_pkg_requirements = {
-        f"percona-h3-pg_{MAJOR_VER}": (2, "h3 extension"),
-        f"percona-pgrouting_{MAJOR_VER}": (2, "pgrouting extension"),
-    }
-
-    for pkg_pattern, (required_milestone, feature_name) in milestone_pkg_requirements.items():
-        if pkg_pattern in package and MILESTONE < required_milestone:
-            pytest.skip(
-                f"MILESTONE={MILESTONE} - "
-                f"requires milestone {required_milestone} build ({feature_name})."
-            )
 
     pkg = host.package(package)
 
@@ -1193,7 +1168,6 @@ def manage_postgis(host, action="create"):
 
 
 # --- PostGIS TEST ---
-@milestone_2
 def test_postgis_library_linkage(host):
     """Verifies PostGIS can be enabled and GEOS, PROJ, and GDAL are reachable."""
     try:
@@ -1205,7 +1179,6 @@ def test_postgis_library_linkage(host):
         manage_postgis(host, "drop")
 
 
-@milestone_2
 def test_postgis_spatial_logic_and_rasters(host):
     """Verifies distance calculations (PROJ/GEOS) and Raster support (GDAL)."""
     try:
@@ -1230,7 +1203,6 @@ def test_postgis_spatial_logic_and_rasters(host):
         manage_postgis(host, "drop")
 
 
-@milestone_2
 def test_postgis_srid_transformation(host):
     """Verifies coordinate reprojection logic (PROJ library check)."""
     try:
@@ -1243,7 +1215,6 @@ def test_postgis_srid_transformation(host):
         manage_postgis(host, "drop")
 
 
-@milestone_2
 def test_postgis_indexing_and_joins(host):
     """Verifies GiST indexing and spatial join performance/logic."""
     try:
@@ -1267,7 +1238,6 @@ def test_postgis_indexing_and_joins(host):
         manage_postgis(host, "drop")
 
 
-@milestone_2
 def test_postgis_functional(host):
     """
     End-to-end functional test: spatial table, GiST index, proximity query,
@@ -1359,7 +1329,6 @@ def h3_db(host):
     return host
 
 
-@milestone_2
 def test_h3_extension_installed(h3_db):
     """Verify h3 is in the installed extensions list."""
     # Simplified command
@@ -1371,7 +1340,6 @@ def test_h3_extension_installed(h3_db):
     assert result.stdout.strip() == "1"
 
 
-@milestone_2
 def test_h3_latlng_to_cell(h3_db):
     """Test using the geometry point signature."""
     # We create a POINT(longitude latitude) and pass it as a single argument
@@ -1382,7 +1350,6 @@ def test_h3_latlng_to_cell(h3_db):
     assert result.stdout.strip().startswith("8719")
 
 
-@milestone_2
 def test_h3_postgis_geometry_to_cell(h3_db):
     """Verify converting a PostGIS Geometry point to an H3 index."""
     # Since ST_Y/ST_X already return double precision, this signature matches
@@ -1394,7 +1361,6 @@ def test_h3_postgis_geometry_to_cell(h3_db):
     assert len(result.stdout.strip()) == 15
 
 
-@milestone_2
 def test_h3_grid_distance(h3_db):
     """Test distance between two cells using the point-based signature."""
     # Using the ST_MakePoint method since we know it works from your PASSED tests
@@ -1410,7 +1376,6 @@ def test_h3_grid_distance(h3_db):
     assert int(result.stdout.strip()) >= 0
 
 
-@milestone_2
 def test_h3_latlng_constructor(h3_db):
     """Test using the geography-to-h3 conversion (the most stable path)."""
     # We know ST_MakePoint works because your other tests just passed.
@@ -1423,7 +1388,6 @@ def test_h3_latlng_constructor(h3_db):
 
 
 # 1. Test the 'geography' signature (Standard for Global H3)
-@milestone_2
 def test_h3_signature_geography(h3_db):
     query = "SELECT h3_latlng_to_cell(ST_MakePoint(-0.1278, 51.5074)::geography, 7);"
     result = h3_db.run(f'{PG_BIN_DIR}/psql -U postgres -d postgres -t -c "{query}"')
@@ -1432,14 +1396,12 @@ def test_h3_signature_geography(h3_db):
 
 
 # 2. Test the 'geometry' signature (Standard for Flat/Projected maps)
-@milestone_2
 def test_h3_signature_geometry(h3_db):
     query = "SELECT h3_latlng_to_cell(ST_SetSRID(ST_MakePoint(-0.1278, 51.5074), 4326), 7);"
     result = h3_db.run(f'{PG_BIN_DIR}/psql -U postgres -d postgres -t -c "{query}"')
     assert result.exit_status == 0
 
 
-@milestone_2
 def test_h3_signature_latlng_point(h3_db):
     # Swap to (lng, lat) for the native point constructor to hit the 8719 index
     query = "SELECT h3_latlng_to_cell(point(-0.1278, 51.5074), 7);"
@@ -1449,7 +1411,6 @@ def test_h3_signature_latlng_point(h3_db):
     assert result.stdout.strip().startswith("8719")
 
 
-@milestone_2
 def test_h3_function_signatures_count(h3_db):
     """
     Verify the 'Contract': The extension should register exactly 3 overloads
@@ -1476,7 +1437,6 @@ def test_h3_function_signatures_count(h3_db):
     )
 
 
-@milestone_2
 def test_h3_functional_integrity(h3_db):
     """The gold-standard functional test for this specific package build."""
     query = "SELECT h3_latlng_to_cell(ST_MakePoint(-0.1278, 51.5074)::geography, 7);"
@@ -1486,7 +1446,6 @@ def test_h3_functional_integrity(h3_db):
     assert result.stdout.strip().startswith("8719")
 
 
-@milestone_2
 def test_h3_binary_integrity(h3_db):
     """Verify C symbols exist without executing them (prevents segfaults)."""
     lib_path = f"/usr/pgsql-{MAJOR_VER}/lib/h3.so"
@@ -1495,7 +1454,6 @@ def test_h3_binary_integrity(h3_db):
     assert "T h3_latlng_to_cell" in result.stdout
 
 
-@milestone_2
 def test_h3_standard_geography_path(h3_db):
     # Longitude first, then Latitude
     query = "SELECT h3_latlng_to_cell(ST_MakePoint(-0.1278, 51.5074)::geography, 7);"
@@ -1505,7 +1463,6 @@ def test_h3_standard_geography_path(h3_db):
     assert result.stdout.strip().startswith("8719")
 
 
-@milestone_2
 def test_h3_internal_point_path(h3_db):
     """
     Verify the internal 'latlng point' signature.
@@ -1520,7 +1477,6 @@ def test_h3_internal_point_path(h3_db):
     assert result.stdout.strip().startswith("8719")
 
 
-@milestone_2
 def test_h3_extension_version(host):
     # 1. Clean slate and recreate
     # We use CASCADE because h3 often has dependencies (like postgis)
@@ -1554,7 +1510,6 @@ def test_h3_extension_version(host):
     assert drop_res.rc == 0, drop_res.stderr
 
 
-@milestone_2
 def test_pgrouting_extension_version(host):
     # 1. Clean slate and recreate
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
@@ -1583,7 +1538,6 @@ def test_pgrouting_extension_version(host):
     assert drop_res.rc == 0, drop_res.stderr
 
 
-@milestone_2
 def test_pg_routing_functional_dijkstra(host):
     # 1. Setup
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
@@ -1611,7 +1565,6 @@ def test_pg_routing_functional_dijkstra(host):
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
 
 
-@milestone_2
 def test_pg_routing_metadata(host):
     # 1. Setup
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
@@ -1631,7 +1584,6 @@ def test_pg_routing_metadata(host):
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
 
 
-@milestone_2
 def test_pg_routing_functional_bidirectional(host):
     # 1. Setup
     host.run("psql -c 'DROP EXTENSION IF EXISTS pgrouting CASCADE;'")
@@ -1665,7 +1617,7 @@ def test_pg_routing_functional_bidirectional(host):
 # =============================================================================
 
 # Fixture: install PostGIS and load legacy.sql once for all legacy function tests.
-# PostGIS is left installed after the fixture teardown because other milestone_2
+# PostGIS is left installed after the fixture teardown because other
 # tests (h3, pgrouting) may depend on it being present.
 
 @pytest.fixture(scope="module")
@@ -1679,14 +1631,12 @@ def postgis_legacy_db(host):
     yield host
 
 
-@milestone_2
 def test_postgis_legacy_sql_file_exists(host):
     """Verify legacy.sql is present at the expected contrib path."""
     result = host.run(f"test -f {POSTGIS_LEGACY_SQL}")
     assert result.rc == 0, f"legacy.sql not found at {POSTGIS_LEGACY_SQL}"
 
 
-@milestone_2
 def test_postgis_uninstall_legacy_sql_file_exists(host):
     """Verify uninstall_legacy.sql is present at the expected contrib path."""
     result = host.run(f"test -f {POSTGIS_UNINSTALL_LEGACY_SQL}")
@@ -1695,7 +1645,6 @@ def test_postgis_uninstall_legacy_sql_file_exists(host):
     )
 
 
-@milestone_2
 def test_postgis_legacy_sql_loads(host):
     """Verify legacy.sql executes without errors against a PostGIS-enabled database."""
     host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS postgis CASCADE;'")
@@ -1703,7 +1652,6 @@ def test_postgis_legacy_sql_loads(host):
     assert result.rc == 0, f"legacy.sql failed to load: {result.stderr}"
 
 
-@milestone_2
 def test_postgis_legacy_st_line_interpolate_point(postgis_legacy_db):
     """st_line_interpolate_point() is a legacy alias — verify it returns a POINT."""
     query = (
@@ -1718,7 +1666,6 @@ def test_postgis_legacy_st_line_interpolate_point(postgis_legacy_db):
     )
 
 
-@milestone_2
 def test_postgis_legacy_st_force_2d(postgis_legacy_db):
     """st_force_2d() is a legacy alias — verify it strips the Z coordinate."""
     query = "SELECT ST_AsText(st_force_2d(ST_GeomFromText('POINT(1 2 3)')));"
@@ -1729,7 +1676,6 @@ def test_postgis_legacy_st_force_2d(postgis_legacy_db):
     )
 
 
-@milestone_2
 def test_postgis_legacy_st_numinteriorring(postgis_legacy_db):
     """st_numinteriorring() is a legacy alias — verify it counts interior rings."""
     query = (
@@ -1745,7 +1691,6 @@ def test_postgis_legacy_st_numinteriorring(postgis_legacy_db):
     )
 
 
-@milestone_2
 def test_postgis_uninstall_legacy_sql(host):
     """Verify uninstall_legacy.sql removes the legacy function aliases.
 
@@ -1776,14 +1721,9 @@ def test_postgis_uninstall_legacy_sql(host):
     )
 
 
-# =============================================================================
-# --- MILESTONE 3 EXTENSION TESTS ---
-# =============================================================================
-
 # --- ip4r ---
 
 
-@milestone_3
 def test_ip4r_extension_version(host):
     # 1. Clean slate and recreate
     host.run("psql -c 'DROP EXTENSION IF EXISTS ip4r CASCADE;'")
@@ -1807,7 +1747,6 @@ def test_ip4r_extension_version(host):
     host.run("psql -c 'DROP EXTENSION IF EXISTS ip4r CASCADE;'")
 
 
-@milestone_3
 def test_ip4r_functional(host):
     # 1. Setup
     host.run("psql -c 'DROP EXTENSION IF EXISTS ip4r CASCADE;'")
@@ -1832,7 +1771,6 @@ def test_ip4r_functional(host):
 # --- hll ---
 
 
-@milestone_3
 def test_hll_extension_version(host):
     # 1. Clean slate and recreate
     host.run("psql -c 'DROP EXTENSION IF EXISTS hll CASCADE;'")
@@ -1857,7 +1795,6 @@ def test_hll_extension_version(host):
     host.run("psql -c 'DROP EXTENSION IF EXISTS hll CASCADE;'")
 
 
-@milestone_3
 def test_hll_functional(host):
     # 1. Setup
     host.run("psql -c 'DROP EXTENSION IF EXISTS hll CASCADE;'")
@@ -1881,7 +1818,6 @@ def test_hll_functional(host):
 # --- pg_cron ---
 
 
-@milestone_3
 def test_pg_cron_extension_version(host):
     # 1. Clean slate and recreate
     # Note: pg_cron background worker requires shared_preload_libraries;
@@ -1907,7 +1843,6 @@ def test_pg_cron_extension_version(host):
     host.run("psql -c 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
 
 
-@milestone_3
 def test_pg_cron_functional(host):
     # 1. Setup
     host.run("psql -c 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
@@ -1928,7 +1863,6 @@ def test_pg_cron_functional(host):
 # --- pg_partman ---
 
 
-@milestone_3
 def test_pg_partman_extension_version(host):
     # 1. Clean slate and recreate
     # pg_partman must be installed into a dedicated schema; create it first.
@@ -1956,7 +1890,6 @@ def test_pg_partman_extension_version(host):
     host.run("psql -c 'DROP SCHEMA IF EXISTS partman CASCADE;'")
 
 
-@milestone_3
 def test_pg_partman_functional(host):
     # 1. Setup — install into the dedicated partman schema
     host.run("psql -c 'DROP EXTENSION IF EXISTS pg_partman CASCADE;'")
@@ -1980,7 +1913,6 @@ def test_pg_partman_functional(host):
 # --- pg_similarity ---
 
 
-@milestone_3
 def test_pg_similarity_extension_version(host):
     # 1. Clean slate and recreate
     host.run("psql -c 'DROP EXTENSION IF EXISTS pg_similarity CASCADE;'")
@@ -2005,7 +1937,6 @@ def test_pg_similarity_extension_version(host):
     host.run("psql -c 'DROP EXTENSION IF EXISTS pg_similarity CASCADE;'")
 
 
-@milestone_3
 def test_pg_similarity_functional(host):
     # 1. Setup
     host.run("psql -c 'DROP EXTENSION IF EXISTS pg_similarity CASCADE;'")
@@ -2026,7 +1957,6 @@ def test_pg_similarity_functional(host):
 # --- vectorscale ---
 
 
-@milestone_3
 def test_vectorscale_extension_version(host):
     # 1. Clean slate and recreate (CASCADE also installs pgvector if needed)
     host.run("psql -c 'DROP EXTENSION IF EXISTS vectorscale CASCADE;'")
@@ -2051,7 +1981,6 @@ def test_vectorscale_extension_version(host):
     host.run("psql -c 'DROP EXTENSION IF EXISTS vectorscale CASCADE;'")
 
 
-@milestone_3
 def test_vectorscale_functional(host):
     # 1. Setup
     host.run("psql -c 'DROP EXTENSION IF EXISTS vectorscale CASCADE;'")
@@ -2077,7 +2006,6 @@ def test_vectorscale_functional(host):
 # --- rum ---
 
 
-@milestone_3
 def test_rum_extension_version(host):
     # 1. Clean slate and recreate
     host.run("psql -c 'DROP EXTENSION IF EXISTS rum CASCADE;'")
@@ -2101,7 +2029,6 @@ def test_rum_extension_version(host):
     host.run("psql -c 'DROP EXTENSION IF EXISTS rum CASCADE;'")
 
 
-@milestone_3
 def test_rum_functional(host):
     # 1. Setup
     host.run("psql -c 'DROP EXTENSION IF EXISTS rum CASCADE;'")
@@ -2129,7 +2056,6 @@ def test_rum_functional(host):
 # --- unit ---
 
 
-@milestone_3
 def test_unit_extension_version(host):
     # 1. Clean slate and recreate
     host.run("psql -c 'DROP EXTENSION IF EXISTS unit CASCADE;'")
@@ -2153,7 +2079,6 @@ def test_unit_extension_version(host):
     host.run("psql -c 'DROP EXTENSION IF EXISTS unit CASCADE;'")
 
 
-@milestone_3
 def test_unit_functional(host):
     # 1. Setup
     host.run("psql -c 'DROP EXTENSION IF EXISTS unit CASCADE;'")
@@ -2174,7 +2099,6 @@ def test_unit_functional(host):
 # --- anon (postgresql_anonymizer) ---
 
 
-@milestone_3
 def test_anon_extension_version(host):
     # 1. Clean slate and recreate
     # CASCADE installs the required pgcrypto dependency automatically.
@@ -2200,7 +2124,6 @@ def test_anon_extension_version(host):
     host.run("psql -c 'DROP EXTENSION IF EXISTS anon CASCADE;'")
 
 
-@milestone_3
 def test_anon_functional(host):
     # 1. Setup
     # Note: dynamic masking requires shared_preload_libraries; partial() works without it.
@@ -2222,13 +2145,9 @@ def test_anon_functional(host):
     host.run("psql -c 'DROP EXTENSION IF EXISTS anon CASCADE;'")
 
 
-# =============================================================================
-# --- MILESTONE 3: AVAILABILITY, DEEPER FUNCTIONAL, AND PRELOAD TESTS ---
-# =============================================================================
-
 # --- pg_available_extensions pre-install check ---
 
-MILESTONE_3_EXTENSIONS = [
+EXTRA_EXTENSIONS = [
     "ip4r",
     "hll",
     "pg_cron",
@@ -2241,10 +2160,9 @@ MILESTONE_3_EXTENSIONS = [
 ]
 
 
-@milestone_3
-@pytest.mark.parametrize("extension", MILESTONE_3_EXTENSIONS)
-def test_milestone3_extension_available(host, extension):
-    """Verify each milestone 3 extension is listed in pg_available_extensions."""
+@pytest.mark.parametrize("extension", EXTRA_EXTENSIONS)
+def test_extra_extension_available(host, extension):
+    """Verify each extra extension is listed in pg_available_extensions."""
     query = (
         f"SELECT count(*) FROM pg_available_extensions WHERE name = '{extension}';"
     )
@@ -2258,7 +2176,6 @@ def test_milestone3_extension_available(host, extension):
 # --- pg_partman: partition creation ---
 
 
-@milestone_3
 def test_pg_partman_create_partitions(host):
     # 1. Setup
     host.run("psql -c 'DROP TABLE IF EXISTS public.test_partman_tbl CASCADE;'")
@@ -2296,7 +2213,6 @@ def test_pg_partman_create_partitions(host):
 # --- vectorscale: approximate nearest-neighbour search ---
 
 
-@milestone_3
 def test_vectorscale_ann_search(host):
     # 1. Setup
     host.run("psql -c 'DROP EXTENSION IF EXISTS vectorscale CASCADE;'")
@@ -2323,7 +2239,6 @@ def test_vectorscale_ann_search(host):
 # --- pg_cron: job scheduling (requires shared_preload_libraries) ---
 
 
-@milestone_3
 @pytest.mark.needs_preload
 def test_pg_cron_schedule_job(host):
     # 1. Setup
@@ -2351,7 +2266,6 @@ def test_pg_cron_schedule_job(host):
 # Static anonymization (anon.anonymize_table) works without shared_preload_libraries.
 
 
-@milestone_3
 def test_anon_static_masking(host):
     # 1. Setup
     host.run("psql -c 'DROP TABLE IF EXISTS public.test_anon_people CASCADE;'")
@@ -2381,7 +2295,6 @@ def test_anon_static_masking(host):
 # --- pg_partman_bgw: background worker tests ---
 
 
-@milestone_3
 @pytest.mark.needs_preload
 def test_pg_partman_bgw_loaded(host):
     """Verify pg_partman_bgw is present in shared_preload_libraries."""
@@ -2393,7 +2306,6 @@ def test_pg_partman_bgw_loaded(host):
     )
 
 
-@milestone_3
 @pytest.mark.needs_preload
 def test_pg_partman_bgw_maintenance(host):
     """Verify run_maintenance() — the function pg_partman_bgw calls on each cycle —
