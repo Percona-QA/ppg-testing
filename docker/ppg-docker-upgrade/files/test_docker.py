@@ -4,6 +4,7 @@ import time
 import psycopg2
 import pytest
 import testinfra
+from packaging import version
 
 import settings
 
@@ -1290,3 +1291,82 @@ def test_pg_telemetry_extension_version(host):
     result = host.run("psql -c 'SELECT percona_pg_telemetry_version();' | awk 'NR==3{print $1}'")
     assert result.rc == 0, result.stderr
     assert result.stdout.strip("\n") == pg_docker_versions["percona-pg-telemetry"]['pg_telemetry_version']
+
+
+# --- pg_cron ---
+
+# Minimum PPG patch versions that ship pg_cron, keyed by major version integer.
+PG_CRON_MIN_VERSIONS = {
+    14: version.parse("14.23"),
+    15: version.parse("15.18"),
+    16: version.parse("16.14"),
+    17: version.parse("17.10"),
+    18: version.parse("18.4"),
+}
+
+
+def _skip_if_pg_cron_unavailable():
+    """Skip the calling test if pg_cron is not available for the current PG version."""
+    current_ver = version.parse(MAJOR_MINOR_VER)
+    min_ver = PG_CRON_MIN_VERSIONS.get(int(MAJOR_VER))
+    if min_ver is None or current_ver < min_ver:
+        pytest.skip(
+            f"pg_cron not available for PostgreSQL {MAJOR_MINOR_VER} "
+            f"(requires >= {min_ver})"
+        )
+
+
+def test_pg_cron_extension_version(host):
+    _skip_if_pg_cron_unavailable()
+    pkg_key = f"percona-pg_cron_{MAJOR_VER}"
+
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
+    create_res = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_cron;'")
+    assert create_res.rc == 0, create_res.stderr
+
+    query = "SELECT extversion FROM pg_extension WHERE extname = 'pg_cron';"
+    actual_ext_version = host.run(f'psql -t -A -c "{query}"').stdout.strip()
+    expected_ext_version = pg_docker_versions[pkg_key]["extension_version"]
+
+    assert actual_ext_version == expected_ext_version, (
+        f"pg_cron extension version {actual_ext_version!r} does not match "
+        f"expected {expected_ext_version!r}"
+    )
+
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
+
+
+def test_pg_cron_functional(host):
+    _skip_if_pg_cron_unavailable()
+
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_cron;'")
+
+    query = "SELECT count(*) FROM cron.job;"
+    result = host.run(f'psql -t -A -c "{query}"')
+    assert result.rc == 0, f"pg_cron functional test failed: {result.stderr}"
+    assert result.stdout.strip() == "0"
+
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
+
+
+@pytest.mark.needs_preload
+def test_pg_cron_schedule_job(host):
+    _skip_if_pg_cron_unavailable()
+    pkg_key = f"percona-pg_cron_{MAJOR_VER}"
+
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
+    host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_cron;'")
+
+    schedule_res = host.run(
+        "psql -t -A -c \"SELECT cron.schedule('test-job', '* * * * *', 'SELECT 1;');\""
+    )
+    assert schedule_res.rc == 0, f"cron.schedule() failed: {schedule_res.stderr}"
+
+    query = "SELECT count(*) FROM cron.job WHERE jobname = 'test-job';"
+    count_result = host.run(f'psql -t -A -c "{query}"')
+    assert count_result.rc == 0
+    assert count_result.stdout.strip() == "1", "Scheduled job not found in cron.job"
+
+    host.run("psql -t -A -c \"SELECT cron.unschedule('test-job');\"")
+    host.run("psql -c 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
