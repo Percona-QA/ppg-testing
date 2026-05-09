@@ -11,10 +11,10 @@
 #
 # Required environment variables
 # ────────────────────────────────
-#   OLD_VERSION        Full source version    e.g. "17.9"
-#   NEW_VERSION        Full target version    e.g. "18.3"
+#   OLD_VERSION        Full source version    e.g. "17.10"
+#   NEW_VERSION        Full target version    e.g. "18.4"
 #   DOCKER_REPOSITORY  Image registry prefix  e.g. "perconalab"
-#   UPGRADE_TAG        Mediator image tag     e.g. "18.3-17.9-16.13-1"
+#   UPGRADE_TAG        Mediator image tag     e.g. "18-17-16"
 #
 # Optional environment variables
 # ────────────────────────────────
@@ -26,7 +26,7 @@
 # Mediator tag
 # ────────────
 #   The mediator tag encodes the full supported version chain.
-#   "18.3-17.9-16.13-1" supports both PG 16 → 17 and PG 17 → 18 upgrades.
+#   "18-17-16" supports both PG 16 → 17 and PG 17 → 18 upgrades.
 #   The older "v2" tag is broken for pre-PG18 targets (uses --no-data-checksums
 #   which was introduced in PG 18) and should not be used.
 #
@@ -40,27 +40,27 @@
 # Usage examples
 # ──────────────
 #   # PG 17 → PG 18
-#   OLD_VERSION=17.9 NEW_VERSION=18.3 DOCKER_REPOSITORY=perconalab \
-#       OLD_TAG=17.9-v2 NEW_TAG=18.3-v2 UPGRADE_TAG=18.3-17.9-16.13-1 \
+#   OLD_VERSION=17.10 NEW_VERSION=18.4 DOCKER_REPOSITORY=perconalab \
+#       OLD_TAG=17.10 NEW_TAG=18.4 UPGRADE_TAG=18-17-16 \
 #       MILESTONE=2 WITH_POSTGIS=true ./run.sh
 #
 #   # PG 16 → PG 17
-#   OLD_VERSION=16.13 NEW_VERSION=17.9 DOCKER_REPOSITORY=perconalab \
-#       OLD_TAG=16.13-v2 NEW_TAG=17.9-v2 UPGRADE_TAG=18.3-17.9-16.13-1 \
+#   OLD_VERSION=16.14 NEW_VERSION=17.10 DOCKER_REPOSITORY=perconalab \
+#       OLD_TAG=16.14 NEW_TAG=17.10 UPGRADE_TAG=18-17-16 \
 #       MILESTONE=2 WITH_POSTGIS=true ./run.sh
 # =============================================================================
 set -uo pipefail
 
 # ── Resolve configuration ────────────────────────────────────────────────────
 
-OLD_VERSION="${OLD_VERSION:-17.9}"
-NEW_VERSION="${NEW_VERSION:-18.3}"
+OLD_VERSION="${OLD_VERSION:-17.10}"
+NEW_VERSION="${NEW_VERSION:-18.4}"
 OLD_MAJOR="${OLD_VERSION%%.*}"
 NEW_MAJOR="${NEW_VERSION%%.*}"
 DOCKER_REPOSITORY="${DOCKER_REPOSITORY:-perconalab}"
 OLD_TAG="${OLD_TAG:-$OLD_VERSION}"
 NEW_TAG="${NEW_TAG:-$NEW_VERSION}"
-: "${UPGRADE_TAG:?UPGRADE_TAG is required. e.g. UPGRADE_TAG=18.3-17.9-16.13-1}"
+: "${UPGRADE_TAG:?UPGRADE_TAG is required. e.g. UPGRADE_TAG=18-17-16}"
 MILESTONE="${MILESTONE:-0}"
 WITH_POSTGIS="${WITH_POSTGIS:-false}"
 
@@ -71,7 +71,7 @@ if [ "${UPGRADE_TAG}" = "v2" ]; then
     echo ""
     echo "  WARNING: mediator tag 'v2' is broken for all upgrade paths."
     echo "  It passes --no-data-checksums (PG 18+ only) causing initdb to fail."
-    echo "  Use UPGRADE_TAG=18.3-17.9-16.13-1 instead."
+    echo "  Use UPGRADE_TAG=18-17-16 instead."
     echo ""
 fi
 
