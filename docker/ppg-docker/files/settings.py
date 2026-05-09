@@ -390,6 +390,8 @@ pg_tde = {
     "18.1": {"version": "2.1.1","extension_version": "pg_tde 2.1.1","ext_sql_version": "2.1"},
     "17.9": {"version": "2.1.2","extension_version": "pg_tde 2.1.2","ext_sql_version": "2.1"},
     "18.3": {"version": "2.1.2","extension_version": "pg_tde 2.1.2","ext_sql_version": "2.1"},
+    "17.10": {"version": "2.1.2","extension_version": "pg_tde 2.1.2","ext_sql_version": "2.1"},
+    "18.4": {"version": "2.1.2","extension_version": "pg_tde 2.1.2","ext_sql_version": "2.1"},
 }
 
 pgbackrest = {
@@ -1075,6 +1077,7 @@ ppg_versions = {
         "percona-pgbackrest": pgbackrest["17.10"],
         "percona-pgvector_17": pgvector["17.10"],
         "percona-pgvector_17-llvmjit": pgvector["17.10"],
+        "percona-pg_tde17": pg_tde["17.10"],
         "python3-etcd": python3_etcd["17.10"],
         "python3-ydiff": python3_ydiff["17.10"],
         "percona-postgis35_17": postgis["17.10"],
@@ -1123,6 +1126,7 @@ ppg_versions = {
         "percona-pgbackrest": pgbackrest["18.4"],
         "percona-pgvector_18": pgvector["18.4"],
         "percona-pgvector_18-llvmjit": pgvector["18.4"],
+        "percona-pg_tde18": pg_tde["18.4"],
         "python3-etcd": python3_etcd["18.4"],
         "python3-ydiff": python3_ydiff["18.4"],
         "percona-postgis35_18": postgis["18.4"],
