@@ -81,8 +81,7 @@ else:
     OLD_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG_OLD}"
     NEW_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG_NEW}"
 
-UPGRADE_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-upgrade-custom:{UPGRADE_IMG_TAG}"
-
+UPGRADE_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-upgrade:{UPGRADE_IMG_TAG}"
 PG_OLD_BIN_DIR = f"/usr/pgsql-{OLD_MAJOR}/bin"
 PG_NEW_BIN_DIR = f"/usr/pgsql-{NEW_MAJOR}/bin"
 PG_DATA_DIR = "/data/db"
