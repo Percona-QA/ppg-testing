@@ -603,12 +603,19 @@ _SYSTEM_TOOL_BINARIES = [
     ("pgbackrest", "/usr/bin/pgbackrest"),
 ]
 
-# All supported PG major versions shipped inside the upgrade mediator image.
-# Maps major version string → full major.minor version used as settings key.
+# Major versions currently shipped inside the upgrade mediator image.
+# Only update this list when a new PG major is added to the image;
+# the latest patch is resolved automatically from settings.ppg_versions.
+_UPGRADE_IMAGE_SUPPORTED_MAJORS = ["14", "15", "16", "17", "18"]
+
+# Maps major version string → latest full major.minor key in settings.
+# Derived at import time — no manual update needed on patch releases.
 _UPGRADE_IMAGE_PG_VERSIONS: dict[str, str] = {
-    "16": "16.13",
-    "17": "17.9",
-    "18": "18.3",
+    major: max(
+        (v for v in settings.ppg_versions if v.split(".")[0] == major),
+        key=lambda v: [int(x) for x in v.split(".")],
+    )
+    for major in _UPGRADE_IMAGE_SUPPORTED_MAJORS
 }
 
 # Pre-built parametrize lists for TestUpgradeImageExtensionFiles.
