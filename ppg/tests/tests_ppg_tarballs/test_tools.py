@@ -37,11 +37,11 @@ TDE_BINARIES = [
 
 # Minimum PostgreSQL versions where pg_cron is available in tarballs
 PG_CRON_MIN_VERSIONS = {
-    14: version.parse("14.22"),
-    15: version.parse("15.17"),
-    16: version.parse("16.13"),
-    17: version.parse("17.9"),
-    18: version.parse("18.3"),
+    14: version.parse("14.23"),
+    15: version.parse("15.18"),
+    16: version.parse("16.14"),
+    17: version.parse("17.10"),
+    18: version.parse("18.4"),
 }
 
 # Minimum PostgreSQL versions where pg_gather install location changed

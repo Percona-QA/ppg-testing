@@ -120,11 +120,11 @@
   - name: Configure shared_preload_libraries
     vars:
       pg_cron_min_versions:
-        '14': '14.22'
-        '15': '15.17'
-        '16': '16.13'
-        '17': '17.9'
-        '18': '18.3'
+        '14': '14.23'
+        '15': '15.18'
+        '16': '16.14'
+        '17': '17.10'
+        '18': '18.4'
       min_pg_cron_ver: "{{ pg_cron_min_versions[major_version | string] | default('0.0') }}"
       base_extensions: >-
         {{ ['pg_stat_monitor', 'pgaudit', 'set_user'] + (['pg_tde'] if major_version | int >= 17 else []) }}
@@ -145,11 +145,11 @@
   - name: Configure pg_cron database name
     vars:
       pg_cron_min_versions:
-        '14': '14.22'
-        '15': '15.17'
-        '16': '16.13'
-        '17': '17.9'
-        '18': '18.3'
+        '14': '14.23'
+        '15': '15.18'
+        '16': '16.14'
+        '17': '17.10'
+        '18': '18.4'
       min_pg_cron_ver: "{{ pg_cron_min_versions[major_version | string] | default('0.0') }}"
     ansible.builtin.lineinfile:
       path: "{{ data_dir }}/postgresql.conf"
