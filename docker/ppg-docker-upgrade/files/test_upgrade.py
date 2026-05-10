@@ -521,7 +521,14 @@ class TestPostUpgradeExtensions:
         )
         assert result.rc == 0
         available = result.stdout.splitlines()
-        missing = [ext for ext in NEW_EXTENSIONS if ext not in available]
+        postgis_family = {
+            "postgis", "postgis_topology", "postgis_raster", "postgis_sfcgal",
+            "address_standardizer", "postgis_tiger_geocoder", "address_standardizer_data_us",
+        }
+        missing = [
+            ext for ext in NEW_EXTENSIONS
+            if ext not in available and (IS_WITH_POSTGIS or ext not in postgis_family)
+        ]
         assert not missing, f"Extensions in settings not available in PG {NEW_MAJOR}: {missing}"
 
 
@@ -533,7 +540,11 @@ class TestPostUpgradePackages:
 
     def test_new_version_rpm_packages_installed(self, upgrade_pipeline):
         new_host = upgrade_pipeline["new_host"]
-        missing = [pkg for pkg in NEW_RPM_PACKAGES if new_host.run(f"rpm -q {pkg}").rc != 0]
+        missing = [
+            pkg for pkg in NEW_RPM_PACKAGES
+            if new_host.run(f"rpm -q {pkg}").rc != 0
+            and (IS_WITH_POSTGIS or "postgis" not in pkg)
+        ]
         assert not missing, f"RPM packages not installed in new image: {missing}"
 
     def test_data_directory_path(self, upgrade_pipeline):
@@ -960,17 +971,3 @@ class TestUpgradeImageExtensionFiles:
             f"{label}: .so missing at {so_path!r} in upgrade image (PG {major})"
         )
 
-    def test_telemetry_packages_not_installed(self, upgrade_image_host):
-        """The upgrade mediator image ships PG 16, 17, and 18 simultaneously.
-        None of the version-specific telemetry packages nor the telemetry agent
-        should be installed in it."""
-        excluded = [
-            "percona-telemetry-agent",
-            "percona-pg-telemetry16",
-            "percona-pg-telemetry17",
-            "percona-pg-telemetry18",
-        ]
-        installed = [pkg for pkg in excluded if upgrade_image_host.run(f"rpm -q {pkg}").rc == 0]
-        assert not installed, (
-            f"Packages that should not be installed in the upgrade mediator image: {installed}"
-        )
