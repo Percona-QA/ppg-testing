@@ -20,7 +20,6 @@
 # ────────────────────────────────
 #   OLD_TAG           Tag for old custom image     (default: OLD_VERSION)
 #   NEW_TAG           Tag for new custom image     (default: NEW_VERSION)
-#   WITH_POSTGIS      Enable PostGIS tests         (default: false)
 #
 # Mediator tag
 # ────────────
@@ -41,12 +40,12 @@
 #   # PG 17 → PG 18
 #   OLD_VERSION=17.10 NEW_VERSION=18.4 DOCKER_REPOSITORY=perconalab \
 #       OLD_TAG=17.10 NEW_TAG=18.4 UPGRADE_TAG=18-17-16 \
-#       WITH_POSTGIS=true ./run.sh
+#       ./run.sh
 #
 #   # PG 16 → PG 17
 #   OLD_VERSION=16.14 NEW_VERSION=17.10 DOCKER_REPOSITORY=perconalab \
 #       OLD_TAG=16.14 NEW_TAG=17.10 UPGRADE_TAG=18-17-16 \
-#       WITH_POSTGIS=true ./run.sh
+#       ./run.sh
 # =============================================================================
 set -uo pipefail
 
@@ -60,7 +59,6 @@ DOCKER_REPOSITORY="${DOCKER_REPOSITORY:-perconalab}"
 OLD_TAG="${OLD_TAG:-$OLD_VERSION}"
 NEW_TAG="${NEW_TAG:-$NEW_VERSION}"
 : "${UPGRADE_TAG:?UPGRADE_TAG is required. e.g. UPGRADE_TAG=18-17-16}"
-WITH_POSTGIS="${WITH_POSTGIS:-false}"
 
 # Warn if the broken legacy "v2" mediator tag is used — it passes
 # --no-data-checksums to initdb which was only introduced in PG 18 and
@@ -127,7 +125,6 @@ echo "  DOCKER_REPOSITORY  : $DOCKER_REPOSITORY"
 echo "  OLD_TAG            : $OLD_TAG"
 echo "  NEW_TAG            : $NEW_TAG"
 echo "  UPGRADE_TAG        : $UPGRADE_TAG"
-echo "  WITH_POSTGIS       : $WITH_POSTGIS"
 echo "  OLD_IMAGE          : $OLD_IMAGE"
 echo "  NEW_IMAGE          : $NEW_IMAGE"
 echo "  UPGRADE_IMAGE      : $UPGRADE_IMAGE"
@@ -151,7 +148,6 @@ _print_header "Phase 1: Testing PG $OLD_VERSION (pre-upgrade)"
 VERSION=$OLD_VERSION \
 TAG=$OLD_TAG \
 DOCKER_REPOSITORY=$DOCKER_REPOSITORY \
-WITH_POSTGIS=$WITH_POSTGIS \
 UPGRADE_DATA_DIR="$OLD_VOL" \
 pytest \
     test_labels_licences.py \
@@ -299,7 +295,6 @@ _print_header "Phase 3: Testing PG $NEW_VERSION (post-upgrade)"
 VERSION=$NEW_VERSION \
 TAG=$NEW_TAG \
 DOCKER_REPOSITORY=$DOCKER_REPOSITORY \
-WITH_POSTGIS=$WITH_POSTGIS \
 UPGRADE_DATA_DIR="$NEW_VOL" \
 pytest \
     test_labels_licences.py \

@@ -15,7 +15,6 @@ MAJOR_VER = os.getenv("VERSION").split(".")[0]
 MAJOR_MINOR_VER = os.getenv("VERSION")
 DOCKER_REPO = os.getenv("DOCKER_REPOSITORY")
 IMG_TAG = os.getenv("TAG")
-IS_WITH_POSTGIS = os.getenv("WITH_POSTGIS", "false").lower() == "true"
 PG_BIN_DIR = f"/usr/pgsql-{MAJOR_VER}/bin"
 PG_DATA_DIR = "/data/db"
 IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-custom:{IMG_TAG}"
@@ -85,7 +84,6 @@ def host(request):
     print(f"Major Version: {MAJOR_VER}")
     print(f"Major Minor Version: {MAJOR_MINOR_VER}")
     print(f"Image TAG: {IMG_TAG}")
-    print(f"IS_WITH_POSTGIS: {IS_WITH_POSTGIS}")
     print(f"DOCKER_TO_USE: {IMAGE}")
     print("--------------------------------")
 
@@ -280,19 +278,6 @@ def should_skip(extension):
     if major < 18 and extension == "pg_logicalinspect":
         return True, "pg_logicalinspect only supported in PG18+"
 
-    # 4. Feature-flag based skips
-    postgis_family = {
-        "postgis",
-        "postgis_topology",
-        "postgis_raster",
-        "postgis_sfcgal",
-        "address_standardizer",
-        "postgis_tiger_geocoder",
-        "address_standardizer_data_us",
-    }
-    if not IS_WITH_POSTGIS and extension in postgis_family:
-        return True, "Docker build is without PostGIS so skipping."
-
     return False, None
 
 
@@ -362,9 +347,6 @@ def test_plpgsql_extension(host):
 @pytest.mark.parametrize("package", DOCKER_RPM_PACKAGES)
 def test_rpm_package_is_installed(host, package):
     # 1. Centralized Skip Logic
-    if not IS_WITH_POSTGIS and "postgis" in package:
-        pytest.skip(f"Docker build is without PostGIS so skipping {package}.")
-
     if "oidc_validator" in package and int(MAJOR_VER) < 18:
         pytest.skip(f"Skipping {package} for PostgreSQL {MAJOR_VER} (only supported on 18.2+).")
 
@@ -480,9 +462,6 @@ def test_pg_config_flags(host, flag):
 
 
 def test_postgis_extension(host):
-    if not IS_WITH_POSTGIS:
-        pytest.skip("Skipping PostGIS test.")
-
     # 1. Execute the create command
     cmd = "psql -c 'CREATE EXTENSION IF NOT EXISTS postgis CASCADE;'"
     result = host.run(cmd)
