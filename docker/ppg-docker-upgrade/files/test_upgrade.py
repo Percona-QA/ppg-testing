@@ -703,6 +703,8 @@ class TestPostUpgradeExtensionFiles:
     ):
         """Verify each extension's ``.control`` file is at
         ``/usr/pgsql-{NEW_MAJOR}/share/extension/``."""
+        if label == "postgis" and not IS_WITH_POSTGIS:
+            pytest.skip("PostGIS not enabled (WITH_POSTGIS=false)")
         new_host = upgrade_pipeline["new_host"]
         path = f"/usr/pgsql-{NEW_MAJOR}/share/extension/{control_file}"
         result = new_host.run(f"test -f {path}")
@@ -726,6 +728,8 @@ class TestPostUpgradeExtensionFiles:
         ``module_pathname`` value is used to derive the expected ``.so`` path.
         Pure-SQL extensions (no ``module_pathname``) are skipped automatically.
         Versioned filenames are handled transparently via ``module_pathname``."""
+        if label == "postgis" and not IS_WITH_POSTGIS:
+            pytest.skip("PostGIS not enabled (WITH_POSTGIS=false)")
         new_host = upgrade_pipeline["new_host"]
         so_path, err = _so_from_control(new_host, NEW_MAJOR, control_file)
         if err:
@@ -754,8 +758,10 @@ class TestPostUpgradeExtensionFiles:
         with no ``.control`` file and does not appear in
         ``pg_available_extensions``."""
         new_host = upgrade_pipeline["new_host"]
-        ext_names = [label for label, _ in _EXT_SPECS]
-        # h3_postgis installs via CREATE EXTENSION h3_postgis CASCADE; include it
+        ext_names = [
+            label for label, _ in _EXT_SPECS
+            if label != "postgis" or IS_WITH_POSTGIS
+        ]
         missing = []
         for ext in ext_names:
             query = (
@@ -883,6 +889,8 @@ class TestUpgradeImageExtensionFiles:
     ):
         """Verify ``.control`` file at ``/usr/pgsql-{major}/share/extension/``
         for every extension × PG major version combination."""
+        if label == "postgis" and not IS_WITH_POSTGIS:
+            pytest.skip("PostGIS not enabled (WITH_POSTGIS=false)")
         path = f"/usr/pgsql-{major}/share/extension/{control_file}"
         result = upgrade_image_host.run(f"test -f {path}")
         assert result.rc == 0, (
@@ -904,6 +912,8 @@ class TestUpgradeImageExtensionFiles:
         Pure-SQL extensions (no ``module_pathname``) are skipped.
         Versioned ``.so`` names are resolved automatically from the
         ``.control`` file — no hardcoded filenames in the test."""
+        if label == "postgis" and not IS_WITH_POSTGIS:
+            pytest.skip("PostGIS not enabled (WITH_POSTGIS=false)")
         so_path, err = _so_from_control(upgrade_image_host, major, control_file)
         if err:
             pytest.fail(f"{label} (PG {major}): {err}")
