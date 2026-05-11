@@ -246,8 +246,8 @@ pg_oidc_validator = {
 pg_tde = {
     "17.9":  {"version": "2.1.2","extension_version": "pg_tde 2.1.2","ext_sql_version": "2.1"},
     "18.3":  {"version": "2.1.2","extension_version": "pg_tde 2.1.2","ext_sql_version": "2.1"},
-    "17.10": {"version": "2.1.2","extension_version": "pg_tde 2.1.2","ext_sql_version": "2.1"},
-    "18.4":  {"version": "2.1.2","extension_version": "pg_tde 2.1.2","ext_sql_version": "2.1"},
+    "17.10": {"version": "2.2.0","extension_version": "pg_tde 2.2.0","ext_sql_version": "2.2"},
+    "18.4": {"version": "2.2.0","extension_version": "pg_tde 2.2.0","ext_sql_version": "2.2"},
 }
 
 # Base extension list — common across all supported major versions.
