@@ -367,6 +367,9 @@ def test_rpm_package_is_installed(host, package):
     if "oidc_validator" in package and int(MAJOR_VER) < 18:
         pytest.skip(f"Skipping {package} for PostgreSQL {MAJOR_VER} (only supported on 18.2+).")
 
+    if "pg_cron" in package:
+        _skip_if_pg_cron_unavailable()
+
     pkg = host.package(package)
 
     # 2. Verify Installation
