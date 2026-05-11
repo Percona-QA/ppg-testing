@@ -360,10 +360,16 @@ DOCKER_RPM_PACKAGES_TEMPLATE = [
     "percona-postgis35_{}-utils",
     "python3-etcd",
     "python3-ydiff",
+    "percona-pg_cron_{}",
 ]
 
-# PG 18 additionally ships percona-pg_oidc_validator.
-DOCKER_RPM_PACKAGES_TEMPLATE_PG18 = DOCKER_RPM_PACKAGES_TEMPLATE + [
+# PG 17+ additionally ships percona-pg_tde.
+DOCKER_RPM_PACKAGES_TEMPLATE_PG17PLUS = DOCKER_RPM_PACKAGES_TEMPLATE + [
+    "percona-pg_tde{}",
+]
+
+# PG 18 additionally ships percona-pg_oidc_validator (and inherits pg_tde from PG17PLUS).
+DOCKER_RPM_PACKAGES_TEMPLATE_PG18 = DOCKER_RPM_PACKAGES_TEMPLATE_PG17PLUS + [
     "percona-pg_oidc_validator{}",
 ]
 
@@ -553,7 +559,7 @@ ppg_versions = {
         "percona-postgis35_17-gui": postgis["17.9"],
         "percona-postgis35_17-llvmjit": postgis["17.9"],
         "percona-postgis35_17-utils": postgis["17.9"],
-        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "17"),
+        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE_PG17PLUS, "17"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "17"),
         "extensions": DOCKER_LIST_EXTENSIONS_PG17,
         "binaries": [
@@ -783,7 +789,7 @@ ppg_versions = {
         "percona-postgis35_17-gui": postgis["17.10"],
         "percona-postgis35_17-llvmjit": postgis["17.10"],
         "percona-postgis35_17-utils": postgis["17.10"],
-        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "17"),
+        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE_PG17PLUS, "17"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "17"),
         "extensions": DOCKER_LIST_EXTENSIONS_PG17,
         "binaries": [
