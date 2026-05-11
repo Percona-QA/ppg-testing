@@ -1,7 +1,6 @@
 ---
   - name: Set Base Facts
     set_fact:
-      go_version: "1.25.6"
       major_version: "{{ lookup('env','VERSION') | regex_replace('ppg-(\\d+).*','\\1') }}"
       install_from_packages: "{{ lookup('env', 'INSTALL_FROM_PACKAGES')}}"
       full_version: "{{ lookup('env','VERSION') | regex_replace('ppg-','') }}"
@@ -23,6 +22,23 @@
       go_version: "1.25.6"
       go_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}"
       cacheable: true
+
+  - name: End play on Ubuntu 26 if PostgreSQL version is not supported
+    meta: end_host
+    vars:
+      ubuntu26_min_versions:
+        '14': '14.23'
+        '15': '15.18'
+        '16': '16.14'
+        '17': '17.10'
+        '18': '18.4'
+      pg_major: "{{ full_version | string | split('.') | first }}"
+      min_ver: "{{ ubuntu26_min_versions[pg_major] | default('0.0') }}"
+    when:
+      - ansible_distribution == "Ubuntu"
+      - ansible_distribution_major_version == "26"
+      - min_ver != '0.0'
+      - full_version | string is version(min_ver, '<', strict=True)
 
   - name: Set Dependent Facts
     set_fact:
@@ -175,7 +191,6 @@
       - ansible_os_family == 'RedHat'
 
   - name: Enable io_uring if possible
-    when: uring_disabled.stdout is defined and uring_disabled.stdout | int > 0
     become: true
     sysctl:
       name: kernel.io_uring_disabled
@@ -185,6 +200,8 @@
       - (major_version | int) >= 18
       - io_method in ['io_uring']
       - ansible_os_family == 'RedHat'
+      - uring_disabled.stdout is defined
+      - uring_disabled.stdout | int > 0
 
   - name: Check kernel version
     command: uname -r
@@ -343,7 +360,7 @@
       INSTALL_DIR: "{{ pg_install_dir }}"
       PGCTLTIMEOUT: "120"
       PG_TEST_TIMEOUT_DEFAULT: "300"
-    ignore_errors: yes
+    ignore_errors: true
     register: regression
 
   - name: Extract failed log paths
@@ -356,7 +373,7 @@
     register: failed_log_outputs
     become: true
     become_user: postgres
-    ignore_errors: yes
+    ignore_errors: true
     when: failed_log_paths | length > 0
 
   - name: Display failed test logs

@@ -1,6 +1,6 @@
 from .extensions import get_extensions_ppg11, get_extensions_ppg12, get_extensions_ppg13
 
-DISTROS = ['bullseye', 'jammy', 'bookworm', 'noble', 'trixie']
+DISTROS = ['bullseye', 'jammy', 'bookworm', 'noble', 'trixie', 'resolute']
 DEB116_PACKAGES_TEMPLATE = ["percona-postgresql-{}",
                             "percona-postgresql-client",
                             "percona-postgresql",
@@ -660,5 +660,15 @@ def get_ppg_versions(distro_type):
             "ppg-17.9": get_pg17_versions(packages=["2:17.9-1", "1:289-1", '289-1'],
                                           distros=DISTROS, distro_type=distro_type),
             "ppg-18.3": get_pg18_versions(packages=["3:18.3-1", "1:289-1", '289-1'],
+                                          distros=DISTROS, distro_type=distro_type),
+            "ppg-14.23": get_pg14_versions(packages=["2:14.23-1", "1:290-1", '290-1'],
+                                          distros=DISTROS, distro_type=distro_type),
+            "ppg-15.18": get_pg15_versions(packages=["2:15.18-1", "1:290-1", '290-1'],
+                                          distros=DISTROS, distro_type=distro_type),
+            "ppg-16.14": get_pg16_versions(packages=["2:16.14-1", "1:290-1", '290-1'],
+                                          distros=DISTROS, distro_type=distro_type),
+            "ppg-17.10": get_pg17_versions(packages=["2:17.10-1", "1:290-1", '290-1'],
+                                          distros=DISTROS, distro_type=distro_type),
+            "ppg-18.4": get_pg18_versions(packages=["3:18.4-1", "1:290-1", '290-1'],
                                           distros=DISTROS, distro_type=distro_type),
             }

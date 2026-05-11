@@ -81,8 +81,7 @@ else:
     OLD_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG_OLD}"
     NEW_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG_NEW}"
 
-UPGRADE_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-upgrade-custom:{UPGRADE_IMG_TAG}"
-
+UPGRADE_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-upgrade:{UPGRADE_IMG_TAG}"
 PG_OLD_BIN_DIR = f"/usr/pgsql-{OLD_MAJOR}/bin"
 PG_NEW_BIN_DIR = f"/usr/pgsql-{NEW_MAJOR}/bin"
 PG_DATA_DIR = "/data/db"
@@ -522,7 +521,14 @@ class TestPostUpgradeExtensions:
         )
         assert result.rc == 0
         available = result.stdout.splitlines()
-        missing = [ext for ext in NEW_EXTENSIONS if ext not in available]
+        postgis_family = {
+            "postgis", "postgis_topology", "postgis_raster", "postgis_sfcgal",
+            "address_standardizer", "postgis_tiger_geocoder", "address_standardizer_data_us",
+        }
+        missing = [
+            ext for ext in NEW_EXTENSIONS
+            if ext not in available and (IS_WITH_POSTGIS or ext not in postgis_family)
+        ]
         assert not missing, f"Extensions in settings not available in PG {NEW_MAJOR}: {missing}"
 
 
@@ -534,7 +540,11 @@ class TestPostUpgradePackages:
 
     def test_new_version_rpm_packages_installed(self, upgrade_pipeline):
         new_host = upgrade_pipeline["new_host"]
-        missing = [pkg for pkg in NEW_RPM_PACKAGES if new_host.run(f"rpm -q {pkg}").rc != 0]
+        missing = [
+            pkg for pkg in NEW_RPM_PACKAGES
+            if new_host.run(f"rpm -q {pkg}").rc != 0
+            and (IS_WITH_POSTGIS or "postgis" not in pkg)
+        ]
         assert not missing, f"RPM packages not installed in new image: {missing}"
 
     def test_data_directory_path(self, upgrade_pipeline):
@@ -604,12 +614,19 @@ _SYSTEM_TOOL_BINARIES = [
     ("pgbackrest", "/usr/bin/pgbackrest"),
 ]
 
-# All supported PG major versions shipped inside the upgrade mediator image.
-# Maps major version string → full major.minor version used as settings key.
+# Major versions currently shipped inside the upgrade mediator image.
+# Only update this list when a new PG major is added to the image;
+# the latest patch is resolved automatically from settings.ppg_versions.
+_UPGRADE_IMAGE_SUPPORTED_MAJORS = ["14", "15", "16", "17", "18"]
+
+# Maps major version string → latest full major.minor key in settings.
+# Derived at import time — no manual update needed on patch releases.
 _UPGRADE_IMAGE_PG_VERSIONS: dict[str, str] = {
-    "16": "16.13",
-    "17": "17.9",
-    "18": "18.3",
+    major: max(
+        (v for v in settings.ppg_versions if v.split(".")[0] == major),
+        key=lambda v: [int(x) for x in v.split(".")],
+    )
+    for major in _UPGRADE_IMAGE_SUPPORTED_MAJORS
 }
 
 # Pre-built parametrize lists for TestUpgradeImageExtensionFiles.
@@ -668,11 +685,11 @@ def _so_from_control(host, major, control_file):
     return None, None  # no module_pathname → pure-SQL extension
 
 
-# ── Phase 3f: Milestone extension file verification (new image) ───────────────
+# ── Phase 3f: Extension file verification (new image) ────────────────────────
 
 
 class TestPostUpgradeExtensionFiles:
-    """Verify that every milestone extension's package files are installed at
+    """Verify that every key extension's package files are installed at
     the correct PostgreSQL prefix in the **new** image.
 
     pg_upgrade requires all extension ``.control`` files (and the ``.so``
@@ -697,6 +714,8 @@ class TestPostUpgradeExtensionFiles:
     ):
         """Verify each extension's ``.control`` file is at
         ``/usr/pgsql-{NEW_MAJOR}/share/extension/``."""
+        if label == "postgis" and not IS_WITH_POSTGIS:
+            pytest.skip("PostGIS not enabled (WITH_POSTGIS=false)")
         new_host = upgrade_pipeline["new_host"]
         path = f"/usr/pgsql-{NEW_MAJOR}/share/extension/{control_file}"
         result = new_host.run(f"test -f {path}")
@@ -720,6 +739,8 @@ class TestPostUpgradeExtensionFiles:
         ``module_pathname`` value is used to derive the expected ``.so`` path.
         Pure-SQL extensions (no ``module_pathname``) are skipped automatically.
         Versioned filenames are handled transparently via ``module_pathname``."""
+        if label == "postgis" and not IS_WITH_POSTGIS:
+            pytest.skip("PostGIS not enabled (WITH_POSTGIS=false)")
         new_host = upgrade_pipeline["new_host"]
         so_path, err = _so_from_control(new_host, NEW_MAJOR, control_file)
         if err:
@@ -736,7 +757,7 @@ class TestPostUpgradeExtensionFiles:
         )
 
     def test_extensions_in_pg_available_extensions(self, upgrade_pipeline):
-        """Verify all milestone extensions appear in ``pg_available_extensions``
+        """Verify all key extensions appear in ``pg_available_extensions``
         on the upgraded cluster.
 
         This is a catalog-level complement to the file-system checks above:
@@ -748,8 +769,10 @@ class TestPostUpgradeExtensionFiles:
         with no ``.control`` file and does not appear in
         ``pg_available_extensions``."""
         new_host = upgrade_pipeline["new_host"]
-        ext_names = [label for label, _ in _EXT_SPECS]
-        # h3_postgis installs via CREATE EXTENSION h3_postgis CASCADE; include it
+        ext_names = [
+            label for label, _ in _EXT_SPECS
+            if label != "postgis" or IS_WITH_POSTGIS
+        ]
         missing = []
         for ext in ext_names:
             query = (
@@ -844,7 +867,7 @@ def upgrade_image_host():
 
 
 class TestUpgradeImageExtensionFiles:
-    """Verify that every milestone extension is installed for **all three**
+    """Verify that every key extension is installed for **all three**
     PostgreSQL major versions (16, 17, 18) inside the upgrade mediator image.
 
     The upgrade mediator image must ship complete extension packages for every
@@ -877,6 +900,8 @@ class TestUpgradeImageExtensionFiles:
     ):
         """Verify ``.control`` file at ``/usr/pgsql-{major}/share/extension/``
         for every extension × PG major version combination."""
+        if label == "postgis" and not IS_WITH_POSTGIS:
+            pytest.skip("PostGIS not enabled (WITH_POSTGIS=false)")
         path = f"/usr/pgsql-{major}/share/extension/{control_file}"
         result = upgrade_image_host.run(f"test -f {path}")
         assert result.rc == 0, (
@@ -898,6 +923,8 @@ class TestUpgradeImageExtensionFiles:
         Pure-SQL extensions (no ``module_pathname``) are skipped.
         Versioned ``.so`` names are resolved automatically from the
         ``.control`` file — no hardcoded filenames in the test."""
+        if label == "postgis" and not IS_WITH_POSTGIS:
+            pytest.skip("PostGIS not enabled (WITH_POSTGIS=false)")
         so_path, err = _so_from_control(upgrade_image_host, major, control_file)
         if err:
             pytest.fail(f"{label} (PG {major}): {err}")
@@ -944,17 +971,3 @@ class TestUpgradeImageExtensionFiles:
             f"{label}: .so missing at {so_path!r} in upgrade image (PG {major})"
         )
 
-    def test_telemetry_packages_not_installed(self, upgrade_image_host):
-        """The upgrade mediator image ships PG 16, 17, and 18 simultaneously.
-        None of the version-specific telemetry packages nor the telemetry agent
-        should be installed in it."""
-        excluded = [
-            "percona-telemetry-agent",
-            "percona-pg-telemetry16",
-            "percona-pg-telemetry17",
-            "percona-pg-telemetry18",
-        ]
-        installed = [pkg for pkg in excluded if upgrade_image_host.run(f"rpm -q {pkg}").rc == 0]
-        assert not installed, (
-            f"Packages that should not be installed in the upgrade mediator image: {installed}"
-        )

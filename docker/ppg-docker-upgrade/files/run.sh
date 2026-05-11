@@ -11,22 +11,21 @@
 #
 # Required environment variables
 # ────────────────────────────────
-#   OLD_VERSION        Full source version    e.g. "17.9"
-#   NEW_VERSION        Full target version    e.g. "18.3"
+#   OLD_VERSION        Full source version    e.g. "17.10"
+#   NEW_VERSION        Full target version    e.g. "18.4"
 #   DOCKER_REPOSITORY  Image registry prefix  e.g. "perconalab"
-#   UPGRADE_TAG        Mediator image tag     e.g. "18.3-17.9-16.13-1"
+#   UPGRADE_TAG        Mediator image tag     e.g. "18-17-16-15-14"
 #
 # Optional environment variables
 # ────────────────────────────────
-#   OLD_TAG           Tag for old custom image     (default: OLD_VERSION)
-#   NEW_TAG           Tag for new custom image     (default: NEW_VERSION)
-#   MILESTONE         Milestone level for tests    (default: 0)
+#   OLD_TAG           Tag for old image            (default: OLD_VERSION)
+#   NEW_TAG           Tag for new image            (default: NEW_VERSION)
 #   WITH_POSTGIS      Enable PostGIS tests         (default: false)
 #
 # Mediator tag
 # ────────────
 #   The mediator tag encodes the full supported version chain.
-#   "18.3-17.9-16.13-1" supports both PG 16 → 17 and PG 17 → 18 upgrades.
+#   "18-17-16-15-14" supports both PG 16 → 17 and PG 17 → 18 upgrades.
 #   The older "v2" tag is broken for pre-PG18 targets (uses --no-data-checksums
 #   which was introduced in PG 18) and should not be used.
 #
@@ -40,28 +39,27 @@
 # Usage examples
 # ──────────────
 #   # PG 17 → PG 18
-#   OLD_VERSION=17.9 NEW_VERSION=18.3 DOCKER_REPOSITORY=perconalab \
-#       OLD_TAG=17.9-v2 NEW_TAG=18.3-v2 UPGRADE_TAG=18.3-17.9-16.13-1 \
-#       MILESTONE=2 WITH_POSTGIS=true ./run.sh
+#   OLD_VERSION=17.10 NEW_VERSION=18.4 DOCKER_REPOSITORY=perconalab \
+#       OLD_TAG=17.10 NEW_TAG=18.4 UPGRADE_TAG=18-17-16-15-14 \
+#       WITH_POSTGIS=true ./run.sh
 #
 #   # PG 16 → PG 17
-#   OLD_VERSION=16.13 NEW_VERSION=17.9 DOCKER_REPOSITORY=perconalab \
-#       OLD_TAG=16.13-v2 NEW_TAG=17.9-v2 UPGRADE_TAG=18.3-17.9-16.13-1 \
-#       MILESTONE=2 WITH_POSTGIS=true ./run.sh
+#   OLD_VERSION=16.14 NEW_VERSION=17.10 DOCKER_REPOSITORY=perconalab \
+#       OLD_TAG=16.14 NEW_TAG=17.10 UPGRADE_TAG=18-17-16-15-14 \
+#       WITH_POSTGIS=true ./run.sh
 # =============================================================================
 set -uo pipefail
 
 # ── Resolve configuration ────────────────────────────────────────────────────
 
-OLD_VERSION="${OLD_VERSION:-17.9}"
-NEW_VERSION="${NEW_VERSION:-18.3}"
+OLD_VERSION="${OLD_VERSION:-17.10}"
+NEW_VERSION="${NEW_VERSION:-18.4}"
 OLD_MAJOR="${OLD_VERSION%%.*}"
 NEW_MAJOR="${NEW_VERSION%%.*}"
 DOCKER_REPOSITORY="${DOCKER_REPOSITORY:-perconalab}"
 OLD_TAG="${OLD_TAG:-$OLD_VERSION}"
 NEW_TAG="${NEW_TAG:-$NEW_VERSION}"
-: "${UPGRADE_TAG:?UPGRADE_TAG is required. e.g. UPGRADE_TAG=18.3-17.9-16.13-1}"
-MILESTONE="${MILESTONE:-0}"
+: "${UPGRADE_TAG:?UPGRADE_TAG is required. e.g. UPGRADE_TAG=18-17-16-15-14}"
 WITH_POSTGIS="${WITH_POSTGIS:-false}"
 
 # Warn if the broken legacy "v2" mediator tag is used — it passes
@@ -71,13 +69,13 @@ if [ "${UPGRADE_TAG}" = "v2" ]; then
     echo ""
     echo "  WARNING: mediator tag 'v2' is broken for all upgrade paths."
     echo "  It passes --no-data-checksums (PG 18+ only) causing initdb to fail."
-    echo "  Use UPGRADE_TAG=18.3-17.9-16.13-1 instead."
+    echo "  Use UPGRADE_TAG=18-17-16-15-14 instead."
     echo ""
 fi
 
-OLD_IMAGE="$DOCKER_REPOSITORY/percona-distribution-postgresql-custom:$OLD_TAG"
-NEW_IMAGE="$DOCKER_REPOSITORY/percona-distribution-postgresql-custom:$NEW_TAG"
-UPGRADE_IMAGE="$DOCKER_REPOSITORY/percona-distribution-postgresql-upgrade-custom:$UPGRADE_TAG"
+OLD_IMAGE="$DOCKER_REPOSITORY/percona-distribution-postgresql:$OLD_TAG"
+NEW_IMAGE="$DOCKER_REPOSITORY/percona-distribution-postgresql:$NEW_TAG"
+UPGRADE_IMAGE="$DOCKER_REPOSITORY/percona-distribution-postgresql-upgrade:$UPGRADE_TAG"
 
 # Named Docker volumes — avoids all bind-mount permission issues in CI.
 # Each run gets a unique suffix so parallel jobs do not collide.
@@ -129,7 +127,6 @@ echo "  DOCKER_REPOSITORY  : $DOCKER_REPOSITORY"
 echo "  OLD_TAG            : $OLD_TAG"
 echo "  NEW_TAG            : $NEW_TAG"
 echo "  UPGRADE_TAG        : $UPGRADE_TAG"
-echo "  MILESTONE          : $MILESTONE"
 echo "  WITH_POSTGIS       : $WITH_POSTGIS"
 echo "  OLD_IMAGE          : $OLD_IMAGE"
 echo "  NEW_IMAGE          : $NEW_IMAGE"
@@ -154,7 +151,6 @@ _print_header "Phase 1: Testing PG $OLD_VERSION (pre-upgrade)"
 VERSION=$OLD_VERSION \
 TAG=$OLD_TAG \
 DOCKER_REPOSITORY=$DOCKER_REPOSITORY \
-MILESTONE=$MILESTONE \
 WITH_POSTGIS=$WITH_POSTGIS \
 UPGRADE_DATA_DIR="$OLD_VOL" \
 pytest \
@@ -303,7 +299,6 @@ _print_header "Phase 3: Testing PG $NEW_VERSION (post-upgrade)"
 VERSION=$NEW_VERSION \
 TAG=$NEW_TAG \
 DOCKER_REPOSITORY=$DOCKER_REPOSITORY \
-MILESTONE=$MILESTONE \
 WITH_POSTGIS=$WITH_POSTGIS \
 UPGRADE_DATA_DIR="$NEW_VOL" \
 pytest \

@@ -363,16 +363,6 @@
         - percona-postgis
     when: ansible_os_family == "Debian"
 
-  - name: Install percona-postgis libsfcgal1 on Ubuntu-18
-    apt:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-        - libsfcgal1
-    when: ansible_os_family == "Debian" and ansible_distribution_major_version == "18"
-
   - name: Install percona-wal2json18 RHEL
     yum:
       name: percona-wal2json18
@@ -476,26 +466,53 @@
       - percona-pg-oidc-validator18
     when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('18.2', '>=', strict=True))
 
-  #- name: Add extensions to postgresql.conf for Debian
-  #  lineinfile:
-  #    path: /etc/postgresql/18/main/postgresql.conf
-  #    line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, pg_tde'
-  #  when: (ansible_os_family == "Debian")
-#
-  #- name: Add extensions to postgresql.conf for RHEL
-  #  lineinfile:
-  #    path: /var/lib/pgsql/18/data/postgresql.conf
-  #    line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user, pg_tde'
-  #  when: (ansible_os_family == "RedHat")
+  - name: Install pg_cron packages RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-pg_cron_18
+    when:
+      - ansible_os_family == "RedHat"
+      - >-
+        (pg_version_to_install | string is version('18.3', '>', strict=True))
+        or
+        (pg_version_to_install | string is version('18.3', '==', strict=True) and lookup('env', 'REPO') == 'testing')
+
+  - name: Install pg_cron packages Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgresql-18-cron
+    when:
+      - ansible_os_family == "Debian"
+      - >-
+        (pg_version_to_install | string is version('18.3', '>', strict=True))
+        or
+        (pg_version_to_install | string is version('18.3', '==', strict=True) and lookup('env', 'REPO') == 'testing')
 
   - name: Configure shared_preload_libraries
     vars:
       # 1. Define base extensions
+      # pg_oidc_validator is NOT preloaded; it is tested as a regular extension via CREATE EXTENSION
       base_extensions: ['pg_stat_monitor', 'pgaudit', 'set_user', 'pg_tde']
 
-      # 2. Conditionally add oidc_validator based on your version requirement
+      # 2. Conditionally add pg_cron:
+      #    VERSION > 18.3: always | VERSION == 18.3: only if REPO=testing | VERSION < 18.3: never
       final_extensions: >-
-        {{ base_extensions + (['pg_oidc_validator'] if pg_version_to_install | string is version('18.2', '>=', strict=True) else []) }}
+        {{
+          base_extensions
+          + (['pg_cron'] if (
+              (pg_version_to_install | string is version('18.3', '>', strict=True))
+              or
+              (pg_version_to_install | string is version('18.3', '==', strict=True) and lookup('env', 'REPO') == 'testing')
+            ) else [])
+        }}
 
       # 3. Handle OS-specific paths dynamically
       pg_conf_path: "{{ '/etc/postgresql/18/main/postgresql.conf' if ansible_os_family == 'Debian' else '/var/lib/pgsql/18/data/postgresql.conf' }}"
@@ -508,6 +525,15 @@
     become: true
     # Only run if it's one of your supported families
     when: ansible_os_family in ["Debian", "RedHat"]
+
+  - name: Configure pg_oidc_validator settings in postgresql.conf
+    blockinfile:
+      path: "{{ '/etc/postgresql/18/main/postgresql.conf' if ansible_os_family == 'Debian' else '/var/lib/pgsql/18/data/postgresql.conf' }}"
+      marker: "# {mark} ANSIBLE MANAGED BLOCK pg_oidc_validator"
+      block: |
+        oauth_validator_libraries = 'pg_oidc_validator'
+        pg_oidc_validator.authn_field = 'sub'
+    when: (ansible_os_family in ["Debian", "RedHat"] and pg_version_to_install | string is version('18.2', '>=', strict=True))
 
   - name: Remove pg_hba.conf debian
     file:
@@ -549,6 +575,24 @@
         host    replication     all             ::1/128                 trust
     when: ansible_os_family == "Debian"
 
+  - name: Add OIDC entry to pg_hba.conf RHEL
+    lineinfile:
+      path: /var/lib/pgsql/18/data/pg_hba.conf
+      line: 'host    all             oidc_test_user  127.0.0.1/32            oauth issuer="https://mock-issuer.com", scope="openid"'
+      state: present
+    when:
+      - ansible_os_family == "RedHat"
+      - pg_version_to_install | string is version('18.2', '>=', strict=True)
+
+  - name: Add OIDC entry to pg_hba.conf Debian
+    lineinfile:
+      path: /etc/postgresql/18/main/pg_hba.conf
+      line: 'host    all             oidc_test_user  127.0.0.1/32            oauth issuer="https://mock-issuer.com", scope="openid"'
+      state: present
+    when:
+      - ansible_os_family == "Debian"
+      - pg_version_to_install | string is version('18.2', '>=', strict=True)
+
   - name: Restart Postgres RHEL
     service:
       name: postgresql-18
@@ -561,6 +605,7 @@
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     when: ansible_os_family == "Debian"
+
 
   - name: Install etcd packages RHEL
     yum:
@@ -652,7 +697,7 @@
       daemon_reload: yes
     async: 180
     poll: 5
-    become: yes
+    become: true
 
   # - name: Install patroni related dependency on Debian 13
   #   apt:

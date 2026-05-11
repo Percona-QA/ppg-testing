@@ -3,7 +3,7 @@
   package:
     name: openssl
     state: present
-  become: yes
+  become: true
 
 - name: Check if openssl binary exists
   stat:

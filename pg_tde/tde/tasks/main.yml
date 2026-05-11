@@ -37,6 +37,23 @@
       or
       (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'RedHat' and ansible_facts['distribution_major_version'] | int == 8)
 
+- name: End play on Ubuntu 26 if PostgreSQL version is not supported
+  meta: end_host
+  vars:
+    ubuntu26_min_versions:
+      '14': '14.23'
+      '15': '15.18'
+      '16': '16.14'
+      '17': '17.10'
+      '18': '18.4'
+    pg_major: "{{ pg_version_to_install | string | split('.') | first }}"
+    min_ver: "{{ ubuntu26_min_versions[pg_major] | default('0.0') }}"
+  when:
+    - ansible_distribution == "Ubuntu"
+    - ansible_distribution_major_version == "26"
+    - min_ver != '0.0'
+    - pg_version_to_install | string is version(min_ver, '<', strict=True)
+
 - name: Set postgres paths and service name
   ansible.builtin.set_fact:
     postgres_conf_path: >-
@@ -149,7 +166,6 @@
     - ansible_os_family == 'RedHat'
 
 - name: Enable io_uring if possible
-  when: uring_disabled.stdout is defined and uring_disabled.stdout | int > 0
   become: true
   sysctl:
     name: kernel.io_uring_disabled
@@ -159,6 +175,8 @@
     - (major_version | int) >= 18
     - io_method in ['io_uring']
     - ansible_os_family == 'RedHat'
+    - uring_disabled.stdout is defined
+    - uring_disabled.stdout | int > 0
 
 - name: Check kernel version
   command: uname -r

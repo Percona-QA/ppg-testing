@@ -118,7 +118,6 @@
       - ansible_os_family == 'RedHat'
 
   - name: Enable io_uring if possible
-    when: uring_disabled.stdout is defined and uring_disabled.stdout | int > 0
     become: true
     sysctl:
       name: kernel.io_uring_disabled
@@ -128,6 +127,8 @@
       - (major_version | int) >= 18
       - io_method in ['io_uring']
       - ansible_os_family == 'RedHat'
+      - uring_disabled.stdout is defined
+      - uring_disabled.stdout | int > 0
 
   - name: Check kernel version
     command: uname -r
@@ -313,7 +314,7 @@
       executable: /bin/bash
     become_user: postgres
     environment:
-      TDE_MODE: 1
+      TDE_MODE: "1"
     register: results
 
   - debug: var=results.stdout_lines
@@ -325,7 +326,7 @@
       executable: /bin/bash
     become_user: postgres
     environment:
-      TDE_MODE: 1
+      TDE_MODE: "1"
     register: results
 
   - debug: var=results.stdout_lines
@@ -478,7 +479,7 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      TDE_MODE: 1
+      TDE_MODE: "1"
       LANG: C.UTF-8
       LC_CTYPE: C
       LC_ALL: C
@@ -609,10 +610,10 @@
       PG_TEST_PORT_DIR: "/tmp/pg_tde_port"
       INSTALL_DIR: "/opt/pgsql"
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
-      PGCTLTIMEOUT: 120
-      PG_TEST_TIMEOUT_DEFAULT: 300
+      PGCTLTIMEOUT: "120"
+      PG_TEST_TIMEOUT_DEFAULT: "300"
     when: testsuite == 'check-tde'
-    ignore_errors: yes
+    ignore_errors: true
     register: regression
 
   - name: Show stdout of check tde tests
@@ -671,10 +672,10 @@
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
       PG_TEST_PORT_DIR: "/tmp/pg_tde_port"
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
-      PGCTLTIMEOUT: 120
-      PG_TEST_TIMEOUT_DEFAULT: 300
+      PGCTLTIMEOUT: "120"
+      PG_TEST_TIMEOUT_DEFAULT: "300"
     when: testsuite == 'check-server'
-    ignore_errors: yes
+    ignore_errors: true
     register: regression
 
   - name: Show stdout of server regression tests
@@ -739,10 +740,10 @@
       PG_TEST_PORT_DIR: "/tmp/pg_tde_port"
       INSTALL_DIR: "/opt/pgsql"
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
-      PGCTLTIMEOUT: 120
-      PG_TEST_TIMEOUT_DEFAULT: 300
+      PGCTLTIMEOUT: "120"
+      PG_TEST_TIMEOUT_DEFAULT: "300"
     when: testsuite == 'check-all'
-    ignore_errors: yes
+    ignore_errors: true
     register: regression
 
   - name: Show stdout of check-all regression tests
@@ -814,13 +815,13 @@
       LC_CTYPE: "C"
       LC_ALL: "C"
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
-    ignore_errors: yes
+    ignore_errors: true
     when: testsuite == 'installcheck-world'
 
   - name: Run installcheck-world with tde (as root shell, sudo inside)
     become: true
     become_user: postgres
-    ignore_errors: yes
+    ignore_errors: true
     shell: |
       ulimit -a
       psql -c "show default_table_access_method ;"
@@ -841,13 +842,13 @@
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
       PG_TEST_PORT_DIR: "/tmp/pg_tde_port"
       INSTALL_DIR: "/opt/pgsql"
-      TDE_MODE: 1
+      TDE_MODE: "1"
       LANG: C.UTF-8
       LC_CTYPE: C
       LC_ALL: C
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
-      PGCTLTIMEOUT: 120
-      PG_TEST_TIMEOUT_DEFAULT: 300
+      PGCTLTIMEOUT: "120"
+      PG_TEST_TIMEOUT_DEFAULT: "300"
     when: testsuite == 'installcheck-world'
     register: regression
 

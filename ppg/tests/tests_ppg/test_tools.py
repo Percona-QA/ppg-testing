@@ -25,6 +25,15 @@ TDE_BINARIES = [
     "pg_tde_waldump",
 ]
 
+# Minimum PostgreSQL versions where pg_cron is available
+PG_CRON_MIN_VERSIONS = {
+    14: version.parse("14.22"),
+    15: version.parse("15.17"),
+    16: version.parse("16.13"),
+    17: version.parse("17.9"),
+    18: version.parse("18.3"),
+}
+
 # Minimum PostgreSQL versions where pg_gather install location changed
 PG_GATHER_MIN_VERSIONS = {
     13: version.parse("13.23"),
@@ -1145,8 +1154,8 @@ def test_llvmjit_files_present(host):
 def test_pg_oidc_validator_package_version(host):
     # 1. Check Major Version
     major = int(settings.MAJOR_VER)
-    if major != 18:
-        pytest.skip(f"pg_oidc_validator supported only on PG-18 (got {major})")
+    if major < 18:
+        pytest.skip(f"pg_oidc_validator supported only on PG-18+ (got {major})")
 
     # 2. Check Specific Minor Version (18.2)
     current_ver_str = pg_versions.get('version', '0.0')
@@ -1169,6 +1178,135 @@ def test_pg_oidc_validator_package_version(host):
     assert expected_version in pkg.version, (
         f"Version mismatch for {pkg_name}: expected {expected_version}, got {pkg.version}"
     )
+
+
+def test_pg_oidc_validator_config(host):
+    """Verify pg_oidc_validator GUCs and pg_hba.conf are configured correctly.
+
+    Full end-to-end OAuth authentication will be covered by a dedicated OIDC job
+    that runs Keycloak. This test confirms the environmental setup is active.
+    """
+    # 1. Version guardrails
+    major = int(settings.MAJOR_VER)
+    if major < 18:
+        pytest.skip(f"pg_oidc_validator supported only on PG-18+ (got {major})")
+
+    current_ver_str = pg_versions.get('version', '0.0')
+    if version.parse(current_ver_str) < version.parse("18.2"):
+        pytest.skip(f"pg_oidc_validator requires PG 18.2+, found {current_ver_str}")
+
+    psql = "psql -t -A -c"
+
+    with host.sudo("postgres"):
+        # 2. Verify GUC: oauth_validator_libraries
+        # 'in' handles the case where multiple libraries are configured
+        result = host.run(
+            f"{psql} \"SELECT setting FROM pg_settings WHERE name = 'oauth_validator_libraries';\""
+        )
+        assert result.rc == 0, f"Failed to query pg_settings: {result.stderr}"
+        assert "pg_oidc_validator" in result.stdout, (
+            f"oauth_validator_libraries is '{result.stdout.strip()}', expected to include 'pg_oidc_validator'"
+        )
+
+        # 3. Dynamically locate config files — avoids hardcoded distro paths
+        conf_path = host.run(f"{psql} \"SHOW config_file;\"").stdout.strip()
+        hba_path = host.run(f"{psql} \"SHOW hba_file;\"").stdout.strip()
+
+        # 4. Verify pg_oidc_validator.authn_field is set in postgresql.conf
+        # The library loads lazily on first auth, so pg_settings won't reflect it until then.
+        # Checking the config file directly is the reliable approach.
+        # Both checks run under postgres sudo to ensure access on RHEL (data dir is 700).
+        result = host.run(f"grep -q 'pg_oidc_validator.authn_field' {conf_path}")
+        assert result.rc == 0, f"pg_oidc_validator.authn_field not found in {conf_path}"
+
+        # 5. Verify pg_hba.conf has an active (uncommented) oauth entry for oidc_test_user
+        result = host.run(f"grep -v '^#' {hba_path} | grep -q 'oauth.*oidc_test_user\\|oidc_test_user.*oauth'")
+        assert result.rc == 0, (
+            f"No active (uncommented) oauth entry for 'oidc_test_user' found in {hba_path}"
+        )
+
+
+def _skip_if_pg_cron_unavailable():
+    """Skip if pg_cron is not available for the current PostgreSQL version."""
+    current_ver = version.parse(pg_versions.get("version", "0.0"))
+    min_ver = PG_CRON_MIN_VERSIONS.get(current_ver.major)
+    if min_ver is None or current_ver < min_ver:
+        pytest.skip(f"pg_cron not available on PostgreSQL {pg_versions.get('version')}")
+
+
+def test_pg_cron_package_version(host):
+    """Verify pg_cron package is installed with the expected version."""
+    _skip_if_pg_cron_unavailable()
+
+    dist = host.system_info.distribution.lower()
+    expected_version = pg_versions.get("PG_CRON_package_version")
+    if not expected_version:
+        pytest.skip("PG_CRON_package_version not defined in pg_versions.")
+
+    if dist in ["ubuntu", "debian"]:
+        pkg_name = f"percona-postgresql-{MAJOR_VER}-cron"
+    else:
+        pkg_name = f"percona-pg_cron_{MAJOR_VER}"
+
+    pkg = host.package(pkg_name)
+    assert pkg.is_installed, f"Package {pkg_name} is not installed"
+    assert expected_version in pkg.version, (
+        f"Version mismatch for {pkg_name}: expected {expected_version}, got {pkg.version}"
+    )
+
+
+def test_pg_cron_extension(host):
+    """Verify pg_cron extension can be created, schedules jobs, and is removed cleanly."""
+    _skip_if_pg_cron_unavailable()
+
+    psql = "psql -t -A -c"
+    expected_sql_version = pg_versions.get("PG_CRON_sql_version")
+
+    with host.sudo("postgres"):
+        try:
+            # 1. Create extension
+            result = host.run(f"{psql} 'CREATE EXTENSION IF NOT EXISTS pg_cron;'")
+            assert result.rc == 0, f"Failed to create pg_cron: {result.stderr}"
+
+            # 2. Verify it is registered in pg_extension
+            count = host.run(
+                f"{psql} \"SELECT count(*) FROM pg_extension WHERE extname = 'pg_cron';\""
+            ).stdout.strip()
+            assert count == "1", "pg_cron extension not found in pg_extension"
+
+            # 3. Verify extension SQL version
+            if expected_sql_version:
+                sql_ver = host.run(
+                    f"{psql} \"SELECT extversion FROM pg_extension WHERE extname = 'pg_cron';\""
+                ).stdout.strip()
+                assert sql_ver == expected_sql_version, (
+                    f"pg_cron SQL version mismatch: expected {expected_sql_version}, got {sql_ver}"
+                )
+
+            # 4. Schedule a job and verify it appears in cron.job
+            schedule_result = host.run(
+                f"{psql} \"SELECT cron.schedule('pg_cron_test_job', '* * * * *', 'SELECT 1');\""
+            )
+            assert schedule_result.rc == 0, f"Failed to schedule job: {schedule_result.stderr}"
+
+            job_count = host.run(
+                f"{psql} \"SELECT count(*) FROM cron.job WHERE jobname = 'pg_cron_test_job';\""
+            ).stdout.strip()
+            assert job_count == "1", "Scheduled job not found in cron.job"
+
+            # 5. Unschedule the test job
+            unschedule = host.run(
+                f"{psql} \"SELECT cron.unschedule('pg_cron_test_job');\""
+            )
+            assert unschedule.rc == 0, f"Failed to unschedule job: {unschedule.stderr}"
+
+        finally:
+            # 6. Always drop the extension to keep state clean
+            drop = host.run(f"{psql} 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
+            final_count = host.run(
+                f"{psql} \"SELECT count(*) FROM pg_extension WHERE extname = 'pg_cron';\""
+            ).stdout.strip()
+            assert final_count == "0", "Failed to drop pg_cron extension cleanly"
 
 
 # def test_pg_telemetry_file_pillar_version(host):

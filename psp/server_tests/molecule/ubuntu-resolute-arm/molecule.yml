@@ -1,0 +1,36 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: ${driver}
+platforms:
+  - name: psp-uresolute-arm-${BUILD_NUMBER}
+    region: ${region}
+    image: ${ami_ubuntu26_arm64}
+    vpc_subnet_id: ${vpc_subnet_id_aws2}
+    instance_type: t4g.xlarge
+    ssh_user: ubuntu
+    root_device_name: /dev/sda1
+    instance_tags:
+      iit-billing-tag: jenkins-pg-worker
+provisioner:
+  name: ansible
+  log: True
+  playbooks:
+    create: ../../../../playbooks/create.yml
+    destroy: ../../../../playbooks/destroy.yml
+    prepare: ../../../../playbooks/prepare.yml
+    converge: ../../playbooks/playbook.yml
+verifier:
+  name: ansible
+scenario:
+  destroy_sequence:
+    - destroy
+  cleanup_sequence:
+    - cleanup
+  test_sequence:
+    - destroy
+    - create
+    - prepare
+    - converge
+    - destroy
