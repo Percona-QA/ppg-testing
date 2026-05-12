@@ -56,6 +56,26 @@
       dest:  "{{dest_dir}}"
       remote_src: true
 
+  # Fix psql wrapper script: `cd -` prints the previous directory to stdout,
+  # polluting psql output on RHEL 9/10 where the /lib64/libreadline.so.8 branch
+  # is taken and libreadline.so.7 does not exist.  Redirect to /dev/null so the
+  # directory change is silent.  Safe on all platforms — no-op where the branch
+  # is never taken.
+  - name: Fix psql wrapper - suppress bare 'cd -' stdout output
+    become: true
+    ansible.builtin.replace:
+      path: "{{dest_dir}}/percona-postgresql{{major_version}}/bin/psql"
+      regexp: '^(\s+)cd -$'
+      replace: '\1cd - > /dev/null'
+
+  - name: Verify psql wrapper patch was applied
+    become: true
+    ansible.builtin.command:
+      cmd: grep -c 'cd - > /dev/null' "{{dest_dir}}/percona-postgresql{{major_version}}/bin/psql"
+    register: psql_patch_check
+    failed_when: psql_patch_check.stdout | int == 0
+    changed_when: false
+
   - name: Copy Percona pl-languages to /opt
     become: true
     copy:

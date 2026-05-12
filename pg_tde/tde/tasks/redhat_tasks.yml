@@ -37,9 +37,9 @@
       LANG: "C.UTF-8"
       LC_CTYPE: "C"
       LC_ALL: "C"
-      PGCTLTIMEOUT: 120
-      PG_TEST_TIMEOUT_DEFAULT: 300
-    ignore_errors: yes
+      PGCTLTIMEOUT: "120"
+      PG_TEST_TIMEOUT_DEFAULT: "300"
+    ignore_errors: true
     register: regression
 
   - name: Show stdout of check tde tests

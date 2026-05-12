@@ -1074,11 +1074,33 @@ def test_pg_cron_extension(host, get_psql_binary_path):
 # result itself.  Any extra path output from the wrapper appears as additional
 # lines and is caught by the assertion.
 #
+# Known to fail on RHEL 9/10 with SSLv3 tarballs; passes on Ubuntu 22/24 and
+# Debian 12 where the wrapper is clean.
+#
 # Three scenarios are covered:
 #   1. Full-path invocation from outside the bin directory
 #   2. Relative ./psql invocation from within the bin directory
 #   3. psql.bin (the underlying binary, documented workaround) — full-path
 # =============================================================================
+
+def test_psql_wrapper_no_bare_cd_dash(host, get_server_path):
+    """Static check: the psql wrapper must not contain a bare 'cd -' line.
+    A bare 'cd -' prints the previous directory to stdout (POSIX behaviour),
+    which pollutes psql output on RHEL 9/10 where the libreadline.so.8 branch
+    is taken.  The fix is 'cd - > /dev/null'.  This test confirms the patch
+    was applied before the behavioural tests run."""
+    psql_script = f"{get_server_path}/bin/psql"
+    f = host.file(psql_script)
+    assert f.exists, f"psql wrapper not found at {psql_script}"
+    # grep returns rc=0 if the pattern is found (bad), rc=1 if not found (good)
+    result = host.run(f"grep -P '^\\s+cd -$' {psql_script}")
+    assert result.rc == 1, (
+        f"psql wrapper at {psql_script} still contains a bare 'cd -' line.\n"
+        f"This will print the bin-dir path to stdout on RHEL 9/10.\n"
+        f"Fix: replace 'cd -' with 'cd - > /dev/null' in the wrapper script.\n"
+        f"Matching lines found:\n{result.stdout}"
+    )
+
 
 def test_psql_wrapper_clean_output_full_path(host, get_psql_binary_path):
     """Invoke psql via its full path (outside bin dir) and verify no extra path
