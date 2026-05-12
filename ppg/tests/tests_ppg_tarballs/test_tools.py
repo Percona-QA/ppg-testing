@@ -1062,3 +1062,75 @@ def test_pg_cron_extension(host, get_psql_binary_path):
 # LLVM JIT is not compiled into the tarball distribution — no llvmjit.so,
 # no llvmjit_types.bc, and pg_config --configure does not show --with-llvm.
 # All llvmjit tests apply only to RPM/DEB package installs and Docker images.
+
+
+# =============================================================================
+# psql wrapper clean-output tests
+#
+# Regression for bug introduced after PG 17.5: the psql wrapper script printed
+# extra path-related lines to stdout, breaking automation and monitoring scripts
+# that parse psql output.  The fix is verified by running a trivial query with
+# -t -A (tuples-only, unaligned) so the only valid stdout line is the query
+# result itself.  Any extra path output from the wrapper appears as additional
+# lines and is caught by the assertion.
+#
+# Three scenarios are covered:
+#   1. Full-path invocation from outside the bin directory
+#   2. Relative ./psql invocation from within the bin directory
+#   3. psql.bin (the underlying binary, documented workaround) — full-path
+# =============================================================================
+
+def test_psql_wrapper_clean_output_full_path(host, get_psql_binary_path):
+    """Invoke psql via its full path (outside bin dir) and verify no extra path
+    output appears on stdout.  Uses -t -A so the only expected line is '1'."""
+    with host.sudo("postgres"):
+        result = host.run(f"{get_psql_binary_path} -p {PORT} -t -A -c 'SELECT 1;'")
+    assert result.rc == 0, (
+        f"psql exited with rc={result.rc}.\nstderr: {result.stderr}"
+    )
+    lines = [l for l in result.stdout.splitlines() if l.strip()]
+    assert lines == ["1"], (
+        f"psql wrapper produced unexpected output (extra path lines?).\n"
+        f"Expected exactly ['1'], got: {lines}\n"
+        f"Full stdout:\n{result.stdout}"
+    )
+
+
+def test_psql_wrapper_clean_output_from_bin_dir(host, get_server_path):
+    """Invoke psql as ./psql from within the bin directory and verify no extra
+    path output appears on stdout.  Reproduces the scenario where the wrapper
+    script resolves its own path and may print it."""
+    bin_dir = f"{get_server_path}/bin"
+    with host.sudo("postgres"):
+        result = host.run(f"cd {bin_dir} && ./psql -p {PORT} -t -A -c 'SELECT 1;'")
+    assert result.rc == 0, (
+        f"psql exited with rc={result.rc}.\nstderr: {result.stderr}"
+    )
+    lines = [l for l in result.stdout.splitlines() if l.strip()]
+    assert lines == ["1"], (
+        f"psql wrapper produced unexpected output when invoked from bin dir.\n"
+        f"Expected exactly ['1'], got: {lines}\n"
+        f"Full stdout:\n{result.stdout}"
+    )
+
+
+def test_psql_bin_exists_and_clean_output(host, get_server_path):
+    """Verify psql.bin (the real binary beneath the wrapper) exists and produces
+    clean output.  psql.bin is the documented workaround for the wrapper bug."""
+    psql_bin_path = f"{get_server_path}/bin/psql.bin"
+    f = host.file(psql_bin_path)
+    assert f.exists, (
+        f"psql.bin not found at {psql_bin_path}. "
+        f"Expected alongside the psql wrapper script."
+    )
+    with host.sudo("postgres"):
+        result = host.run(f"{psql_bin_path} -p {PORT} -t -A -c 'SELECT 1;'")
+    assert result.rc == 0, (
+        f"psql.bin exited with rc={result.rc}.\nstderr: {result.stderr}"
+    )
+    lines = [l for l in result.stdout.splitlines() if l.strip()]
+    assert lines == ["1"], (
+        f"psql.bin produced unexpected output.\n"
+        f"Expected exactly ['1'], got: {lines}\n"
+        f"Full stdout:\n{result.stdout}"
+    )
