@@ -477,6 +477,105 @@ def test_telemetry_packages_not_installed(host, package):
     )
 
 
+def test_llvmjit_files_present(host):
+    """Strategy 1: Verify that LLVM JIT .so and .bc files are present and non-empty."""
+    lib_path = f"/usr/pgsql-{MAJOR_VER}/lib"
+    expected_files = [
+        f"{lib_path}/llvmjit.so",
+        f"{lib_path}/llvmjit_types.bc",
+    ]
+    for path in expected_files:
+        f = host.file(path)
+        assert f.exists, f"Missing LLVM JIT file: {path}"
+        assert f.is_file, f"Path exists but is not a file: {path}"
+        assert f.size > 0, f"File {path} exists but is empty!"
+
+
+def test_llvmjit_rpm_ownership(host):
+    """Strategy 2: Verify llvmjit.so and llvmjit_types.bc are owned by the llvmjit RPM package."""
+    lib_path = f"/usr/pgsql-{MAJOR_VER}/lib"
+    expected_pkg = f"percona-postgresql{MAJOR_VER}-llvmjit"
+    for filename in ["llvmjit.so", "llvmjit_types.bc"]:
+        path = f"{lib_path}/{filename}"
+        result = host.run(f"rpm -qf {path}")
+        assert result.rc == 0, f"rpm -qf failed for {path}: {result.stderr}"
+        assert expected_pkg in result.stdout, (
+            f"{path} is not owned by {expected_pkg}. Got: {result.stdout.strip()}"
+        )
+
+
+def test_llvmjit_statically_linked(host):
+    """Strategy 3: Verify llvmjit.so has no dynamic dependency on libLLVM (statically linked)."""
+    so_path = f"/usr/pgsql-{MAJOR_VER}/lib/llvmjit.so"
+    result = host.run(f"ldd {so_path}")
+    assert result.rc == 0, f"ldd failed on {so_path}: {result.stderr}"
+    assert "libLLVM" not in result.stdout, (
+        f"llvmjit.so has a dynamic libLLVM dependency — expected static linking.\n"
+        f"ldd output:\n{result.stdout}"
+    )
+
+
+def test_llvmjit_symbols_present(host):
+    """Strategy 4: Verify key JIT symbols are exported from llvmjit.so."""
+    so_path = f"/usr/pgsql-{MAJOR_VER}/lib/llvmjit.so"
+    expected_symbols = [
+        "llvmjit_compile_expr",
+        "llvmjit_init",
+    ]
+    for symbol in expected_symbols:
+        result = host.run(f"nm -D {so_path} | grep -q '{symbol}'")
+        assert result.rc == 0, (
+            f"Expected JIT symbol '{symbol}' not found in {so_path}"
+        )
+
+
+def test_llvmjit_no_undefined_cxx_symbols(host):
+    """Strategy 4b: Verify llvmjit.so has no undefined C++ stdlib symbols (_ZSt*).
+    Catches the bug where llvmjit.so failed to load at runtime with:
+      ERROR: could not load library 'llvmjit.so': undefined symbol: _ZSt21__glibcxx_assert_fail...
+    These symbols must be statically linked into llvmjit.so on RHEL builds."""
+    so_path = f"/usr/pgsql-{MAJOR_VER}/lib/llvmjit.so"
+    result = host.run(f"nm -D {so_path} | awk '$2 == \"U\" && $3 ~ /^_ZSt/ {{print}}'")
+    assert result.rc == 0, f"nm -D failed on {so_path}: {result.stderr}"
+    assert result.stdout.strip() == "", (
+        f"llvmjit.so has undefined C++ stdlib symbols (_ZSt*) — "
+        f"this will cause a runtime load failure.\n"
+        f"Undefined symbols found:\n{result.stdout}"
+    )
+
+
+def test_llvmjit_functional(host):
+    """Strategy 5: Verify JIT actually loads and compiles at runtime via EXPLAIN ANALYZE.
+    Reproduces the exact failure scenario: if llvmjit.so has undefined symbols the query
+    returns ERROR instead of a plan with a JIT: section."""
+    result = host.run(
+        "psql -c \""
+        "SET jit = on; "
+        "SET jit_above_cost = 0; "
+        "SET jit_inline_above_cost = 0; "
+        "SET jit_optimize_above_cost = 0; "
+        "EXPLAIN (ANALYZE, VERBOSE, BUFFERS) "
+        "SELECT count(*) FROM generate_series(1, 1000000) g WHERE g % 2 = 0;\""
+    )
+    assert result.rc == 0, (
+        f"JIT load failed — possible undefined symbol in llvmjit.so.\n"
+        f"stderr: {result.stderr}\nstdout: {result.stdout}"
+    )
+    assert "JIT:" in result.stdout, (
+        f"JIT was not triggered. EXPLAIN ANALYZE output:\n{result.stdout}"
+    )
+
+
+def test_llvmjit_pg_config_compiled_with_llvm(host):
+    """Strategy 6: Verify PostgreSQL was compiled with --with-llvm via pg_config --configure."""
+    result = host.run(f"/usr/pgsql-{MAJOR_VER}/bin/pg_config --configure")
+    assert result.rc == 0, f"pg_config --configure failed: {result.stderr}"
+    assert "--with-llvm" in result.stdout, (
+        f"PostgreSQL was not compiled with --with-llvm.\n"
+        f"pg_config --configure output:\n{result.stdout}"
+    )
+
+
 @pytest.mark.needs_preload
 def test_pg_stat_monitor_extension_version(host):
     # 1. Ensure extension is created

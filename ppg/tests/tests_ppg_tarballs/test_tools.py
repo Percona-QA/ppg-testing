@@ -1058,25 +1058,95 @@ def test_pg_cron_extension(host, get_psql_binary_path):
 # f"{get_server_path}/lib/postgis-3.so",]
 # sql_dir = f"{get_server_path}/share/extension/"
 
-# def test_llvmjit_files_present(host):
-#     """
-#     Ensure LLVM JIT .bc and .so files required by PostgreSQL are present.
-#     Applies only to PostgreSQL installations on Debian/Ubuntu systems.
-#     """
+def test_llvmjit_files_present(host, get_server_path):
+    """Strategy 1: Verify that LLVM JIT .so and .bc files are present and non-empty
+    in the tarball installation directory."""
+    base_path = f"{get_server_path}/lib"
+    expected_files = [
+        f"{base_path}/llvmjit.so",
+        f"{base_path}/llvmjit_types.bc",
+    ]
+    for path in expected_files:
+        f = host.file(path)
+        assert f.exists, f"Missing LLVM JIT file: {path}"
+        assert f.is_file, f"Path exists but is not a file: {path}"
+        assert f.size > 0, f"File {path} exists but is empty!"
 
-#     dist = host.system_info.distribution.lower()
-#     if dist not in ["debian", "ubuntu"]:
-#         pytest.skip("LLVM JIT file verification only applies to Debian/Ubuntu package installations.")
 
-#     base_path = f"/usr/lib/postgresql/{MAJOR_VER}/lib"
+def test_llvmjit_statically_linked(host, get_server_path):
+    """Strategy 3: Verify llvmjit.so has no dynamic dependency on libLLVM (statically linked).
+    Applies to RHEL-family systems where Percona ships a statically linked LLVM."""
+    dist = host.system_info.distribution.lower()
+    if dist not in ["redhat", "centos", "rocky", "ol", "rhel"]:
+        pytest.skip("Static LLVM linking check only applies to RHEL-family systems.")
+    so_path = f"{get_server_path}/lib/llvmjit.so"
+    result = host.run(f"ldd {so_path}")
+    assert result.rc == 0, f"ldd failed on {so_path}: {result.stderr}"
+    assert "libLLVM" not in result.stdout, (
+        f"llvmjit.so has a dynamic libLLVM dependency — expected static linking.\n"
+        f"ldd output:\n{result.stdout}"
+    )
 
-#     expected_files = [
-#         f"{base_path}/llvmjit_types.bc",
-#         f"{base_path}/llvmjit.so",
-#     ]
 
-#     for path in expected_files:
-#         f = host.file(path)
-#         assert f.exists, f"Missing LLVM JIT file: {path}"
-#         assert f.is_file, f"Path exists but is not a file: {path}"
-#         assert f.size > 0, f"File {path} exists but is empty!"
+def test_llvmjit_symbols_present(host, get_server_path):
+    """Strategy 4: Verify key JIT symbols are exported from llvmjit.so."""
+    so_path = f"{get_server_path}/lib/llvmjit.so"
+    expected_symbols = [
+        "llvmjit_compile_expr",
+        "llvmjit_init",
+    ]
+    for symbol in expected_symbols:
+        result = host.run(f"nm -D {so_path} | grep -q '{symbol}'")
+        assert result.rc == 0, (
+            f"Expected JIT symbol '{symbol}' not found in {so_path}"
+        )
+
+
+def test_llvmjit_no_undefined_cxx_symbols(host, get_server_path):
+    """Strategy 4b: Verify llvmjit.so has no undefined C++ stdlib symbols (_ZSt*).
+    Catches the bug where llvmjit.so failed to load at runtime with:
+      ERROR: could not load library 'llvmjit.so': undefined symbol: _ZSt21__glibcxx_assert_fail...
+    These symbols must be statically linked into llvmjit.so on RHEL builds."""
+    dist = host.system_info.distribution.lower()
+    if dist not in ["redhat", "centos", "rocky", "ol", "rhel"]:
+        pytest.skip("Undefined C++ symbol check only applies to RHEL-family systems.")
+    so_path = f"{get_server_path}/lib/llvmjit.so"
+    result = host.run(f"nm -D {so_path} | awk '$2 == \"U\" && $3 ~ /^_ZSt/ {{print}}'")
+    assert result.rc == 0, f"nm -D failed on {so_path}: {result.stderr}"
+    assert result.stdout.strip() == "", (
+        f"llvmjit.so has undefined C++ stdlib symbols (_ZSt*) — "
+        f"this will cause a runtime load failure.\n"
+        f"Undefined symbols found:\n{result.stdout}"
+    )
+
+
+def test_llvmjit_functional(host, get_psql_binary_path):
+    """Strategy 5: Verify JIT actually loads and compiles at runtime via EXPLAIN ANALYZE.
+    Reproduces the exact failure scenario: if llvmjit.so has undefined symbols the query
+    returns ERROR instead of a plan with a JIT: section."""
+    result = host.run(
+        f"{get_psql_binary_path} -c \""
+        "SET jit = on; "
+        "SET jit_above_cost = 0; "
+        "SET jit_inline_above_cost = 0; "
+        "SET jit_optimize_above_cost = 0; "
+        "EXPLAIN (ANALYZE, VERBOSE, BUFFERS) "
+        "SELECT count(*) FROM generate_series(1, 1000000) g WHERE g % 2 = 0;\""
+    )
+    assert result.rc == 0, (
+        f"JIT load failed — possible undefined symbol in llvmjit.so.\n"
+        f"stderr: {result.stderr}\nstdout: {result.stdout}"
+    )
+    assert "JIT:" in result.stdout, (
+        f"JIT was not triggered. EXPLAIN ANALYZE output:\n{result.stdout}"
+    )
+
+
+def test_llvmjit_pg_config_compiled_with_llvm(host, get_server_path):
+    """Strategy 6: Verify PostgreSQL was compiled with --with-llvm via pg_config --configure."""
+    result = host.run(f"{get_server_path}/bin/pg_config --configure")
+    assert result.rc == 0, f"pg_config --configure failed: {result.stderr}"
+    assert "--with-llvm" in result.stdout, (
+        f"PostgreSQL was not compiled with --with-llvm.\n"
+        f"pg_config --configure output:\n{result.stdout}"
+    )
