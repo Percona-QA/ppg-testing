@@ -663,7 +663,7 @@
     shell: | 
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
-      cd /tmp/postgres/ && make -s check-world -k
+      cd /tmp/postgres/ && make -s check-world -k PROVE_FLAGS='-v -p'
     become_user: postgres
     args:
       executable: /bin/bash
@@ -762,7 +762,7 @@
       export TDE_MODE=1
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
-      cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/pg_tde/ci_scripts/tde_setup.sql" make -s installcheck-world -k PROVE_FLAGS="-e 'perl -I/tmp/pg_tde/ci_scripts/perl -I/tmp/postgres/src/test/perl -MPostgreSQL::Test::TdeCluster'"
+      cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/pg_tde/ci_scripts/tde_setup.sql" make -s installcheck-world -k PROVE_FLAGS="-v -p -e 'perl -I/tmp/pg_tde/ci_scripts/perl -I/tmp/postgres/src/test/perl -MPostgreSQL::Test::TdeCluster'"
     args:
       executable: /bin/bash
       chdir: "/tmp/postgres/"
