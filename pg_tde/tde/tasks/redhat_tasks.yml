@@ -24,7 +24,8 @@
 
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
-      cd /tmp/pg_tde && make -s installcheck -k
+      cd /tmp/pg_tde && make -s installcheck USE_PGXS=1 -k PROVE_FLAGS='-v -p'
+      #cd /tmp/pg_tde && make -s installcheck -k
     become_user: postgres
     args:
       executable: /bin/bash

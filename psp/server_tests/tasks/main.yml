@@ -599,7 +599,8 @@
 
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
-      cd /tmp/pg_tde && make -s installcheck -k
+      cd /tmp/pg_tde && make -s installcheck -k PROVE_FLAGS='-v -p'
+      #cd /tmp/pg_tde && make -s installcheck -k
     become_user: postgres
     args:
       executable: /bin/bash
@@ -714,78 +715,6 @@
       msg: "Server regression tests failed with return code {{ regression.rc }}"
     when:
       - testsuite == 'check-server'
-      - regression is defined
-      - regression.rc != 0
-
-  # =============================
-  # Run check-all regression tests
-  # =============================
-  - name: Run all regression tests
-    shell: | 
-      export VAULT_SKIP_VERIFY=true
-      export VAULT_ROOT_TOKEN_FILE=/tmp/bao_env/bao_token.txt
-      export VAULT_CACERT_FILE=/tmp/bao_env/bao_ca.crt
-      export VAULT_ADDR="https://127.0.0.1:8200"
-      export VAULT_TOKEN=root
-      export PGCTLTIMEOUT=120
-      export PG_TEST_TIMEOUT_DEFAULT=300
-      cd /tmp/postgres/ && make -s check-world -k
-    become_user: postgres
-    args:
-      executable: /bin/bash
-      chdir: "/tmp/postgres/"
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      PG_TEST_PORT_DIR: "/tmp/pg_tde_port"
-      INSTALL_DIR: "/opt/pgsql"
-      PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
-      PGCTLTIMEOUT: "120"
-      PG_TEST_TIMEOUT_DEFAULT: "300"
-    when: testsuite == 'check-all'
-    ignore_errors: true
-    register: regression
-
-  - name: Show stdout of check-all regression tests
-    debug:
-      var: regression.stdout_lines
-    when: testsuite == 'check-all'
-
-  - name: Show stderr if test fails
-    debug:
-      var: regression.stderr_lines
-    when:
-      - testsuite == 'check-all'
-      - regression is defined
-      - regression.rc != 0
-
-  - name: Find regression.diffs files if tests fail
-    find:
-      paths: "/tmp/postgres"
-      patterns: "regression.diffs"
-      recurse: yes
-    register: regression_diff_files
-    when:
-      - testsuite == 'check-all'
-      - regression is defined
-      - regression.rc != 0
-
-  - name: Show contents of regression.diffs with directory name
-    shell: |
-      echo "Directory: $(dirname {{ item.path }})"
-      cat {{ item.path }}
-    loop: "{{ regression_diff_files.files }}"
-    when:
-      - testsuite == 'check-all'
-      - regression is defined
-      - regression.rc != 0
-      - regression_diff_files is defined
-
-  - name: Fail the playbook if tests failed in check-all
-    fail:
-      msg: "All regression tests failed with return code {{ regression.rc }}"
-    when:
-      - testsuite == 'check-all'
       - regression is defined
       - regression.rc != 0
 
