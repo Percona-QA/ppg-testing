@@ -13,7 +13,7 @@ UBUNTU26_MIN_VERSIONS = {
 
 
 @pytest.fixture(autouse=True)
-def skip_unsupported_ubuntu(host):
+def skip_unsupported_ubuntu(host, request):
     dist = host.system_info.distribution.lower()
     if dist != "ubuntu":
         return
@@ -32,5 +32,15 @@ def skip_unsupported_ubuntu(host):
         return
 
     min_ver = UBUNTU26_MIN_VERSIONS.get(major)
-    if min_ver and parsed < min_ver:
+    if min_ver is None:
+        return
+
+    is_upgrade = request.node.get_closest_marker("upgrade") is not None
+
+    if parsed < min_ver:
         pytest.skip(f"Ubuntu 26 with PG {ver_str} < {min_ver} is not supported")
+    elif is_upgrade and parsed == min_ver:
+        pytest.skip(
+            f"Ubuntu 26 upgrade job skipped for PG {ver_str}: "
+            f"this is the first supported version and cannot be upgraded to from an earlier release"
+        )
