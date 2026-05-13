@@ -16,11 +16,11 @@
     pg_version_to_install: "{{ lookup('env', 'FROM_VERSION') | replace('ppg-','') }}"
     upgrade_to_pg_version: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
 
-- name: End play on Ubuntu 26 and versions older than 18.4
+- name: End play on Ubuntu 26 and versions older than 17.10
   meta: end_host
   when: ansible_distribution == "Ubuntu" and
     ansible_distribution_major_version == "26" and
-    pg_version_to_install | string is version('18.4', '<', strict=True)
+    pg_version_to_install | string is version('17.10', '<', strict=True)
 
 - name: End play on Debian 13
   meta: end_play
@@ -40,13 +40,13 @@
 - name: Initialize Percona PostgreSQL 17 on RHEL
   ansible.builtin.command:
     cmd: "/usr/pgsql-17/bin/postgresql-17-setup initdb"
-  become: yes
+  become: true
   when: ansible_os_family == "RedHat"
 
 - name: Enable checksums on Percona PostgreSQL 17 cluster
   ansible.builtin.command:
     cmd: "/usr/pgsql-17/bin/pg_checksums --enable -D /var/lib/pgsql/17/data"
-  become: yes
+  become: true
   when: ansible_os_family == "RedHat"
 
 - name: Install PPG tools
@@ -192,7 +192,7 @@
 - name: Initialize Percona PostgreSQL 18 on RHEL
   ansible.builtin.command:
     cmd: "/usr/pgsql-18/bin/postgresql-18-setup initdb"
-  become: yes
+  become: true
   when: ansible_os_family == "RedHat"
 
 - name: Set io_method to worker for PG 18
@@ -200,7 +200,7 @@
     path: "/var/lib/pgsql/18/data/postgresql.conf"
     regexp: '^io_method'
     line: "io_method = 'worker'"
-  become: yes
+  become: true
   when: ansible_os_family == "RedHat"
 
 - name: Stop postgresql service for RHEL based
@@ -218,7 +218,7 @@
 - name: Create PostgreSQL 18 cluster on Debian with no checksums
   ansible.builtin.command: >
     /usr/bin/pg_createcluster 18 main --port=5433 -- --no-data-checksums
-  become: yes
+  become: true
   become_user: postgres
   when: ansible_os_family == "Debian"
 
@@ -232,7 +232,7 @@
     minutes: 1
 
 - name: Add Percona PG18 lib to ld.so.conf.d
-  become: yes
+  become: true
   ansible.builtin.copy:
     dest: /etc/ld.so.conf.d/percona-pg18.conf
     content: "/usr/lib/postgresql/18/lib"
@@ -242,7 +242,7 @@
   when: ansible_os_family == "Debian"
 
 - name: Add Percona PG18 lib to ld.so.conf.d
-  become: yes
+  become: true
   ansible.builtin.copy:
     dest: /etc/ld.so.conf.d/percona-pg18.conf
     content: "/usr/pgsql-18/lib"
@@ -252,7 +252,7 @@
   when: ansible_os_family == "RedHat"
 
 - name: Run ldconfig after adding percona lib path
-  become: yes
+  become: true
   ansible.builtin.command: /sbin/ldconfig
 
 - name: Execute pg_upgrade RHEL
