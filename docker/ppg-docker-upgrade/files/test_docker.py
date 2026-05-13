@@ -5,6 +5,7 @@ import psycopg2
 import pytest
 import testinfra
 from packaging import version
+from datetime import datetime, timedelta
 
 import settings
 
@@ -17,10 +18,13 @@ IMG_TAG = os.getenv("TAG")
 IS_WITH_POSTGIS = os.getenv("WITH_POSTGIS", "false").lower() == "true"
 PG_BIN_DIR = f"/usr/pgsql-{MAJOR_VER}/bin"
 PG_DATA_DIR = "/data/db"
+PPG_IMAGE_NAME = os.getenv("PPG_IMAGE_NAME", "percona-distribution-postgresql")
 if IS_WITH_POSTGIS:
-    IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-with-postgis:{IMG_TAG}"
+    IMAGE = f"{DOCKER_REPO}/{PPG_IMAGE_NAME}-with-postgis:{IMG_TAG}"
 else:
-    IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG}"
+    IMAGE = f"{DOCKER_REPO}/{PPG_IMAGE_NAME}:{IMG_TAG}"
+UPGRADE_DATA_DIR = os.getenv("UPGRADE_DATA_DIR")  # host path to mount as PG_DATA_DIR
+
 
 # --- Settings ---
 pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER)
@@ -584,7 +588,6 @@ def test_pg_config_flags(host, flag):
 def test_postgis_extension(host):
     if not IS_WITH_POSTGIS:
         pytest.skip("Skipping PostGIS test.")
-
     # 1. Execute the create command
     cmd = "psql -c 'CREATE EXTENSION IF NOT EXISTS postgis CASCADE;'"
     result = host.run(cmd)
@@ -1499,3 +1502,4 @@ def test_pg_cron_schedule_job(host):
 
     host.run("psql -t -A -c \"SELECT cron.unschedule('test-job');\"")
     host.run("psql -c 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
+

@@ -16,10 +16,11 @@ PG_BIN_DIR = f"/usr/pgsql-{MAJOR_VER}/bin"
 NETWORK_NAME = "patroni_test_net"
 ETCD_NAME = "etcd_node"
 IS_WITH_POSTGIS = os.getenv("WITH_POSTGIS", "false").lower() == "true"
+PPG_IMAGE_NAME = os.getenv("PPG_IMAGE_NAME", "percona-distribution-postgresql")
 if IS_WITH_POSTGIS:
-    IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-with-postgis:{IMG_TAG}"
+    IMAGE = f"{DOCKER_REPO}/{PPG_IMAGE_NAME}-with-postgis:{IMG_TAG}"
 else:
-    IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG}"
+    IMAGE = f"{DOCKER_REPO}/{PPG_IMAGE_NAME}:{IMG_TAG}"
 
 def get_patroni_status(port):
     """Helper to query the Patroni REST API."""

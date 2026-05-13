@@ -74,14 +74,22 @@ IS_WITH_POSTGIS = os.getenv("WITH_POSTGIS", "false").lower() == "true"
 # the fixture manages its own host-path volumes.
 UPGRADE_NEW_VOL = os.environ.get("UPGRADE_NEW_VOL")
 
-if IS_WITH_POSTGIS:
-    OLD_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-with-postgis:{IMG_TAG_OLD}"
-    NEW_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-with-postgis:{IMG_TAG_NEW}"
-else:
-    OLD_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG_OLD}"
-    NEW_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG_NEW}"
+OLD_DOCKER_REPO = os.environ.get("OLD_DOCKER_REPOSITORY", DOCKER_REPO)
+NEW_DOCKER_REPO = os.environ.get("NEW_DOCKER_REPOSITORY", DOCKER_REPO)
+UPGRADE_DOCKER_REPO = os.environ.get("UPGRADE_DOCKER_REPOSITORY", NEW_DOCKER_REPO)
 
-UPGRADE_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-upgrade:{UPGRADE_IMG_TAG}"
+PPG_IMAGE_NAME = os.environ.get("PPG_IMAGE_NAME", "percona-distribution-postgresql")
+if IS_WITH_POSTGIS:
+    OLD_IMAGE = f"{OLD_DOCKER_REPO}/{PPG_IMAGE_NAME}-with-postgis:{IMG_TAG_OLD}"
+    NEW_IMAGE = f"{NEW_DOCKER_REPO}/{PPG_IMAGE_NAME}-with-postgis:{IMG_TAG_NEW}"
+else:
+    OLD_IMAGE = f"{OLD_DOCKER_REPO}/{PPG_IMAGE_NAME}:{IMG_TAG_OLD}"
+    NEW_IMAGE = f"{NEW_DOCKER_REPO}/{PPG_IMAGE_NAME}:{IMG_TAG_NEW}"
+
+PPG_UPGRADE_IMAGE_NAME = os.environ.get(
+    "PPG_UPGRADE_IMAGE_NAME", "percona-distribution-postgresql-upgrade"
+)
+UPGRADE_IMAGE = f"{UPGRADE_DOCKER_REPO}/{PPG_UPGRADE_IMAGE_NAME}:{UPGRADE_IMG_TAG}"
 PG_OLD_BIN_DIR = f"/usr/pgsql-{OLD_MAJOR}/bin"
 PG_NEW_BIN_DIR = f"/usr/pgsql-{NEW_MAJOR}/bin"
 PG_DATA_DIR = "/data/db"
@@ -970,4 +978,5 @@ class TestUpgradeImageExtensionFiles:
         assert result.rc == 0, (
             f"{label}: .so missing at {so_path!r} in upgrade image (PG {major})"
         )
+
 

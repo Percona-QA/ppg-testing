@@ -2,12 +2,17 @@
 - name: Set Facts.
   set_fact:
     DOCKER_REPOSITORY: "{{ lookup('env', 'REPOSITORY') }}"
-    OLD_VERSION: "{{ lookup('env', 'OLD_SERVER_VERSION') | default('17.10', true) }}"
-    NEW_VERSION: "{{ lookup('env', 'NEW_SERVER_VERSION') | default('18.4', true) }}"
+    OLD_VERSION: "{{ lookup('env', 'OLD_SERVER_VERSION') | default('17.9', true) }}"
+    NEW_VERSION: "{{ lookup('env', 'NEW_SERVER_VERSION') | default('18.3', true) }}"
     OLD_TAG: "{{ lookup('env', 'OLD_VERSION_DOCKER_TAG') | default(lookup('env', 'OLD_VERSION'), true) }}"
     NEW_TAG: "{{ lookup('env', 'NEW_VERSION_DOCKER_TAG') | default(lookup('env', 'NEW_VERSION'), true) }}"
-    UPGRADE_TAG: "{{ lookup('env', 'UPGRADE_DOCKER_TAG') | default('18-17-16-15-14', true) }}"
+    UPGRADE_TAG: "{{ lookup('env', 'UPGRADE_DOCKER_TAG') | default('18-17', true) }}"
     WITH_POSTGIS: "{{ lookup('env', 'WITH_POSTGIS') | default('false', true) }}"
+    PPG_IMAGE_NAME: "{{ lookup('env', 'PPG_IMAGE_NAME') | default('percona-distribution-postgresql', true) }}"
+    PPG_UPGRADE_IMAGE_NAME: "{{ lookup('env', 'PPG_UPGRADE_IMAGE_NAME') | default('percona-distribution-postgresql-upgrade', true) }}"
+    OLD_DOCKER_REPOSITORY: "{{ lookup('env', 'OLD_DOCKER_REPOSITORY') | default('', true) }}"
+    NEW_DOCKER_REPOSITORY: "{{ lookup('env', 'NEW_DOCKER_REPOSITORY') | default('', true) }}"
+    UPGRADE_DOCKER_REPOSITORY: "{{ lookup('env', 'UPGRADE_DOCKER_REPOSITORY') | default('', true) }}"
     cacheable: true
 
 - name: Print upgrade pair
@@ -226,6 +231,11 @@
     NEW_TAG: "{{ NEW_TAG }}"
     UPGRADE_TAG: "{{ UPGRADE_TAG }}"
     WITH_POSTGIS: "{{ WITH_POSTGIS }}"
+    PPG_IMAGE_NAME: "{{ PPG_IMAGE_NAME }}"
+    PPG_UPGRADE_IMAGE_NAME: "{{ PPG_UPGRADE_IMAGE_NAME }}"
+    OLD_DOCKER_REPOSITORY: "{{ OLD_DOCKER_REPOSITORY }}"
+    NEW_DOCKER_REPOSITORY: "{{ NEW_DOCKER_REPOSITORY }}"
+    UPGRADE_DOCKER_REPOSITORY: "{{ UPGRADE_DOCKER_REPOSITORY }}"
     PPG_LABEL_MAINTAINER: "{{ ppg_label_maintainer | default('Percona Development <info@percona.com>') }}"
     PPG_LABEL_VENDOR: "{{ ppg_label_vendor | default('Percona') }}"
     PPG_LABEL_NAME_POSTGRESQL: "{{ ppg_label_name_postgresql | default('Percona Distribution for PostgreSQL') }}"
