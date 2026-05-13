@@ -1096,8 +1096,7 @@ def test_psql_wrapper_no_bare_cd_dash(host, get_server_path):
     result = host.run(f"grep -P '^\\s+cd -$' {psql_script}")
     assert result.rc == 1, (
         f"psql wrapper at {psql_script} still contains a bare 'cd -' line.\n"
-        f"This will print the bin-dir path to stdout on RHEL 9/10.\n"
-        f"Fix: replace 'cd -' with 'cd - > /dev/null' in the wrapper script.\n"
+        f"Fix: remove 'cd -' in the wrapper script.\n"
         f"Matching lines found:\n{result.stdout}"
     )
 
