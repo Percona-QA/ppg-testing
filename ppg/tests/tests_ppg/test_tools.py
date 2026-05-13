@@ -41,6 +41,15 @@ PG_TDE_UPGRADE_MIN_VERSIONS = {
     18: version.parse("18.4"),
 }
 
+# Minimum PostgreSQL versions where libpgpoolpcp3 replaces libpgpool2 on Debian/Ubuntu
+LIBPGPOOLPCP3_MIN_VERSIONS = {
+    14: version.parse("14.23"),
+    15: version.parse("15.18"),
+    16: version.parse("16.14"),
+    17: version.parse("17.10"),
+    18: version.parse("18.4"),
+}
+
 # Minimum PostgreSQL versions where pg_gather install location changed
 PG_GATHER_MIN_VERSIONS = {
     13: version.parse("13.23"),
@@ -755,6 +764,35 @@ def test_pgpool_package_version(host):
         pgpool = host.package(f"percona-pgpool-II-pg{MAJOR_VER}")
     assert pgpool.is_installed
     assert pg_versions["pgpool"]['version'] in pgpool.version, pgpool.version
+
+
+def test_pgpool_libpgpool_package(host):
+    """Verify the correct libpgpool variant is installed on Debian/Ubuntu.
+    libpgpoolpcp3 replaces libpgpool2 from: 14.23, 15.18, 16.14, 17.10, 18.4."""
+    dist = host.system_info.distribution.lower()
+    if dist not in ["ubuntu", "debian"]:
+        pytest.skip("libpgpool package check only applies to Debian/Ubuntu.")
+
+    current_ver = version.parse(pg_versions.get("version", "0.0"))
+    min_ver = LIBPGPOOLPCP3_MIN_VERSIONS.get(current_ver.major)
+
+    if min_ver is not None and current_ver >= min_ver:
+        pkg = host.package("libpgpoolpcp3")
+        assert pkg.is_installed, (
+            f"libpgpoolpcp3 should be installed on PostgreSQL {current_ver} "
+            f"(>= {min_ver}) but is not."
+        )
+        old_pkg = host.package("libpgpool2")
+        assert not old_pkg.is_installed, (
+            f"libpgpool2 should NOT be installed on PostgreSQL {current_ver} "
+            f"(replaced by libpgpoolpcp3 from {min_ver})."
+        )
+    else:
+        pkg = host.package("libpgpool2")
+        assert pkg.is_installed, (
+            f"libpgpool2 should be installed on PostgreSQL {current_ver} "
+            f"(libpgpoolpcp3 not available until {min_ver})."
+        )
 
 
 def test_pgpool_binary_version(host):
