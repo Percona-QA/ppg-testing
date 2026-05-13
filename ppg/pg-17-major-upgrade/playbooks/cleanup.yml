@@ -26,6 +26,7 @@
           - percona-pg-stat-monitor16
           - percona-pgaudit16-set-user
           - percona-postgresql-16-wal2json
+      ignore_errors: true
       when: ansible_os_family == "Debian"
 
 - name: Cleanup
@@ -99,6 +100,7 @@
           - percona-postgresql16-plpython3-debuginfo
           - percona-postgresql16-pltcl-debuginfo
           - percona-postgresql16-server-debuginfo
+      ignore_errors: true
       when: ansible_os_family == "RedHat"
 
     # - name: remove pgaudit deb packages
@@ -121,4 +123,5 @@
       yum:
         name: percona-pg_repack16
         state: absent
+      ignore_errors: true
       when: ansible_os_family == "RedHat"
