@@ -32,6 +32,7 @@ TDE_BINARIES = [
     "pg_tde_resetwal",
     "pg_tde_restore_encrypt",
     "pg_tde_rewind",
+    "pg_tde_upgrade",
     "pg_tde_waldump",
 ]
 
@@ -40,6 +41,12 @@ PG_CRON_MIN_VERSIONS = {
     14: version.parse("14.23"),
     15: version.parse("15.18"),
     16: version.parse("16.14"),
+    17: version.parse("17.10"),
+    18: version.parse("18.4"),
+}
+
+# Minimum PostgreSQL versions where pg_tde_upgrade binary is available in tarballs
+PG_TDE_UPGRADE_MIN_VERSIONS = {
     17: version.parse("17.10"),
     18: version.parse("18.4"),
 }
@@ -814,6 +821,16 @@ def test_tde_binaries_present(host, binary):
     # pg_tde only exists on PG-17 and above.
     if int(settings.MAJOR_VER) < 17:
         pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
+
+    # pg_tde_upgrade was introduced in 17.10 / 18.4.
+    if binary == "pg_tde_upgrade":
+        current_ver = version.parse(pg_versions.get("version", "0.0"))
+        min_ver = PG_TDE_UPGRADE_MIN_VERSIONS.get(current_ver.major)
+        if min_ver is None or current_ver < min_ver:
+            pytest.skip(
+                f"pg_tde_upgrade not available on PostgreSQL {pg_versions.get('version')} "
+                f"(requires >= {min_ver})"
+            )
 
     dist = host.system_info.distribution.lower()
 
