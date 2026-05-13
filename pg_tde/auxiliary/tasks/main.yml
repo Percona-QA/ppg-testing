@@ -348,7 +348,11 @@
   - name: Run check tde tests
     become: true
     become_user: postgres
-    shell: "./test_runner.sh --server_build_path {{ pg_install_dir }} --skip_test {{ skip_testcase_list }} --io_method {{ io_method }}"
+    shell: >-
+      ./test_runner.sh
+      --server_build_path {{ pg_install_dir }}
+      {% if skip_testcase_enabled and skip_testcase_list | length > 0 %}--skip_test {{ skip_testcase_list }}{% endif %}
+      --io_method {{ io_method }}
     args:
       executable: /bin/bash
       chdir: "/tmp/percona-qa/postgresql/automation/wrapper"
