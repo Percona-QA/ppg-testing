@@ -1053,11 +1053,6 @@ def test_pg_cron_extension(host, get_psql_binary_path):
             final_count = host.run(f"{psql} \"SELECT count(*) FROM pg_extension WHERE extname = 'pg_cron';\"").stdout.strip()
             assert final_count == "0", "Failed to drop pg_cron extension cleanly"
 
-
-# f"{get_server_path}/share/extension/postgis.control",
-# f"{get_server_path}/lib/postgis-3.so",]
-# sql_dir = f"{get_server_path}/share/extension/"
-
 # NOTE: Percona PostgreSQL tarballs are built without --with-llvm.
 # LLVM JIT is not compiled into the tarball distribution — no llvmjit.so,
 # no llvmjit_types.bc, and pg_config --configure does not show --with-llvm.
@@ -1074,8 +1069,6 @@ def test_pg_cron_extension(host, get_psql_binary_path):
 # result itself.  Any extra path output from the wrapper appears as additional
 # lines and is caught by the assertion.
 #
-# Known to fail on RHEL 9/10 with SSLv3 tarballs; passes on Ubuntu 22/24 and
-# Debian 12 where the wrapper is clean.
 #
 # Three scenarios are covered:
 #   1. Full-path invocation from outside the bin directory
