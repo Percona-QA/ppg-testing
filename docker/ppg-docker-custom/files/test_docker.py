@@ -426,17 +426,19 @@ def test_llvmjit_statically_linked(host):
 
 
 def test_llvmjit_symbols_present(host):
-    """Strategy 4: Verify key JIT symbols are exported from llvmjit.so."""
+    """Strategy 4: Verify the JIT provider entry point is exported from llvmjit.so.
+
+    PostgreSQL loads the JIT provider via dlopen() + dlsym("_PG_jit_provider_init").
+    That function fills a JitProviderCallbacks struct with internal function pointers
+    (compile_expr, etc.) — those are never dlsym'd directly and are therefore not
+    required to be dynamic exports.  _PG_jit_provider_init is the only symbol that
+    must appear in the dynamic symbol table on every platform."""
     so_path = f"/usr/pgsql-{MAJOR_VER}/lib/llvmjit.so"
-    expected_symbols = [
-        "llvmjit_compile_expr",
-        "llvmjit_init",
-    ]
-    for symbol in expected_symbols:
-        result = host.run(f"nm -D {so_path} | grep -q '{symbol}'")
-        assert result.rc == 0, (
-            f"Expected JIT symbol '{symbol}' not found in {so_path}"
-        )
+    result = host.run(f"nm -D {so_path} | grep -q '_PG_jit_provider_init'")
+    assert result.rc == 0, (
+        f"Expected JIT symbol '_PG_jit_provider_init' not found in {so_path}. "
+        f"The library may be missing or incorrectly built."
+    )
 
 
 def test_llvmjit_no_undefined_cxx_symbols(host):
