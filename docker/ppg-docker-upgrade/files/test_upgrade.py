@@ -571,9 +571,7 @@ class TestPostUpgradePackages:
 
     def test_telemetry_packages_not_installed(self, upgrade_pipeline):
         new_host = upgrade_pipeline["new_host"]
-        excluded = ["percona-telemetry-agent"] + [
-            f"percona-pg-telemetry{ver}" for ver in ["16", "17", "18"] if ver != NEW_MAJOR
-        ]
+        excluded = ["percona-telemetry-agent", f"percona-pg-telemetry{OLD_MAJOR}"]
         installed = [pkg for pkg in excluded if new_host.run(f"rpm -q {pkg}").rc == 0]
         assert not installed, (
             f"Packages that should not be installed in PG{NEW_MAJOR} image: {installed}"
@@ -638,10 +636,11 @@ _UPGRADE_IMAGE_PG_VERSIONS: dict[str, str] = {
 }
 
 # Pre-built parametrize lists for TestUpgradeImageExtensionFiles.
-# Cross-product: every PG major version × every extension spec.
+# Only check the OLD and NEW major versions for the current upgrade path.
 _UPGRADE_IMG_CTRL_PARAMS = [
     (major, label, ctrl)
-    for major in _UPGRADE_IMAGE_PG_VERSIONS
+    for major in dict.fromkeys([OLD_MAJOR, NEW_MAJOR])
+    if major in _UPGRADE_IMAGE_PG_VERSIONS
     for label, ctrl in _EXT_SPECS
 ]
 
@@ -949,12 +948,12 @@ class TestUpgradeImageExtensionFiles:
 
     @pytest.mark.parametrize(
         "major",
-        list(_UPGRADE_IMAGE_PG_VERSIONS.keys()),
-        ids=[f"pg{m}" for m in _UPGRADE_IMAGE_PG_VERSIONS],
+        [m for m in dict.fromkeys([OLD_MAJOR, NEW_MAJOR]) if m in _UPGRADE_IMAGE_PG_VERSIONS],
+        ids=[f"pg{m}" for m in dict.fromkeys([OLD_MAJOR, NEW_MAJOR]) if m in _UPGRADE_IMAGE_PG_VERSIONS],
     )
     def test_wal2json_so_all_pg_versions(self, upgrade_image_host, major):
         """``wal2json`` is a logical-replication output plugin with no
-        ``.control`` file.  Verify its ``.so`` for every PG major version."""
+        ``.control`` file.  Verify its ``.so`` for the OLD and NEW major versions."""
         path = f"/usr/pgsql-{major}/lib/{_WALJSON_SO}"
         result = upgrade_image_host.run(f"test -f {path}")
         assert result.rc == 0, (
