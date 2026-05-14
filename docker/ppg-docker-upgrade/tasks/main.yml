@@ -19,28 +19,6 @@
   debug:
     msg: "Upgrade: PG {{ OLD_VERSION }} → PG {{ NEW_VERSION }}"
 
-- name: Assign OLD_TAG based on architecture
-  set_fact:
-    OLD_TAG: >-
-      {{
-        OLD_TAG if ansible_architecture == 'x86_64' and not OLD_TAG|regex_search('multi')
-        else OLD_TAG if ansible_architecture == 'aarch64' and (not OLD_TAG|regex_search('multi') and OLD_TAG|regex_search('-arm64$'))
-        else OLD_TAG|string + '-arm64' if ansible_architecture == 'aarch64' and not OLD_TAG|regex_search('multi')
-        else OLD_TAG
-      }}
-  when: "ansible_architecture == 'x86_64' or ansible_architecture == 'aarch64'"
-
-- name: Assign NEW_TAG based on architecture
-  set_fact:
-    NEW_TAG: >-
-      {{
-        NEW_TAG if ansible_architecture == 'x86_64' and not NEW_TAG|regex_search('multi')
-        else NEW_TAG if ansible_architecture == 'aarch64' and (not NEW_TAG|regex_search('multi') and NEW_TAG|regex_search('-arm64$'))
-        else NEW_TAG|string + '-arm64' if ansible_architecture == 'aarch64' and not NEW_TAG|regex_search('multi')
-        else NEW_TAG
-      }}
-  when: "ansible_architecture == 'x86_64' or ansible_architecture == 'aarch64'"
-
 - name: Print resolved tags
   debug:
     msg: "OLD_TAG: {{ OLD_TAG }}, NEW_TAG: {{ NEW_TAG }}, UPGRADE_TAG: {{ UPGRADE_TAG }}"
