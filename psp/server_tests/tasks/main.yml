@@ -648,6 +648,33 @@
       - regression.rc != 0
       - diffs_output is defined
 
+  - name: Package check-tde test artifacts
+    shell: |
+      set -uo pipefail
+      ARTIFACT_DIR="/tmp/test-artifacts"
+      rm -rf "$ARTIFACT_DIR"
+      mkdir -p "$ARTIFACT_DIR"
+      find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      cp -r /tmp/pg_tde/t "$ARTIFACT_DIR/pg_tde_t" 2>/dev/null || true
+      cp /tmp/postgres/logfile "$ARTIFACT_DIR/" 2>/dev/null || true
+      tar -czf /tmp/test-artifacts.tar.gz -C /tmp test-artifacts
+    args:
+      executable: /bin/bash
+    when:
+      - testsuite == 'check-tde'
+      - regression is defined
+    ignore_errors: true
+
+  - name: Fetch check-tde test artifacts to controller
+    fetch:
+      src: /tmp/test-artifacts.tar.gz
+      dest: "{{ playbook_dir }}/../artifacts/"
+      fail_on_missing: false
+    when:
+      - testsuite == 'check-tde'
+      - regression is defined
+
   - name: Fail the playbook if tde tests failed
     fail:
       msg: "TDE regression tests failed with return code {{ regression.rc }}"
@@ -709,6 +736,31 @@
       - regression is defined
       - regression.rc != 0
       - diffs_output.stdout is defined
+
+  - name: Package check-server test artifacts
+    shell: |
+      set -uo pipefail
+      ARTIFACT_DIR="/tmp/test-artifacts"
+      rm -rf "$ARTIFACT_DIR"
+      mkdir -p "$ARTIFACT_DIR"
+      find /tmp/postgres -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      find /tmp/postgres -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      tar -czf /tmp/test-artifacts.tar.gz -C /tmp test-artifacts
+    args:
+      executable: /bin/bash
+    when:
+      - testsuite == 'check-server'
+      - regression is defined
+    ignore_errors: true
+
+  - name: Fetch check-server test artifacts to controller
+    fetch:
+      src: /tmp/test-artifacts.tar.gz
+      dest: "{{ playbook_dir }}/../artifacts/"
+      fail_on_missing: false
+    when:
+      - testsuite == 'check-server'
+      - regression is defined
 
   - name: Fail the playbook if server tests failed
     fail:
@@ -814,6 +866,33 @@
       - testsuite == 'installcheck-world'
       - regression is defined
       - regression.rc != 0
+
+  - name: Package installcheck-world test artifacts
+    shell: |
+      set -uo pipefail
+      ARTIFACT_DIR="/tmp/test-artifacts"
+      rm -rf "$ARTIFACT_DIR"
+      mkdir -p "$ARTIFACT_DIR"
+      find /tmp/postgres -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      find /tmp/postgres -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      cp /tmp/postgres/logfile "$ARTIFACT_DIR/" 2>/dev/null || true
+      tar -czf /tmp/test-artifacts.tar.gz -C /tmp test-artifacts
+    args:
+      executable: /bin/bash
+    when:
+      - testsuite == 'installcheck-world'
+      - regression is defined
+    ignore_errors: true
+
+  - name: Fetch installcheck-world test artifacts to controller
+    fetch:
+      src: /tmp/test-artifacts.tar.gz
+      dest: "{{ playbook_dir }}/../artifacts/"
+      fail_on_missing: false
+    when:
+      - testsuite == 'installcheck-world'
+      - regression is defined
 
   - name: Fail the playbook if tests failed in installcheck-world
     fail:
