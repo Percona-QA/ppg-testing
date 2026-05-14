@@ -5,6 +5,7 @@
       percona_server_version: "{{ lookup('env', 'PERCONA_SERVER_VERSION') }}"
       major_version: "{{ lookup('env', 'VERSION').split('.')[0] }}"
       io_method: "{{ lookup('env', 'IO_METHOD') }}"
+      artifact_filename: "psp-{{ lookup('env', 'TESTSUITE') }}-pg{{ lookup('env', 'VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env', 'BUILD_NUMBER') }}.tar.gz"
       cacheable: true
 
   - name: End play on RHEL 8 and Rocky 8 for pg-18>= and io_uring, as uring not supported
@@ -657,8 +658,9 @@
       find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       cp -r /tmp/pg_tde/t "$ARTIFACT_DIR/pg_tde_t" 2>/dev/null || true
+      cp -r /tmp/pg_tde/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
       cp /tmp/postgres/logfile "$ARTIFACT_DIR/" 2>/dev/null || true
-      tar -czf /tmp/test-artifacts.tar.gz -C /tmp test-artifacts
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp test-artifacts
     args:
       executable: /bin/bash
     when:
@@ -668,7 +670,7 @@
 
   - name: Fetch check-tde test artifacts to controller
     fetch:
-      src: /tmp/test-artifacts.tar.gz
+      src: "/tmp/{{ artifact_filename }}"
       dest: "{{ playbook_dir }}/../artifacts/"
       fail_on_missing: false
     when:
@@ -745,7 +747,7 @@
       mkdir -p "$ARTIFACT_DIR"
       find /tmp/postgres -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/postgres -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
-      tar -czf /tmp/test-artifacts.tar.gz -C /tmp test-artifacts
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp test-artifacts
     args:
       executable: /bin/bash
     when:
@@ -755,7 +757,7 @@
 
   - name: Fetch check-server test artifacts to controller
     fetch:
-      src: /tmp/test-artifacts.tar.gz
+      src: "/tmp/{{ artifact_filename }}"
       dest: "{{ playbook_dir }}/../artifacts/"
       fail_on_missing: false
     when:
@@ -877,7 +879,7 @@
       find /tmp/postgres -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       cp /tmp/postgres/logfile "$ARTIFACT_DIR/" 2>/dev/null || true
-      tar -czf /tmp/test-artifacts.tar.gz -C /tmp test-artifacts
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp test-artifacts
     args:
       executable: /bin/bash
     when:
@@ -887,7 +889,7 @@
 
   - name: Fetch installcheck-world test artifacts to controller
     fetch:
-      src: /tmp/test-artifacts.tar.gz
+      src: "/tmp/{{ artifact_filename }}"
       dest: "{{ playbook_dir }}/../artifacts/"
       fail_on_missing: false
     when:
