@@ -253,8 +253,9 @@
 - name: Build pg_tde
   become: true
   become_user: postgres
-  ansible.builtin.command: >
+  ansible.builtin.shell: >-
     make USE_PGXS=1 PG_CONFIG={{ pg_config_path }}
+    CFLAGS="$({{ pg_config_path }} --cflags | sed 's/-Wmissing-variable-declarations//g')"
   args:
     chdir: /tmp/pg_tde
     executable: /bin/bash
