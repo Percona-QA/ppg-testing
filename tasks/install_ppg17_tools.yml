@@ -484,9 +484,7 @@
     when:
       - ansible_os_family == "RedHat"
       - >-
-        (pg_version_to_install | string is version('17.9', '>', strict=True))
-        or
-        (pg_version_to_install | string is version('17.9', '==', strict=True) and lookup('env', 'REPO') == 'testing')
+        (pg_version_to_install | string is version('17.9', '>=', strict=True))
 
   - name: Install pg_cron packages Debian
     apt:
@@ -499,9 +497,7 @@
     when:
       - ansible_os_family == "Debian"
       - >-
-        (pg_version_to_install | string is version('17.9', '>', strict=True))
-        or
-        (pg_version_to_install | string is version('17.9', '==', strict=True) and lookup('env', 'REPO') == 'testing')
+        (pg_version_to_install | string is version('17.9', '>=', strict=True))
 
   - name: Configure shared_preload_libraries
     vars:
@@ -511,8 +507,6 @@
           base_extensions
           + (['pg_cron'] if (
               (pg_version_to_install | string is version('17.9', '>', strict=True))
-              or
-              (pg_version_to_install | string is version('17.9', '==', strict=True) and lookup('env', 'REPO') == 'testing')
             ) else [])
         }}
       pg_conf_path: "{{ '/etc/postgresql/17/main/postgresql.conf' if ansible_os_family == 'Debian' else '/var/lib/pgsql/17/data/postgresql.conf' }}"
