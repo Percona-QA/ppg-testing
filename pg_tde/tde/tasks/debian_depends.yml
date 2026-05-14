@@ -224,6 +224,15 @@
       name: postgresql
       state: stopped
 
+  - name: Recreate PostgreSQL cluster with C.UTF-8 locale on Debian
+    become: true
+    shell: |
+      pg_dropcluster {{ major_version }} main || true
+      pg_createcluster --locale C.UTF-8 {{ major_version }} main
+    args:
+      executable: /bin/bash
+    when: ansible_distribution == "Debian"
+
   - name: Start postgresql service for Debian based
     service:
       name: postgresql
