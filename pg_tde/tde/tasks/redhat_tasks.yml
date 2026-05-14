@@ -69,6 +69,29 @@
       - regression.rc != 0
       - diffs_output is defined
 
+  - name: Package tde test artifacts
+    shell: |
+      set -uo pipefail
+      ARTIFACT_DIR="/tmp/test-artifacts"
+      rm -rf "$ARTIFACT_DIR"
+      mkdir -p "$ARTIFACT_DIR"
+      find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      cp -r /tmp/pg_tde/t "$ARTIFACT_DIR/pg_tde_t" 2>/dev/null || true
+      cp -r /tmp/pg_tde/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp test-artifacts
+    args:
+      executable: /bin/bash
+    when: regression is defined
+    ignore_errors: true
+
+  - name: Fetch tde test artifacts to controller
+    fetch:
+      src: "/tmp/{{ artifact_filename }}"
+      dest: "{{ playbook_dir }}/../artifacts/"
+      fail_on_missing: false
+    when: regression is defined
+
   - name: Fail the playbook if tde tests failed
     fail:
       msg: "TDE regression tests failed with return code {{ regression.rc }}"

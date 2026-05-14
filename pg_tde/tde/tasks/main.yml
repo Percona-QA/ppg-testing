@@ -9,6 +9,7 @@
     pg_version_to_install: "{{ lookup('env','VERSION') | regex_replace('ppg-','') }}"
     postgres_group: "{{ 'wheel' if ansible_os_family == 'RedHat' else 'admin' }}"
     io_method: "{{ lookup('env', 'IO_METHOD') }}"
+    artifact_filename: "tde-{{ lookup('env','VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.tar.gz"
     cacheable: true
 
 - name: Set PostgreSQL config path for Debian/Ubuntu
