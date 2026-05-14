@@ -110,6 +110,10 @@ def host(request):
         preload_libs = "pg_stat_monitor,pgaudit,set_user"
         if int(MAJOR_VER) >= 17:
             preload_libs = f"pg_tde,{preload_libs}"
+        pg_cron_min = PG_CRON_MIN_VERSIONS.get(int(MAJOR_VER))
+        pg_cron_available = pg_cron_min and version.parse(MAJOR_MINOR_VER) >= pg_cron_min
+        if pg_cron_available:
+            preload_libs = f"pg_cron,{preload_libs}"
         run_cmd.extend(
             [
                 "-c",
@@ -128,6 +132,8 @@ def host(request):
                 "wal_level=logical",
             ]
         )
+        if pg_cron_available:
+            run_cmd.extend(["-c", "cron.database_name=postgres"])
 
     subprocess.check_output(run_cmd)
 
@@ -1437,6 +1443,7 @@ def _skip_if_pg_cron_unavailable():
         )
 
 
+@pytest.mark.needs_preload
 def test_pg_cron_extension_version(host):
     _skip_if_pg_cron_unavailable()
     pkg_key = f"percona-pg_cron_{MAJOR_VER}"
@@ -1457,6 +1464,7 @@ def test_pg_cron_extension_version(host):
     host.run("psql -c 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
 
 
+@pytest.mark.needs_preload
 def test_pg_cron_functional(host):
     _skip_if_pg_cron_unavailable()
 
