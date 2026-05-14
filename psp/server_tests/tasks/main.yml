@@ -372,7 +372,9 @@
 
   - name: initdb cluster
     become_user: postgres
-    command: ./initdb -D /opt/pgsql/data
+    command: >
+      ./initdb -D /opt/pgsql/data
+      {{ '--locale=C.UTF-8' if ansible_distribution == 'Debian' else '' }}
     args:
       chdir: /opt/pgsql/bin
       executable: /bin/bash
@@ -481,9 +483,9 @@
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
       TDE_MODE: "1"
-      LANG: C.UTF-8
-      LC_CTYPE: C
-      LC_ALL: C
+      LANG: "C.UTF-8"
+      LC_CTYPE: "C.UTF-8"
+      LC_ALL: "C.UTF-8"
     when:
       - testsuite in ['installcheck-world', 'check-tde']
     register: pg_start_result
@@ -571,11 +573,11 @@
   # Run pg_tde regression tests
   # =============================
   - name: Run check tde tests
-    shell: | 
+    shell: |
       # export VAULT_ROOT_TOKEN_FILE=/tmp/bao_env/bao_token.txt
       # export VAULT_CACERT_FILE=/tmp/bao_env/bao_ca.crt
 
-      # export VAULT_ADDR="https://127.0.0.1:8200"
+      # export VAULT_ADDR="https://127.0.0.1:8202"
       # export VAULT_TOKEN=root
       echo $VAULT_ADDR
 
@@ -614,6 +616,9 @@
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
       PGCTLTIMEOUT: "120"
       PG_TEST_TIMEOUT_DEFAULT: "300"
+      LANG: "C.UTF-8"
+      LC_CTYPE: "C.UTF-8"
+      LC_ALL: "C.UTF-8"
     when: testsuite == 'check-tde'
     ignore_errors: true
     register: regression
@@ -689,7 +694,7 @@
   # Run server regression tests
   # =============================
   - name: Run server regression tests
-    shell: | 
+    shell: |
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
       cd /tmp/postgres/ && make -s check-world -k PROVE_FLAGS='-v -p'
@@ -704,6 +709,9 @@
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
       PGCTLTIMEOUT: "120"
       PG_TEST_TIMEOUT_DEFAULT: "300"
+      LANG: "C.UTF-8"
+      LC_CTYPE: "C.UTF-8"
+      LC_ALL: "C.UTF-8"
     when: testsuite == 'check-server'
     ignore_errors: true
     register: regression
@@ -795,8 +803,8 @@
       INSTALL_DIR: "/opt/pgsql"
       TDE_MODE: "1"
       LANG: "C.UTF-8"
-      LC_CTYPE: "C"
-      LC_ALL: "C"
+      LC_CTYPE: "C.UTF-8"
+      LC_ALL: "C.UTF-8"
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
     ignore_errors: true
     when: testsuite == 'installcheck-world'
@@ -826,9 +834,9 @@
       PG_TEST_PORT_DIR: "/tmp/pg_tde_port"
       INSTALL_DIR: "/opt/pgsql"
       TDE_MODE: "1"
-      LANG: C.UTF-8
-      LC_CTYPE: C
-      LC_ALL: C
+      LANG: "C.UTF-8"
+      LC_CTYPE: "C.UTF-8"
+      LC_ALL: "C.UTF-8"
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
       PGCTLTIMEOUT: "120"
       PG_TEST_TIMEOUT_DEFAULT: "300"
