@@ -35,8 +35,8 @@
       PGHOST: "/run/postgresql, /tmp"
       PGPORT: "5432"
       LANG: "C.UTF-8"
-      LC_CTYPE: "C"
-      LC_ALL: "C"
+      LC_CTYPE: "C.UTF-8"
+      LC_ALL: "C.UTF-8"
       PGCTLTIMEOUT: "120"
       PG_TEST_TIMEOUT_DEFAULT: "300"
     ignore_errors: true
