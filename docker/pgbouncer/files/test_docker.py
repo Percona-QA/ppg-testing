@@ -415,10 +415,13 @@ def test_transaction_mode_handling():
     {setup_sql}
     BEGIN;
     INSERT INTO {target_table} VALUES (999);
-    SELECT count(*) FROM {target_table} WHERE id = 999;
     COMMIT;
+    SELECT count(*) FROM {target_table} WHERE id = 999;
     """
+
     ec, out = run_sql(tx_sql)
-    assert ec == 0, f"Transaction failed: {out}"
-    # 'out' might contain multiple lines; we check that '1' is the result of the SELECT
-    assert "1" in out
+    # Debug: see exactly what the DB returned if it fails
+    assert ec == 0, f"SQL failed with exit code {ec}. Output: {out}"
+
+    # Checking for "1" in the output of the final SELECT
+    assert "1" in out, f"Expected count '1' not found in output: {out}"
