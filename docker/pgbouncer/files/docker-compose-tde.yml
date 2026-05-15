@@ -1,0 +1,67 @@
+services:
+  pg-primary:
+    image: ${PG_IMAGE}
+    container_name: ${PG_CONTAINER_NAME:-pg_primary}
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mysecretpassword
+      PGDATA: /data/db
+      POSTGRES_DB: ${PG_DB:-postgres}
+      POSTGRES_INITDB_ARGS: "--auth-host=md5 --auth-local=md5"
+      WITH_TDE: "${WITH_TDE:-0}"
+    volumes:
+      - pgdata:/data/db
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    # ENABLE_PG_TDE=1 is no longer honored by the image; load pg_tde via
+    # shared_preload_libraries on the postgres command line instead. TDE is
+    # only supported on PG 17+, and this file is only selected by Ansible
+    # when WITH_TDE_EFFECTIVE == '1'.
+    command: postgres -c 'shared_preload_libraries=pg_tde' -c 'max_connections=${MAX_CONNECTIONS}'
+
+  pgbouncer:
+    image: ${PGBOUNCER_IMAGE}
+    container_name: ${PGBOUNCER_CONTAINER_NAME:-pgbouncer}
+    volumes:
+      # Removed :ro from userlist.txt to allow runtime 'echo' injections
+      - ./pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./userlist.txt:/etc/pgbouncer/userlist.txt
+    environment:
+      - PGBOUNCER_ADMIN_USER=${PGBOUNCER_ADMIN_USER}
+      - PGBOUNCER_ADMIN_PASS=${PGBOUNCER_ADMIN_PASS}
+    ports:
+      - "${PGBOUNCER_PORT}:${PGBOUNCER_PORT}"
+    restart: always
+    # Using the default entrypoint is usually better for Percona/Bitnami images, 
+    # but if overriding, ensure the config path is correct.
+    command: pgbouncer /etc/pgbouncer/pgbouncer.ini
+    healthcheck:
+      #nc is great, but psql is a more 'authentic' check for pgbouncer
+      test: ["CMD-SHELL", "nc -z localhost ${PGBOUNCER_PORT}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      pg-primary:
+        condition: service_healthy
+
+  pg_client:
+    image: ${PG_IMAGE}
+    container_name: ${PG_CLIENT_CONTAINER_NAME:-pg_client}
+    entrypoint: ["tail", "-f", "/dev/null"]
+    depends_on:
+      pgbouncer:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'client ready'"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
