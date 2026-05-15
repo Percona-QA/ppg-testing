@@ -423,9 +423,8 @@
       packages:
       - percona-pg_tde{{ postgres_version }}
       - percona-pg_tde{{ postgres_version }}-devel
-
-#  - percona-pg_tde{{ postgres_version }}-debugsource
-#  - percona-pg_tde{{ postgres_version }}-debuginfo
+      - percona-pg_tde{{ postgres_version }}-debugsource
+      - percona-pg_tde{{ postgres_version }}-debuginfo
 
   - name: Initialize Postgres RHEL
     become: true

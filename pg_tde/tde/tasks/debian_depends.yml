@@ -67,6 +67,20 @@
         {% endif %}
     when: ansible_os_family == "Debian"
 
+  - name: Ensure locales package is installed on Debian
+    become: true
+    apt:
+      name: locales
+      state: present
+    when: ansible_distribution == "Debian"
+
+  - name: Generate en_US.UTF-8 locale on Debian
+    become: true
+    community.general.locale_gen:
+      name: en_US.UTF-8
+      state: present
+    when: ansible_distribution == "Debian"
+
   - name: Install rename
     ansible.builtin.shell: sudo DEBIAN_FRONTEND=noninteractive apt install -y rename
   
