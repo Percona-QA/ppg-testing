@@ -132,6 +132,9 @@
     POSTGRES_USER: "{{ postgres_user }}"
     POSTGRES_PASSWORD: "{{ postgres_password }}"
     WITH_TDE: "{{ WITH_TDE_EFFECTIVE | default('0') }}"
+    # When TDE is requested, load pg_tde via -c shared_preload_libraries=pg_tde.
+    # The legacy ENABLE_PG_TDE=1 env var is no longer honored by the image.
+    PG_TDE_PRELOAD: "{{ '-c shared_preload_libraries=pg_tde' if (WITH_TDE_EFFECTIVE | default('0')) == '1' else '' }}"
   when:
     - docker_compose_command | default('') != "ERROR"
   tags:

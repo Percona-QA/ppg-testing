@@ -8,9 +8,8 @@ services:
       PGDATA: /data/db
       POSTGRES_DB: ${PG_DB:-postgres}
       POSTGRES_INITDB_ARGS: "--auth-host=md5 --auth-local=md5"
-      POSTGRES_OPTIONS: "-c max_connections=${MAX_CONNECTIONS}"
+      POSTGRES_OPTIONS: "-c max_connections=${MAX_CONNECTIONS} ${PG_TDE_PRELOAD:-}"
       WITH_TDE: "${WITH_TDE:-0}"
-      ENABLE_PG_TDE: "${WITH_TDE:-0}"
     volumes:
       - pgdata:/data/db
     ports:
