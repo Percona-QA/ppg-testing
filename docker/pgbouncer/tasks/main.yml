@@ -46,11 +46,20 @@
     - prepare
     - always
 
-- name: Copy docker-compose.yml to /tmp/docker_test
+- name: Copy the correct compose file based on TDE setting
   ansible.builtin.copy:
-    src: "../files/docker-compose.yml"
+    # If WITH_TDE_EFFECTIVE is '1', it picks .tde.yml; otherwise, it picks .std.yml.
+    # TDE is only available on PG 17+, which WITH_TDE_EFFECTIVE already enforces.
+    src: "../files/docker-compose-{{ 'tde' if WITH_TDE_EFFECTIVE | bool else 'std' }}.yml"
     dest: "/tmp/docker_test/docker-compose.yml"
     mode: '0644'
+  tags:
+    - prepare
+    - always
+
+- name: Report TDE Status
+  ansible.builtin.debug:
+    msg: "TDE Requested: {{ WITH_TDE_REQUESTED }} | Postgres Version: {{ PG_MAJOR }} | Final Decision: {{ 'TDE ENABLED' if WITH_TDE_EFFECTIVE == '1' else 'STANDARD MODE' }}"
   tags:
     - prepare
     - always
@@ -132,9 +141,6 @@
     POSTGRES_USER: "{{ postgres_user }}"
     POSTGRES_PASSWORD: "{{ postgres_password }}"
     WITH_TDE: "{{ WITH_TDE_EFFECTIVE | default('0') }}"
-    # When TDE is requested, load pg_tde via -c shared_preload_libraries=pg_tde.
-    # The legacy ENABLE_PG_TDE=1 env var is no longer honored by the image.
-    PG_TDE_PRELOAD: "{{ '-c shared_preload_libraries=pg_tde' if (WITH_TDE_EFFECTIVE | default('0')) == '1' else '' }}"
   when:
     - docker_compose_command | default('') != "ERROR"
   tags:
