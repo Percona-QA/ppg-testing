@@ -4,6 +4,15 @@
   become: true
   become_method: sudo
   tasks:
+    - name: Pin postgresql-client-18 to prevent auto-installation during cleanup
+      copy:
+        content: |
+          Package: postgresql-client-18
+          Pin: release *
+          Pin-Priority: -1
+        dest: /etc/apt/preferences.d/no-stock-postgresql-client-18
+      when: ansible_os_family == "Debian"
+
     - name: remove Postgresql deb packages
       apt:
         name: "{{ packages }}"
@@ -79,4 +88,10 @@
         - libpq-dev
         - libpq5-dbgsym
         - libpq5
+      when: ansible_os_family == "Debian"
+
+    - name: Remove apt pin for postgresql-client-18
+      file:
+        path: /etc/apt/preferences.d/no-stock-postgresql-client-18
+        state: absent
       when: ansible_os_family == "Debian"
