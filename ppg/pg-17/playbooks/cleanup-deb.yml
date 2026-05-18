@@ -8,6 +8,7 @@
       apt:
         name: "{{ packages }}"
         state: absent
+      ignore_errors: true
       vars:
         packages:
           - percona-postgresql-17
@@ -40,6 +41,8 @@
           - percona-pgbouncer-dbgsym
           - percona-postgresql-17-wal2json
           - percona-postgresql-17-wal2json-dbgsym
+          - percona-pg-stat-monitor17
+          - percona-pg-stat-monitor17-dbgsym
       when: ansible_os_family == "Debian"
 
     - name: Remove postgresql Debian developer packages
