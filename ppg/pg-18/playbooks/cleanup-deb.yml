@@ -43,12 +43,29 @@
           - percona-postgresql-18-wal2json-dbgsym
           - percona-pg-stat-monitor18
           - percona-pg-stat-monitor18-dbgsym
+          - percona-pg-tde18
+          - percona-pg-tde18-client
+          - percona-pg-tde18-dbgsym
+          - percona-pgpool2
+          - percona-pgpool2-dbgsym
+          - libpgpool2
+          - percona-postgresql-18-cron
+          - percona-postgresql-18-pgvector
+          - percona-postgresql-18-pgvector-dbgsym
+          - percona-pg-oidc-validator18
+          - percona-pg-oidc-validator18-dbgsym
+          - percona-patroni-doc
+          - percona-postgis
+          - percona-postgresql-postgis-scripts
+          - percona-postgresql-18-postgis-3-scripts
+          - percona-pg-gather
       when: ansible_os_family == "Debian"
 
     - name: Remove postgresql Debian developer packages
       apt:
         name: "{{ packages }}"
         state: absent
+      ignore_errors: true
       vars:
         packages:
         - libecpg-compat3
