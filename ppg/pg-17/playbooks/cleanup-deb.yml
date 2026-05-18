@@ -4,7 +4,32 @@
   become: true
   become_method: sudo
   tasks:
-    - name: remove Postgresql deb packages
+    - name: Remove extension and add-on packages first
+      apt:
+        name: "{{ packages }}"
+        state: absent
+      ignore_errors: true
+      vars:
+        packages:
+          - percona-postgresql-17-pgaudit
+          - percona-postgresql-17-repack
+          - percona-postgresql-17-repack-dbgsym
+          - percona-pgaudit17-set-user
+          - percona-pgaudit17-set-user-dbgsym
+          - percona-postgresql-17-wal2json
+          - percona-postgresql-17-wal2json-dbgsym
+          - percona-pg-stat-monitor17
+          - percona-pg-stat-monitor17-dbgsym
+          - percona-pgbackrest
+          - percona-pgbackrest-doc
+          - percona-patroni
+          - percona-patroni-dbgsym
+          - percona-pgbadger
+          - percona-pgbouncer
+          - percona-pgbouncer-dbgsym
+      when: ansible_os_family == "Debian"
+
+    - name: Remove core PostgreSQL deb packages
       apt:
         name: "{{ packages }}"
         state: absent
@@ -27,28 +52,13 @@
           - percona-postgresql-plperl-17-dbgsym
           - percona-postgresql-plpython3-17-dbgsym
           - percona-postgresql-pltcl-17-dbgsym
-          - percona-postgresql-17-pgaudit
-          - percona-postgresql-17-repack
-          - percona-postgresql-17-repack-dbgsym
-          - percona-pgbackrest
-          - percona-pgbackrest-doc
-          - percona-patroni
-          - percona-patroni-dbgsym
-          - percona-pgbadger
-          - percona-pgbouncer
-          - percona-pgaudit17-set-user
-          - percona-pgaudit17-set-user-dbgsym
-          - percona-pgbouncer-dbgsym
-          - percona-postgresql-17-wal2json
-          - percona-postgresql-17-wal2json-dbgsym
-          - percona-pg-stat-monitor17
-          - percona-pg-stat-monitor17-dbgsym
       when: ansible_os_family == "Debian"
 
     - name: Remove postgresql Debian developer packages
       apt:
         name: "{{ packages }}"
         state: absent
+      ignore_errors: true
       vars:
         packages:
         - libecpg-compat3
