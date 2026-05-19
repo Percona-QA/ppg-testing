@@ -85,6 +85,11 @@
     update_cache: yes
   when: ansible_os_family == "Debian"
 
+- name: Disable postgresql DNF module on RHEL/Rocky/OL
+  command: dnf module disable postgresql -y
+  ignore_errors: true
+  when: ansible_os_family == "RedHat"
+
 - name: install Percona Platform for PostgreSQL 14 packages
   include_tasks: ../../../../tasks/install_ppg14.yml
 

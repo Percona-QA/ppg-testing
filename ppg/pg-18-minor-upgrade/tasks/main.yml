@@ -109,6 +109,11 @@
     state: absent
   when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('18.5', '>=', strict=True))
 
+- name: Disable postgresql DNF module on RHEL/Rocky/OL
+  command: dnf module disable postgresql -y
+  ignore_errors: true
+  when: ansible_os_family == "RedHat"
+
 - name: install Percona Platform for PostgreSQL rpm packages for RHEL
   yum:
     name: "{{ packages }}"
