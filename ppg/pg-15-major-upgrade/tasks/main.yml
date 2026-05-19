@@ -142,11 +142,11 @@
   when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('14.18', '>=', strict=True))
 
 - name: install Percona Platform for PostgreSQL rpm packages for RHEL
-  yum:
+  ansible.builtin.dnf:
     name: "{{ packages }}"
     state: latest
     update_cache: yes
-    exclude: "postgresql*"
+    install_weak_deps: false
   vars:
     packages:
         - percona-postgresql-client-common
