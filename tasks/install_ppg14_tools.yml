@@ -423,10 +423,7 @@
       - percona-pg_cron_14
     when:
       - ansible_os_family == "RedHat"
-      - >-
-        (pg_version_to_install | string is version('14.22', '>', strict=True))
-        or
-        (pg_version_to_install | string is version('14.22', '==', strict=True) and lookup('env', 'REPO') == 'testing')
+      - pg_version_to_install | string is version('14.22', '>', strict=True)
 
   - name: Install pg_cron packages Debian
     apt:
@@ -438,10 +435,7 @@
       - percona-postgresql-14-cron
     when:
       - ansible_os_family == "Debian"
-      - >-
-        (pg_version_to_install | string is version('14.22', '>', strict=True))
-        or
-        (pg_version_to_install | string is version('14.22', '==', strict=True) and lookup('env', 'REPO') == 'testing')
+      - pg_version_to_install | string is version('14.22', '>', strict=True)
 
   - name: Configure shared_preload_libraries
     vars:
@@ -450,9 +444,7 @@
         {{
           base_extensions
           + (['pg_cron'] if (
-              (pg_version_to_install | string is version('14.22', '>', strict=True))
-              or
-              (pg_version_to_install | string is version('14.22', '==', strict=True) and lookup('env', 'REPO') == 'testing')
+              pg_version_to_install | string is version('14.22', '>', strict=True)
             ) else [])
         }}
       pg_conf_path: "{{ '/etc/postgresql/14/main/postgresql.conf' if ansible_os_family == 'Debian' else '/var/lib/pgsql/14/data/postgresql.conf' }}"
