@@ -26,6 +26,15 @@ TDE_BINARIES = [
     "pg_tde_waldump",
 ]
 
+# Minimum PostgreSQL versions where llvmjit is functional (fixed build)
+LLVMJIT_MIN_VERSIONS = {
+    14: version.parse("14.23"),
+    15: version.parse("15.18"),
+    16: version.parse("16.14"),
+    17: version.parse("17.10"),
+    18: version.parse("18.4"),
+}
+
 # Minimum PostgreSQL versions where pg_cron is available
 PG_CRON_MIN_VERSIONS = {
     14: version.parse("14.23"),
@@ -1182,6 +1191,14 @@ def test_pg_tde_package_version(host):
         )
 
 
+def _skip_if_llvmjit_unavailable():
+    """Skip if llvmjit is not available (fixed build) for the current PostgreSQL version."""
+    current_ver = version.parse(pg_versions.get("version", "0.0"))
+    min_ver = LLVMJIT_MIN_VERSIONS.get(current_ver.major)
+    if min_ver is None or current_ver < min_ver:
+        pytest.skip(f"llvmjit not available for PostgreSQL {pg_versions.get('version')}")
+
+
 def _llvmjit_lib_path(host):
     """Return the OS-appropriate path to the PostgreSQL lib directory."""
     dist = host.system_info.distribution.lower()
@@ -1200,6 +1217,7 @@ def _llvmjit_pg_config(host):
 
 def test_llvmjit_files_present(host):
     """Strategy 1: Verify that LLVM JIT .so and .bc files are present and non-empty."""
+    _skip_if_llvmjit_unavailable()
     base_path = _llvmjit_lib_path(host)
     expected_files = [
         f"{base_path}/llvmjit.so",
@@ -1215,6 +1233,7 @@ def test_llvmjit_files_present(host):
 def test_llvmjit_rpm_ownership(host):
     """Strategy 2: Verify llvmjit.so and llvmjit_types.bc are owned by the llvmjit RPM package.
     Applies to RHEL-family systems only."""
+    _skip_if_llvmjit_unavailable()
     dist = host.system_info.distribution.lower()
     if dist not in ["redhat", "centos", "rocky", "ol", "rhel"]:
         pytest.skip("RPM ownership check only applies to RHEL-family systems.")
@@ -1232,6 +1251,7 @@ def test_llvmjit_rpm_ownership(host):
 def test_llvmjit_statically_linked(host):
     """Strategy 3: Verify llvmjit.so has no dynamic dependency on libLLVM (statically linked).
     Applies to RHEL-family systems where Percona ships a statically linked LLVM."""
+    _skip_if_llvmjit_unavailable()
     dist = host.system_info.distribution.lower()
     if dist not in ["redhat", "centos", "rocky", "ol", "rhel"]:
         pytest.skip("Static LLVM linking check only applies to RHEL-family systems.")
@@ -1252,6 +1272,7 @@ def test_llvmjit_symbols_present(host):
     (compile_expr, etc.) — those are never dlsym'd directly and are therefore not
     required to be dynamic exports.  _PG_jit_provider_init is the only symbol that
     must appear in the dynamic symbol table on every platform (RHEL, Debian, Ubuntu)."""
+    _skip_if_llvmjit_unavailable()
     so_path = f"{_llvmjit_lib_path(host)}/llvmjit.so"
 
     result = host.run(f"nm -D {so_path} | grep -q '_PG_jit_provider_init'")
@@ -1266,6 +1287,7 @@ def test_llvmjit_no_undefined_cxx_symbols(host):
     Catches the bug where llvmjit.so failed to load at runtime with:
       ERROR: could not load library 'llvmjit.so': undefined symbol: _ZSt21__glibcxx_assert_fail...
     These symbols must be statically linked into llvmjit.so on RHEL builds."""
+    _skip_if_llvmjit_unavailable()
     dist = host.system_info.distribution.lower()
     if dist not in ["redhat", "centos", "rocky", "ol", "rhel"]:
         pytest.skip("Undefined C++ symbol check only applies to RHEL-family systems.")
@@ -1283,6 +1305,7 @@ def test_llvmjit_functional(host):
     """Strategy 5: Verify JIT actually loads and compiles at runtime via EXPLAIN ANALYZE.
     Reproduces the exact failure scenario: if llvmjit.so has undefined symbols the query
     returns ERROR instead of a plan with a JIT: section."""
+    _skip_if_llvmjit_unavailable()
     with host.sudo("postgres"):
         result = host.run(
             "psql -c \""
@@ -1304,6 +1327,7 @@ def test_llvmjit_functional(host):
 
 def test_llvmjit_pg_config_compiled_with_llvm(host):
     """Strategy 6: Verify PostgreSQL was compiled with --with-llvm via pg_config --configure."""
+    _skip_if_llvmjit_unavailable()
     pg_config = _llvmjit_pg_config(host)
     result = host.run(f"{pg_config} --configure")
     assert result.rc == 0, f"pg_config --configure failed: {result.stderr}"

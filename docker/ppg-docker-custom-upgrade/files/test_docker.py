@@ -477,8 +477,30 @@ def test_telemetry_packages_not_installed(host, package):
     )
 
 
+# Minimum PPG patch versions where llvmjit is functional (fixed build)
+LLVMJIT_MIN_VERSIONS = {
+    14: version.parse("14.23"),
+    15: version.parse("15.18"),
+    16: version.parse("16.14"),
+    17: version.parse("17.10"),
+    18: version.parse("18.4"),
+}
+
+
+def _skip_if_llvmjit_unavailable():
+    """Skip the calling test if llvmjit is not functional for the current PG version."""
+    current_ver = version.parse(MAJOR_MINOR_VER)
+    min_ver = LLVMJIT_MIN_VERSIONS.get(int(MAJOR_VER))
+    if min_ver is None or current_ver < min_ver:
+        pytest.skip(
+            f"llvmjit not available for PostgreSQL {MAJOR_MINOR_VER} "
+            f"(requires >= {min_ver})"
+        )
+
+
 def test_llvmjit_files_present(host):
     """Strategy 1: Verify that LLVM JIT .so and .bc files are present and non-empty."""
+    _skip_if_llvmjit_unavailable()
     lib_path = f"/usr/pgsql-{MAJOR_VER}/lib"
     expected_files = [
         f"{lib_path}/llvmjit.so",
@@ -493,6 +515,7 @@ def test_llvmjit_files_present(host):
 
 def test_llvmjit_rpm_ownership(host):
     """Strategy 2: Verify llvmjit.so and llvmjit_types.bc are owned by the llvmjit RPM package."""
+    _skip_if_llvmjit_unavailable()
     lib_path = f"/usr/pgsql-{MAJOR_VER}/lib"
     expected_pkg = f"percona-postgresql{MAJOR_VER}-llvmjit"
     for filename in ["llvmjit.so", "llvmjit_types.bc"]:
@@ -506,6 +529,7 @@ def test_llvmjit_rpm_ownership(host):
 
 def test_llvmjit_statically_linked(host):
     """Strategy 3: Verify llvmjit.so has no dynamic dependency on libLLVM (statically linked)."""
+    _skip_if_llvmjit_unavailable()
     so_path = f"/usr/pgsql-{MAJOR_VER}/lib/llvmjit.so"
     result = host.run(f"ldd {so_path}")
     assert result.rc == 0, f"ldd failed on {so_path}: {result.stderr}"
@@ -523,6 +547,7 @@ def test_llvmjit_symbols_present(host):
     (compile_expr, etc.) — those are never dlsym'd directly and are therefore not
     required to be dynamic exports.  _PG_jit_provider_init is the only symbol that
     must appear in the dynamic symbol table on every platform."""
+    _skip_if_llvmjit_unavailable()
     so_path = f"/usr/pgsql-{MAJOR_VER}/lib/llvmjit.so"
     result = host.run(f"nm -D {so_path} | grep -q '_PG_jit_provider_init'")
     assert result.rc == 0, (
@@ -536,6 +561,7 @@ def test_llvmjit_no_undefined_cxx_symbols(host):
     Catches the bug where llvmjit.so failed to load at runtime with:
       ERROR: could not load library 'llvmjit.so': undefined symbol: _ZSt21__glibcxx_assert_fail...
     These symbols must be statically linked into llvmjit.so on RHEL builds."""
+    _skip_if_llvmjit_unavailable()
     so_path = f"/usr/pgsql-{MAJOR_VER}/lib/llvmjit.so"
     result = host.run(f"nm -D {so_path} | awk '$2 == \"U\" && $3 ~ /^_ZSt/ {{print}}'")
     assert result.rc == 0, f"nm -D failed on {so_path}: {result.stderr}"
@@ -550,6 +576,7 @@ def test_llvmjit_functional(host):
     """Strategy 5: Verify JIT actually loads and compiles at runtime via EXPLAIN ANALYZE.
     Reproduces the exact failure scenario: if llvmjit.so has undefined symbols the query
     returns ERROR instead of a plan with a JIT: section."""
+    _skip_if_llvmjit_unavailable()
     result = host.run(
         "psql -c \""
         "SET jit = on; "
@@ -570,6 +597,7 @@ def test_llvmjit_functional(host):
 
 def test_llvmjit_pg_config_compiled_with_llvm(host):
     """Strategy 6: Verify PostgreSQL was compiled with --with-llvm via pg_config --configure."""
+    _skip_if_llvmjit_unavailable()
     result = host.run(f"/usr/pgsql-{MAJOR_VER}/bin/pg_config --configure")
     assert result.rc == 0, f"pg_config --configure failed: {result.stderr}"
     assert "--with-llvm" in result.stdout, (
