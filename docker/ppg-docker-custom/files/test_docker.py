@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import psycopg2
 import pytest
 import testinfra
+from packaging import version
 
 import settings
 
@@ -388,9 +389,8 @@ def test_telemetry_packages_not_installed(host, package):
 
 
 # Minimum PPG patch versions where llvmjit is functional (fixed build)
+# Custom docker images only support major versions 16, 17, and 18
 LLVMJIT_MIN_VERSIONS = {
-    14: version.parse("14.23"),
-    15: version.parse("15.18"),
     16: version.parse("16.14"),
     17: version.parse("17.10"),
     18: version.parse("18.4"),
