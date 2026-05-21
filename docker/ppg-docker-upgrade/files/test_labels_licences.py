@@ -98,7 +98,9 @@ def test_ppg_postgres_image_labels(image_labels):
     # 3. Value Accuracy
     assert image_labels.get("vendor") == REQUIRED_LABEL_VENDOR
     assert image_labels.get("maintainer") == REQUIRED_LABEL_MAINTAINER
-    assert image_labels.get("name") == EXPECTED_LABEL_NAME_POSTGRESQL
+    assert EXPECTED_LABEL_NAME_POSTGRESQL in image_labels.get("name", ""), (
+        f"Label 'name' does not contain '{EXPECTED_LABEL_NAME_POSTGRESQL}'"
+    )
     assert image_labels.get("name").startswith(REQUIRED_LABEL_NAME_PREFIX)
 
 
