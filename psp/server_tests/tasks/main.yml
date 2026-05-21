@@ -235,7 +235,7 @@
       dest: /tmp/pg_tde
       track_submodules: true
     vars:
-      repo: "https://github.com/percona/pg_tde.git"
+      repo: "{{ lookup('env', 'TDE_REPO') }}"
       version: "{{ lookup('env', 'TDE_BRANCH') }}"
     become_user: postgres
     when:
