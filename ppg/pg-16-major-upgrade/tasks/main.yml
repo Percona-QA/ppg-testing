@@ -16,11 +16,11 @@
     pg_version_to_install: "{{ lookup('env', 'FROM_VERSION') | replace('ppg-','') }}"
     upgrade_to_pg_version: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
 
-- name: End play on Ubuntu 26 and versions older than 16.14
+- name: End play on Ubuntu 26 and versions older than 15.18
   meta: end_host
   when: ansible_distribution == "Ubuntu" and
     ansible_distribution_major_version == "26" and
-    pg_version_to_install | string is version('16.14', '<', strict=True)
+    pg_version_to_install | string is version('15.18', '<', strict=True)
 
 - name: End play on rocky linux 9
   meta: end_play

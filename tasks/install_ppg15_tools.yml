@@ -314,7 +314,7 @@
         - percona-pgpool-II-pg15-extensions
     when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('15.2', '>=', strict=True))
 
-  - name: Install percona-pgpool Debian
+  - name: Install percona-pgpool Debian (libpgpool2 for < 15.18)
     apt:
       name: "{{ packages }}"
       state: latest
@@ -323,7 +323,23 @@
       packages:
         - percona-pgpool2
         - libpgpool2
-    when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('15.2', '>=', strict=True))
+    when: >
+      ansible_os_family == "Debian" and
+      pg_version_to_install | string is version('15.2', '>=', strict=True) and
+      pg_version_to_install | string is version('15.18', '<', strict=True)
+
+  - name: Install percona-pgpool Debian (libpgpoolpcp3 for >= 15.18)
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pgpool2
+        - libpgpoolpcp3
+    when: >
+      ansible_os_family == "Debian" and
+      pg_version_to_install | string is version('15.18', '>=', strict=True)
 
   - name: Enable llvm-toolset for RHEL8 to install PostGIS
     become: true
@@ -420,10 +436,7 @@
       - percona-pg_cron_15
     when:
       - ansible_os_family == "RedHat"
-      - >-
-        (pg_version_to_install | string is version('15.17', '>', strict=True))
-        or
-        (pg_version_to_install | string is version('15.17', '==', strict=True) and lookup('env', 'REPO') == 'testing')
+      - pg_version_to_install | string is version('15.17', '>', strict=True)
 
   - name: Install pg_cron packages Debian
     apt:
@@ -435,10 +448,7 @@
       - percona-postgresql-15-cron
     when:
       - ansible_os_family == "Debian"
-      - >-
-        (pg_version_to_install | string is version('15.17', '>', strict=True))
-        or
-        (pg_version_to_install | string is version('15.17', '==', strict=True) and lookup('env', 'REPO') == 'testing')
+      - pg_version_to_install | string is version('15.17', '>', strict=True)
 
   - name: Configure shared_preload_libraries
     vars:
@@ -447,9 +457,7 @@
         {{
           base_extensions
           + (['pg_cron'] if (
-              (pg_version_to_install | string is version('15.17', '>', strict=True))
-              or
-              (pg_version_to_install | string is version('15.17', '==', strict=True) and lookup('env', 'REPO') == 'testing')
+              pg_version_to_install | string is version('15.17', '>', strict=True)
             ) else [])
         }}
       pg_conf_path: "{{ '/etc/postgresql/15/main/postgresql.conf' if ansible_os_family == 'Debian' else '/var/lib/pgsql/15/data/postgresql.conf' }}"

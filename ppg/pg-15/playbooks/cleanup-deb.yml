@@ -4,10 +4,36 @@
   become: true
   become_method: sudo
   tasks:
-    - name: remove Postgresql deb packages
+    - name: Remove extension and add-on packages first
       apt:
         name: "{{ packages }}"
         state: absent
+      ignore_errors: true
+      vars:
+        packages:
+          - percona-postgresql-15-pgaudit
+          - percona-postgresql-15-repack
+          - percona-postgresql-15-repack-dbgsym
+          - percona-pgaudit15-set-user
+          - percona-pgaudit15-set-user-dbgsym
+          - percona-postgresql-15-wal2json
+          - percona-postgresql-15-wal2json-dbgsym
+          - percona-pg-stat-monitor15
+          - percona-pg-stat-monitor15-dbgsym
+          - percona-pgbackrest
+          - percona-pgbackrest-doc
+          - percona-patroni
+          - percona-patroni-dbgsym
+          - percona-pgbadger
+          - percona-pgbouncer
+          - percona-pgbouncer-dbgsym
+      when: ansible_os_family == "Debian"
+
+    - name: Remove core PostgreSQL deb packages
+      apt:
+        name: "{{ packages }}"
+        state: absent
+      ignore_errors: true
       vars:
         packages:
           - percona-postgresql-15
@@ -26,32 +52,13 @@
           - percona-postgresql-plperl-15-dbgsym
           - percona-postgresql-plpython3-15-dbgsym
           - percona-postgresql-pltcl-15-dbgsym
-          - percona-postgresql-15-pgaudit
-          - percona-postgresql-15-repack
-          - percona-postgresql-15-repack-dbgsym
-          - percona-pgbackrest
-          - percona-pgbackrest-doc
-          - percona-patroni
-          - percona-patroni-dbgsym
-          - percona-pgbadger
-          - percona-pgbouncer
-          - percona-pgaudit15-set-user
-          - percona-pgaudit15-set-user-dbgsym
-          - percona-pgbouncer-dbgsym
-          - percona-postgresql-15-wal2json
-          - percona-postgresql-15-wal2json-dbgsym
-      when: ansible_distribution == "Debian"
-
-    - name: remove patroni ubuntu
-      apt:
-        name: percona-patroni
-        state: absent
-      when: ansible_distribution == "Ubuntu"
+      when: ansible_os_family == "Debian"
 
     - name: Remove postgresql Debian developer packages
       apt:
         name: "{{ packages }}"
         state: absent
+      ignore_errors: true
       vars:
         packages:
         - libecpg-compat3

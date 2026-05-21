@@ -561,15 +561,20 @@ class TestPostUpgradePackages:
         missing = [f for f in config_files if not new_host.file(f).exists]
         assert not missing, f"PostgreSQL config files missing after upgrade: {missing}"
 
-    def test_telemetry_packages_not_installed(self, upgrade_pipeline):
+    def test_telemetry_agent_installed(self, upgrade_pipeline):
+        """percona-telemetry-agent must be present in PG 14–17 images and is
+        not available from PG 18 onwards (mirrors ppg-docker behaviour)."""
+        if int(NEW_MAJOR) >= 18:
+            pytest.skip(
+                f"percona-telemetry-agent not available in PG {NEW_MAJOR} — skipping"
+            )
         new_host = upgrade_pipeline["new_host"]
-        excluded = ["percona-telemetry-agent"] + [
-            f"percona-pg-telemetry{ver}" for ver in ["16", "17", "18"] if ver != NEW_MAJOR
-        ]
-        installed = [pkg for pkg in excluded if new_host.run(f"rpm -q {pkg}").rc == 0]
-        assert not installed, (
-            f"Packages that should not be installed in PG{NEW_MAJOR} image: {installed}"
+        result = new_host.run("rpm -q percona-telemetry-agent")
+        assert result.rc == 0, (
+            f"percona-telemetry-agent should be installed in PG {NEW_MAJOR} image "
+            f"but was not found"
         )
+
 
 
 # ── Shared extension metadata ─────────────────────────────────────────────────
@@ -969,5 +974,31 @@ class TestUpgradeImageExtensionFiles:
         result = upgrade_image_host.run(f"test -f {so_path}")
         assert result.rc == 0, (
             f"{label}: .so missing at {so_path!r} in upgrade image (PG {major})"
+        )
+
+    @pytest.mark.parametrize(
+        "major",
+        list(_UPGRADE_IMAGE_PG_VERSIONS.keys()),
+        ids=[f"pg{m}" for m in _UPGRADE_IMAGE_PG_VERSIONS],
+    )
+    def test_pg_telemetry_package_installed(self, upgrade_image_host, major):
+        """``percona-pg-telemetry{major}`` must be present in the upgrade image
+        for PG 14–17.  Telemetry is not available from PG 18 onwards."""
+        if int(major) >= 18:
+            pytest.skip(
+                f"percona-pg-telemetry not available for PG {major} — skipping"
+            )
+        result = upgrade_image_host.run(f"rpm -q percona-pg-telemetry{major}")
+        assert result.rc == 0, (
+            f"percona-pg-telemetry{major} should be installed in upgrade image "
+            f"(PG {major})"
+        )
+
+    def test_telemetry_agent_installed(self, upgrade_image_host):
+        """``percona-telemetry-agent`` must be present in the upgrade image.
+        The image ships PG 14–17 which all require it."""
+        result = upgrade_image_host.run("rpm -q percona-telemetry-agent")
+        assert result.rc == 0, (
+            "percona-telemetry-agent should be installed in upgrade image"
         )
 

@@ -22,16 +22,41 @@ TDE_BINARIES = [
     "pg_tde_resetwal",
     "pg_tde_restore_encrypt",
     "pg_tde_rewind",
+    "pg_tde_upgrade",
     "pg_tde_waldump",
 ]
 
+# Minimum PostgreSQL versions where llvmjit is functional (fixed build)
+LLVMJIT_MIN_VERSIONS = {
+    14: version.parse("14.23"),
+    15: version.parse("15.18"),
+    16: version.parse("16.14"),
+    17: version.parse("17.10"),
+    18: version.parse("18.4"),
+}
+
 # Minimum PostgreSQL versions where pg_cron is available
 PG_CRON_MIN_VERSIONS = {
-    14: version.parse("14.22"),
-    15: version.parse("15.17"),
-    16: version.parse("16.13"),
-    17: version.parse("17.9"),
-    18: version.parse("18.3"),
+    14: version.parse("14.23"),
+    15: version.parse("15.18"),
+    16: version.parse("16.14"),
+    17: version.parse("17.10"),
+    18: version.parse("18.4"),
+}
+
+# Minimum PostgreSQL versions where pg_tde_upgrade binary is available
+PG_TDE_UPGRADE_MIN_VERSIONS = {
+    17: version.parse("17.10"),
+    18: version.parse("18.4"),
+}
+
+# Minimum PostgreSQL versions where libpgpoolpcp3 replaces libpgpool2 on Debian/Ubuntu
+LIBPGPOOLPCP3_MIN_VERSIONS = {
+    14: version.parse("14.23"),
+    15: version.parse("15.18"),
+    16: version.parse("16.14"),
+    17: version.parse("17.10"),
+    18: version.parse("18.4"),
 }
 
 # Minimum PostgreSQL versions where pg_gather install location changed
@@ -750,6 +775,35 @@ def test_pgpool_package_version(host):
     assert pg_versions["pgpool"]['version'] in pgpool.version, pgpool.version
 
 
+def test_pgpool_libpgpool_package(host):
+    """Verify the correct libpgpool variant is installed on Debian/Ubuntu.
+    libpgpoolpcp3 replaces libpgpool2 from: 14.23, 15.18, 16.14, 17.10, 18.4."""
+    dist = host.system_info.distribution.lower()
+    if dist not in ["ubuntu", "debian"]:
+        pytest.skip("libpgpool package check only applies to Debian/Ubuntu.")
+
+    current_ver = version.parse(pg_versions.get("version", "0.0"))
+    min_ver = LIBPGPOOLPCP3_MIN_VERSIONS.get(current_ver.major)
+
+    if min_ver is not None and current_ver >= min_ver:
+        pkg = host.package("libpgpoolpcp3")
+        assert pkg.is_installed, (
+            f"libpgpoolpcp3 should be installed on PostgreSQL {current_ver} "
+            f"(>= {min_ver}) but is not."
+        )
+        old_pkg = host.package("libpgpool2")
+        assert not old_pkg.is_installed, (
+            f"libpgpool2 should NOT be installed on PostgreSQL {current_ver} "
+            f"(replaced by libpgpoolpcp3 from {min_ver})."
+        )
+    else:
+        pkg = host.package("libpgpool2")
+        assert pkg.is_installed, (
+            f"libpgpool2 should be installed on PostgreSQL {current_ver} "
+            f"(libpgpoolpcp3 not available until {min_ver})."
+        )
+
+
 def test_pgpool_binary_version(host):
     dist = host.system_info.distribution
     if dist.lower() in ["redhat", "centos", "rocky", "ol", "rhel",'ubuntu']:
@@ -969,6 +1023,16 @@ def test_tde_binaries_present(host, binary):
     if int(settings.MAJOR_VER) < 17:
         pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
 
+    # pg_tde_upgrade was introduced in 17.10 / 18.4.
+    if binary == "pg_tde_upgrade":
+        current_ver = version.parse(pg_versions.get("version", "0.0"))
+        min_ver = PG_TDE_UPGRADE_MIN_VERSIONS.get(current_ver.major)
+        if min_ver is None or current_ver < min_ver:
+            pytest.skip(
+                f"pg_tde_upgrade not available on PostgreSQL {pg_versions.get('version')} "
+                f"(requires >= {min_ver})"
+            )
+
     dist = host.system_info.distribution.lower()
 
     # Determine the PostgreSQL 18 bin directory
@@ -1127,28 +1191,150 @@ def test_pg_tde_package_version(host):
         )
 
 
-def test_llvmjit_files_present(host):
-    """
-    Ensure LLVM JIT .bc and .so files required by PostgreSQL are present.
-    Applies only to PostgreSQL installations on Debian/Ubuntu systems.
-    """
+def _skip_if_llvmjit_unavailable():
+    """Skip if llvmjit is not available (fixed build) for the current PostgreSQL version."""
+    current_ver = version.parse(pg_versions.get("version", "0.0"))
+    min_ver = LLVMJIT_MIN_VERSIONS.get(current_ver.major)
+    if min_ver is None or current_ver < min_ver:
+        pytest.skip(f"llvmjit not available for PostgreSQL {pg_versions.get('version')}")
 
+
+def _llvmjit_lib_path(host):
+    """Return the OS-appropriate path to the PostgreSQL lib directory."""
     dist = host.system_info.distribution.lower()
-    if dist not in ["debian", "ubuntu"]:
-        pytest.skip("LLVM JIT file verification only applies to Debian/Ubuntu package installations.")
+    if dist in ["redhat", "centos", "rocky", "ol", "rhel"]:
+        return f"/usr/pgsql-{MAJOR_VER}/lib"
+    return f"/usr/lib/postgresql/{MAJOR_VER}/lib"
 
-    base_path = f"/usr/lib/postgresql/{MAJOR_VER}/lib"
 
+def _llvmjit_pg_config(host):
+    """Return the OS-appropriate pg_config binary path."""
+    dist = host.system_info.distribution.lower()
+    if dist in ["redhat", "centos", "rocky", "ol", "rhel"]:
+        return f"/usr/pgsql-{MAJOR_VER}/bin/pg_config"
+    return f"/usr/lib/postgresql/{MAJOR_VER}/bin/pg_config"
+
+
+def test_llvmjit_files_present(host):
+    """Strategy 1: Verify that LLVM JIT .so and .bc files are present and non-empty."""
+    _skip_if_llvmjit_unavailable()
+    base_path = _llvmjit_lib_path(host)
     expected_files = [
-        f"{base_path}/llvmjit_types.bc",
         f"{base_path}/llvmjit.so",
+        f"{base_path}/llvmjit_types.bc",
     ]
-
     for path in expected_files:
         f = host.file(path)
         assert f.exists, f"Missing LLVM JIT file: {path}"
         assert f.is_file, f"Path exists but is not a file: {path}"
         assert f.size > 0, f"File {path} exists but is empty!"
+
+
+def test_llvmjit_rpm_ownership(host):
+    """Strategy 2: Verify llvmjit.so and llvmjit_types.bc are owned by the llvmjit RPM package.
+    Applies to RHEL-family systems only."""
+    _skip_if_llvmjit_unavailable()
+    dist = host.system_info.distribution.lower()
+    if dist not in ["redhat", "centos", "rocky", "ol", "rhel"]:
+        pytest.skip("RPM ownership check only applies to RHEL-family systems.")
+    lib_path = _llvmjit_lib_path(host)
+    expected_pkg = f"percona-postgresql{MAJOR_VER}-llvmjit"
+    for filename in ["llvmjit.so", "llvmjit_types.bc"]:
+        path = f"{lib_path}/{filename}"
+        result = host.run(f"rpm -qf {path}")
+        assert result.rc == 0, f"rpm -qf failed for {path}: {result.stderr}"
+        assert expected_pkg in result.stdout, (
+            f"{path} is not owned by {expected_pkg}. Got: {result.stdout.strip()}"
+        )
+
+
+def test_llvmjit_statically_linked(host):
+    """Strategy 3: Verify llvmjit.so has no dynamic dependency on libLLVM (statically linked).
+    Applies to RHEL-family systems where Percona ships a statically linked LLVM."""
+    _skip_if_llvmjit_unavailable()
+    dist = host.system_info.distribution.lower()
+    if dist not in ["redhat", "centos", "rocky", "ol", "rhel"]:
+        pytest.skip("Static LLVM linking check only applies to RHEL-family systems.")
+    so_path = f"{_llvmjit_lib_path(host)}/llvmjit.so"
+    result = host.run(f"ldd {so_path}")
+    assert result.rc == 0, f"ldd failed on {so_path}: {result.stderr}"
+    assert "libLLVM" not in result.stdout, (
+        f"llvmjit.so has a dynamic libLLVM dependency — expected static linking.\n"
+        f"ldd output:\n{result.stdout}"
+    )
+
+
+def test_llvmjit_symbols_present(host):
+    """Strategy 4: Verify the JIT provider entry point is exported from llvmjit.so.
+
+    PostgreSQL loads the JIT provider via dlopen() + dlsym("_PG_jit_provider_init").
+    That function fills a JitProviderCallbacks struct with internal function pointers
+    (compile_expr, etc.) — those are never dlsym'd directly and are therefore not
+    required to be dynamic exports.  _PG_jit_provider_init is the only symbol that
+    must appear in the dynamic symbol table on every platform (RHEL, Debian, Ubuntu)."""
+    _skip_if_llvmjit_unavailable()
+    so_path = f"{_llvmjit_lib_path(host)}/llvmjit.so"
+
+    result = host.run(f"nm -D {so_path} | grep -q '_PG_jit_provider_init'")
+    assert result.rc == 0, (
+        f"Expected JIT symbol '_PG_jit_provider_init' not found in {so_path}. "
+        f"The library may be missing or incorrectly built."
+    )
+
+
+def test_llvmjit_no_undefined_cxx_symbols(host):
+    """Strategy 4b: Verify llvmjit.so has no undefined C++ stdlib symbols (_ZSt*).
+    Catches the bug where llvmjit.so failed to load at runtime with:
+      ERROR: could not load library 'llvmjit.so': undefined symbol: _ZSt21__glibcxx_assert_fail...
+    These symbols must be statically linked into llvmjit.so on RHEL builds."""
+    _skip_if_llvmjit_unavailable()
+    dist = host.system_info.distribution.lower()
+    if dist not in ["redhat", "centos", "rocky", "ol", "rhel"]:
+        pytest.skip("Undefined C++ symbol check only applies to RHEL-family systems.")
+    so_path = f"{_llvmjit_lib_path(host)}/llvmjit.so"
+    result = host.run(f"nm -D {so_path} | awk '$2 == \"U\" && $3 ~ /^_ZSt/ {{print}}'")
+    assert result.rc == 0, f"nm -D failed on {so_path}: {result.stderr}"
+    assert result.stdout.strip() == "", (
+        f"llvmjit.so has undefined C++ stdlib symbols (_ZSt*) — "
+        f"this will cause a runtime load failure.\n"
+        f"Undefined symbols found:\n{result.stdout}"
+    )
+
+
+def test_llvmjit_functional(host):
+    """Strategy 5: Verify JIT actually loads and compiles at runtime via EXPLAIN ANALYZE.
+    Reproduces the exact failure scenario: if llvmjit.so has undefined symbols the query
+    returns ERROR instead of a plan with a JIT: section."""
+    _skip_if_llvmjit_unavailable()
+    with host.sudo("postgres"):
+        result = host.run(
+            "psql -c \""
+            "SET jit = on; "
+            "SET jit_above_cost = 0; "
+            "SET jit_inline_above_cost = 0; "
+            "SET jit_optimize_above_cost = 0; "
+            "EXPLAIN (ANALYZE, VERBOSE, BUFFERS) "
+            "SELECT count(*) FROM generate_series(1, 1000000) g WHERE g % 2 = 0;\""
+        )
+    assert result.rc == 0, (
+        f"JIT load failed — possible undefined symbol in llvmjit.so.\n"
+        f"stderr: {result.stderr}\nstdout: {result.stdout}"
+    )
+    assert "JIT:" in result.stdout, (
+        f"JIT was not triggered. EXPLAIN ANALYZE output:\n{result.stdout}"
+    )
+
+
+def test_llvmjit_pg_config_compiled_with_llvm(host):
+    """Strategy 6: Verify PostgreSQL was compiled with --with-llvm via pg_config --configure."""
+    _skip_if_llvmjit_unavailable()
+    pg_config = _llvmjit_pg_config(host)
+    result = host.run(f"{pg_config} --configure")
+    assert result.rc == 0, f"pg_config --configure failed: {result.stderr}"
+    assert "--with-llvm" in result.stdout, (
+        f"PostgreSQL was not compiled with --with-llvm.\n"
+        f"pg_config --configure output:\n{result.stdout}"
+    )
 
 
 def test_pg_oidc_validator_package_version(host):

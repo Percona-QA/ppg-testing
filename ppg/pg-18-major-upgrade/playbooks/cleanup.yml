@@ -26,6 +26,7 @@
           - percona-pg-stat-monitor17
           - percona-pgaudit17-set-user
           - percona-postgresql-17-wal2json
+      ignore_errors: true
       when: ansible_os_family == "Debian"
 
 - name: Cleanup
@@ -33,11 +34,35 @@
   become: true
   become_method: sudo
   tasks:
-    - name: remove Postgresql deb packages
+    - name: Remove PG17 extension and add-on packages first
       apt:
         name: "{{ packages }}"
         state: absent
         update_cache: true
+      ignore_errors: true
+      vars:
+        packages:
+          - percona-postgresql-17-pgaudit
+          - percona-postgresql-17-pgaudit-dbgsym
+          - percona-postgresql-17-repack
+          - percona-postgresql-17-repack-dbgsym
+          - percona-postgresql-17-postgis-3
+          - percona-postgresql-17-wal2json
+          - percona-postgresql-17-wal2json-dbgsym
+          - percona-pg-stat-monitor17
+          - percona-pg-stat-monitor17-dbgsym
+          - percona-pgaudit17-set-user
+          - percona-pgaudit17-set-user-dbgsym
+          - percona-pg-telemetry17
+          - percona-postgresql-postgis
+          - percona-postgresql-postgis-scripts
+      when: ansible_os_family == "Debian"
+
+    - name: Remove core PG17 deb packages
+      apt:
+        name: "{{ packages }}"
+        state: absent
+      ignore_errors: true
       vars:
         packages:
           - percona-postgresql-17
@@ -52,24 +77,14 @@
           - percona-postgresql-plperl-17-dbgsym
           - percona-postgresql-plpython3-17-dbgsym
           - percona-postgresql-pltcl-17-dbgsym
-          - percona-pg-stat-monitor17
-          - percona-pgaudit17-set-user
-          - percona-postgresql-17-wal2json
-      ignore_errors: true
       when: ansible_os_family == "Debian"
 
-    # - name: Remove Percona Platform for PostgreSQL deb packages
-    #   apt:
-    #     name: "{{ packages }}"
-    #     state: absent
-    #   vars:
-    #     packages:
-    #     - percona-postgresql-plpython-17
-    #     - percona-postgresql-plpython-17-dbgsym
-    #     - percona-postgresql-server-dev-17-dbgsym
-    #   when:
-    #     - ansible_os_family == "Debian"
-    #     - lookup('env', 'PG_VERSION') == "ppg-17.5"
+    - name: Fix any remaining broken packages after PG17 removal
+      shell: apt-get -f install -y
+      args:
+        executable: /bin/bash
+      ignore_errors: true
+      when: ansible_os_family == "Debian"
 
     - name: remove Postgresql rpm packages
       yum:
@@ -77,7 +92,6 @@
         state: absent
       vars:
         packages:
-          - percona-postgresql17
           - percona-postgresql17
           - percona-postgresql17-contrib
           - percona-postgresql17-debuginfo
@@ -90,7 +104,6 @@
           - percona-postgresql17-pltcl
           - percona-postgresql17-server
           - percona-postgresql17-test
-          - percona-postgresql17-debuginfo
           - percona-postgresql17-debugsource
           - percona-postgresql17-devel-debuginfo
           - percona-postgresql17-libs-debuginfo
@@ -99,26 +112,12 @@
           - percona-postgresql17-plpython3-debuginfo
           - percona-postgresql17-pltcl-debuginfo
           - percona-postgresql17-server-debuginfo
+      ignore_errors: true
       when: ansible_os_family == "RedHat"
-
-    # - name: remove pgaudit deb packages
-    #   apt:
-    #     name: percona-postgresql-17-pgaudit
-    #     state: absent
-    #   when: ansible_os_family == "Debian"
-
-    # - name: remove pg_repack deb packages
-    #   apt:
-    #     name: "{{ packages }}"
-    #     state: absent
-    #   vars:
-    #     packages:
-    #       - percona-postgresql-17-repack
-    #       - percona-postgresql-17-repack-dbgsym
-    #   when: ansible_os_family == "Debian"
 
     - name: remove pg_repack rpm packages
       yum:
         name: percona-pg_repack17
         state: absent
+      ignore_errors: true
       when: ansible_os_family == "RedHat"

@@ -32,6 +32,7 @@ TDE_BINARIES = [
     "pg_tde_resetwal",
     "pg_tde_restore_encrypt",
     "pg_tde_rewind",
+    "pg_tde_upgrade",
     "pg_tde_waldump",
 ]
 
@@ -40,6 +41,12 @@ PG_CRON_MIN_VERSIONS = {
     14: version.parse("14.23"),
     15: version.parse("15.18"),
     16: version.parse("16.14"),
+    17: version.parse("17.10"),
+    18: version.parse("18.4"),
+}
+
+# Minimum PostgreSQL versions where pg_tde_upgrade binary is available in tarballs
+PG_TDE_UPGRADE_MIN_VERSIONS = {
     17: version.parse("17.10"),
     18: version.parse("18.4"),
 }
@@ -815,6 +822,16 @@ def test_tde_binaries_present(host, binary):
     if int(settings.MAJOR_VER) < 17:
         pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
 
+    # pg_tde_upgrade was introduced in 17.10 / 18.4.
+    if binary == "pg_tde_upgrade":
+        current_ver = version.parse(pg_versions.get("version", "0.0"))
+        min_ver = PG_TDE_UPGRADE_MIN_VERSIONS.get(current_ver.major)
+        if min_ver is None or current_ver < min_ver:
+            pytest.skip(
+                f"pg_tde_upgrade not available on PostgreSQL {pg_versions.get('version')} "
+                f"(requires >= {min_ver})"
+            )
+
     dist = host.system_info.distribution.lower()
 
     bin_path = f"{PG_PATH}/bin/{binary}"
@@ -1053,30 +1070,98 @@ def test_pg_cron_extension(host, get_psql_binary_path):
             final_count = host.run(f"{psql} \"SELECT count(*) FROM pg_extension WHERE extname = 'pg_cron';\"").stdout.strip()
             assert final_count == "0", "Failed to drop pg_cron extension cleanly"
 
+# NOTE: Percona PostgreSQL tarballs are built without --with-llvm.
+# LLVM JIT is not compiled into the tarball distribution — no llvmjit.so,
+# no llvmjit_types.bc, and pg_config --configure does not show --with-llvm.
+# All llvmjit tests apply only to RPM/DEB package installs and Docker images.
 
-# f"{get_server_path}/share/extension/postgis.control",
-# f"{get_server_path}/lib/postgis-3.so",]
-# sql_dir = f"{get_server_path}/share/extension/"
 
-# def test_llvmjit_files_present(host):
-#     """
-#     Ensure LLVM JIT .bc and .so files required by PostgreSQL are present.
-#     Applies only to PostgreSQL installations on Debian/Ubuntu systems.
-#     """
+# =============================================================================
+# psql wrapper clean-output tests
+#
+# Regression for bug introduced after PG 17.5: the psql wrapper script printed
+# extra path-related lines to stdout, breaking automation and monitoring scripts
+# that parse psql output.  The fix is verified by running a trivial query with
+# -t -A (tuples-only, unaligned) so the only valid stdout line is the query
+# result itself.  Any extra path output from the wrapper appears as additional
+# lines and is caught by the assertion.
+#
+#
+# Three scenarios are covered:
+#   1. Full-path invocation from outside the bin directory
+#   2. Relative ./psql invocation from within the bin directory
+#   3. psql.bin (the underlying binary, documented workaround) — full-path
+# =============================================================================
 
-#     dist = host.system_info.distribution.lower()
-#     if dist not in ["debian", "ubuntu"]:
-#         pytest.skip("LLVM JIT file verification only applies to Debian/Ubuntu package installations.")
+def test_psql_wrapper_no_bare_cd_dash(host, get_server_path):
+    """Static check: the psql wrapper must not contain a bare 'cd -' line.
+    A bare 'cd -' prints the previous directory to stdout (POSIX behaviour),
+    which pollutes psql output on RHEL 9/10 where the libreadline.so.8 branch
+    is taken.  The fix is 'cd - > /dev/null'.  This test confirms the patch
+    was applied before the behavioural tests run."""
+    psql_script = f"{get_server_path}/bin/psql"
+    f = host.file(psql_script)
+    assert f.exists, f"psql wrapper not found at {psql_script}"
+    # grep returns rc=0 if the pattern is found (bad), rc=1 if not found (good)
+    result = host.run(f"grep -P '^\\s+cd -$' {psql_script}")
+    assert result.rc == 1, (
+        f"psql wrapper at {psql_script} still contains a bare 'cd -' line.\n"
+        f"Fix: remove 'cd -' in the wrapper script.\n"
+        f"Matching lines found:\n{result.stdout}"
+    )
 
-#     base_path = f"/usr/lib/postgresql/{MAJOR_VER}/lib"
 
-#     expected_files = [
-#         f"{base_path}/llvmjit_types.bc",
-#         f"{base_path}/llvmjit.so",
-#     ]
+def test_psql_wrapper_clean_output_full_path(host, get_psql_binary_path):
+    """Invoke psql via its full path (outside bin dir) and verify no extra path
+    output appears on stdout.  Uses -t -A so the only expected line is '1'."""
+    with host.sudo("postgres"):
+        result = host.run(f"{get_psql_binary_path} -p {PORT} -t -A -c 'SELECT 1;'")
+    assert result.rc == 0, (
+        f"psql exited with rc={result.rc}.\nstderr: {result.stderr}"
+    )
+    lines = [l for l in result.stdout.splitlines() if l.strip()]
+    assert lines == ["1"], (
+        f"psql wrapper produced unexpected output (extra path lines?).\n"
+        f"Expected exactly ['1'], got: {lines}\n"
+        f"Full stdout:\n{result.stdout}"
+    )
 
-#     for path in expected_files:
-#         f = host.file(path)
-#         assert f.exists, f"Missing LLVM JIT file: {path}"
-#         assert f.is_file, f"Path exists but is not a file: {path}"
-#         assert f.size > 0, f"File {path} exists but is empty!"
+
+def test_psql_wrapper_clean_output_from_bin_dir(host, get_server_path):
+    """Invoke psql as ./psql from within the bin directory and verify no extra
+    path output appears on stdout.  Reproduces the scenario where the wrapper
+    script resolves its own path and may print it."""
+    bin_dir = f"{get_server_path}/bin"
+    with host.sudo("postgres"):
+        result = host.run(f"cd {bin_dir} && ./psql -p {PORT} -t -A -c 'SELECT 1;'")
+    assert result.rc == 0, (
+        f"psql exited with rc={result.rc}.\nstderr: {result.stderr}"
+    )
+    lines = [l for l in result.stdout.splitlines() if l.strip()]
+    assert lines == ["1"], (
+        f"psql wrapper produced unexpected output when invoked from bin dir.\n"
+        f"Expected exactly ['1'], got: {lines}\n"
+        f"Full stdout:\n{result.stdout}"
+    )
+
+
+def test_psql_bin_exists_and_clean_output(host, get_server_path):
+    """Verify psql.bin (the real binary beneath the wrapper) exists and produces
+    clean output.  psql.bin is the documented workaround for the wrapper bug."""
+    psql_bin_path = f"{get_server_path}/bin/psql.bin"
+    f = host.file(psql_bin_path)
+    assert f.exists, (
+        f"psql.bin not found at {psql_bin_path}. "
+        f"Expected alongside the psql wrapper script."
+    )
+    with host.sudo("postgres"):
+        result = host.run(f"{psql_bin_path} -p {PORT} -t -A -c 'SELECT 1;'")
+    assert result.rc == 0, (
+        f"psql.bin exited with rc={result.rc}.\nstderr: {result.stderr}"
+    )
+    lines = [l for l in result.stdout.splitlines() if l.strip()]
+    assert lines == ["1"], (
+        f"psql.bin produced unexpected output.\n"
+        f"Expected exactly ['1'], got: {lines}\n"
+        f"Full stdout:\n{result.stdout}"
+    )

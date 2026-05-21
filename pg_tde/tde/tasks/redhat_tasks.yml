@@ -24,7 +24,8 @@
 
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
-      cd /tmp/pg_tde && make -s installcheck -k
+      cd /tmp/pg_tde && make -s installcheck USE_PGXS=1 -k PROVE_FLAGS='-v -p'
+      #cd /tmp/pg_tde && make -s installcheck -k
     become_user: postgres
     args:
       executable: /bin/bash
@@ -34,11 +35,11 @@
       PGHOST: "/run/postgresql, /tmp"
       PGPORT: "5432"
       LANG: "C.UTF-8"
-      LC_CTYPE: "C"
-      LC_ALL: "C"
-      PGCTLTIMEOUT: 120
-      PG_TEST_TIMEOUT_DEFAULT: 300
-    ignore_errors: yes
+      LC_CTYPE: "C.UTF-8"
+      LC_ALL: "C.UTF-8"
+      PGCTLTIMEOUT: "120"
+      PG_TEST_TIMEOUT_DEFAULT: "300"
+    ignore_errors: true
     register: regression
 
   - name: Show stdout of check tde tests
@@ -67,6 +68,29 @@
       - regression is defined
       - regression.rc != 0
       - diffs_output is defined
+
+  - name: Package tde test artifacts
+    shell: |
+      set -uo pipefail
+      ARTIFACT_DIR="/tmp/test-artifacts"
+      rm -rf "$ARTIFACT_DIR"
+      mkdir -p "$ARTIFACT_DIR"
+      find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      cp -r /tmp/pg_tde/t "$ARTIFACT_DIR/pg_tde_t" 2>/dev/null || true
+      cp -r /tmp/pg_tde/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp test-artifacts
+    args:
+      executable: /bin/bash
+    when: regression is defined
+    ignore_errors: true
+
+  - name: Fetch tde test artifacts to controller
+    fetch:
+      src: "/tmp/{{ artifact_filename }}"
+      dest: "{{ playbook_dir }}/../artifacts/"
+      fail_on_missing: false
+    when: regression is defined
 
   - name: Fail the playbook if tde tests failed
     fail:

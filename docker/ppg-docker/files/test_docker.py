@@ -38,6 +38,7 @@ TDE_BINARIES = [
     "pg_tde_resetwal",
     "pg_tde_restore_encrypt",
     "pg_tde_rewind",
+    "pg_tde_upgrade",
     "pg_tde_waldump",
 ]
 
@@ -109,6 +110,10 @@ def host(request):
         preload_libs = "pg_stat_monitor,pgaudit,set_user"
         if int(MAJOR_VER) >= 17:
             preload_libs = f"pg_tde,{preload_libs}"
+        pg_cron_min = PG_CRON_MIN_VERSIONS.get(int(MAJOR_VER))
+        pg_cron_available = pg_cron_min and version.parse(MAJOR_MINOR_VER) >= pg_cron_min
+        if pg_cron_available:
+            preload_libs = f"pg_cron,{preload_libs}"
         run_cmd.extend(
             [
                 "-c",
@@ -127,6 +132,8 @@ def host(request):
                 "wal_level=logical",
             ]
         )
+        if pg_cron_available:
+            run_cmd.extend(["-c", "cron.database_name=postgres"])
 
     subprocess.check_output(run_cmd)
 
@@ -397,6 +404,114 @@ def test_rpm_package_is_installed(host, package):
     )
 
     print(f"[SUCCESS] {package} version {pkg.version} verified.")
+
+
+def test_llvmjit_files_present(host):
+    """Strategy 1: Verify that LLVM JIT .so and .bc files are present and non-empty."""
+    _skip_if_llvmjit_unavailable()
+    lib_path = f"/usr/pgsql-{MAJOR_VER}/lib"
+    expected_files = [
+        f"{lib_path}/llvmjit.so",
+        f"{lib_path}/llvmjit_types.bc",
+    ]
+    for path in expected_files:
+        f = host.file(path)
+        assert f.exists, f"Missing LLVM JIT file: {path}"
+        assert f.is_file, f"Path exists but is not a file: {path}"
+        assert f.size > 0, f"File {path} exists but is empty!"
+
+
+def test_llvmjit_rpm_ownership(host):
+    """Strategy 2: Verify llvmjit.so and llvmjit_types.bc are owned by the llvmjit RPM package."""
+    _skip_if_llvmjit_unavailable()
+    lib_path = f"/usr/pgsql-{MAJOR_VER}/lib"
+    expected_pkg = f"percona-postgresql{MAJOR_VER}-llvmjit"
+    for filename in ["llvmjit.so", "llvmjit_types.bc"]:
+        path = f"{lib_path}/{filename}"
+        result = host.run(f"rpm -qf {path}")
+        assert result.rc == 0, f"rpm -qf failed for {path}: {result.stderr}"
+        assert expected_pkg in result.stdout, (
+            f"{path} is not owned by {expected_pkg}. Got: {result.stdout.strip()}"
+        )
+
+
+def test_llvmjit_statically_linked(host):
+    """Strategy 3: Verify llvmjit.so has no dynamic dependency on libLLVM (statically linked)."""
+    _skip_if_llvmjit_unavailable()
+    so_path = f"/usr/pgsql-{MAJOR_VER}/lib/llvmjit.so"
+    result = host.run(f"ldd {so_path}")
+    assert result.rc == 0, f"ldd failed on {so_path}: {result.stderr}"
+    assert "libLLVM" not in result.stdout, (
+        f"llvmjit.so has a dynamic libLLVM dependency — expected static linking.\n"
+        f"ldd output:\n{result.stdout}"
+    )
+
+
+def test_llvmjit_symbols_present(host):
+    """Strategy 4: Verify the JIT provider entry point is exported from llvmjit.so.
+
+    PostgreSQL loads the JIT provider via dlopen() + dlsym("_PG_jit_provider_init").
+    That function fills a JitProviderCallbacks struct with internal function pointers
+    (compile_expr, etc.) — those are never dlsym'd directly and are therefore not
+    required to be dynamic exports.  _PG_jit_provider_init is the only symbol that
+    must appear in the dynamic symbol table on every platform."""
+    _skip_if_llvmjit_unavailable()
+    so_path = f"/usr/pgsql-{MAJOR_VER}/lib/llvmjit.so"
+    result = host.run(f"nm -D {so_path} | grep -q '_PG_jit_provider_init'")
+    assert result.rc == 0, (
+        f"Expected JIT symbol '_PG_jit_provider_init' not found in {so_path}. "
+        f"The library may be missing or incorrectly built."
+    )
+
+
+def test_llvmjit_no_undefined_cxx_symbols(host):
+    """Strategy 4b: Verify llvmjit.so has no undefined C++ stdlib symbols (_ZSt*).
+    Catches the bug where llvmjit.so failed to load at runtime with:
+      ERROR: could not load library 'llvmjit.so': undefined symbol: _ZSt21__glibcxx_assert_fail...
+    These symbols must be statically linked into llvmjit.so on RHEL builds."""
+    _skip_if_llvmjit_unavailable()
+    so_path = f"/usr/pgsql-{MAJOR_VER}/lib/llvmjit.so"
+    result = host.run(f"nm -D {so_path} | awk '$2 == \"U\" && $3 ~ /^_ZSt/ {{print}}'")
+    assert result.rc == 0, f"nm -D failed on {so_path}: {result.stderr}"
+    assert result.stdout.strip() == "", (
+        f"llvmjit.so has undefined C++ stdlib symbols (_ZSt*) — "
+        f"this will cause a runtime load failure.\n"
+        f"Undefined symbols found:\n{result.stdout}"
+    )
+
+
+def test_llvmjit_functional(host):
+    """Strategy 5: Verify JIT actually loads and compiles at runtime via EXPLAIN ANALYZE.
+    Reproduces the exact failure scenario: if llvmjit.so has undefined symbols the query
+    returns ERROR instead of a plan with a JIT: section."""
+    _skip_if_llvmjit_unavailable()
+    result = host.run(
+        "psql -c \""
+        "SET jit = on; "
+        "SET jit_above_cost = 0; "
+        "SET jit_inline_above_cost = 0; "
+        "SET jit_optimize_above_cost = 0; "
+        "EXPLAIN (ANALYZE, VERBOSE, BUFFERS) "
+        "SELECT count(*) FROM generate_series(1, 1000000) g WHERE g % 2 = 0;\""
+    )
+    assert result.rc == 0, (
+        f"JIT load failed — possible undefined symbol in llvmjit.so.\n"
+        f"stderr: {result.stderr}\nstdout: {result.stdout}"
+    )
+    assert "JIT:" in result.stdout, (
+        f"JIT was not triggered. EXPLAIN ANALYZE output:\n{result.stdout}"
+    )
+
+
+def test_llvmjit_pg_config_compiled_with_llvm(host):
+    """Strategy 6: Verify PostgreSQL was compiled with --with-llvm via pg_config --configure."""
+    _skip_if_llvmjit_unavailable()
+    result = host.run(f"/usr/pgsql-{MAJOR_VER}/bin/pg_config --configure")
+    assert result.rc == 0, f"pg_config --configure failed: {result.stderr}"
+    assert "--with-llvm" in result.stdout, (
+        f"PostgreSQL was not compiled with --with-llvm.\n"
+        f"pg_config --configure output:\n{result.stdout}"
+    )
 
 
 @pytest.mark.needs_preload
@@ -1119,6 +1234,16 @@ def test_tde_binaries_present(host, binary):
     if int(MAJOR_VER) < 17:
         pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
 
+    # pg_tde_upgrade was introduced in 17.10 / 18.4.
+    if binary == "pg_tde_upgrade":
+        current_ver = version.parse(MAJOR_MINOR_VER)
+        min_ver = PG_TDE_UPGRADE_MIN_VERSIONS.get(int(MAJOR_VER))
+        if min_ver is None or current_ver < min_ver:
+            pytest.skip(
+                f"pg_tde_upgrade not available on PostgreSQL {MAJOR_MINOR_VER} "
+                f"(requires >= {min_ver})"
+            )
+
     dist = host.system_info.distribution.lower()
 
     # Determine the PostgreSQL 18 bin directory
@@ -1298,6 +1423,15 @@ def test_pg_telemetry_extension_version(host):
 
 # --- pg_cron ---
 
+# Minimum PPG patch versions where llvmjit is functional (fixed build)
+LLVMJIT_MIN_VERSIONS = {
+    14: version.parse("14.23"),
+    15: version.parse("15.18"),
+    16: version.parse("16.14"),
+    17: version.parse("17.10"),
+    18: version.parse("18.4"),
+}
+
 # Minimum PPG patch versions that ship pg_cron, keyed by major version integer.
 PG_CRON_MIN_VERSIONS = {
     14: version.parse("14.23"),
@@ -1306,6 +1440,23 @@ PG_CRON_MIN_VERSIONS = {
     17: version.parse("17.10"),
     18: version.parse("18.4"),
 }
+
+# Minimum PPG patch versions that ship pg_tde_upgrade binary, keyed by major version integer.
+PG_TDE_UPGRADE_MIN_VERSIONS = {
+    17: version.parse("17.10"),
+    18: version.parse("18.4"),
+}
+
+
+def _skip_if_llvmjit_unavailable():
+    """Skip the calling test if llvmjit is not functional for the current PG version."""
+    current_ver = version.parse(MAJOR_MINOR_VER)
+    min_ver = LLVMJIT_MIN_VERSIONS.get(int(MAJOR_VER))
+    if min_ver is None or current_ver < min_ver:
+        pytest.skip(
+            f"llvmjit not available for PostgreSQL {MAJOR_MINOR_VER} "
+            f"(requires >= {min_ver})"
+        )
 
 
 def _skip_if_pg_cron_unavailable():
@@ -1319,6 +1470,7 @@ def _skip_if_pg_cron_unavailable():
         )
 
 
+@pytest.mark.needs_preload
 def test_pg_cron_extension_version(host):
     _skip_if_pg_cron_unavailable()
     pkg_key = f"percona-pg_cron_{MAJOR_VER}"
@@ -1339,6 +1491,7 @@ def test_pg_cron_extension_version(host):
     host.run("psql -c 'DROP EXTENSION IF EXISTS pg_cron CASCADE;'")
 
 
+@pytest.mark.needs_preload
 def test_pg_cron_functional(host):
     _skip_if_pg_cron_unavailable()
 

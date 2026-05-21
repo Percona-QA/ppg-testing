@@ -4,10 +4,52 @@
   become: true
   become_method: sudo
   tasks:
-    - name: remove Postgresql deb packages
+    - name: Remove extension and add-on packages first
       apt:
         name: "{{ packages }}"
         state: absent
+      ignore_errors: true
+      vars:
+        packages:
+          - percona-postgresql-18-pgaudit
+          - percona-postgresql-18-repack
+          - percona-postgresql-18-repack-dbgsym
+          - percona-pgaudit18-set-user
+          - percona-pgaudit18-set-user-dbgsym
+          - percona-postgresql-18-wal2json
+          - percona-postgresql-18-wal2json-dbgsym
+          - percona-pg-stat-monitor18
+          - percona-pg-stat-monitor18-dbgsym
+          - percona-pg-tde18
+          - percona-pg-tde18-client
+          - percona-pg-tde18-dbgsym
+          - percona-pgpool2
+          - percona-pgpool2-dbgsym
+          - libpgpool2
+          - percona-postgresql-18-cron
+          - percona-postgresql-18-pgvector
+          - percona-postgresql-18-pgvector-dbgsym
+          - percona-pg-oidc-validator18
+          - percona-pg-oidc-validator18-dbgsym
+          - percona-postgis
+          - percona-postgresql-postgis-scripts
+          - percona-postgresql-18-postgis-3-scripts
+          - percona-pg-gather
+          - percona-pgbackrest
+          - percona-pgbackrest-doc
+          - percona-patroni
+          - percona-patroni-dbgsym
+          - percona-patroni-doc
+          - percona-pgbadger
+          - percona-pgbouncer
+          - percona-pgbouncer-dbgsym
+      when: ansible_os_family == "Debian"
+
+    - name: Remove core PostgreSQL deb packages
+      apt:
+        name: "{{ packages }}"
+        state: absent
+      ignore_errors: true
       vars:
         packages:
           - percona-postgresql-18
@@ -26,32 +68,13 @@
           - percona-postgresql-plperl-18-dbgsym
           - percona-postgresql-plpython3-18-dbgsym
           - percona-postgresql-pltcl-18-dbgsym
-          - percona-postgresql-18-pgaudit
-          - percona-postgresql-18-repack
-          - percona-postgresql-18-repack-dbgsym
-          - percona-pgbackrest
-          - percona-pgbackrest-doc
-          - percona-patroni
-          - percona-patroni-dbgsym
-          - percona-pgbadger
-          - percona-pgbouncer
-          - percona-pgaudit18-set-user
-          - percona-pgaudit18-set-user-dbgsym
-          - percona-pgbouncer-dbgsym
-          - percona-postgresql-18-wal2json
-          - percona-postgresql-18-wal2json-dbgsym
-      when: ansible_distribution == "Debian"
-
-    - name: remove patroni ubuntu
-      apt:
-        name: percona-patroni
-        state: absent
-      when: ansible_distribution == "Ubuntu"
+      when: ansible_os_family == "Debian"
 
     - name: Remove postgresql Debian developer packages
       apt:
         name: "{{ packages }}"
         state: absent
+      ignore_errors: true
       vars:
         packages:
         - libecpg-compat3

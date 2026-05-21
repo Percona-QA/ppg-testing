@@ -8,9 +8,7 @@ services:
       PGDATA: /data/db
       POSTGRES_DB: ${PG_DB:-postgres}
       POSTGRES_INITDB_ARGS: "--auth-host=md5 --auth-local=md5"
-      POSTGRES_OPTIONS: "-c max_connections=${MAX_CONNECTIONS}"
       WITH_TDE: "${WITH_TDE:-0}"
-      ENABLE_PG_TDE: "${WITH_TDE:-0}"
     volumes:
       - pgdata:/data/db
     ports:
@@ -20,6 +18,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    # ENABLE_PG_TDE=1 is no longer honored by the image; load pg_tde via
+    # shared_preload_libraries on the postgres command line instead. TDE is
+    # only supported on PG 17+, and this file is only selected by Ansible
+    # when WITH_TDE_EFFECTIVE == '1'.
+    command: postgres -c 'shared_preload_libraries=pg_tde' -c 'max_connections=${MAX_CONNECTIONS}'
 
   pgbouncer:
     image: ${PGBOUNCER_IMAGE}

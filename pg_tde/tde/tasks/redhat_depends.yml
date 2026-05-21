@@ -76,6 +76,14 @@
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     when: ansible_distribution_major_version == "9"
 
+  - name: Install gcc-toolset-14 for LTO compatibility on RHEL/Rocky/OL 8/9
+    become: true
+    dnf:
+      name: gcc-toolset-14
+      state: present
+    when:
+      - ansible_distribution_major_version == "9"
+
   - name: install tools
     yum:
       name: "{{ packages }}"

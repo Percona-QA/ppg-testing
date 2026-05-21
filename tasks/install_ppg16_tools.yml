@@ -341,7 +341,7 @@
         - percona-pgpool-II-pg16-extensions
     when: ansible_os_family == "RedHat"
 
-  - name: Install percona-pgpool Debian
+  - name: Install percona-pgpool Debian (libpgpool2 for < 16.14)
     apt:
       name: "{{ packages }}"
       state: latest
@@ -350,7 +350,22 @@
       packages:
         - percona-pgpool2
         - libpgpool2
-    when: ansible_os_family == "Debian"
+    when: >
+      ansible_os_family == "Debian" and
+      pg_version_to_install | string is version('16.14', '<', strict=True)
+
+  - name: Install percona-pgpool Debian (libpgpoolpcp3 for >= 16.14)
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pgpool2
+        - libpgpoolpcp3
+    when: >
+      ansible_os_family == "Debian" and
+      pg_version_to_install | string is version('16.14', '>=', strict=True)
 
   - name: Enable llvm-toolset for RHEL8 to install PostGIS
     become: true
@@ -435,10 +450,7 @@
       - percona-pg_cron_16
     when:
       - ansible_os_family == "RedHat"
-      - >-
-        (pg_version_to_install | string is version('16.13', '>', strict=True))
-        or
-        (pg_version_to_install | string is version('16.13', '==', strict=True) and lookup('env', 'REPO') == 'testing')
+      - pg_version_to_install | string is version('16.13', '>', strict=True)
 
   - name: Install pg_cron packages Debian
     apt:
@@ -450,10 +462,7 @@
       - percona-postgresql-16-cron
     when:
       - ansible_os_family == "Debian"
-      - >-
-        (pg_version_to_install | string is version('16.13', '>', strict=True))
-        or
-        (pg_version_to_install | string is version('16.13', '==', strict=True) and lookup('env', 'REPO') == 'testing')
+      - pg_version_to_install | string is version('16.13', '>', strict=True)
 
   - name: Configure shared_preload_libraries
     vars:
@@ -462,9 +471,7 @@
         {{
           base_extensions
           + (['pg_cron'] if (
-              (pg_version_to_install | string is version('16.13', '>', strict=True))
-              or
-              (pg_version_to_install | string is version('16.13', '==', strict=True) and lookup('env', 'REPO') == 'testing')
+              pg_version_to_install | string is version('16.13', '>', strict=True)
             ) else [])
         }}
       pg_conf_path: "{{ '/etc/postgresql/16/main/postgresql.conf' if ansible_os_family == 'Debian' else '/var/lib/pgsql/16/data/postgresql.conf' }}"

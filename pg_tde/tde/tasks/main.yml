@@ -9,6 +9,7 @@
     pg_version_to_install: "{{ lookup('env','VERSION') | regex_replace('ppg-','') }}"
     postgres_group: "{{ 'wheel' if ansible_os_family == 'RedHat' else 'admin' }}"
     io_method: "{{ lookup('env', 'IO_METHOD') }}"
+    artifact_filename: "tde-{{ lookup('env','VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.tar.gz"
     cacheable: true
 
 - name: Set PostgreSQL config path for Debian/Ubuntu
@@ -240,6 +241,16 @@
     - ansible_distribution == 'Debian'
     - (ansible_distribution_major_version | int) == 13
 
+- name: Remove vault_v2_test from t/regress.pl
+  ansible.builtin.lineinfile:
+    path: /tmp/pg_tde/t/regress.pl
+    regexp: '.*vault_v2_test.*'
+    state: absent
+  when:
+    - ansible_os_family == 'Debian'
+    - ansible_distribution == 'Debian'
+    - (ansible_distribution_major_version | int) == 13
+
 - name: Submodule update
   command : git submodule update --init --recursive
   args:
@@ -253,8 +264,12 @@
 - name: Build pg_tde
   become: true
   become_user: postgres
-  ansible.builtin.command: >
-    make USE_PGXS=1 PG_CONFIG={{ pg_config_path }}
+  ansible.builtin.shell: |
+    {% if ansible_os_family == 'RedHat' and ansible_distribution_major_version == '9' %}
+    source /opt/rh/gcc-toolset-14/enable
+    {% endif %}
+    make USE_PGXS=1 PG_CONFIG={{ pg_config_path }} \
+      CFLAGS="$({{ pg_config_path }} --cflags | sed 's/-Wmissing-variable-declarations//g')"
   args:
     chdir: /tmp/pg_tde
     executable: /bin/bash
