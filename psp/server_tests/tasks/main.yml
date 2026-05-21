@@ -339,6 +339,8 @@
     environment:
       TDE_MODE: "1"
     register: results
+    when:
+        - (major_version | int) >= 17 
 
   - debug: var=results.stdout_lines
 
