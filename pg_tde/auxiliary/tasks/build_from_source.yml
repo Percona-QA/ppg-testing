@@ -40,15 +40,11 @@
 
   - debug: var=results.stdout_lines
 
-  - name: Configure Postgres/PSP from sources with liburing for supported OS. 
-    command: >
-      ./configure
-      --enable-debug
-      --enable-cassert
-      --enable-tap-tests
-      --with-icu
-      --prefix=/opt/pgsql
-      --with-liburing
+  - name: Configure Postgres/PSP from sources with liburing for supported OS.
+    ansible.builtin.shell: |
+      set -o pipefail
+      ./configure --enable-debug --enable-cassert --enable-tap-tests --with-icu --prefix=/opt/pgsql --with-liburing \
+        2>&1 | tee /tmp/psp-build.log
     args:
       chdir: /tmp/postgres
       executable: /bin/bash
@@ -64,13 +60,10 @@
   - debug: var=results.stdout_lines
 
   - name: Configure Postgres/PSP from sources
-    command: >
-      ./configure
-      --enable-debug
-      --enable-cassert
-      --enable-tap-tests
-      --with-icu
-      --prefix=/opt/pgsql
+    ansible.builtin.shell: |
+      set -o pipefail
+      ./configure --enable-debug --enable-cassert --enable-tap-tests --with-icu --prefix=/opt/pgsql \
+        2>&1 | tee /tmp/psp-build.log
     args:
       chdir: /tmp/postgres
       executable: /bin/bash
@@ -81,7 +74,9 @@
   - debug: var=results.stdout_lines
 
   - name: Run make install-world with parallel jobs
-    ansible.builtin.command: make install-world -j
+    ansible.builtin.shell: |
+      set -o pipefail
+      make install-world -j 2>&1 | tee -a /tmp/psp-build.log
     args:
       chdir: /tmp/postgres
       executable: /bin/bash
@@ -113,8 +108,9 @@
   - name: Build & Install pg_tde
     become: true
     become_user: postgres
-    ansible.builtin.command: >
-      make PG_CONFIG=/opt/pgsql/bin/pg_config install
+    ansible.builtin.shell: |
+      set -o pipefail
+      make PG_CONFIG=/opt/pgsql/bin/pg_config install 2>&1 | tee /tmp/tde-build.log
     args:
       chdir: /tmp/pg_tde
       executable: /bin/bash

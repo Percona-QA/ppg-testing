@@ -194,17 +194,20 @@
       state: absent
 
   - name: Build pg_stat_monitor from sources
-    make:
-      chdir: "/tmp/pg_stat_monitor"
-      params:
-        USE_PGXS: 1
+    shell: |
+      set -o pipefail
+      make USE_PGXS=1 2>&1 | tee /tmp/pgsm-build.log
+    args:
+      chdir: /tmp/pg_stat_monitor
+      executable: /bin/bash
 
   - name: Install pg_stat_monitor from sources
-    make:
-      target: install
-      chdir: "/tmp/pg_stat_monitor"
-      params:
-        USE_PGXS: 1
+    shell: |
+      set -o pipefail
+      make install USE_PGXS=1 2>&1 | tee -a /tmp/pgsm-build.log
+    args:
+      chdir: /tmp/pg_stat_monitor
+      executable: /bin/bash
     when: not use_package_install
 
   - name: Install pg-stat-monitor Debian/Ubuntu Package
