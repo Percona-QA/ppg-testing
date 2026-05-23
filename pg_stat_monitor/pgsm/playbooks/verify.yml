@@ -16,11 +16,12 @@
         artifact_filename: "pgsm-{{ lookup('env','VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.tar.gz"
 
     - name: Test pg_stat_monitor
-      make:
-        target: installcheck
+      shell: |
+        set -o pipefail
+        make installcheck USE_PGXS=1 2>&1 | tee /tmp/pgsm-installcheck-regression.log
+      args:
         chdir: "/tmp/pg_stat_monitor"
-        params:
-          USE_PGXS: 1
+        executable: /bin/bash
       ignore_errors: yes
       register: installcheck
 
@@ -36,6 +37,25 @@
       become_method: sudo
       become_user: root
 
+    - name: Debug - find regression files and results dirs before packaging
+      shell: |
+        echo "=== regression.out files ==="
+        find /tmp/pg_stat_monitor -name "regression.out" 2>/dev/null || true
+        echo "=== regression.diffs files ==="
+        find /tmp/pg_stat_monitor -name "regression.diffs" 2>/dev/null || true
+        echo "=== results/ directories (outside tmp_check) ==="
+        find /tmp/pg_stat_monitor -type d -name "results" -not -path "*/tmp_check/*" 2>/dev/null || true
+      args:
+        executable: /bin/bash
+      register: debug_regression
+      ignore_errors: true
+      become: true
+      become_method: sudo
+      become_user: root
+
+    - debug:
+        var: debug_regression.stdout_lines
+
     - name: Package pgsm test artifacts
       shell: |
         set -uo pipefail
@@ -47,11 +67,18 @@
         find /tmp/pg_stat_monitor -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
         cp -r /tmp/pg_stat_monitor/t "$ARTIFACT_DIR/pg_stat_monitor_t" 2>/dev/null || true
         cp -r /tmp/pg_stat_monitor/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
+        # Collect standalone results/ directories for pg_regress SQL test outputs
+        find /tmp/pg_stat_monitor -type d -name "results" -not -path "*/tmp_check/*" | while read d; do
+          rel="${d#/tmp/pg_stat_monitor/}"
+          mkdir -p "$ARTIFACT_DIR/pg_stat_monitor/$rel"
+          cp -r "$d/." "$ARTIFACT_DIR/pg_stat_monitor/$rel/" 2>/dev/null || true
+        done
         # Collect PostgreSQL system service log (RHEL path)
         find /var/lib/pgsql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
         # Collect PostgreSQL system service log (Debian/Ubuntu path)
         find /var/log/postgresql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
         cp /tmp/pgsm-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+        cp /tmp/pgsm-installcheck-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
         tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
       args:
         executable: /bin/bash

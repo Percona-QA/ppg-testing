@@ -590,7 +590,7 @@
       echo $VAULT_ADDR
 
       CLUSTER_INFO=$(mktemp)
-      bao server -dev -dev-tls -dev-cluster-json="$CLUSTER_INFO" > /dev/null &
+      bao server -dev -dev-tls -dev-cluster-json="$CLUSTER_INFO" > /tmp/bao-server.log 2>&1 &
       sleep 10
       export VAULT_ROOT_TOKEN_FILE=$(mktemp)
       jq -r .root_token "$CLUSTER_INFO" > "$VAULT_ROOT_TOKEN_FILE"
@@ -663,6 +663,29 @@
       - regression.rc != 0
       - diffs_output is defined
 
+  - name: Debug - find regression files and results dirs before packaging (check-tde)
+    shell: |
+      echo "=== regression.out files ==="
+      find /tmp/pg_tde -name "regression.out" 2>/dev/null || true
+      echo "=== regression.diffs files ==="
+      find /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
+      echo "=== results/ directories (outside tmp_check) ==="
+      find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" 2>/dev/null || true
+    args:
+      executable: /bin/bash
+    register: debug_regression
+    ignore_errors: true
+    become: true
+    when:
+      - testsuite == 'check-tde'
+      - regression is defined
+
+  - debug:
+      var: debug_regression.stdout_lines
+    when:
+      - testsuite == 'check-tde'
+      - regression is defined
+
   - name: Package check-tde test artifacts
     shell: |
       set -uo pipefail
@@ -674,11 +697,18 @@
       find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       cp -r /tmp/pg_tde/t "$ARTIFACT_DIR/pg_tde_t" 2>/dev/null || true
       cp -r /tmp/pg_tde/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
+      # Collect standalone results/ directories for pg_regress SQL test outputs
+      find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" | while read d; do
+        rel="${d#/tmp/pg_tde/}"
+        mkdir -p "$ARTIFACT_DIR/pg_tde/$rel"
+        cp -r "$d/." "$ARTIFACT_DIR/pg_tde/$rel/" 2>/dev/null || true
+      done
       cp /tmp/postgres/logfile "$ARTIFACT_DIR/server.log" 2>/dev/null || true
       cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true
       tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
       executable: /bin/bash
@@ -763,6 +793,29 @@
       - regression.rc != 0
       - diffs_output.stdout is defined
 
+  - name: Debug - find regression files and results dirs before packaging (check-server)
+    shell: |
+      echo "=== regression.out files ==="
+      find /tmp/postgres -name "regression.out" 2>/dev/null || true
+      echo "=== regression.diffs files ==="
+      find /tmp/postgres -name "regression.diffs" 2>/dev/null || true
+      echo "=== results/ directories (outside tmp_check) ==="
+      find /tmp/postgres -type d -name "results" -not -path "*/tmp_check/*" 2>/dev/null || true
+    args:
+      executable: /bin/bash
+    register: debug_regression
+    ignore_errors: true
+    become: true
+    when:
+      - testsuite == 'check-server'
+      - regression is defined
+
+  - debug:
+      var: debug_regression.stdout_lines
+    when:
+      - testsuite == 'check-server'
+      - regression is defined
+
   - name: Package check-server test artifacts
     shell: |
       set -uo pipefail
@@ -774,6 +827,12 @@
       find /tmp/postgres -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       # Collect tmp_check directories for tap test logs (make check-world creates these per module)
       find /tmp/postgres -type d -name "tmp_check" | while read d; do
+        rel="${d#/tmp/postgres/}"
+        mkdir -p "$ARTIFACT_DIR/postgres/$rel"
+        cp -r "$d/." "$ARTIFACT_DIR/postgres/$rel/" 2>/dev/null || true
+      done
+      # Collect standalone results/ directories for pg_regress SQL test outputs
+      find /tmp/postgres -type d -name "results" -not -path "*/tmp_check/*" | while read d; do
         rel="${d#/tmp/postgres/}"
         mkdir -p "$ARTIFACT_DIR/postgres/$rel"
         cp -r "$d/." "$ARTIFACT_DIR/postgres/$rel/" 2>/dev/null || true
@@ -907,6 +966,29 @@
       - regression is defined
       - regression.rc != 0
 
+  - name: Debug - find regression files and results dirs before packaging (installcheck-world)
+    shell: |
+      echo "=== regression.out files ==="
+      find /tmp/postgres /tmp/pg_tde -name "regression.out" 2>/dev/null || true
+      echo "=== regression.diffs files ==="
+      find /tmp/postgres /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
+      echo "=== results/ directories (outside tmp_check) ==="
+      find /tmp/postgres /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" 2>/dev/null || true
+    args:
+      executable: /bin/bash
+    register: debug_regression
+    ignore_errors: true
+    become: true
+    when:
+      - testsuite == 'installcheck-world'
+      - regression is defined
+
+  - debug:
+      var: debug_regression.stdout_lines
+    when:
+      - testsuite == 'installcheck-world'
+      - regression is defined
+
   - name: Package installcheck-world test artifacts
     shell: |
       set -uo pipefail
@@ -925,6 +1007,17 @@
         cp -r "$d/." "$ARTIFACT_DIR/postgres/$rel/" 2>/dev/null || true
       done
       find /tmp/pg_tde -type d -name "tmp_check" | while read d; do
+        rel="${d#/tmp/pg_tde/}"
+        mkdir -p "$ARTIFACT_DIR/pg_tde/$rel"
+        cp -r "$d/." "$ARTIFACT_DIR/pg_tde/$rel/" 2>/dev/null || true
+      done
+      # Collect standalone results/ directories for pg_regress SQL test outputs
+      find /tmp/postgres -type d -name "results" -not -path "*/tmp_check/*" | while read d; do
+        rel="${d#/tmp/postgres/}"
+        mkdir -p "$ARTIFACT_DIR/postgres/$rel"
+        cp -r "$d/." "$ARTIFACT_DIR/postgres/$rel/" 2>/dev/null || true
+      done
+      find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" | while read d; do
         rel="${d#/tmp/pg_tde/}"
         mkdir -p "$ARTIFACT_DIR/pg_tde/$rel"
         cp -r "$d/." "$ARTIFACT_DIR/pg_tde/$rel/" 2>/dev/null || true
