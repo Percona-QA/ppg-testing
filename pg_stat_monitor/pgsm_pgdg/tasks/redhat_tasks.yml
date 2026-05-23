@@ -236,12 +236,48 @@
       chdir: /tmp/pg_stat_monitor
       executable: /bin/bash
 
+  - name: Detect LLVM package required for pg_stat_monitor installation
+    shell: |
+      # Get the exact LLVM_CONFIG path PostgreSQL was built against
+      LLVM_CONFIG_PATH=$(pg_config --configure 2>/dev/null | grep -oP "LLVM_CONFIG=\K[^ '\"]+")
+      if [ -z "$LLVM_CONFIG_PATH" ]; then
+        echo ""
+        exit 0
+      fi
+      LLVM_BIN_DIR=$(dirname "$LLVM_CONFIG_PATH")
+      # Nothing to do if llvm-lto is already present
+      if [ -f "$LLVM_BIN_DIR/llvm-lto" ]; then
+        echo ""
+        exit 0
+      fi
+      # Derive package name from versioned path (e.g. /usr/lib64/llvm20/bin -> llvm20)
+      # or fall back to plain 'llvm'
+      LLVM_VERSION=$(echo "$LLVM_BIN_DIR" | grep -oP "(?<=llvm)\d+")
+      if [ -n "$LLVM_VERSION" ]; then
+        echo "llvm${LLVM_VERSION}"
+      else
+        echo "llvm"
+      fi
+    args:
+      executable: /bin/bash
+    register: llvm_pkg_needed
+    changed_when: false
+    become: true
+
+  - name: Install LLVM utilities package to provide llvm-lto
+    yum:
+      name: "{{ llvm_pkg_needed.stdout }}"
+      state: present
+    when: llvm_pkg_needed.stdout | length > 0
+    become: true
+
   - name: Install pg_stat_monitor from sources
-    make:
-      target: install
-      chdir: "/tmp/pg_stat_monitor"
-      params:
-        USE_PGXS: 1
+    shell: |
+      set -o pipefail
+      make install USE_PGXS=1 2>&1 | tee -a /tmp/pgsm-build.log
+    args:
+      chdir: /tmp/pg_stat_monitor
+      executable: /bin/bash
     when: not use_package_install
 
   - name: Install pg-stat-monitor RHEL RPM Package

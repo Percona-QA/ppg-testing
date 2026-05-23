@@ -26,12 +26,126 @@
   - name: Configure repository
     include_tasks: ../../../../tasks/enable_repo.yml
 
-  - name: Include Redhat tasks file 
-    include_tasks: 
+  - name: Include Redhat tasks file
+    include_tasks:
       file: "redhat_tasks.yml"
     when: ansible_os_family == 'RedHat'
 
-  - name: Include Debian tasks file 
-    include_tasks: 
+  - name: Include Debian tasks file
+    include_tasks:
       file: "debian_tasks.yml"
     when: ansible_os_family == 'Debian'
+
+  # =============================
+  # Run pg_stat_monitor regression tests and collect artifacts
+  # =============================
+
+  - name: Set artifact filename
+    set_fact:
+      artifact_filename: "pgsm-pgdg-{{ lookup('env','VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.tar.gz"
+
+  - name: Run pg_stat_monitor installcheck
+    shell: |
+      set -o pipefail
+      make installcheck USE_PGXS=1 2>&1 | tee /tmp/pgsm-installcheck-regression.log
+    args:
+      chdir: "/tmp/pg_stat_monitor"
+      executable: /bin/bash
+    become: true
+    become_user: postgres
+    environment:
+      PG_TEST_PORT_DIR: /tmp/pg_stat_monitor
+    ignore_errors: yes
+    register: installcheck
+
+  - name: Show stdout of pg_stat_monitor installcheck
+    debug:
+      var: installcheck.stdout_lines
+
+  - name: Show stderr if installcheck fails
+    debug:
+      var: installcheck.stderr_lines
+    when:
+      - installcheck is defined
+      - installcheck.rc != 0
+
+  - name: Show regression.diffs if tests failed
+    shell: cat /tmp/pg_stat_monitor/regression.diffs
+    register: diffs_output
+    when:
+      - installcheck is defined
+      - installcheck.rc != 0
+    ignore_errors: true
+    become: true
+
+  - name: Print regression.diffs
+    debug:
+      msg: "{{ diffs_output.stdout_lines }}"
+    when:
+      - installcheck is defined
+      - installcheck.rc != 0
+      - diffs_output is defined
+
+  - name: Debug - find regression files and results dirs before packaging
+    shell: |
+      echo "=== regression.out files ==="
+      find /tmp/pg_stat_monitor -name "regression.out" 2>/dev/null || true
+      echo "=== regression.diffs files ==="
+      find /tmp/pg_stat_monitor -name "regression.diffs" 2>/dev/null || true
+      echo "=== results/ directories (outside tmp_check) ==="
+      find /tmp/pg_stat_monitor -type d -name "results" -not -path "*/tmp_check/*" 2>/dev/null || true
+    args:
+      executable: /bin/bash
+    register: debug_regression
+    ignore_errors: true
+    become: true
+    when: installcheck is defined
+
+  - debug:
+      var: debug_regression.stdout_lines
+    when: installcheck is defined
+
+  - name: Package pgsm-pgdg test artifacts
+    shell: |
+      set -uo pipefail
+      ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
+      ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
+      rm -rf "$ARTIFACT_DIR"
+      mkdir -p "$ARTIFACT_DIR"
+      find /tmp/pg_stat_monitor -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      find /tmp/pg_stat_monitor -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      cp -r /tmp/pg_stat_monitor/t "$ARTIFACT_DIR/pg_stat_monitor_t" 2>/dev/null || true
+      cp -r /tmp/pg_stat_monitor/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
+      # Collect standalone results/ directories for pg_regress SQL test outputs
+      find /tmp/pg_stat_monitor -type d -name "results" -not -path "*/tmp_check/*" | while read d; do
+        rel="${d#/tmp/pg_stat_monitor/}"
+        mkdir -p "$ARTIFACT_DIR/pg_stat_monitor/$rel"
+        cp -r "$d/." "$ARTIFACT_DIR/pg_stat_monitor/$rel/" 2>/dev/null || true
+      done
+      # Collect PostgreSQL system service log (RHEL path)
+      find /var/lib/pgsql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      # Collect PostgreSQL system service log (Debian/Ubuntu path)
+      find /var/log/postgresql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      cp /tmp/pgsm-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pgsm-installcheck-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
+    args:
+      executable: /bin/bash
+    when: installcheck is defined
+    ignore_errors: true
+    become: true
+
+  - name: Fetch pgsm-pgdg test artifacts to controller
+    fetch:
+      src: "/tmp/{{ artifact_filename }}"
+      dest: "{{ playbook_dir }}/../artifacts/"
+      fail_on_missing: false
+    when: installcheck is defined
+    become: true
+
+  - name: Fail if pg_stat_monitor installcheck failed
+    fail:
+      msg: "pg_stat_monitor installcheck failed with return code {{ installcheck.rc }}"
+    when:
+      - installcheck is defined
+      - installcheck.rc != 0
