@@ -837,10 +837,9 @@
         mkdir -p "$ARTIFACT_DIR/postgres/$rel"
         cp -r "$d/." "$ARTIFACT_DIR/postgres/$rel/" 2>/dev/null || true
       done
-      cp /tmp/postgres/logfile "$ARTIFACT_DIR/server.log" 2>/dev/null || true
+      # Note: no /tmp/postgres/logfile for check-server — make check-world manages its own
+      # temp instances; their per-node server logs are inside the tmp_check/log/ dirs above.
       cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/check-server-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
       tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
