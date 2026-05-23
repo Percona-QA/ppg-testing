@@ -610,7 +610,8 @@
 
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
-      cd /tmp/pg_tde && make -s installcheck -k PROVE_FLAGS='-v -p'
+      set -o pipefail
+      cd /tmp/pg_tde && make -s installcheck -k PROVE_FLAGS='-v -p' 2>&1 | tee /tmp/check-tde-regression.log
       #cd /tmp/pg_tde && make -s installcheck -k
     become_user: postgres
     args:
@@ -665,20 +666,23 @@
   - name: Package check-tde test artifacts
     shell: |
       set -uo pipefail
-      ARTIFACT_DIR="/tmp/test-artifacts"
+      ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
+      ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
       mkdir -p "$ARTIFACT_DIR"
       find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       cp -r /tmp/pg_tde/t "$ARTIFACT_DIR/pg_tde_t" 2>/dev/null || true
       cp -r /tmp/pg_tde/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
-      cp /tmp/postgres/logfile "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/postgres/logfile "$ARTIFACT_DIR/server.log" 2>/dev/null || true
       cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp test-artifacts
+      cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
       executable: /bin/bash
+    become: true
     when:
       - testsuite == 'check-tde'
       - regression is defined
@@ -708,7 +712,8 @@
     shell: |
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
-      cd /tmp/postgres/ && make -s check-world -k PROVE_FLAGS='-v -p'
+      set -o pipefail
+      cd /tmp/postgres/ && make -s check-world -k PROVE_FLAGS='-v -p' 2>&1 | tee /tmp/check-server-regression.log
     become_user: postgres
     args:
       executable: /bin/bash
@@ -761,7 +766,8 @@
   - name: Package check-server test artifacts
     shell: |
       set -uo pipefail
-      ARTIFACT_DIR="/tmp/test-artifacts"
+      ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
+      ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
       mkdir -p "$ARTIFACT_DIR"
       find /tmp/postgres -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
@@ -772,13 +778,15 @@
         mkdir -p "$ARTIFACT_DIR/postgres/$rel"
         cp -r "$d/." "$ARTIFACT_DIR/postgres/$rel/" 2>/dev/null || true
       done
-      cp /tmp/postgres/logfile "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/postgres/logfile "$ARTIFACT_DIR/server.log" 2>/dev/null || true
       cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp test-artifacts
+      cp /tmp/check-server-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
       executable: /bin/bash
+    become: true
     when:
       - testsuite == 'check-server'
       - regression is defined
@@ -845,7 +853,8 @@
       export TDE_MODE=1
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
-      cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/pg_tde/ci_scripts/tde_setup.sql" make -s installcheck-world -k PROVE_FLAGS="-v -p -e 'perl -I/tmp/pg_tde/ci_scripts/perl -I/tmp/postgres/src/test/perl -MPostgreSQL::Test::TdeCluster'"
+      set -o pipefail
+      cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/pg_tde/ci_scripts/tde_setup.sql" make -s installcheck-world -k PROVE_FLAGS="-v -p -e 'perl -I/tmp/pg_tde/ci_scripts/perl -I/tmp/postgres/src/test/perl -MPostgreSQL::Test::TdeCluster'" 2>&1 | tee /tmp/installcheck-world-regression.log
     args:
       executable: /bin/bash
       chdir: "/tmp/postgres/"
@@ -901,7 +910,8 @@
   - name: Package installcheck-world test artifacts
     shell: |
       set -uo pipefail
-      ARTIFACT_DIR="/tmp/test-artifacts"
+      ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
+      ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
       mkdir -p "$ARTIFACT_DIR"
       find /tmp/postgres -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
@@ -919,13 +929,15 @@
         mkdir -p "$ARTIFACT_DIR/pg_tde/$rel"
         cp -r "$d/." "$ARTIFACT_DIR/pg_tde/$rel/" 2>/dev/null || true
       done
-      cp /tmp/postgres/logfile "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/postgres/logfile "$ARTIFACT_DIR/server.log" 2>/dev/null || true
       cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp test-artifacts
+      cp /tmp/installcheck-world-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
       executable: /bin/bash
+    become: true
     when:
       - testsuite == 'installcheck-world'
       - regression is defined

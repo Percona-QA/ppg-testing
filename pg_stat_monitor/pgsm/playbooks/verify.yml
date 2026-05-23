@@ -39,7 +39,8 @@
     - name: Package pgsm test artifacts
       shell: |
         set -uo pipefail
-        ARTIFACT_DIR="/tmp/test-artifacts"
+        ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
+        ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
         rm -rf "$ARTIFACT_DIR"
         mkdir -p "$ARTIFACT_DIR"
         find /tmp/pg_stat_monitor -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
@@ -51,7 +52,7 @@
         # Collect PostgreSQL system service log (Debian/Ubuntu path)
         find /var/log/postgresql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
         cp /tmp/pgsm-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
-        tar -czf "/tmp/{{ artifact_filename }}" -C /tmp test-artifacts
+        tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
       args:
         executable: /bin/bash
       when: installcheck.rc != 0
