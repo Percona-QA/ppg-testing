@@ -239,7 +239,7 @@
   - name: Detect LLVM package required for pg_stat_monitor installation
     shell: |
       # Get the exact LLVM_CONFIG path PostgreSQL was built against
-      LLVM_CONFIG_PATH=$(pg_config --configure 2>/dev/null | grep -oP "LLVM_CONFIG=\K[^ '\"]+")
+      LLVM_CONFIG_PATH=$(/usr/pgsql-{{ major_version }}/bin/pg_config --configure 2>/dev/null | grep -oP "LLVM_CONFIG=\K[^ '\"]+")
       if [ -z "$LLVM_CONFIG_PATH" ]; then
         echo ""
         exit 0
