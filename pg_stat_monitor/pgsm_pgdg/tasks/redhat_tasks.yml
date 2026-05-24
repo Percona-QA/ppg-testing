@@ -245,28 +245,23 @@
 
   - name: Detect LLVM package required for pg_stat_monitor installation
     shell: |
-      # LLVM_BINPATH is baked into Makefile.global by PostgreSQL's configure.
-      # That file (not pgxs.mk) holds all @substitution@ variables.
-      MAKEFILE_GLOBAL=$(find /usr/pgsql-{{ major_version }}/lib/pgxs/src -name "Makefile.global" 2>/dev/null | head -1)
-      if [ -z "$MAKEFILE_GLOBAL" ]; then
+      MG=$(find /usr/pgsql-{{ major_version }}/lib/pgxs/src -name Makefile.global 2>/dev/null | head -1)
+      if [ -z "$MG" ]; then
         echo ""
         exit 0
       fi
-      LLVM_BIN_DIR=$(grep -oP '^LLVM_BINPATH\s*=\s*\K\S+' "$MAKEFILE_GLOBAL")
-      if [ -z "$LLVM_BIN_DIR" ]; then
+      LLVM_BIN=$(awk -F= '/^LLVM_BINPATH/{gsub(/ /,"",$2); print $2; exit}' "$MG")
+      if [ -z "$LLVM_BIN" ]; then
         echo ""
         exit 0
       fi
-      # Nothing to do if llvm-lto is already present
-      if [ -f "$LLVM_BIN_DIR/llvm-lto" ]; then
+      if [ -f "$LLVM_BIN/llvm-lto" ]; then
         echo ""
         exit 0
       fi
-      # Derive package name from versioned path (e.g. /usr/lib64/llvm20/bin -> llvm20)
-      # or fall back to plain 'llvm'
-      LLVM_VERSION=$(echo "$LLVM_BIN_DIR" | grep -oP "(?<=llvm)\d+")
-      if [ -n "$LLVM_VERSION" ]; then
-        echo "llvm${LLVM_VERSION}"
+      VER=$(echo "$LLVM_BIN" | sed 's/.*llvm\([0-9]*\).*/\1/')
+      if [ -n "$VER" ]; then
+        echo "llvm${VER}"
       else
         echo "llvm"
       fi
