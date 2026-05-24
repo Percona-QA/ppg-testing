@@ -266,11 +266,15 @@
 
   - name: Detect LLVM package required for pg_stat_monitor installation
     shell: |
-      # The LLVM path is in Makefile.global (configure-time vars), not pgxs.mk.
-      # Search all files under the pgxs tree for the versioned LLVM bin path.
-      LLVM_BIN_DIR=$(grep -rP '/[a-z0-9/_.-]+llvm\d+/bin' \
-        /usr/pgsql-{{ major_version }}/lib/pgxs/ 2>/dev/null \
-        | grep -oP '/[a-z0-9/_.-]+llvm\d+/bin' | sort -u | head -1)
+      # LLVM_BINPATH is baked into Makefile.global by PostgreSQL's configure.
+      # That file (not pgxs.mk) holds all @substitution@ variables.
+      MAKEFILE_GLOBAL=$(find /usr/pgsql-{{ major_version }}/lib/pgxs/src \
+        -name "Makefile.global" 2>/dev/null | head -1)
+      if [ -z "$MAKEFILE_GLOBAL" ]; then
+        echo ""
+        exit 0
+      fi
+      LLVM_BIN_DIR=$(grep -oP '^LLVM_BINPATH\s*=\s*\K\S+' "$MAKEFILE_GLOBAL")
       if [ -z "$LLVM_BIN_DIR" ]; then
         echo ""
         exit 0
