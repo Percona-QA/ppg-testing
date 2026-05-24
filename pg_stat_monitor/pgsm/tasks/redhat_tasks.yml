@@ -268,8 +268,7 @@
     shell: |
       # LLVM_BINPATH is baked into Makefile.global by PostgreSQL's configure.
       # That file (not pgxs.mk) holds all @substitution@ variables.
-      MAKEFILE_GLOBAL=$(find /usr/pgsql-{{ major_version }}/lib/pgxs/src \
-        -name "Makefile.global" 2>/dev/null | head -1)
+      MAKEFILE_GLOBAL=$(find /usr/pgsql-{{ major_version }}/lib/pgxs/src -name "Makefile.global" 2>/dev/null | head -1)
       if [ -z "$MAKEFILE_GLOBAL" ]; then
         echo ""
         exit 0
