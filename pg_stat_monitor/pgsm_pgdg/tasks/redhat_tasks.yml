@@ -245,14 +245,15 @@
 
   - name: Detect LLVM package required for pg_stat_monitor installation
     shell: |
-      # Read LLVM_CONFIG directly from pgxs.mk — the same source make install uses
-      PGXS_MK="/usr/pgsql-{{ major_version }}/lib/pgxs/src/makefiles/pgxs.mk"
-      LLVM_CONFIG_PATH=$(grep -oP '^LLVM_CONFIG\s*=\s*\K\S+' "$PGXS_MK" 2>/dev/null | head -1)
-      if [ -z "$LLVM_CONFIG_PATH" ]; then
+      # llvm-config must already be present — make install calls it to resolve
+      # the llvm-lto path (proven by the full versioned path in the error).
+      # Find it under /usr/lib64/llvm*/bin/ and check if llvm-lto is alongside it.
+      LLVM_CONFIG=$(find /usr/lib64/llvm*/bin/llvm-config 2>/dev/null | sort -V | tail -1)
+      if [ -z "$LLVM_CONFIG" ]; then
         echo ""
         exit 0
       fi
-      LLVM_BIN_DIR=$(dirname "$LLVM_CONFIG_PATH")
+      LLVM_BIN_DIR=$(dirname "$LLVM_CONFIG")
       # Nothing to do if llvm-lto is already present
       if [ -f "$LLVM_BIN_DIR/llvm-lto" ]; then
         echo ""
