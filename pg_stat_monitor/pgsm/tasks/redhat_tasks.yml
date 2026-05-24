@@ -264,17 +264,29 @@
       chdir: /tmp/pg_stat_monitor
       executable: /bin/bash
 
+  - name: Dump LLVM-related lines from pgxs.mk
+    shell: grep -iE 'llvm|clang' /usr/pgsql-{{ major_version }}/lib/pgxs/src/makefiles/pgxs.mk 2>/dev/null | head -30
+    args:
+      executable: /bin/bash
+    register: pgxs_llvm_debug
+    changed_when: false
+    become: true
+    ignore_errors: true
+
+  - debug:
+      var: pgxs_llvm_debug.stdout_lines
+
   - name: Detect LLVM package required for pg_stat_monitor installation
     shell: |
-      # llvm-config must already be present — make install calls it to resolve
-      # the llvm-lto path (proven by the full versioned path in the error).
-      # Find it under /usr/lib64/llvm*/bin/ and check if llvm-lto is alongside it.
-      LLVM_CONFIG=$(find /usr/lib64/llvm*/bin/llvm-config 2>/dev/null | sort -V | tail -1)
-      if [ -z "$LLVM_CONFIG" ]; then
+      PGXS_MK="/usr/pgsql-{{ major_version }}/lib/pgxs/src/makefiles/pgxs.mk"
+      # Extract the versioned LLVM bin path directly from pgxs.mk.
+      # This works even before any LLVM package is installed — the path is
+      # hardcoded in pgxs.mk at PostgreSQL build time.
+      LLVM_BIN_DIR=$(grep -oP '/[a-z0-9/_.-]+llvm\d+/bin' "$PGXS_MK" 2>/dev/null | sort -u | head -1)
+      if [ -z "$LLVM_BIN_DIR" ]; then
         echo ""
         exit 0
       fi
-      LLVM_BIN_DIR=$(dirname "$LLVM_CONFIG")
       # Nothing to do if llvm-lto is already present
       if [ -f "$LLVM_BIN_DIR/llvm-lto" ]; then
         echo ""
