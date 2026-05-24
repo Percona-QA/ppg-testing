@@ -245,8 +245,9 @@
 
   - name: Detect LLVM package required for pg_stat_monitor installation
     shell: |
-      # Get the exact LLVM_CONFIG path PostgreSQL was built against
-      LLVM_CONFIG_PATH=$(/usr/pgsql-{{ major_version }}/bin/pg_config --configure 2>/dev/null | grep -oP "LLVM_CONFIG=\K[^ '\"]+")
+      # Read LLVM_CONFIG directly from pgxs.mk — the same source make install uses
+      PGXS_MK="/usr/pgsql-{{ major_version }}/lib/pgxs/src/makefiles/pgxs.mk"
+      LLVM_CONFIG_PATH=$(grep -oP '^LLVM_CONFIG\s*=\s*\K\S+' "$PGXS_MK" 2>/dev/null | head -1)
       if [ -z "$LLVM_CONFIG_PATH" ]; then
         echo ""
         exit 0
