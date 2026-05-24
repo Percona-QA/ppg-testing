@@ -264,39 +264,29 @@
       chdir: /tmp/pg_stat_monitor
       executable: /bin/bash
 
-  - name: Detect LLVM package required for pg_stat_monitor installation
+  - name: Ensure llvm-lto is available for pg_stat_monitor installation
     shell: |
       MG=$(find /usr/pgsql-{{ major_version }}/lib/pgxs/src -name Makefile.global 2>/dev/null | head -1)
       if [ -z "$MG" ]; then
-        echo ""
         exit 0
       fi
       LLVM_BIN=$(awk -F= '/^LLVM_BINPATH/{gsub(/ /,"",$2); print $2; exit}' "$MG")
-      if [ -z "$LLVM_BIN" ]; then
-        echo ""
-        exit 0
-      fi
-      if [ -f "$LLVM_BIN/llvm-lto" ]; then
-        echo ""
+      if [ -z "$LLVM_BIN" ] || [ -f "$LLVM_BIN/llvm-lto" ]; then
         exit 0
       fi
       VER=$(echo "$LLVM_BIN" | sed 's/.*llvm\([0-9]*\).*/\1/')
-      if [ -n "$VER" ]; then
-        echo "llvm${VER}"
-      else
-        echo "llvm"
+      if yum install -y "llvm${VER}" > /dev/null 2>&1; then
+        exit 0
       fi
+      LTO=$(command -v llvm-lto 2>/dev/null || find /usr/bin /usr/lib64 /opt/rh -name llvm-lto 2>/dev/null | head -1)
+      if [ -z "$LTO" ]; then
+        echo "llvm-lto not found on system" >&2
+        exit 1
+      fi
+      mkdir -p "$LLVM_BIN"
+      ln -sf "$LTO" "$LLVM_BIN/llvm-lto"
     args:
       executable: /bin/bash
-    register: llvm_pkg_needed
-    changed_when: false
-    become: true
-
-  - name: Install LLVM utilities package to provide llvm-lto
-    yum:
-      name: "{{ llvm_pkg_needed.stdout }}"
-      state: present
-    when: llvm_pkg_needed.stdout | length > 0
     become: true
 
   - name: Install pg_stat_monitor from sources
