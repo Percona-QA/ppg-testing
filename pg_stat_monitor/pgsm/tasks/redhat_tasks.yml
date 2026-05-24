@@ -266,9 +266,10 @@
 
   - name: Detect LLVM package required for pg_stat_monitor installation
     shell: |
+      {% raw %}
       # LLVM_BINPATH is baked into Makefile.global by PostgreSQL's configure.
       # That file (not pgxs.mk) holds all @substitution@ variables.
-      MAKEFILE_GLOBAL=$(find /usr/pgsql-{{ major_version }}/lib/pgxs/src -name "Makefile.global" 2>/dev/null | head -1)
+      MAKEFILE_GLOBAL=$(find "/usr/pgsql-${PG_MAJOR_VER}/lib/pgxs/src" -name "Makefile.global" 2>/dev/null | head -1)
       if [ -z "$MAKEFILE_GLOBAL" ]; then
         echo ""
         exit 0
@@ -291,6 +292,9 @@
       else
         echo "llvm"
       fi
+      {% endraw %}
+    environment:
+      PG_MAJOR_VER: "{{ major_version }}"
     args:
       executable: /bin/bash
     register: llvm_pkg_needed
