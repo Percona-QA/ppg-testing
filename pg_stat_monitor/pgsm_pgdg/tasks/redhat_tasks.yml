@@ -11,6 +11,13 @@
     command: dnf module disable postgresql -y
     when: ansible_distribution_major_version == "8"
 
+  # --- RHEL / Rocky / Oracle Linux ---
+  - name: Install glibc language packs (RedHat family)
+    ansible.builtin.dnf:
+      name: glibc-langpack-en
+      state: present
+    when: ansible_os_family == "RedHat"
+
   - name: Install perl-CPAN and perl-App-cpanminus on Red Hat
     become: true
     yum:

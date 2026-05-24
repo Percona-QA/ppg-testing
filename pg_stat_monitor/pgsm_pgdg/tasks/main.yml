@@ -55,6 +55,9 @@
     become_user: postgres
     environment:
       PG_TEST_PORT_DIR: /tmp/pg_stat_monitor
+      LC_COLLATE: "C"
+      LC_CTYPE: "en_US.UTF-8"
+      LC_ALL: ""
     ignore_errors: yes
     register: installcheck
 
