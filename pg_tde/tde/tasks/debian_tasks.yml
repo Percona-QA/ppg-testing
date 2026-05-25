@@ -4,7 +4,7 @@
       echo $VAULT_ADDR
 
       CLUSTER_INFO=$(mktemp)
-      bao server -dev -dev-tls -dev-cluster-json="$CLUSTER_INFO" > /dev/null &
+      bao server -dev -dev-tls -dev-cluster-json="$CLUSTER_INFO" > /tmp/bao-server.log 2>&1 &
       sleep 10
       export VAULT_ROOT_TOKEN_FILE=$(mktemp)
       jq -r .root_token "$CLUSTER_INFO" > "$VAULT_ROOT_TOKEN_FILE"
@@ -24,7 +24,8 @@
 
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
-      cd /tmp/pg_tde && make -s installcheck USE_PGXS=1 -k PROVE_FLAGS='-v -p'
+      set -o pipefail
+      cd /tmp/pg_tde && make -s installcheck USE_PGXS=1 -k PROVE_FLAGS='-v -p' 2>&1 | tee /tmp/check-tde-regression.log
     become_user: postgres
     args:
       executable: /bin/bash
@@ -68,19 +69,52 @@
       - regression.rc != 0
       - diffs_output is defined
 
+  - name: Debug - find regression files and results dirs before packaging
+    shell: |
+      echo "=== regression.out files ==="
+      find /tmp/pg_tde -name "regression.out" 2>/dev/null || true
+      echo "=== regression.diffs files ==="
+      find /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
+      echo "=== results/ directories (outside tmp_check) ==="
+      find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" 2>/dev/null || true
+    args:
+      executable: /bin/bash
+    register: debug_regression
+    ignore_errors: true
+    become: true
+    when: regression is defined
+
+  - debug:
+      var: debug_regression.stdout_lines
+    when: regression is defined
+
   - name: Package tde test artifacts
     shell: |
       set -uo pipefail
-      ARTIFACT_DIR="/tmp/test-artifacts"
+      ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
+      ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
       mkdir -p "$ARTIFACT_DIR"
       find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       cp -r /tmp/pg_tde/t "$ARTIFACT_DIR/pg_tde_t" 2>/dev/null || true
       cp -r /tmp/pg_tde/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
-      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp test-artifacts
+      # Collect standalone results/ directories for pg_regress SQL test outputs
+      find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" | while read d; do
+        rel="${d#/tmp/pg_tde/}"
+        mkdir -p "$ARTIFACT_DIR/pg_tde/$rel"
+        cp -r "$d/." "$ARTIFACT_DIR/pg_tde/$rel/" 2>/dev/null || true
+      done
+      # Collect PostgreSQL system service log (Debian/Ubuntu path)
+      find /var/log/postgresql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
       executable: /bin/bash
+    become: true
     when: regression is defined
     ignore_errors: true
 

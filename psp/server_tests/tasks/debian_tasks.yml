@@ -115,6 +115,8 @@
 
   - name: Include KMIP server setup playbook
     include_tasks: run_kmip_vault_server.yml
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
 
   - name: Change ownership of /tmp/bao_env to postgres
     ansible.builtin.file:
@@ -123,3 +125,5 @@
       group: admin
       recurse: true
     become: true
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']

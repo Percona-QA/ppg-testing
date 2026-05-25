@@ -235,7 +235,7 @@
       dest: /tmp/pg_tde
       track_submodules: true
     vars:
-      repo: "https://github.com/percona/pg_tde.git"
+      repo: "{{ lookup('env', 'TDE_REPO') }}"
       version: "{{ lookup('env', 'TDE_BRANCH') }}"
     become_user: postgres
     when:
@@ -277,15 +277,11 @@
 
   - debug: var=results.stdout_lines
 
-  - name: Configure Postgres/PSP from sources with liburing for supported OS. 
-    command: >
-      ./configure
-      --enable-debug
-      --enable-cassert
-      --enable-tap-tests
-      --with-icu
-      --prefix=/opt/pgsql
-      --with-liburing
+  - name: Configure Postgres/PSP from sources with liburing for supported OS.
+    ansible.builtin.shell: |
+      set -o pipefail
+      ./configure --enable-debug --enable-cassert --enable-tap-tests --with-icu --prefix=/opt/pgsql --with-liburing \
+        2>&1 | tee /tmp/postgres/build.log
     args:
       chdir: /tmp/postgres
       executable: /bin/bash
@@ -301,13 +297,10 @@
   - debug: var=results.stdout_lines
 
   - name: Configure Postgres/PSP from sources
-    command: >
-      ./configure
-      --enable-debug
-      --enable-cassert
-      --enable-tap-tests
-      --with-icu
-      --prefix=/opt/pgsql
+    ansible.builtin.shell: |
+      set -o pipefail
+      ./configure --enable-debug --enable-cassert --enable-tap-tests --with-icu --prefix=/opt/pgsql \
+        2>&1 | tee /tmp/postgres/build.log
     args:
       chdir: /tmp/postgres
       executable: /bin/bash
@@ -319,7 +312,9 @@
   - debug: var=results.stdout_lines
 
   - name: Run make install-world with parallel jobs
-    ansible.builtin.command: make install-world -j
+    ansible.builtin.shell: |
+      set -o pipefail
+      make install-world -j 2>&1 | tee -a /tmp/postgres/build.log
     args:
       chdir: /tmp/postgres
       executable: /bin/bash
@@ -339,6 +334,8 @@
     environment:
       TDE_MODE: "1"
     register: results
+    when:
+        - (major_version | int) >= 17 
 
   - debug: var=results.stdout_lines
 
@@ -400,8 +397,9 @@
   - name: Build & Install pg_tde
     become: true
     become_user: postgres
-    ansible.builtin.command: >
-      make PG_CONFIG=/opt/pgsql/bin/pg_config install
+    ansible.builtin.shell: |
+      set -o pipefail
+      make PG_CONFIG=/opt/pgsql/bin/pg_config install 2>&1 | tee /tmp/tde-build.log
     args:
       chdir: /tmp/pg_tde
       executable: /bin/bash
@@ -592,7 +590,7 @@
       echo $VAULT_ADDR
 
       CLUSTER_INFO=$(mktemp)
-      bao server -dev -dev-tls -dev-cluster-json="$CLUSTER_INFO" > /dev/null &
+      bao server -dev -dev-tls -dev-cluster-json="$CLUSTER_INFO" > /tmp/bao-server.log 2>&1 &
       sleep 10
       export VAULT_ROOT_TOKEN_FILE=$(mktemp)
       jq -r .root_token "$CLUSTER_INFO" > "$VAULT_ROOT_TOKEN_FILE"
@@ -612,7 +610,8 @@
 
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
-      cd /tmp/pg_tde && make -s installcheck -k PROVE_FLAGS='-v -p'
+      set -o pipefail
+      cd /tmp/pg_tde && make -s installcheck -k PROVE_FLAGS='-v -p' 2>&1 | tee /tmp/check-tde-regression.log
       #cd /tmp/pg_tde && make -s installcheck -k
     become_user: postgres
     args:
@@ -664,20 +663,56 @@
       - regression.rc != 0
       - diffs_output is defined
 
+  - name: Debug - find regression files and results dirs before packaging (check-tde)
+    shell: |
+      echo "=== regression.out files ==="
+      find /tmp/pg_tde -name "regression.out" 2>/dev/null || true
+      echo "=== regression.diffs files ==="
+      find /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
+      echo "=== results/ directories (outside tmp_check) ==="
+      find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" 2>/dev/null || true
+    args:
+      executable: /bin/bash
+    register: debug_regression
+    ignore_errors: true
+    become: true
+    when:
+      - testsuite == 'check-tde'
+      - regression is defined
+
+  - debug:
+      var: debug_regression.stdout_lines
+    when:
+      - testsuite == 'check-tde'
+      - regression is defined
+
   - name: Package check-tde test artifacts
     shell: |
       set -uo pipefail
-      ARTIFACT_DIR="/tmp/test-artifacts"
+      ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
+      ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
       mkdir -p "$ARTIFACT_DIR"
       find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       cp -r /tmp/pg_tde/t "$ARTIFACT_DIR/pg_tde_t" 2>/dev/null || true
       cp -r /tmp/pg_tde/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
-      cp /tmp/postgres/logfile "$ARTIFACT_DIR/" 2>/dev/null || true
-      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp test-artifacts
+      # Collect standalone results/ directories for pg_regress SQL test outputs
+      find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" | while read d; do
+        rel="${d#/tmp/pg_tde/}"
+        mkdir -p "$ARTIFACT_DIR/pg_tde/$rel"
+        cp -r "$d/." "$ARTIFACT_DIR/pg_tde/$rel/" 2>/dev/null || true
+      done
+      cp /tmp/postgres/logfile "$ARTIFACT_DIR/server.log" 2>/dev/null || true
+      cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
       executable: /bin/bash
+    become: true
     when:
       - testsuite == 'check-tde'
       - regression is defined
@@ -707,7 +742,8 @@
     shell: |
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
-      cd /tmp/postgres/ && make -s check-world -k PROVE_FLAGS='-v -p'
+      set -o pipefail
+      cd /tmp/postgres/ && make -s check-world -k PROVE_FLAGS='-v -p' 2>&1 | tee /tmp/check-server-regression.log
     become_user: postgres
     args:
       executable: /bin/bash
@@ -757,17 +793,58 @@
       - regression.rc != 0
       - diffs_output.stdout is defined
 
+  - name: Debug - find regression files and results dirs before packaging (check-server)
+    shell: |
+      echo "=== regression.out files ==="
+      find /tmp/postgres -name "regression.out" 2>/dev/null || true
+      echo "=== regression.diffs files ==="
+      find /tmp/postgres -name "regression.diffs" 2>/dev/null || true
+      echo "=== results/ directories (outside tmp_check) ==="
+      find /tmp/postgres -type d -name "results" -not -path "*/tmp_check/*" 2>/dev/null || true
+    args:
+      executable: /bin/bash
+    register: debug_regression
+    ignore_errors: true
+    become: true
+    when:
+      - testsuite == 'check-server'
+      - regression is defined
+
+  - debug:
+      var: debug_regression.stdout_lines
+    when:
+      - testsuite == 'check-server'
+      - regression is defined
+
   - name: Package check-server test artifacts
     shell: |
       set -uo pipefail
-      ARTIFACT_DIR="/tmp/test-artifacts"
+      ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
+      ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
       mkdir -p "$ARTIFACT_DIR"
       find /tmp/postgres -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/postgres -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
-      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp test-artifacts
+      # Collect tmp_check directories for tap test logs (make check-world creates these per module)
+      find /tmp/postgres -type d -name "tmp_check" | while read d; do
+        rel="${d#/tmp/postgres/}"
+        mkdir -p "$ARTIFACT_DIR/postgres/$rel"
+        cp -r "$d/." "$ARTIFACT_DIR/postgres/$rel/" 2>/dev/null || true
+      done
+      # Collect standalone results/ directories for pg_regress SQL test outputs
+      find /tmp/postgres -type d -name "results" -not -path "*/tmp_check/*" | while read d; do
+        rel="${d#/tmp/postgres/}"
+        mkdir -p "$ARTIFACT_DIR/postgres/$rel"
+        cp -r "$d/." "$ARTIFACT_DIR/postgres/$rel/" 2>/dev/null || true
+      done
+      # Note: no /tmp/postgres/logfile for check-server — make check-world manages its own
+      # temp instances; their per-node server logs are inside the tmp_check/log/ dirs above.
+      cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/check-server-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
       executable: /bin/bash
+    become: true
     when:
       - testsuite == 'check-server'
       - regression is defined
@@ -834,7 +911,8 @@
       export TDE_MODE=1
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
-      cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/pg_tde/ci_scripts/tde_setup.sql" make -s installcheck-world -k PROVE_FLAGS="-v -p -e 'perl -I/tmp/pg_tde/ci_scripts/perl -I/tmp/postgres/src/test/perl -MPostgreSQL::Test::TdeCluster'"
+      set -o pipefail
+      cd /tmp/postgres && EXTRA_REGRESS_OPTS="--extra-setup=/tmp/pg_tde/ci_scripts/tde_setup.sql" make -s installcheck-world -k PROVE_FLAGS="-v -p -e 'perl -I/tmp/pg_tde/ci_scripts/perl -I/tmp/postgres/src/test/perl -MPostgreSQL::Test::TdeCluster'" 2>&1 | tee /tmp/installcheck-world-regression.log
     args:
       executable: /bin/bash
       chdir: "/tmp/postgres/"
@@ -887,19 +965,71 @@
       - regression is defined
       - regression.rc != 0
 
+  - name: Debug - find regression files and results dirs before packaging (installcheck-world)
+    shell: |
+      echo "=== regression.out files ==="
+      find /tmp/postgres /tmp/pg_tde -name "regression.out" 2>/dev/null || true
+      echo "=== regression.diffs files ==="
+      find /tmp/postgres /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
+      echo "=== results/ directories (outside tmp_check) ==="
+      find /tmp/postgres /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" 2>/dev/null || true
+    args:
+      executable: /bin/bash
+    register: debug_regression
+    ignore_errors: true
+    become: true
+    when:
+      - testsuite == 'installcheck-world'
+      - regression is defined
+
+  - debug:
+      var: debug_regression.stdout_lines
+    when:
+      - testsuite == 'installcheck-world'
+      - regression is defined
+
   - name: Package installcheck-world test artifacts
     shell: |
       set -uo pipefail
-      ARTIFACT_DIR="/tmp/test-artifacts"
+      ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
+      ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
       mkdir -p "$ARTIFACT_DIR"
       find /tmp/postgres -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/postgres -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
-      cp /tmp/postgres/logfile "$ARTIFACT_DIR/" 2>/dev/null || true
-      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp test-artifacts
+      find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      # Collect tmp_check directories for tap test logs
+      find /tmp/postgres -type d -name "tmp_check" | while read d; do
+        rel="${d#/tmp/postgres/}"
+        mkdir -p "$ARTIFACT_DIR/postgres/$rel"
+        cp -r "$d/." "$ARTIFACT_DIR/postgres/$rel/" 2>/dev/null || true
+      done
+      find /tmp/pg_tde -type d -name "tmp_check" | while read d; do
+        rel="${d#/tmp/pg_tde/}"
+        mkdir -p "$ARTIFACT_DIR/pg_tde/$rel"
+        cp -r "$d/." "$ARTIFACT_DIR/pg_tde/$rel/" 2>/dev/null || true
+      done
+      # Collect standalone results/ directories for pg_regress SQL test outputs
+      find /tmp/postgres -type d -name "results" -not -path "*/tmp_check/*" | while read d; do
+        rel="${d#/tmp/postgres/}"
+        mkdir -p "$ARTIFACT_DIR/postgres/$rel"
+        cp -r "$d/." "$ARTIFACT_DIR/postgres/$rel/" 2>/dev/null || true
+      done
+      find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" | while read d; do
+        rel="${d#/tmp/pg_tde/}"
+        mkdir -p "$ARTIFACT_DIR/pg_tde/$rel"
+        cp -r "$d/." "$ARTIFACT_DIR/pg_tde/$rel/" 2>/dev/null || true
+      done
+      cp /tmp/postgres/logfile "$ARTIFACT_DIR/server.log" 2>/dev/null || true
+      cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/installcheck-world-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
       executable: /bin/bash
+    become: true
     when:
       - testsuite == 'installcheck-world'
       - regression is defined

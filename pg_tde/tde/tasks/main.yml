@@ -268,8 +268,10 @@
     {% if ansible_os_family == 'RedHat' and ansible_distribution_major_version == '9' %}
     source /opt/rh/gcc-toolset-14/enable
     {% endif %}
+    set -o pipefail
     make USE_PGXS=1 PG_CONFIG={{ pg_config_path }} \
-      CFLAGS="$({{ pg_config_path }} --cflags | sed 's/-Wmissing-variable-declarations//g')"
+      CFLAGS="$({{ pg_config_path }} --cflags | sed 's/-Wmissing-variable-declarations//g')" \
+      2>&1 | tee /tmp/tde-build.log
   args:
     chdir: /tmp/pg_tde
     executable: /bin/bash

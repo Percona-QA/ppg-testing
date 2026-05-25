@@ -1,19 +1,8 @@
-import os
-import time
-
-import testinfra.utils.ansible_runner
-
-
-testinfra_hosts = testinfra.utils.ansible_runner.AnsibleRunner(
-    os.environ['MOLECULE_INVENTORY_FILE']).get_hosts('all')
-
-
-def test_tde(host):
-    with host.sudo("postgres"):
-        os = host.system_info.distribution
-        result = host.run("cd /tmp/contrib/pg_tde && export LANG=C.UTF-8 && export LC_CTYPE=C && export LC_ALL=C && export PG_TEST_PORT_DIR=tmp/pg_tde && make -s installcheck -k")
-        print(result.stdout)
-        if result.rc != 0:
-            print(result.stderr)
-            print(host.file("/tmp/contrib/pg_tde/regression.diffs").content_string)
-            raise AssertionError
+# This file is not used.
+#
+# The pg_tde/tde molecule configuration uses the Ansible verifier
+# (verifier.name: ansible). All tests run as Ansible tasks during the
+# converge phase via tasks/redhat_tasks.yml and tasks/debian_tasks.yml
+# using: make installcheck USE_PGXS=1
+#
+# This file is retained for reference only and is never executed by molecule.

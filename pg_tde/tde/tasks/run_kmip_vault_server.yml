@@ -71,9 +71,11 @@
 - name: Build KMIP Docker image using CLI
   become: true
   ansible.builtin.shell: |
-    docker build -t kmip-server .
+    set -o pipefail
+    docker build -t kmip-server . 2>&1 | tee /tmp/kmip-build.log
   args:
     chdir: /tmp/kmip_server
+    executable: /bin/bash
 
 - name: Run KMIP Docker container using CLI
   become: true
@@ -293,7 +295,7 @@
     msg: "Unsupported architecture: {{ ansible_architecture }}"
   when: arch == "unsupported"
 
-- name: Debug Bao URL and file (for safety)
+- name: Set OS architecture fact
   ansible.builtin.set_fact:
     OS_ARCH: "{{ arch | trim }}"
 
@@ -309,14 +311,19 @@
 - name: Debug Bao URL and file (for safety)
   ansible.builtin.debug:
     msg:
-      - "URL: '{{ bao_pkg_url }}'"
-      - "File: '{{ bao_pkg_file }}'"
+      - "URL: {{ bao_pkg_url }}"
+      - "File: {{ bao_pkg_file }}"
 
 - name: Download OpenBao package
   ansible.builtin.get_url:
     url: "{{ bao_pkg_url | trim }}"
     dest: "{{ bao_pkg_file | trim }}"
     mode: '0644'
+    timeout: 120
+  register: bao_download
+  retries: 3
+  delay: 15
+  until: bao_download is succeeded
 
 - name: Install OpenBao on Debian-based systems
   ansible.builtin.apt:

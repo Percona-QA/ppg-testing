@@ -21,6 +21,7 @@
       # ... include other env lookups here ...
       go_version: "1.25.6"
       go_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}"
+      artifact_filename: "tde-auxiliary-{{ lookup('env','VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.tar.gz"
       cacheable: true
 
   - name: End play on Ubuntu 26 if PostgreSQL version is not supported
@@ -397,8 +398,45 @@
     when: 
       - failed_log_outputs.results | default([]) | length > 0
 
+  - name: Package tde auxiliary test artifacts
+    shell: |
+      set -uo pipefail
+      ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
+      ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
+      rm -rf "$ARTIFACT_DIR"
+      mkdir -p "$ARTIFACT_DIR"
+      # Copy all test log files found in the failed_log_paths list
+      {% for log_path in failed_log_paths %}
+      cp --parents "{{ log_path }}" "$ARTIFACT_DIR/" 2>/dev/null || true
+      {% endfor %}
+      # Also collect full automation log directory for context
+      find /tmp/percona-qa/postgresql/automation/logs -type f 2>/dev/null | \
+        xargs -I{} cp --parents {} "$ARTIFACT_DIR/" 2>/dev/null || true
+      # Collect PostgreSQL system service log (RHEL path, package install)
+      find /var/lib/pgsql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      # Collect PostgreSQL system service log (Debian/Ubuntu path, package install)
+      find /var/log/postgresql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      # Collect PostgreSQL server log when built from source (/opt/pgsql data dir)
+      find /opt/pgsql/data -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      # Collect build logs when built from source
+      cp /tmp/psp-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
+    args:
+      executable: /bin/bash
+    become: true
+    when: failed_log_outputs.results | default([]) | length > 0
+    ignore_errors: true
+
+  - name: Fetch tde auxiliary test artifacts to controller
+    fetch:
+      src: "/tmp/{{ artifact_filename }}"
+      dest: "{{ playbook_dir }}/../artifacts/"
+      fail_on_missing: false
+    when: failed_log_outputs.results | default([]) | length > 0
+
   - name: Fail the playbook if tde tests failed
     fail:
       msg: "TDE auxiliary tests failed"
-    when: 
+    when:
       - failed_log_outputs.results | default([]) | length > 0
