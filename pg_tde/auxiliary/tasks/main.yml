@@ -398,6 +398,13 @@
     when: 
       - failed_log_outputs.results | default([]) | length > 0
 
+  - name: Save test runner output to file
+    copy:
+      content: "{{ regression.stdout | default('') }}\n--- STDERR ---\n{{ regression.stderr | default('') }}"
+      dest: /tmp/tde-test-runner-output.log
+    become: true
+    when: regression is defined
+
   - name: Package tde auxiliary test artifacts
     shell: |
       set -uo pipefail
@@ -405,27 +412,36 @@
       ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
       mkdir -p "$ARTIFACT_DIR"
-      # Copy all test log files found in the failed_log_paths list
-      {% for log_path in failed_log_paths %}
-      cp --parents "{{ log_path }}" "$ARTIFACT_DIR/" 2>/dev/null || true
-      {% endfor %}
-      # Also collect full automation log directory for context
-      find /tmp/percona-qa/postgresql/automation/logs -type f 2>/dev/null | \
-        xargs -I{} cp --parents {} "$ARTIFACT_DIR/" 2>/dev/null || true
-      # Collect PostgreSQL system service log (RHEL path, package install)
+      # Test runner summary (stdout + stderr from test_runner.sh)
+      cp /tmp/tde-test-runner-output.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      # All per-test logs under /tmp/pgtest/test_logs/ (one .log per test, always written)
+      find /tmp/pgtest/test_logs -type f 2>/dev/null | xargs -I{} cp --parents {} "$ARTIFACT_DIR/" 2>/dev/null || true
+      # Failed test artifacts: PGDATA snapshots saved by test_runner on failure
+      find /tmp/pgtest/failed_tests -type f 2>/dev/null | xargs -I{} cp --parents {} "$ARTIFACT_DIR/" 2>/dev/null || true
+      # PostgreSQL server logs from all test data directories
+      cp --parents /tmp/pgtest/data/server.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp --parents /tmp/pgtest/primary_data/server.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp --parents /tmp/pgtest/replica_data/server.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      # postgresql.conf from test clusters (useful for config-related failures)
+      cp --parents /tmp/pgtest/data/postgresql.conf "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp --parents /tmp/pgtest/primary_data/postgresql.conf "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp --parents /tmp/pgtest/replica_data/postgresql.conf "$ARTIFACT_DIR/" 2>/dev/null || true
+      # initdb log
+      cp /tmp/pgtest/initdb.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      # PostgreSQL system service log (RHEL path, package install)
       find /var/lib/pgsql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
-      # Collect PostgreSQL system service log (Debian/Ubuntu path, package install)
+      # PostgreSQL system service log (Debian/Ubuntu path, package install)
       find /var/log/postgresql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
-      # Collect PostgreSQL server log when built from source (/opt/pgsql data dir)
+      # PostgreSQL server log when built from source (/opt/pgsql data dir)
       find /opt/pgsql/data -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
-      # Collect build logs when built from source
+      # Build logs
       cp /tmp/psp-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
       executable: /bin/bash
     become: true
-    when: failed_log_outputs.results | default([]) | length > 0
+    when: regression is defined
     ignore_errors: true
 
   - name: Fetch tde auxiliary test artifacts to controller
@@ -433,7 +449,7 @@
       src: "/tmp/{{ artifact_filename }}"
       dest: "{{ playbook_dir }}/../artifacts/"
       fail_on_missing: false
-    when: failed_log_outputs.results | default([]) | length > 0
+    when: regression is defined
 
   - name: Fail the playbook if tde tests failed
     fail:
