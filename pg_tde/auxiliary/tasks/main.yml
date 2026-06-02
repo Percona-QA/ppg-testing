@@ -426,11 +426,8 @@
       # logs/: per-test subdirectories created by test_runner
       # Each contains test stdout, server logs, and config files
       # -------------------------------------------------------
-      find /tmp/pgtest/test_logs -mindepth 1 -maxdepth 2 2>/dev/null \
+      find /tmp/pgtest/test_logs -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
         -exec cp -r {} "$ARTIFACT_DIR/logs/" \; || true
-      # OpenBao server log (written to $RUN_DIR/<name>/bao_server.log)
-      find /tmp/pgtest -name "bao_server.log" 2>/dev/null \
-        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
       # System PostgreSQL service log: RHEL (/var/lib/pgsql)
       find /var/lib/pgsql -name "*.log" -type f 2>/dev/null \
         -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
