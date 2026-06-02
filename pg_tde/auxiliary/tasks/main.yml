@@ -411,32 +411,43 @@
       ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
       ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
-      mkdir -p "$ARTIFACT_DIR"
-      # Test runner summary (stdout + stderr from test_runner.sh)
+      mkdir -p "$ARTIFACT_DIR/logs"
+      mkdir -p "$ARTIFACT_DIR/failed_tests"
+
+      # -------------------------------------------------------
+      # Top-level: test runner summary and build logs
+      # -------------------------------------------------------
       cp /tmp/tde-test-runner-output.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      # All per-test logs under /tmp/pgtest/test_logs/ (one .log per test, always written)
-      find /tmp/pgtest/test_logs -type f 2>/dev/null | xargs -I{} cp --parents {} "$ARTIFACT_DIR/" 2>/dev/null || true
-      # Failed test artifacts: PGDATA snapshots saved by test_runner on failure
-      find /tmp/pgtest/failed_tests -type f 2>/dev/null | xargs -I{} cp --parents {} "$ARTIFACT_DIR/" 2>/dev/null || true
-      # PostgreSQL server logs from all test data directories
-      cp --parents /tmp/pgtest/data/server.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp --parents /tmp/pgtest/primary_data/server.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp --parents /tmp/pgtest/replica_data/server.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      # postgresql.conf from test clusters (useful for config-related failures)
-      cp --parents /tmp/pgtest/data/postgresql.conf "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp --parents /tmp/pgtest/primary_data/postgresql.conf "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp --parents /tmp/pgtest/replica_data/postgresql.conf "$ARTIFACT_DIR/" 2>/dev/null || true
-      # initdb log
-      cp /tmp/pgtest/initdb.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      # PostgreSQL system service log (RHEL path, package install)
-      find /var/lib/pgsql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
-      # PostgreSQL system service log (Debian/Ubuntu path, package install)
-      find /var/log/postgresql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
-      # PostgreSQL server log when built from source (/opt/pgsql data dir)
-      find /opt/pgsql/data -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
-      # Build logs
-      cp /tmp/psp-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pgtest/initdb.log           "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/psp-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
+
+      # -------------------------------------------------------
+      # logs/: per-test subdirectories created by test_runner
+      # Each contains test stdout, server logs, and config files
+      # -------------------------------------------------------
+      find /tmp/pgtest/test_logs -mindepth 1 -maxdepth 2 2>/dev/null \
+        -exec cp -r {} "$ARTIFACT_DIR/logs/" \; || true
+      # OpenBao server log (written to $RUN_DIR/<name>/bao_server.log)
+      find /tmp/pgtest -name "bao_server.log" 2>/dev/null \
+        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+      # System PostgreSQL service log: RHEL (/var/lib/pgsql)
+      find /var/lib/pgsql -name "*.log" -type f 2>/dev/null \
+        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+      # System PostgreSQL service log: Debian (/var/log/postgresql)
+      find /var/log/postgresql -name "*.log" -type f 2>/dev/null \
+        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+      # PostgreSQL server log when built from source (/opt/pgsql/data)
+      find /opt/pgsql/data -name "*.log" -type f 2>/dev/null \
+        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+
+      # -------------------------------------------------------
+      # failed_tests/: PGDATA snapshots saved by test_runner
+      # -------------------------------------------------------
+      find /tmp/pgtest/failed_tests -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while read d; do
+        cp -r "$d" "$ARTIFACT_DIR/failed_tests/" 2>/dev/null || true
+      done
+
       tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
       executable: /bin/bash
