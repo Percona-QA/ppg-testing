@@ -493,6 +493,7 @@ def test_llvmjit_symbols_present(host):
     required to be dynamic exports.  _PG_jit_provider_init is the only symbol that
     must appear in the dynamic symbol table on every platform."""
     _skip_if_llvmjit_unavailable()
+    _ensure_nm_available(host)
     so_path = f"/usr/pgsql-{MAJOR_VER}/lib/llvmjit.so"
     result = host.run(f"nm -D {so_path} | grep -q '_PG_jit_provider_init'")
     assert result.rc == 0, (
@@ -507,6 +508,7 @@ def test_llvmjit_no_undefined_cxx_symbols(host):
       ERROR: could not load library 'llvmjit.so': undefined symbol: _ZSt21__glibcxx_assert_fail...
     These symbols must be statically linked into llvmjit.so on RHEL builds."""
     _skip_if_llvmjit_unavailable()
+    _ensure_nm_available(host)
     so_path = f"/usr/pgsql-{MAJOR_VER}/lib/llvmjit.so"
     result = host.run(f"nm -D {so_path} | awk '$2 == \"U\" && $3 ~ /^_ZSt/ {{print}}'")
     assert result.rc == 0, f"nm -D failed on {so_path}: {result.stderr}"
@@ -1493,6 +1495,35 @@ def _skip_if_llvmjit_unavailable():
         pytest.skip(
             f"llvmjit not available for PostgreSQL {MAJOR_MINOR_VER} "
             f"(requires >= {min_ver})"
+        )
+
+
+def _ensure_nm_available(host):
+    """Ensure nm (binutils) is available in the container, installing it if needed.
+
+    UBI 8 minimal images do not include binutils by default while UBI 9 does.
+    Rather than skipping the test, install binutils on-the-fly so that symbol
+    inspection tests run on all UBI variants (ubi8, ubi9, ubi10).
+
+    The container runs as the postgres user so yum/dnf requires root.
+    We use 'docker exec -u root' via subprocess to perform the install.
+    Only skips if installation itself fails.
+    """
+    if host.run("command -v nm").rc == 0:
+        return
+    container_name = f"PG{MAJOR_VER}"
+    subprocess.run(
+        ["docker", "exec", "-u", "root", container_name,
+         "sh", "-c",
+         "yum install -y binutils 2>/dev/null || "
+         "dnf install -y binutils 2>/dev/null || "
+         "microdnf install -y binutils 2>/dev/null"],
+        capture_output=True
+    )
+    if host.run("command -v nm").rc != 0:
+        pytest.skip(
+            "nm (binutils) not available and could not be installed in this "
+            "container — skipping symbol inspection test."
         )
 
 
