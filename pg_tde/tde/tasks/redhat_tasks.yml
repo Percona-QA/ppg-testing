@@ -110,6 +110,7 @@
       # Collect PostgreSQL system service log (RHEL path)
       find /var/lib/pgsql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-install.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true

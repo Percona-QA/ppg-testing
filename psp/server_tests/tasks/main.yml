@@ -418,7 +418,7 @@
     become: true
     ansible.builtin.shell: |
       set -o pipefail
-      meson install -C /tmp/pg_tde-build 2>&1 | tee -a /tmp/tde-build.log
+      meson install -C /tmp/pg_tde-build 2>&1 | tee /tmp/tde-install.log
     args:
       executable: /bin/bash
     environment:
@@ -724,6 +724,7 @@
       cp /tmp/postgres/logfile "$ARTIFACT_DIR/server.log" 2>/dev/null || true
       cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-install.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true

@@ -109,6 +109,7 @@
       # Collect PostgreSQL system service log (Debian/Ubuntu path)
       find /var/log/postgresql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-install.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true

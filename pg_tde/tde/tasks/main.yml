@@ -291,7 +291,7 @@
   become: true
   ansible.builtin.shell: |
     set -o pipefail
-    meson install -C /tmp/pg_tde-build 2>&1 | tee -a /tmp/tde-build.log
+    meson install -C /tmp/pg_tde-build 2>&1 | tee /tmp/tde-install.log
   args:
     executable: /bin/bash
   environment:
