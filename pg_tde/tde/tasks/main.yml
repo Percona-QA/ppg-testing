@@ -271,7 +271,6 @@
     set -o pipefail
     rm -rf /tmp/pg_tde-build
     meson setup --buildtype=release -Dpg_config={{ pg_config_path }} -Dwerror=true /tmp/pg_tde-build 2>&1 | tee /tmp/tde-build.log
-    meson install -C /tmp/pg_tde-build 2>&1 | tee -a /tmp/tde-build.log
     # make USE_PGXS=1 PG_CONFIG={{ pg_config_path }} \
     #   CFLAGS="$({{ pg_config_path }} --cflags | sed 's/-Wmissing-variable-declarations//g')" \
     #   2>&1 | tee /tmp/tde-build.log
@@ -283,6 +282,20 @@
     LD_LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu:{{ pg_lib_dir }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
     LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu:{{ pg_lib_dir }}:{{ ansible_env.LIBRARY_PATH | default('') }}"
     TDE_MODE: "1"
+  register: tde_build_output
+
+- debug:
+    var: tde_build_output.stdout_lines
+
+- name: Install pg_tde
+  become: true
+  ansible.builtin.shell: |
+    set -o pipefail
+    meson install -C /tmp/pg_tde-build 2>&1 | tee -a /tmp/tde-build.log
+  args:
+    executable: /bin/bash
+  environment:
+    PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:{{ ansible_env.PATH }}"
   register: tde_install_output
 
 - debug:

@@ -394,14 +394,13 @@
 
   - debug: var=results.stdout_lines
 
-  - name: Build & Install pg_tde
+  - name: Build pg_tde
     become: true
     become_user: postgres
     ansible.builtin.shell: |
       set -o pipefail
       rm -rf /tmp/pg_tde-build
       meson setup --buildtype=release -Dpg_config=/opt/pgsql/bin/pg_config -Dwerror=true /tmp/pg_tde-build 2>&1 | tee /tmp/tde-build.log
-      meson install -C /tmp/pg_tde-build 2>&1 | tee -a /tmp/tde-build.log
       # make PG_CONFIG=/opt/pgsql/bin/pg_config install 2>&1 | tee /tmp/tde-build.log
     args:
       chdir: /tmp/pg_tde
@@ -409,6 +408,21 @@
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       TDE_MODE: "1"
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Install pg_tde
+    become: true
+    ansible.builtin.shell: |
+      set -o pipefail
+      meson install -C /tmp/pg_tde-build 2>&1 | tee -a /tmp/tde-build.log
+    args:
+      executable: /bin/bash
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
     when:
       - testsuite in ['installcheck-world', 'check-tde']
     register: results
