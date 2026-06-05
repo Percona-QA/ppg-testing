@@ -553,6 +553,60 @@ def test_llvmjit_pg_config_compiled_with_llvm(host):
     )
 
 
+def test_openssl_version_matches_ubi(host):
+    """Verify the OpenSSL version in the container matches the expected version for the UBI base.
+
+    - UBI 8  -> OpenSSL 1.x
+    - UBI 9  -> OpenSSL 3.x
+    - UBI 10 -> OpenSSL 3.x
+    """
+    EXPECTED_OPENSSL_MAJOR = {'8': '1', '9': '3', '10': '3'}
+    ubi_major = _expected_ubi_major_version()
+    expected = EXPECTED_OPENSSL_MAJOR[ubi_major]
+
+    result = host.run("openssl version")
+    assert result.rc == 0, f"openssl version failed: {result.stderr}"
+    # Output: "OpenSSL 1.1.1k  FIPS ..." or "OpenSSL 3.0.7 ..."
+    actual_major = result.stdout.strip().split()[1].split('.')[0]
+    assert actual_major == expected, (
+        f"OpenSSL version mismatch for UBI {ubi_major}: "
+        f"expected major {expected}, got '{result.stdout.strip()}'"
+    )
+
+
+def test_llvm_version_matches_ubi(host):
+    """Verify the LLVM major version installed in the container matches the expected
+    range for the UBI base image.
+
+    - UBI 8  -> LLVM 13 or 14
+    - UBI 9  -> LLVM 15, 16, or 17
+    - UBI 10 -> LLVM 17, 18, or 19
+    """
+    _skip_if_llvmjit_unavailable()
+    EXPECTED_LLVM_MAJORS = {
+        '8':  [13, 14],
+        '9':  [15, 16, 17],
+        '10': [17, 18, 19],
+    }
+    ubi_major = _expected_ubi_major_version()
+    expected_majors = EXPECTED_LLVM_MAJORS[ubi_major]
+
+    # Read LLVM version from installed llvm-libs RPM package
+    result = host.run("rpm -qa --queryformat '%{VERSION}\\n' 'llvm-libs*' | head -1")
+    if result.rc != 0 or not result.stdout.strip():
+        # Fallback: detect from installed libLLVM shared library filenames
+        result = host.run(
+            "find /usr/lib64 -maxdepth 1 -name 'libLLVM-*.so' 2>/dev/null | "
+            "sed 's/.*libLLVM-\\([0-9]*\\).*/\\1/' | head -1"
+        )
+    assert result.stdout.strip(), "Could not determine LLVM version from rpm or /usr/lib64"
+    actual_major = int(result.stdout.strip().split('.')[0])
+    assert actual_major in expected_majors, (
+        f"LLVM major version mismatch for UBI {ubi_major}: "
+        f"expected one of {expected_majors}, got {actual_major}"
+    )
+
+
 @pytest.mark.needs_preload
 def test_pg_stat_monitor_extension_version(host):
     # 1. Ensure extension is created
@@ -592,15 +646,9 @@ def test_build_with_liburing(host):
     if MAJOR_VER not in ["18"]:
         pytest.skip("Skipping, test only for PostgreSQL 18 version")
 
-    distribution = host.system_info.distribution.lower()
-    if distribution in [
-        "redhat",
-        "centos",
-        "rhel",
-        "rocky",
-        "ol",
-    ] and host.system_info.release.startswith("8"):
-        pytest.skip(f"liburing not supported on {distribution} 8 for postgres {MAJOR_VER}")
+    ubi_major = _expected_ubi_major_version()
+    if ubi_major == '8':
+        pytest.skip(f"liburing not supported on UBI/RHEL 8 for postgres {MAJOR_VER}")
 
     cmd = "pg_config --configure"
     output = host.check_output(cmd)

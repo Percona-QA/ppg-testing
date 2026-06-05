@@ -95,6 +95,8 @@
       - zlib-devel
       - readline-devel
       - gcc
+      - meson
+      - ninja-build
       - lz4
       - lz4-devel
       - python3

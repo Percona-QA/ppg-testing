@@ -42,6 +42,8 @@
         - make
         - gcc
         - autoconf
+        - meson
+        - ninja-build
         - libjson-c-dev
         - libhttp-server-simple-perl
         - python3-pykmip

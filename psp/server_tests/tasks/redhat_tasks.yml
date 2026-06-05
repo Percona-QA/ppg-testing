@@ -147,6 +147,8 @@
       - llvm
       - llvm-toolset
       - llvm-devel
+      - meson
+      - ninja-build
       - clang-devel
       - vim
       - git

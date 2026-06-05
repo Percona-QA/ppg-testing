@@ -25,8 +25,9 @@
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
       set -o pipefail
-      cd /tmp/pg_tde && make -s installcheck USE_PGXS=1 -k PROVE_FLAGS='-v -p' 2>&1 | tee /tmp/check-tde-regression.log
-      #cd /tmp/pg_tde && make -s installcheck -k
+      meson test --timeout-multiplier=0 --print-errorlogs -C /tmp/pg_tde-build 2>&1 | tee /tmp/check-tde-regression.log
+      # cd /tmp/pg_tde && make -s installcheck USE_PGXS=1 -k PROVE_FLAGS='-v -p' 2>&1 | tee /tmp/check-tde-regression.log
+      # cd /tmp/pg_tde && make -s installcheck -k
     become_user: postgres
     args:
       executable: /bin/bash
