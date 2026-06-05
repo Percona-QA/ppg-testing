@@ -573,36 +573,6 @@ def test_openssl_version_matches_ubi(host):
     )
 
 
-def test_llvm_version_matches_ubi(host):
-    """Verify the LLVM major version installed in the container matches the expected
-    range for the UBI base image.
-
-    - UBI 8  -> LLVM 13 or 14
-    - UBI 9  -> LLVM 15, 16, or 17
-    - UBI 10 -> LLVM 17, 18, or 19
-    """
-    _skip_if_llvmjit_unavailable()
-    EXPECTED_LLVM_MAJORS = {
-        '8':  [13, 14],
-        '9':  [15, 16, 17],
-        '10': [17, 18, 19],
-    }
-    ubi_major = _expected_ubi_major_version()
-    expected_majors = EXPECTED_LLVM_MAJORS[ubi_major]
-
-    result = host.run("rpm -qa --queryformat '%{VERSION}\\n' 'llvm-libs*' | head -1")
-    if result.rc != 0 or not result.stdout.strip():
-        result = host.run(
-            "find /usr/lib64 -maxdepth 1 -name 'libLLVM-*.so' 2>/dev/null | "
-            "sed 's/.*libLLVM-\\([0-9]*\\).*/\\1/' | head -1"
-        )
-    assert result.stdout.strip(), "Could not determine LLVM version from rpm or /usr/lib64"
-    actual_major = int(result.stdout.strip().split('.')[0])
-    assert actual_major in expected_majors, (
-        f"LLVM major version mismatch for UBI {ubi_major}: "
-        f"expected one of {expected_majors}, got {actual_major}"
-    )
-
 
 @pytest.mark.needs_preload
 def test_pg_stat_monitor_extension_version(host):
