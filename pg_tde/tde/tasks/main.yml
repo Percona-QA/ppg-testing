@@ -230,26 +230,43 @@
 
 - debug: var=results.stdout_lines
 
-#to be removed once test is stable
-- name: Remove vault_v2_test from Makefile
-  ansible.builtin.lineinfile:
-    path: /tmp/pg_tde/Makefile
-    regexp: '.*vault_v2_test.*'
-    state: absent
-  when:
-    - ansible_os_family == 'Debian'
-    - ansible_distribution == 'Debian'
-    - (ansible_distribution_major_version | int) == 13
+# NOTE: vault_v2_test is excluded on Debian 13 only (vault_v2_test.sql uses
+# features not yet supported on that platform). The Makefile task below is
+# dead code since switching to meson — meson does not use the Makefile. Only
+# the regress.pl removal is still active (regress.pl is invoked by meson test).
+#
+# TODO: Remove the Makefile task once vault_v2_test is stable on Debian 13.
 
-- name: Remove vault_v2_test from t/regress.pl
-  ansible.builtin.lineinfile:
-    path: /tmp/pg_tde/t/regress.pl
-    regexp: '.*vault_v2_test.*'
-    state: absent
-  when:
-    - ansible_os_family == 'Debian'
-    - ansible_distribution == 'Debian'
-    - (ansible_distribution_major_version | int) == 13
+# Dead code — meson does not use the Makefile. Kept for reference only.
+# - name: Remove vault_v2_test from Makefile
+#   ansible.builtin.lineinfile:
+#     path: /tmp/pg_tde/Makefile
+#     regexp: '.*vault_v2_test.*'
+#     state: absent
+#   when:
+#     - ansible_os_family == 'Debian'
+#     - ansible_distribution == 'Debian'
+#     - (ansible_distribution_major_version | int) == 13
+
+# TODO: vault_v2_test was previously excluded on Debian 13 due to instability.
+# Now that bao is installed natively and regress.pl manages its own bao lifecycle,
+# vault_v2_test may work on Debian 13 without exclusion. Commented out to verify
+# on the next CI run — re-enable exclusion if vault_v2_test still fails on Debian 13.
+#
+# - name: Remove vault_v2_test from t/regress.pl
+#   ansible.builtin.lineinfile:
+#     path: /tmp/pg_tde/t/regress.pl
+#     regexp: '.*vault_v2_test.*'
+#     state: absent
+#   when:
+#     - ansible_os_family == 'Debian'
+#     - ansible_distribution == 'Debian'
+#     - (ansible_distribution_major_version | int) == 13
+
+# NOTE: wal_archiving.pl is skipped on RHEL/Rocky/OL family via an internal
+# check in the test itself (detects /etc/redhat-release). No Ansible task is
+# needed here. See t/wal_archiving.pl for the full explanation of what needs
+# to be investigated before re-enabling on RHEL.
 
 - name: Submodule update
   command : git submodule update --init --recursive
@@ -355,26 +372,23 @@
       multiple_extensions.pl: /tmp/pg_tde/t/multiple_extensions.pl
       delete_principal_key_1.out: /tmp/pg_tde/expected/delete_principal_key_1.out
 
-- name: Include KMIP server setup
-  ansible.builtin.include_tasks: run_kmip_vault_server.yml
+# run_kmip_vault_server.yml is no longer needed with meson test.
+# Previously (make installcheck era) it installed Docker and ran KMIP as a
+# Docker container and started Vault/OpenBao externally. With meson test:
+#   - kmip.pl starts/stops its own cosmian_kms process (installed natively)
+#   - regress.pl starts/stops its own bao process (installed natively)
+# Both tools are now installed in debian_depends.yml / redhat_depends.yml.
+#
+# - name: Include KMIP server setup
+#   ansible.builtin.include_tasks: run_kmip_vault_server.yml
 
-# =============================
-# Vault ownership fix
-# =============================
-- name: Ensure /tmp/vault_env ownership is postgres
-  ansible.builtin.file:
-    path: /tmp/vault_env
-    owner: postgres
-    group: "{{ postgres_group }}"
-    recurse: true
-
-- name: Change ownership of /tmp/bao_env to postgres
-  ansible.builtin.file:
-    path: /tmp/bao_env
-    owner: postgres
-    group: "{{ postgres_group }}"
-    recurse: true
-  become: true
+# These ownership fix tasks are no longer needed. /tmp/vault_env and
+# /tmp/bao_env were created by run_kmip_vault_server.yml (now removed).
+# regress.pl creates its own bao temp dir via PostgreSQL::Test::Utils::tempdir
+# which is already owned by postgres.
+#
+# - name: Ensure /tmp/vault_env ownership is postgres
+# - name: Change ownership of /tmp/bao_env to postgres
 
 # =============================
 # OS-specific tasks

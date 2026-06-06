@@ -1,31 +1,10 @@
 ---
   - name: Run installcheck tde tests
-    shell: | 
-      echo $VAULT_ADDR
-
-      CLUSTER_INFO=$(mktemp)
-      bao server -dev -dev-tls -dev-cluster-json="$CLUSTER_INFO" > /tmp/bao-server.log 2>&1 &
-      sleep 10
-      export VAULT_ROOT_TOKEN_FILE=$(mktemp)
-      jq -r .root_token "$CLUSTER_INFO" > "$VAULT_ROOT_TOKEN_FILE"
-      export VAULT_CACERT=$(jq -r .ca_cert_path "$CLUSTER_INFO")
-      rm "$CLUSTER_INFO"
-
-      ## We need to enable key/value version 1 engine for just for tests
-      bao secrets enable -path=kv-v1 -version=1 kv
-
-      ## Create a test namespace for the tests to test namespace support
-      echo $VAULT_ADDR
-      export VAULT_SKIP_VERIFY=true
-      bao status
-      bao namespace create "pgns"
-      bao secrets enable -ns=pgns -path=secret -description="Production Secrets" kv-v2
-      bao status
-
+    shell: |
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
       set -o pipefail
-      meson test --timeout-multiplier=0 --print-errorlogs -C /tmp/pg_tde-build 2>&1 | tee /tmp/check-tde-regression.log
+      meson test --no-rebuild --timeout-multiplier=-1 --print-errorlogs -C /tmp/pg_tde-build 2>&1 | tee /tmp/check-tde-regression.log
       # cd /tmp/pg_tde && make -s installcheck USE_PGXS=1 -k PROVE_FLAGS='-v -p' 2>&1 | tee /tmp/check-tde-regression.log
     become_user: postgres
     args:
