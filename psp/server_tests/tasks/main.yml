@@ -354,6 +354,38 @@
 
   - debug: var=results.stdout_lines
 
+  - name: Patch wal_archiving.pl - wait for WAL archiving before stopping primary on RHEL
+    ansible.builtin.blockinfile:
+      path: /tmp/pg_tde/t/wal_archiving.pl
+      insertbefore: '^\$primary->stop;'
+      marker: "# {mark} ANSIBLE PATCH - wait for WAL archive before stop"
+      block: |
+        # Force WAL switch and wait for archiving to complete.
+        # On RHEL, pg_ctl stop finishes before archive_command flushes the last
+        # WAL segment, leaving it missing from the archive and causing the replica
+        # restore_command to loop for 300s before timing out.
+        $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
+        $primary->poll_query_until(
+            'postgres',
+            "SELECT last_archived_wal >= pg_walfile_name(pg_current_wal_lsn())",
+            't'
+        );
+    become_user: postgres
+    when:
+      - ansible_os_family == 'RedHat'
+      - testsuite in ['installcheck-world', 'check-tde']
+
+  - name: Remove kmip test case on Debian 11
+    ansible.builtin.file:
+      path: /tmp/pg_tde/t/kmip.pl
+      state: absent
+    become_user: postgres
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
+      - ansible_os_family == 'Debian'
+      - ansible_distribution == 'Debian'
+      - (ansible_distribution_major_version | int) == 11
+
   # - name: Copy Vault_v2 test output file
   #   ansible.builtin.copy:
   #     src: ../../files/vault_v2_test_1.out

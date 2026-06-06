@@ -304,6 +304,9 @@
 - name: Install pg_tde
   become: true
   ansible.builtin.shell: |
+    {% if ansible_os_family == 'RedHat' and ansible_distribution_major_version == '9' %}
+    source /opt/rh/gcc-toolset-14/enable
+    {% endif %}
     set -o pipefail
     meson install -C /tmp/pg_tde-build 2>&1 | tee /tmp/tde-install.log
   args:
@@ -347,14 +350,47 @@
     state: absent
   become_user: postgres
 
-# wal_archiving.pl confirmed failing on RHEL/Rocky/OL in build215:
-# tests 1-36 pass (CLI + primary WAL + archive) but replica init_from_backup
-# / standby startup hangs ~300s then exits 255. Keeping the test ENABLED so
-# that testrun/wal_archiving/ data dir and server logs are collected in artifacts
-# for diagnosis. Possible causes: locale issue, SELinux blocking streaming
-# replication, pg_ctl start timeout, or network issue in CI containers.
-# TODO: investigate using collected wal_archiving server logs and PGDATA.
-#
+# kmip.pl is excluded on Debian 11 — CosmianKms.pm gen_certs() uses
+# 'openssl x509 -copy_extensions copy' which is not supported by the
+# OpenSSL version shipped with Debian 11 (Bullseye). The flag causes
+# openssl to exit with code 1, triggering a BAIL_OUT before any test
+# can run. Needs a fix in the pg_tde source (CosmianKms.pm) to use a
+# compatible cert generation approach for older OpenSSL versions.
+- name: Remove kmip test case on Debian 11
+  ansible.builtin.file:
+    path: /tmp/pg_tde/t/kmip.pl
+    state: absent
+  become_user: postgres
+  when:
+    - ansible_os_family == 'Debian'
+    - ansible_distribution == 'Debian'
+    - (ansible_distribution_major_version | int) == 11
+
+# wal_archiving.pl fix for RHEL/Rocky/OL: build216 data confirmed the root cause.
+# The replica's pg_tde_restore_encrypt restore_command loops for ~300s waiting
+# for WAL segment 7 which is never archived because pg_ctl stop on RHEL completes
+# before archive_command finishes for the last WAL segment. Fix: patch the test
+# to force a WAL switch and wait for archiving to complete before stopping.
+# This cannot be fixed in the pg_tde repo by us, so we patch it in-place via Ansible.
+- name: Patch wal_archiving.pl - wait for WAL archiving before stopping primary on RHEL
+  ansible.builtin.blockinfile:
+    path: /tmp/pg_tde/t/wal_archiving.pl
+    insertbefore: '^\$primary->stop;'
+    marker: "# {mark} ANSIBLE PATCH - wait for WAL archive before stop"
+    block: |
+      # Force WAL switch and wait for archiving to complete.
+      # On RHEL, pg_ctl stop finishes before archive_command flushes the last
+      # WAL segment, leaving it missing from the archive and causing the replica
+      # restore_command to loop for 300s before timing out.
+      $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
+      $primary->poll_query_until(
+          'postgres',
+          "SELECT last_archived_wal >= pg_walfile_name(pg_current_wal_lsn())",
+          't'
+      );
+  become_user: postgres
+  when: ansible_os_family == 'RedHat'
+
 # - name: Remove wal_archiving test case on rhel
 #   ansible.builtin.file:
 #     path: /tmp/pg_tde/t/wal_archiving.pl

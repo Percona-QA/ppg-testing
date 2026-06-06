@@ -174,8 +174,10 @@
       OPENBAO_VERSION=2.5.4
       ARCH_TAR=$(uname -m | sed 's/aarch64/arm64/')
       wget -q https://github.com/openbao/openbao/releases/download/v${OPENBAO_VERSION}/bao_${OPENBAO_VERSION}_Linux_${ARCH_TAR}.tar.gz -O /tmp/openbao.tar.gz
-      tar -xzf /tmp/openbao.tar.gz -C /usr/local/bin bao
-      chmod 0755 /usr/local/bin/bao
+      # Install to /usr/bin so it is in the default RHEL PATH (/usr/local/bin is
+      # not included in the minimal PATH that meson test subprocesses inherit on RHEL)
+      tar -xzf /tmp/openbao.tar.gz -C /usr/bin bao
+      chmod 0755 /usr/bin/bao
       rm -f /tmp/openbao.tar.gz
     args:
       executable: /bin/bash
