@@ -34,7 +34,10 @@
       - regression.rc != 0
 
   - name: Show tde regression diffs if tests failed
-    shell: cat /tmp/pg_tde/regression.diffs
+    shell: |
+      # meson writes regression.diffs to the build dir
+      cat /tmp/pg_tde-build/regression.diffs 2>/dev/null || \
+      cat /tmp/pg_tde/regression.diffs 2>/dev/null || true
     register: diffs_output
     when:
       - regression is defined
@@ -52,9 +55,9 @@
   - name: Debug - find regression files and results dirs before packaging
     shell: |
       echo "=== regression.out files ==="
-      find /tmp/pg_tde -name "regression.out" 2>/dev/null || true
+      find /tmp/pg_tde-build /tmp/pg_tde -name "regression.out" 2>/dev/null || true
       echo "=== regression.diffs files ==="
-      find /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
+      find /tmp/pg_tde-build /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
       echo "=== results/ directories (outside tmp_check) ==="
       find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" 2>/dev/null || true
     args:

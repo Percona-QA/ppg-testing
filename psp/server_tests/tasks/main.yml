@@ -640,7 +640,10 @@
       - regression.rc != 0
 
   - name: Show tde regression diffs if tests failed
-    shell: cat /tmp/pg_tde/regression.diffs
+    shell: |
+      # meson writes regression.diffs to the build dir
+      cat /tmp/pg_tde-build/regression.diffs 2>/dev/null || \
+      cat /tmp/pg_tde/regression.diffs 2>/dev/null || true
     register: diffs_output
     when:
       - testsuite == 'check-tde'
@@ -660,9 +663,9 @@
   - name: Debug - find regression files and results dirs before packaging (check-tde)
     shell: |
       echo "=== regression.out files ==="
-      find /tmp/pg_tde -name "regression.out" 2>/dev/null || true
+      find /tmp/pg_tde-build /tmp/pg_tde -name "regression.out" 2>/dev/null || true
       echo "=== regression.diffs files ==="
-      find /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
+      find /tmp/pg_tde-build /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
       echo "=== results/ directories (outside tmp_check) ==="
       find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" 2>/dev/null || true
     args:
@@ -687,8 +690,16 @@
       ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
       mkdir -p "$ARTIFACT_DIR"
+      # SQL regression diffs/results — meson writes these to the build dir
+      cp /tmp/pg_tde-build/regression.diffs "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_tde-build/regression.out   "$ARTIFACT_DIR/" 2>/dev/null || true
       find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      # Full meson test log with complete stderr per test
+      cp -r /tmp/pg_tde-build/meson-logs "$ARTIFACT_DIR/meson-logs" 2>/dev/null || true
+      # Per-test log directories from testwrap
+      find /tmp/pg_tde-build/testrun -name "*.log" -type f 2>/dev/null | \
+        xargs -I{} cp --parents {} "$ARTIFACT_DIR/" || true
       cp -r /tmp/pg_tde/t "$ARTIFACT_DIR/pg_tde_t" 2>/dev/null || true
       cp -r /tmp/pg_tde/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
       # Collect standalone results/ directories for pg_regress SQL test outputs
@@ -963,9 +974,9 @@
   - name: Debug - find regression files and results dirs before packaging (installcheck-world)
     shell: |
       echo "=== regression.out files ==="
-      find /tmp/postgres /tmp/pg_tde -name "regression.out" 2>/dev/null || true
+      find /tmp/postgres /tmp/pg_tde-build /tmp/pg_tde -name "regression.out" 2>/dev/null || true
       echo "=== regression.diffs files ==="
-      find /tmp/postgres /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
+      find /tmp/postgres /tmp/pg_tde-build /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
       echo "=== results/ directories (outside tmp_check) ==="
       find /tmp/postgres /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" 2>/dev/null || true
     args:
@@ -992,6 +1003,12 @@
       mkdir -p "$ARTIFACT_DIR"
       find /tmp/postgres -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/postgres -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      # pg_tde meson build dir regression output
+      cp /tmp/pg_tde-build/regression.diffs "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_tde-build/regression.out   "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp -r /tmp/pg_tde-build/meson-logs "$ARTIFACT_DIR/meson-logs" 2>/dev/null || true
+      find /tmp/pg_tde-build/testrun -name "*.log" -type f 2>/dev/null | \
+        xargs -I{} cp --parents {} "$ARTIFACT_DIR/" || true
       find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       # Collect tmp_check directories for tap test logs
