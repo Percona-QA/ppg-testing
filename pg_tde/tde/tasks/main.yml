@@ -347,12 +347,13 @@
     state: absent
   become_user: postgres
 
-# TODO: Verify whether wal_archiving.pl actually fails on RHEL/Rocky/OL before
-# deciding to remove it. On build212 RHEL 10 the test failed with
-# "No such file or directory" which is likely a transient git checkout timing
-# issue, not a real test failure. Also check whether shell backtick glob
-# expansion on WAL files works correctly with pg_tde binaries in PATH on RHEL.
-# Enable the task below only if wal_archiving genuinely fails on RHEL CI.
+# wal_archiving.pl confirmed failing on RHEL/Rocky/OL in build215:
+# tests 1-36 pass (CLI + primary WAL + archive) but replica init_from_backup
+# / standby startup hangs ~300s then exits 255. Keeping the test ENABLED so
+# that testrun/wal_archiving/ data dir and server logs are collected in artifacts
+# for diagnosis. Possible causes: locale issue, SELinux blocking streaming
+# replication, pg_ctl start timeout, or network issue in CI containers.
+# TODO: investigate using collected wal_archiving server logs and PGDATA.
 #
 # - name: Remove wal_archiving test case on rhel
 #   ansible.builtin.file:

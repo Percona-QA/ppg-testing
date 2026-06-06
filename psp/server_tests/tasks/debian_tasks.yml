@@ -58,7 +58,8 @@
     become: true
     ansible.builtin.shell: |
       OPENBAO_VERSION=2.5.4
-      ARCH=$(dpkg --print-architecture)
+      # OpenBao tar.gz uses x86_64/arm64 naming (not amd64/arm64 like dpkg convention)
+      ARCH=$(dpkg --print-architecture | sed 's/amd64/x86_64/')
       wget -q https://github.com/openbao/openbao/releases/download/v${OPENBAO_VERSION}/bao_${OPENBAO_VERSION}_Linux_${ARCH}.tar.gz -O /tmp/openbao.tar.gz
       tar -xzf /tmp/openbao.tar.gz -C /usr/local/bin bao
       chmod 0755 /usr/local/bin/bao

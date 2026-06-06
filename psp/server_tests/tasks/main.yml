@@ -604,7 +604,7 @@
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
       set -o pipefail
-      meson test --no-rebuild --timeout-multiplier=-1 --print-errorlogs -C /tmp/pg_tde-build 2>&1 | tee /tmp/check-tde-regression.log
+      meson test --no-rebuild --timeout-multiplier=1000 --print-errorlogs -C /tmp/pg_tde-build 2>&1 | tee /tmp/check-tde-regression.log
       # cd /tmp/pg_tde && make -s installcheck -k PROVE_FLAGS='-v -p' 2>&1 | tee /tmp/check-tde-regression.log
       # cd /tmp/pg_tde && make -s installcheck -k
     become_user: postgres
@@ -701,7 +701,8 @@
       find /tmp/pg_tde-build/testrun -name "*.log" -type f 2>/dev/null | \
         xargs -I{} cp --parents {} "$ARTIFACT_DIR/" || true
       cp -r /tmp/pg_tde/t "$ARTIFACT_DIR/pg_tde_t" 2>/dev/null || true
-      cp -r /tmp/pg_tde/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
+      # tmp_check is in the build dir with meson (source dir path is dead code)
+      cp -r /tmp/pg_tde-build/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
       # Collect standalone results/ directories for pg_regress SQL test outputs
       find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" | while read d; do
         rel="${d#/tmp/pg_tde/}"

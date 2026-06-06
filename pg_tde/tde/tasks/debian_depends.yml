@@ -58,7 +58,8 @@
     become: true
     ansible.builtin.shell: |
       OPENBAO_VERSION=2.5.4
-      ARCH=$(dpkg --print-architecture)
+      # OpenBao tar.gz uses x86_64/arm64 naming (not amd64/arm64 like dpkg convention)
+      ARCH=$(dpkg --print-architecture | sed 's/amd64/x86_64/')
       # OpenBao standard binary only ships as tar.gz (not .deb); HSM variant
       # ships as .deb but pg_tde requires the standard bao binary.
       wget -q https://github.com/openbao/openbao/releases/download/v${OPENBAO_VERSION}/bao_${OPENBAO_VERSION}_Linux_${ARCH}.tar.gz -O /tmp/openbao.tar.gz
