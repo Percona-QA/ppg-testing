@@ -400,14 +400,17 @@
     insertbefore: '^\$primary->stop;'
     marker: "# {mark} ANSIBLE PATCH - wait for WAL archive before stop"
     block: |
-      # Force WAL switch and wait for archiving to complete.
+      # Force WAL switch and wait for that specific segment to be archived.
       # On RHEL, pg_ctl stop finishes before archive_command flushes the last
-      # WAL segment, leaving it missing from the archive and causing the replica
-      # restore_command to loop for 300s before timing out.
-      $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
+      # WAL segment. We capture the LSN returned by pg_switch_wal() (which is
+      # the END of the segment just completed) and poll until last_archived_wal
+      # reaches it. We must NOT use pg_current_wal_lsn() here — after the switch
+      # that points to the NEW segment which has not been archived yet, so the
+      # condition would always return 'f' and poll_query_until would time out.
+      my $switch_lsn = $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
       $primary->poll_query_until(
           'postgres',
-          "SELECT last_archived_wal >= pg_walfile_name(pg_current_wal_lsn()) FROM pg_stat_archiver",
+          "SELECT last_archived_wal >= pg_walfile_name('$switch_lsn'::pg_lsn) FROM pg_stat_archiver",
           't'
       );
   become_user: postgres

@@ -289,6 +289,11 @@
       name: br_netfilter
       state: present
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+    # Non-fatal: when the repo kernel-modules-extra version lags the running
+    # kernel (e.g. Rocky 10 freshly updated), the module is simply not
+    # available in /lib/modules/<running-kernel>/. Skip gracefully rather than
+    # aborting the whole playbook.
+    failed_when: false
 
   - name: Install cpanm File::Rename
     become: true
