@@ -244,26 +244,29 @@
 
   - debug: var=results.stdout_lines
 
-  #to be removed once test is stable
-  - name: Remove vault_v2_test from Makefile
-    ansible.builtin.lineinfile:
-      path: /tmp/pg_tde/Makefile
-      regexp: '.*vault_v2_test.*'
-      state: absent
-    when:
-      - ansible_os_family == 'Debian'
-      - ansible_distribution == 'Debian'
-      - (ansible_distribution_major_version | int) == 13
+  # Dead code — meson does not use the Makefile. Kept for reference only.
+  # - name: Remove vault_v2_test from Makefile
+  #   ansible.builtin.lineinfile:
+  #     path: /tmp/pg_tde/Makefile
+  #     regexp: '.*vault_v2_test.*'
+  #     state: absent
+  #   when:
+  #     - ansible_os_family == 'Debian'
+  #     - ansible_distribution == 'Debian'
+  #     - (ansible_distribution_major_version | int) == 13
 
-  - name: Remove vault_v2_test from t/regress.pl
-    ansible.builtin.lineinfile:
-      path: /tmp/pg_tde/t/regress.pl
-      regexp: '.*vault_v2_test.*'
-      state: absent
-    when:
-      - ansible_os_family == 'Debian'
-      - ansible_distribution == 'Debian'
-      - (ansible_distribution_major_version | int) == 13
+  # TODO: vault_v2_test was previously excluded on Debian 13. Now that bao is
+  # installed natively and regress.pl manages its own bao lifecycle, it may work
+  # without exclusion. Commented out to verify on next CI run.
+  # - name: Remove vault_v2_test from t/regress.pl
+  #   ansible.builtin.lineinfile:
+  #     path: /tmp/pg_tde/t/regress.pl
+  #     regexp: '.*vault_v2_test.*'
+  #     state: absent
+  #   when:
+  #     - ansible_os_family == 'Debian'
+  #     - ansible_distribution == 'Debian'
+  #     - (ansible_distribution_major_version | int) == 13
 
   - name: Submodule update
     command : git submodule update --init --recursive
@@ -599,32 +602,6 @@
   # =============================
   - name: Run check tde tests
     shell: |
-      # export VAULT_ROOT_TOKEN_FILE=/tmp/bao_env/bao_token.txt
-      # export VAULT_CACERT_FILE=/tmp/bao_env/bao_ca.crt
-
-      # export VAULT_ADDR="https://127.0.0.1:8202"
-      # export VAULT_TOKEN=root
-      echo $VAULT_ADDR
-
-      CLUSTER_INFO=$(mktemp)
-      bao server -dev -dev-tls -dev-cluster-json="$CLUSTER_INFO" > /tmp/bao-server.log 2>&1 &
-      sleep 10
-      export VAULT_ROOT_TOKEN_FILE=$(mktemp)
-      jq -r .root_token "$CLUSTER_INFO" > "$VAULT_ROOT_TOKEN_FILE"
-      export VAULT_CACERT=$(jq -r .ca_cert_path "$CLUSTER_INFO")
-      rm "$CLUSTER_INFO"
-
-      ## We need to enable key/value version 1 engine for just for tests
-      bao secrets enable -path=kv-v1 -version=1 kv
-
-      ## Create a test namespace for the tests to test namespace support
-      echo $VAULT_ADDR
-      export VAULT_SKIP_VERIFY=true
-      bao status
-      bao namespace create "pgns"
-      bao secrets enable -ns=pgns -path=secret -description="Production Secrets" kv-v2
-      bao status
-
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
       set -o pipefail

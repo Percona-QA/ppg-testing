@@ -350,12 +350,19 @@
     state: absent
   become_user: postgres
 
-- name: Remove wal_archiving test case on rhel
-  ansible.builtin.file:
-    path: /tmp/pg_tde/t/wal_archiving.pl
-    state: absent
-  become_user: postgres
-  when: ansible_os_family == 'RedHat'
+# TODO: Verify whether wal_archiving.pl actually fails on RHEL/Rocky/OL before
+# deciding to remove it. On build212 RHEL 10 the test failed with
+# "No such file or directory" which is likely a transient git checkout timing
+# issue, not a real test failure. Also check whether shell backtick glob
+# expansion on WAL files works correctly with pg_tde binaries in PATH on RHEL.
+# Enable the task below only if wal_archiving genuinely fails on RHEL CI.
+#
+# - name: Remove wal_archiving test case on rhel
+#   ansible.builtin.file:
+#     path: /tmp/pg_tde/t/wal_archiving.pl
+#     state: absent
+#   become_user: postgres
+#   when: ansible_os_family == 'RedHat'
 
 - name: Copy pg_tde test files
   ansible.builtin.copy:

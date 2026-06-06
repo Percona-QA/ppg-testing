@@ -167,6 +167,31 @@
       - perl-JSON
       - jq
 
+  - name: Install OpenBao
+    become: true
+    ansible.builtin.shell: |
+      OPENBAO_VERSION=2.5.4
+      ARCH_TAR=$(uname -m | sed 's/aarch64/arm64/')
+      wget -q https://github.com/openbao/openbao/releases/download/v${OPENBAO_VERSION}/bao_${OPENBAO_VERSION}_Linux_${ARCH_TAR}.tar.gz -O /tmp/openbao.tar.gz
+      tar -xzf /tmp/openbao.tar.gz -C /usr/local/bin bao
+      chmod 0755 /usr/local/bin/bao
+      rm -f /tmp/openbao.tar.gz
+    args:
+      executable: /bin/bash
+
+  - name: Install Cosmian KMS
+    become: true
+    ansible.builtin.shell: |
+      COSMIAN_VERSION=5.21.0
+      ARCH_DIR=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+      ARCH_RPM=$(uname -m)
+      wget -q https://package.cosmian.com/kms/${COSMIAN_VERSION}/rpm/${ARCH_DIR}/non-fips/static/cosmian-kms-server-non-fips-static-openssl_${COSMIAN_VERSION}_${ARCH_RPM}.rpm -O /tmp/cosmian_kms.rpm
+      rpm -ivh /tmp/cosmian_kms.rpm || true
+      chmod 0755 /usr/sbin/cosmian_kms || true
+      rm -f /tmp/cosmian_kms.rpm
+    args:
+      executable: /bin/bash
+
   - name: Install liburing packages
     yum:
       name:
@@ -349,17 +374,22 @@
   - debug: var=results.stdout_lines
     when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
 
-  - name: Include KMIP server setup playbook
-    include_tasks: run_kmip_vault_server.yml
-    when:
-      - testsuite in ['installcheck-world', 'check-tde']
-
-  - name: Change ownership of /tmp/bao_env to postgres
-    ansible.builtin.file:
-      path: /tmp/bao_env
-      owner: postgres
-      group: wheel
-      recurse: true
-    become: true
-    when:
-      - testsuite in ['installcheck-world', 'check-tde']
+  # run_kmip_vault_server.yml is no longer needed — kmip.pl starts its own
+  # cosmian_kms process and regress.pl starts its own bao process (both installed
+  # natively). /tmp/bao_env was created by run_kmip_vault_server.yml and is no
+  # longer created.
+  #
+  # - name: Include KMIP server setup playbook
+  #   include_tasks: run_kmip_vault_server.yml
+  #   when:
+  #     - testsuite in ['installcheck-world', 'check-tde']
+  #
+  # - name: Change ownership of /tmp/bao_env to postgres
+  #   ansible.builtin.file:
+  #     path: /tmp/bao_env
+  #     owner: postgres
+  #     group: wheel
+  #     recurse: true
+  #   become: true
+  #   when:
+  #     - testsuite in ['installcheck-world', 'check-tde']
