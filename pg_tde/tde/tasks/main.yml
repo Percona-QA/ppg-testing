@@ -248,20 +248,17 @@
 #     - ansible_distribution == 'Debian'
 #     - (ansible_distribution_major_version | int) == 13
 
-# TODO: vault_v2_test was previously excluded on Debian 13 due to instability.
-# Now that bao is installed natively and regress.pl manages its own bao lifecycle,
-# vault_v2_test may work on Debian 13 without exclusion. Commented out to verify
-# on the next CI run — re-enable exclusion if vault_v2_test still fails on Debian 13.
-#
-# - name: Remove vault_v2_test from t/regress.pl
-#   ansible.builtin.lineinfile:
-#     path: /tmp/pg_tde/t/regress.pl
-#     regexp: '.*vault_v2_test.*'
-#     state: absent
-#   when:
-#     - ansible_os_family == 'Debian'
-#     - ansible_distribution == 'Debian'
-#     - (ansible_distribution_major_version | int) == 13
+# vault_v2_test confirmed still failing on Debian 13 (build213 debian13-arm:
+# 15/16 subtests passed, vault_v2_test FAIL). Re-enabled exclusion.
+- name: Remove vault_v2_test from t/regress.pl
+  ansible.builtin.lineinfile:
+    path: /tmp/pg_tde/t/regress.pl
+    regexp: '.*vault_v2_test.*'
+    state: absent
+  when:
+    - ansible_os_family == 'Debian'
+    - ansible_distribution == 'Debian'
+    - (ansible_distribution_major_version | int) == 13
 
 # NOTE: wal_archiving.pl is skipped on RHEL/Rocky/OL family via an internal
 # check in the test itself (detects /etc/redhat-release). No Ansible task is

@@ -165,6 +165,7 @@
       - wget
       - perl-LWP-Protocol-https
       - perl-JSON
+      - perl-JSON-XS
       - jq
 
   - name: Install OpenBao

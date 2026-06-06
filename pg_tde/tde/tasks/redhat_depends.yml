@@ -132,6 +132,7 @@
       - wget
       - perl-LWP-Protocol-https
       - perl-JSON
+      - perl-JSON-XS
       - jq
       - numactl-devel
 

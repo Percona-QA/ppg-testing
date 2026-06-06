@@ -76,8 +76,18 @@
       ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
       mkdir -p "$ARTIFACT_DIR"
+      # SQL regression diffs/results — meson writes these to the build dir, not source dir
+      cp /tmp/pg_tde-build/regression.diffs "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_tde-build/regression.out   "$ARTIFACT_DIR/" 2>/dev/null || true
+      # Legacy: also check source dir in case make installcheck path is used
       find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      # Full meson test log — contains complete stdout/stderr per test including
+      # cosmian_kms stderr, bao errors, and TAP output (critical for RHEL debugging)
+      cp -r /tmp/pg_tde-build/meson-logs "$ARTIFACT_DIR/meson-logs" 2>/dev/null || true
+      # Per-test log directories created by testwrap (PostgreSQL server logs per test)
+      find /tmp/pg_tde-build/testrun -name "*.log" -type f 2>/dev/null | \
+        xargs -I{} cp --parents {} "$ARTIFACT_DIR/" || true
       cp -r /tmp/pg_tde/t "$ARTIFACT_DIR/pg_tde_t" 2>/dev/null || true
       cp -r /tmp/pg_tde/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
       # Collect standalone results/ directories for pg_regress SQL test outputs

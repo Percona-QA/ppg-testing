@@ -48,6 +48,7 @@
         - libhttp-server-simple-perl
         - python3-pykmip
         - libjson-perl
+        - libjson-xs-perl
         - libicu-dev
         - libzstd-dev
         - jq
