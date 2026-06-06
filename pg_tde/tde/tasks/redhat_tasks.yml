@@ -1,4 +1,72 @@
 ---
+  # -------------------------------------------------------------------------
+  # Diagnose cosmian_kms startup on RHEL 9/10 BEFORE running meson test.
+  # kmip.pl uses CosmianKms.pm which spawns cosmian_kms via IPC::Run and polls
+  # an HTTPS readiness endpoint for 15 seconds. If cosmian_kms does not become
+  # ready in time the test bails out. This block collects the info needed to
+  # determine whether the root cause is:
+  #   (a) binary execution failure (crash / missing dep / wrong arch)
+  #   (b) SELinux AVC denial preventing port bind or network accept
+  #   (c) slow startup (needs longer timeout in CosmianKms.pm)
+  # -------------------------------------------------------------------------
+  - name: Diagnose cosmian_kms startup on RHEL 9/10
+    become: true
+    ansible.builtin.shell: |
+      set -x
+      echo "=== Binary location and permissions ==="
+      which cosmian_kms 2>&1 || echo "NOT IN PATH"
+      ls -la /usr/sbin/cosmian_kms 2>/dev/null || echo "NOT at /usr/sbin"
+      echo "=== File type ==="
+      file /usr/sbin/cosmian_kms 2>/dev/null || true
+      echo "=== SELinux status ==="
+      getenforce 2>/dev/null || echo "SELinux not available"
+      echo "=== SELinux context of binary ==="
+      ls -laZ /usr/sbin/cosmian_kms 2>/dev/null || true
+      echo "=== OPENSSL_MODULES candidates ==="
+      for d in /usr/local/cosmian/lib/ossl-modules /usr/lib64/ossl-modules \
+                /usr/lib/x86_64-linux-gnu/ossl-modules; do
+        [ -d "$d" ] && echo "EXISTS: $d" && ls "$d" || true
+      done
+      echo "=== Quick binary exec test ==="
+      timeout 2 /usr/sbin/cosmian_kms --version 2>&1 || echo "exec returned $?"
+      echo "=== cosmian_kms manual startup (10s) ==="
+      DIAGDIR=$(mktemp -d /tmp/kms-diag-XXXXXX)
+      cat > $DIAGDIR/kms.toml << 'TOML'
+      default_username = "admin"
+      [db]
+      database_type = "sqlite"
+      sqlite_path = "/tmp/kms-diag-db"
+      clear_database = true
+      [http]
+      port = 17800
+      hostname = "127.0.0.1"
+      TOML
+      /usr/sbin/cosmian_kms -c $DIAGDIR/kms.toml > $DIAGDIR/kms.stdout 2>$DIAGDIR/kms.stderr &
+      KMS_PID=$!
+      sleep 10
+      echo "--- still running after 10s? ---"
+      kill -0 $KMS_PID 2>/dev/null && echo "YES (pid=$KMS_PID)" || echo "NO (exited already)"
+      echo "--- stdout (first 40 lines) ---"
+      head -40 $DIAGDIR/kms.stdout 2>/dev/null || echo "(empty)"
+      echo "--- stderr (first 40 lines) ---"
+      head -40 $DIAGDIR/kms.stderr 2>/dev/null || echo "(empty)"
+      echo "--- curl readiness probe ---"
+      curl -fsSk -m 3 http://127.0.0.1:17800/version 2>&1 || echo "FAILED (exit $?)"
+      echo "--- Recent SELinux AVC denials ---"
+      ausearch -m AVC -ts recent 2>/dev/null | tail -40 || echo "ausearch not available or no denials"
+      kill $KMS_PID 2>/dev/null || true
+      rm -rf $DIAGDIR /tmp/kms-diag-db*
+    args:
+      executable: /bin/bash
+    register: cosmian_diag
+    ignore_errors: true
+    when: ansible_distribution_major_version in ['9', '10']
+
+  - name: Show cosmian_kms diagnostic output
+    debug:
+      var: cosmian_diag.stdout_lines
+    when: ansible_distribution_major_version in ['9', '10']
+
   - name: Run check tde tests
     shell: |
       export PGCTLTIMEOUT=120

@@ -250,12 +250,38 @@
   #       args:
   #         chdir: /tmp/liburing-liburing-2.5
 
+  - name: Check if br_netfilter module is already available
+    become: true
+    command: modprobe --dry-run br_netfilter
+    register: br_netfilter_check
+    failed_when: false
+    changed_when: false
+    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
   - name: Install kernel-modules-extra on RHEL 10
     become: true
     dnf:
       name: "kernel-modules-extra-{{ ansible_kernel }}"
       state: present
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+    when:
+      - ansible_os_family == "RedHat"
+      - ansible_distribution_major_version == "10"
+      - br_netfilter_check.rc != 0
+    register: kmod_exact
+    failed_when: false
+
+  - name: Install kernel-modules-extra (unversioned fallback) on RHEL 10
+    become: true
+    dnf:
+      name: "kernel-modules-extra"
+      state: present
+    when:
+      - ansible_os_family == "RedHat"
+      - ansible_distribution_major_version == "10"
+      - br_netfilter_check.rc != 0
+      - kmod_exact is defined
+      - kmod_exact.rc is defined
+      - kmod_exact.rc != 0
 
   - name: Ensure br_netfilter module is loaded
     become: true
