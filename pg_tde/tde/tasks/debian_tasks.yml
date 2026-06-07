@@ -17,9 +17,9 @@
       LANG: "C.UTF-8"
       LC_CTYPE: "C.UTF-8"
       LC_ALL: "C.UTF-8"
-      PGCTLTIMEOUT: 120
-      PG_TEST_TIMEOUT_DEFAULT: 300
-    ignore_errors: yes
+      PGCTLTIMEOUT: "120"
+      PG_TEST_TIMEOUT_DEFAULT: "300"
+    ignore_errors: true
     register: regression
 
   - name: Show stdout of check tde tests
@@ -65,11 +65,11 @@
     register: debug_regression
     ignore_errors: true
     become: true
-    when: regression is defined
+    when: regression is defined and regression.rc != 0
 
   - debug:
       var: debug_regression.stdout_lines
-    when: regression is defined
+    when: regression is defined and regression.rc != 0
 
   - name: Package tde test artifacts
     shell: |
@@ -110,7 +110,7 @@
     args:
       executable: /bin/bash
     become: true
-    when: regression is defined
+    when: regression is defined and regression.rc != 0
     ignore_errors: true
 
   - name: Fetch tde test artifacts to controller
@@ -118,7 +118,7 @@
       src: "/tmp/{{ artifact_filename }}"
       dest: "{{ playbook_dir }}/../artifacts/"
       fail_on_missing: false
-    when: regression is defined
+    when: regression is defined and regression.rc != 0
 
   - name: Fail the playbook if tde tests failed
     fail:

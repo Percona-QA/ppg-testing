@@ -39,12 +39,6 @@
       - perl-CPAN
       - perl-App-cpanminus
 
-  # - name: Install perl module perl-IPC-Run
-  #   become: true
-  #   command: cpanm IPC::Run
-  #   environment:
-  #     PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
   - name: Install perl module Text::Trim
     become: true
     command: cpanm Text::Trim
@@ -259,73 +253,10 @@
   #       args:
   #         chdir: /tmp/liburing-liburing-2.5
 
-  # br_netfilter tasks commented out pending investigation of whether Docker
-  # (which loads br_netfilter itself at startup) makes these redundant.
-  # On RHEL 10 these succeeded silently (module already loaded by Docker);
-  # on Rocky 10 they failed because the repo kernel-modules-extra version
-  # didn't match the running kernel, aborting the playbook before any tests ran.
-  # Build 469 confirmed all tests pass without these tasks.
-  #
-  # - name: Check if br_netfilter module is already available
-  #   become: true
-  #   command: modprobe --dry-run br_netfilter
-  #   register: br_netfilter_check
-  #   failed_when: false
-  #   changed_when: false
-  #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
-  #
-  # - name: Install kernel-modules-extra on RHEL 10
-  #   become: true
-  #   dnf:
-  #     name: "kernel-modules-extra-{{ ansible_kernel }}"
-  #     state: present
-  #   when:
-  #     - ansible_os_family == "RedHat"
-  #     - ansible_distribution_major_version == "10"
-  #     - br_netfilter_check.rc != 0
-  #   register: kmod_exact
-  #   failed_when: false
-  #
-  # - name: Install kernel-modules-extra (unversioned fallback) on RHEL 10
-  #   become: true
-  #   dnf:
-  #     name: "kernel-modules-extra"
-  #     state: present
-  #   when:
-  #     - ansible_os_family == "RedHat"
-  #     - ansible_distribution_major_version == "10"
-  #     - br_netfilter_check.rc != 0
-  #     - kmod_exact is defined
-  #     - kmod_exact.rc is defined
-  #     - kmod_exact.rc != 0
-  #
-  # - name: Ensure br_netfilter module is loaded
-  #   become: true
-  #   community.general.modprobe:
-  #     name: br_netfilter
-  #     state: present
-  #   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
-  #   failed_when: false
-
   - name: Install cpanm File::Rename
     become: true
     command: cpanm File::Rename
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
-
-  # - name: Install HTTP::Server::Simple::CGI Perl module
-  #   become: true
-  #   ansible.builtin.command: >
-  #     cpanm --notest --quiet HTTP::Server::Simple::CGI
-  #   args:
-  #     creates: /usr/local/share/perl5/HTTP/Server/Simple/CGI.pm
-
-  # - name: Install cpanm CGI::Session
-  #   become: true
-  #   command: cpanm CGI::Session
-
-  # - name: Install HTTP::Server::Simple::CGI
-  #   become: true
-  #   command: cpanm HTTP::Server::Simple::CGI
 
   - name: Install required Perl modules
     become: true

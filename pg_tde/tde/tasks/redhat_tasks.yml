@@ -1,163 +1,4 @@
 ---
-  # -------------------------------------------------------------------------
-  # Diagnose cosmian_kms startup on RHEL 9/10 BEFORE running meson test.
-  # kmip.pl uses CosmianKms.pm which spawns cosmian_kms via IPC::Run and polls
-  # an HTTPS readiness endpoint for 15 seconds. If cosmian_kms does not become
-  # ready in time the test bails out. This block collects the info needed to
-  # determine whether the root cause is:
-  #   (a) binary execution failure (crash / missing dep / wrong arch)
-  #   (b) SELinux AVC denial preventing port bind or network accept
-  #   (c) slow startup (needs longer timeout in CosmianKms.pm)
-  # -------------------------------------------------------------------------
-  # -------------------------------------------------------------------------
-  # Previous diagnostic confirmed: cosmian_kms binary works fine, HTTP starts
-  # in <10s, SELinux (even Permissive on OL9) is NOT the cause. The actual
-  # kmip.pl test uses FULL TLS (server.p12 + [socket_server]) and polls
-  # https:// — our previous diagnostic used plain HTTP. This updated diagnostic
-  # generates real TLS certs (same as CosmianKms.pm gen_certs()), writes a
-  # TOML matching kmip.pl exactly, then times how long TLS HTTPS startup takes.
-  # -------------------------------------------------------------------------
-  - name: Diagnose cosmian_kms TLS startup timing on RHEL 9/10
-    # Phase 1 (root): confirms binary + TLS work fine — already shown ~1s startup.
-    # Phase 2 (postgres): mirrors exactly what CosmianKms.pm/_spawn() does:
-    #   IPC::Run starts cosmian_kms as the postgres user with stdout→/dev/null.
-    #   Any crash output is silently swallowed, leaving $stderr empty, so we only
-    #   see "readiness timed out" with no clue why. This diagnostic captures stdout
-    #   so we can see the actual error when run as postgres.
-    become: true
-    ansible.builtin.shell: |
-      set -eo pipefail
-      echo "=== ldd of cosmian_kms ==="
-      ldd /usr/sbin/cosmian_kms 2>&1 || echo "ldd failed"
-      echo "=== SELinux status ==="
-      getenforce 2>/dev/null || echo "not available"
-      echo "=== cosmian_kms permissions ==="
-      ls -la /usr/sbin/cosmian_kms
-      echo "=== /usr/local/cosmian/lib permissions ==="
-      ls -la /usr/local/cosmian/lib/ 2>/dev/null || echo "not found"
-      ls -la /usr/local/cosmian/lib/ossl-modules/ 2>/dev/null || echo "ossl-modules not found"
-
-      # ---- shared cert+toml generation function ----
-      gen_kms_env() {
-        local TLSDIR=$1
-        openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
-          -keyout $TLSDIR/ca.key -out $TLSDIR/ca.pem \
-          -subj '/CN=pg_tde-test-ca' 2>&1
-        openssl req -newkey rsa:2048 -nodes \
-          -keyout $TLSDIR/server.key -out $TLSDIR/server.csr \
-          -subj '/CN=127.0.0.1' -addext 'subjectAltName=IP:127.0.0.1' 2>&1
-        openssl x509 -req -in $TLSDIR/server.csr \
-          -CA $TLSDIR/ca.pem -CAkey $TLSDIR/ca.key -CAcreateserial \
-          -days 1 -out $TLSDIR/server.pem -copy_extensions copy 2>&1
-        openssl pkcs12 -export -out $TLSDIR/server.p12 \
-          -inkey $TLSDIR/server.key -in $TLSDIR/server.pem \
-          -password pass:test 2>&1
-        cat > $TLSDIR/kms.toml << TOML
-      default_username = "admin"
-
-      [db]
-      database_type = "sqlite"
-      sqlite_path   = "$TLSDIR/db"
-      clear_database = true
-
-      [tls]
-      tls_p12_file         = "$TLSDIR/server.p12"
-      tls_p12_password     = "test"
-      clients_ca_cert_file = "$TLSDIR/ca.pem"
-
-      [socket_server]
-      socket_server_start    = true
-      socket_server_port     = 17801
-      socket_server_hostname = "127.0.0.1"
-
-      [http]
-      port     = 17802
-      hostname = "127.0.0.1"
-
-      [logging]
-      rust_log = "info,cosmian_kms=info"
-      TOML
-      }
-
-      # ---- Phase 1: run as root (already confirmed ~1s) ----
-      echo "=== Phase 1: cosmian_kms as ROOT ==="
-      TLSDIR=$(mktemp -d /tmp/kms-root-XXXXXX)
-      gen_kms_env $TLSDIR
-      /usr/sbin/cosmian_kms -c $TLSDIR/kms.toml > $TLSDIR/kms.stdout 2>$TLSDIR/kms.stderr &
-      KMS_PID=$!
-      START_MS=$(date +%s%3N)
-      READY=0
-      for i in $(seq 1 30); do
-        sleep 1
-        if curl -fsSk -m 2 https://127.0.0.1:17802/version > /dev/null 2>&1; then
-          NOW_MS=$(date +%s%3N)
-          echo "ROOT: HTTPS READY after $((NOW_MS - START_MS))ms (attempt $i)"
-          READY=1; break
-        fi
-      done
-      [ "$READY" = "0" ] && echo "ROOT: HTTPS NOT READY after 30s"
-      kill $KMS_PID 2>/dev/null || true
-      rm -rf $TLSDIR
-
-      # ---- Phase 2: run as postgres (mirrors CosmianKms.pm _spawn exactly) ----
-      echo "=== Phase 2: cosmian_kms as POSTGRES USER ==="
-      TLSDIR=$(mktemp -d /tmp/kms-postgres-XXXXXX)
-      chmod 755 $TLSDIR
-      gen_kms_env $TLSDIR
-      chmod 644 $TLSDIR/*.pem $TLSDIR/*.p12 $TLSDIR/*.toml $TLSDIR/*.key 2>/dev/null || true
-      # Detect OPENSSL_MODULES exactly as CosmianKms.pm does
-      OSSL_MODULES=""
-      for d in /usr/local/cosmian/lib/ossl-modules /usr/lib64/ossl-modules \
-                /usr/lib/x86_64-linux-gnu/ossl-modules /usr/lib/aarch64-linux-gnu/ossl-modules; do
-        [ -d "$d" ] && OSSL_MODULES="$d" && break
-      done
-      echo "OPENSSL_MODULES will be: ${OSSL_MODULES:-<not set>}"
-      # Run as postgres — stdout captured (IPC::Run sends this to /dev/null, hiding crashes)
-      su -s /bin/bash postgres -c "
-        OPENSSL_MODULES='$OSSL_MODULES' \
-        /usr/sbin/cosmian_kms -c $TLSDIR/kms.toml \
-          > $TLSDIR/kms.stdout 2>$TLSDIR/kms.stderr &
-        KMS_PID=\$!
-        START_MS=\$(date +%s%3N)
-        READY=0
-        for i in \$(seq 1 30); do
-          sleep 1
-          if curl -fsSk -m 2 https://127.0.0.1:17802/version > /dev/null 2>&1; then
-            NOW_MS=\$(date +%s%3N)
-            echo \"POSTGRES: HTTPS READY after \$((NOW_MS - START_MS))ms (attempt \$i)\"
-            READY=1; break
-          fi
-          echo \"  attempt \$i: not ready\"
-        done
-        [ \"\$READY\" = \"0\" ] && echo 'POSTGRES: HTTPS NOT READY after 30s'
-        kill \$KMS_PID 2>/dev/null || true
-      " 2>&1
-      echo "--- cosmian_kms stdout as postgres (what IPC::Run hides) ---"
-      cat $TLSDIR/kms.stdout 2>/dev/null || echo "(empty)"
-      echo "--- cosmian_kms stderr as postgres ---"
-      cat $TLSDIR/kms.stderr 2>/dev/null || echo "(empty)"
-      echo "--- AVC denials ---"
-      ausearch -m AVC -ts recent 2>/dev/null | tail -20 || echo "none / ausearch unavailable"
-      rm -rf $TLSDIR
-    args:
-      executable: /bin/bash
-    register: cosmian_diag
-    ignore_errors: true
-    when: ansible_distribution_major_version in ['9', '10']
-
-  - name: Show cosmian_kms diagnostic output
-    debug:
-      var: cosmian_diag.stdout_lines
-    when: ansible_distribution_major_version in ['9', '10']
-
-  - name: Save cosmian_kms diagnostic to file for artifact collection
-    ansible.builtin.copy:
-      content: "{{ cosmian_diag.stdout | default('') }}\nSTDERR:\n{{ cosmian_diag.stderr | default('') }}"
-      dest: /tmp/cosmian-kms-diag.log
-    become: true
-    ignore_errors: true
-    when: ansible_distribution_major_version in ['9', '10']
-
   - name: Run check tde tests
     shell: |
       export PGCTLTIMEOUT=120
@@ -225,11 +66,11 @@
     register: debug_regression
     ignore_errors: true
     become: true
-    when: regression is defined
+    when: regression is defined and regression.rc != 0
 
   - debug:
       var: debug_regression.stdout_lines
-    when: regression is defined
+    when: regression is defined and regression.rc != 0
 
   - name: Package tde test artifacts
     shell: |
@@ -269,12 +110,11 @@
       cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/cosmian-kms-diag.log "$ARTIFACT_DIR/" 2>/dev/null || true
       tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
       executable: /bin/bash
     become: true
-    when: regression is defined
+    when: regression is defined and regression.rc != 0
     ignore_errors: true
 
   - name: Fetch tde test artifacts to controller
@@ -282,7 +122,7 @@
       src: "/tmp/{{ artifact_filename }}"
       dest: "{{ playbook_dir }}/../artifacts/"
       fail_on_missing: false
-    when: regression is defined
+    when: regression is defined and regression.rc != 0
 
   - name: Fail the playbook if tde tests failed
     fail:

@@ -403,7 +403,7 @@
       content: "{{ regression.stdout | default('') }}\n--- STDERR ---\n{{ regression.stderr | default('') }}"
       dest: /tmp/tde-test-runner-output.log
     become: true
-    when: regression is defined
+    when: regression is defined and regression.rc != 0
 
   - name: Package tde auxiliary test artifacts
     shell: |
@@ -449,7 +449,7 @@
     args:
       executable: /bin/bash
     become: true
-    when: regression is defined
+    when: regression is defined and regression.rc != 0
     ignore_errors: true
 
   - name: Fetch tde auxiliary test artifacts to controller
@@ -457,7 +457,7 @@
       src: "/tmp/{{ artifact_filename }}"
       dest: "{{ playbook_dir }}/../artifacts/"
       fail_on_missing: false
-    when: regression is defined
+    when: regression is defined and regression.rc != 0
 
   - name: Fail the playbook if tde tests failed
     fail:

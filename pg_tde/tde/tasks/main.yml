@@ -260,11 +260,6 @@
     - ansible_distribution == 'Debian'
     - (ansible_distribution_major_version | int) == 13
 
-# NOTE: wal_archiving.pl is skipped on RHEL/Rocky/OL family via an internal
-# check in the test itself (detects /etc/redhat-release). No Ansible task is
-# needed here. See t/wal_archiving.pl for the full explanation of what needs
-# to be investigated before re-enabling on RHEL.
-
 - name: Submodule update
   command : git submodule update --init --recursive
   args:
@@ -317,13 +312,6 @@
 
 - debug:
     var: tde_install_output.stdout_lines
-
-# - name: Add pg_tde to shared_preload_libraries
-#   ansible.builtin.lineinfile:
-#     path: "{{ pg_conf }}"
-#     regexp: "^shared_preload_libraries"
-#     line: "shared_preload_libraries = 'pg_tde'"
-#     create: no
 
 # Remove old io_method (if PG18+)
 - name: Comment out any io_method line (PG18+)
@@ -415,13 +403,6 @@
       );
   become_user: postgres
   when: ansible_os_family == 'RedHat'
-
-# - name: Remove wal_archiving test case on rhel
-#   ansible.builtin.file:
-#     path: /tmp/pg_tde/t/wal_archiving.pl
-#     state: absent
-#   become_user: postgres
-#   when: ansible_os_family == 'RedHat'
 
 - name: Copy pg_tde test files
   ansible.builtin.copy:
