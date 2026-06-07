@@ -312,6 +312,32 @@
     command: cpanm File::Rename
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
+  - name: Write Cluster.pm logging_collector patch to temp file
+    # The heredoc content must be written via copy to avoid YAML block-scalar
+    # termination: unindented lines inside a shell | block confuse the YAML parser.
+    become: true
+    ansible.builtin.copy:
+      dest: /tmp/cluster_pm_patch.pl
+      mode: '0644'
+      content: |
+
+        # --- logging_collector_ansible_patch ---
+        # Force logging_collector=off for every test cluster so that
+        # wait_for_log() can read messages from the testwrap capture file.
+        # The Percona ppg build-from-source enables logging_collector by default,
+        # which redirects server logs away from the file that wait_for_log reads.
+        {
+            no warnings 'redefine';
+            my $_orig_cluster_init = \&PostgreSQL::Test::Cluster::init;
+            *PostgreSQL::Test::Cluster::init = sub {
+                my ($self, %params) = @_;
+                $self->$_orig_cluster_init(%params);
+                $self->append_conf('postgresql.conf', "logging_collector = off\n");
+                return $self;
+            };
+        }
+    when: ansible_os_family == "RedHat"
+
   - name: Patch PostgreSQL TestCluster to force logging_collector=off in test clusters
     # The Percona PostgreSQL build-from-source has logging_collector=on as default.
     # PostgreSQL::Test::Cluster::wait_for_log() reads the testwrap capture file
@@ -334,24 +360,7 @@
         echo "Already patched"
         exit 0
       fi
-      cat >> "$CLUSTER_PM" << 'PERL'
-
-# --- logging_collector_ansible_patch ---
-# Force logging_collector=off for every test cluster so that
-# wait_for_log() can read messages from the testwrap capture file.
-# The Percona ppg build-from-source enables logging_collector by default,
-# which redirects server logs away from the file that wait_for_log reads.
-{
-    no warnings 'redefine';
-    my $_orig_cluster_init = \&PostgreSQL::Test::Cluster::init;
-    *PostgreSQL::Test::Cluster::init = sub {
-        my ($self, %params) = @_;
-        $self->$_orig_cluster_init(%params);
-        $self->append_conf('postgresql.conf', "logging_collector = off\n");
-        return $self;
-    };
-}
-PERL
+      cat /tmp/cluster_pm_patch.pl >> "$CLUSTER_PM"
       echo "Cluster.pm patched: $CLUSTER_PM"
     args:
       executable: /bin/bash
