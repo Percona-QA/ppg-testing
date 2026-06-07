@@ -162,7 +162,13 @@
       ARCH_RPM=$(uname -m)
       wget -q https://package.cosmian.com/kms/${COSMIAN_VERSION}/rpm/${ARCH_DIR}/non-fips/static/cosmian-kms-server-non-fips-static-openssl_${COSMIAN_VERSION}_${ARCH_RPM}.rpm -O /tmp/cosmian_kms.rpm
       rpm -ivh /tmp/cosmian_kms.rpm || true
+      # RPM ships binary + bundled legacy.so as 0500 root:root (same as .deb).
+      # postgres user (running meson test / kmip.pl) cannot dlopen() legacy.so
+      # without world-execute permission — cosmian_kms crashes silently because
+      # IPC::Run redirects its stdout to /dev/null. Mirror the upstream GH CI fix.
       chmod 0755 /usr/sbin/cosmian_kms || true
+      chmod 0755 /usr/local/cosmian/lib/ossl-modules/legacy.so || true
+      chmod 0755 /usr/local/cosmian/lib/ossl-modules/ || true
       rm -f /tmp/cosmian_kms.rpm
     args:
       executable: /bin/bash
@@ -305,6 +311,51 @@
     become: true
     command: cpanm File::Rename
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
+  - name: Patch PostgreSQL TestCluster to force logging_collector=off in test clusters
+    # The Percona PostgreSQL build-from-source has logging_collector=on as default.
+    # PostgreSQL::Test::Cluster::wait_for_log() reads the testwrap capture file
+    # (e.g. wal_archiving_replica_enc.log), but with logging_collector=on the server
+    # redirects all output to pgdata/log/ after startup — the capture file stops at
+    # 4 lines and wait_for_log() never sees "waiting for WAL to become available".
+    # This causes wal_archiving.pl to BAIL_OUT after 300s on every RHEL variant.
+    # PSP binary packages have logging_collector=off and pass correctly.
+    # Fix: monkey-patch Cluster.pm to append logging_collector=off to postgresql.conf
+    # for every test cluster created by init(), without touching pg_tde source.
+    become: true
+    ansible.builtin.shell: |
+      CLUSTER_PM=$(find /usr/pgsql-18 /opt/pgsql -name "Cluster.pm" \
+                        -path "*/PostgreSQL/Test/*" 2>/dev/null | head -1)
+      if [ -z "$CLUSTER_PM" ]; then
+        echo "Cluster.pm not found — skipping"
+        exit 0
+      fi
+      if grep -q "logging_collector_ansible_patch" "$CLUSTER_PM"; then
+        echo "Already patched"
+        exit 0
+      fi
+      cat >> "$CLUSTER_PM" << 'PERL'
+
+# --- logging_collector_ansible_patch ---
+# Force logging_collector=off for every test cluster so that
+# wait_for_log() can read messages from the testwrap capture file.
+# The Percona ppg build-from-source enables logging_collector by default,
+# which redirects server logs away from the file that wait_for_log reads.
+{
+    no warnings 'redefine';
+    my $_orig_cluster_init = \&PostgreSQL::Test::Cluster::init;
+    *PostgreSQL::Test::Cluster::init = sub {
+        my ($self, %params) = @_;
+        $self->$_orig_cluster_init(%params);
+        $self->append_conf('postgresql.conf', "logging_collector = off\n");
+        return $self;
+    };
+}
+PERL
+      echo "Cluster.pm patched: $CLUSTER_PM"
+    args:
+      executable: /bin/bash
+    when: ansible_os_family == "RedHat"
 
   # - name: Install HTTP::Server::Simple::CGI Perl module
   #   become: true

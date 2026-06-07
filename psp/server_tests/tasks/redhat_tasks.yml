@@ -190,7 +190,13 @@
       ARCH_RPM=$(uname -m)
       wget -q https://package.cosmian.com/kms/${COSMIAN_VERSION}/rpm/${ARCH_DIR}/non-fips/static/cosmian-kms-server-non-fips-static-openssl_${COSMIAN_VERSION}_${ARCH_RPM}.rpm -O /tmp/cosmian_kms.rpm
       rpm -ivh /tmp/cosmian_kms.rpm || true
+      # RPM ships binary + bundled legacy.so as 0500 root:root (same as .deb).
+      # postgres user (running meson test / kmip.pl) cannot dlopen() legacy.so
+      # without world-execute permission — cosmian_kms crashes silently because
+      # IPC::Run redirects its stdout to /dev/null. Mirror the upstream GH CI fix.
       chmod 0755 /usr/sbin/cosmian_kms || true
+      chmod 0755 /usr/local/cosmian/lib/ossl-modules/legacy.so || true
+      chmod 0755 /usr/local/cosmian/lib/ossl-modules/ || true
       rm -f /tmp/cosmian_kms.rpm
     args:
       executable: /bin/bash
