@@ -120,7 +120,8 @@
       cp -r /tmp/pg_stat_monitor/t "$ARTIFACT_DIR/pg_stat_monitor_t" 2>/dev/null || true
       cp -r /tmp/pg_stat_monitor/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
       # Collect standalone results/ directories for pg_regress SQL test outputs
-      find /tmp/pg_stat_monitor -type d -name "results" -not -path "*/tmp_check/*" | while read d; do
+      # Exclude t/results — already captured as part of pg_stat_monitor_t/ (cp -r t/ above)
+      find /tmp/pg_stat_monitor -type d -name "results" -not -path "*/tmp_check/*" -not -path "*/t/results*" | while read d; do
         rel="${d#/tmp/pg_stat_monitor/}"
         mkdir -p "$ARTIFACT_DIR/pg_stat_monitor/$rel"
         cp -r "$d/." "$ARTIFACT_DIR/pg_stat_monitor/$rel/" 2>/dev/null || true

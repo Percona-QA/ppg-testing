@@ -88,8 +88,12 @@
       # cosmian_kms stderr, bao errors, and TAP output (critical for debugging)
       cp -r /tmp/pg_tde-build/meson-logs "$ARTIFACT_DIR/meson-logs" 2>/dev/null || true
       # Per-test log directories created by testwrap (PostgreSQL server logs per test)
-      find /tmp/pg_tde-build/testrun -name "*.log" -type f 2>/dev/null | \
-        xargs -I{} cp --parents {} "$ARTIFACT_DIR/" || true
+      # Strip /tmp/pg_tde-build/ prefix so logs land at testrun/<test>/log/*.log
+      find /tmp/pg_tde-build/testrun -name "*.log" -type f 2>/dev/null | while read f; do
+        rel="${f#/tmp/pg_tde-build/}"
+        mkdir -p "$ARTIFACT_DIR/$(dirname "$rel")"
+        cp "$f" "$ARTIFACT_DIR/$rel"
+      done || true
       cp -r /tmp/pg_tde/t "$ARTIFACT_DIR/pg_tde_t" 2>/dev/null || true
       # tmp_check is in the build dir with meson (source dir path is dead code)
       cp -r /tmp/pg_tde-build/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true

@@ -601,8 +601,12 @@
       # Full meson test log with complete stderr per test
       cp -r /tmp/pg_tde-build/meson-logs "$ARTIFACT_DIR/meson-logs" 2>/dev/null || true
       # Per-test log directories from testwrap
-      find /tmp/pg_tde-build/testrun -name "*.log" -type f 2>/dev/null | \
-        xargs -I{} cp --parents {} "$ARTIFACT_DIR/" || true
+      # Strip /tmp/pg_tde-build/ prefix so logs land at testrun/<test>/log/*.log
+      find /tmp/pg_tde-build/testrun -name "*.log" -type f 2>/dev/null | while read f; do
+        rel="${f#/tmp/pg_tde-build/}"
+        mkdir -p "$ARTIFACT_DIR/$(dirname "$rel")"
+        cp "$f" "$ARTIFACT_DIR/$rel"
+      done || true
       cp -r /tmp/pg_tde/t "$ARTIFACT_DIR/pg_tde_t" 2>/dev/null || true
       # tmp_check is in the build dir with meson (source dir path is dead code)
       cp -r /tmp/pg_tde-build/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
@@ -915,8 +919,12 @@
       cp /tmp/pg_tde-build/regression.diffs "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/pg_tde-build/regression.out   "$ARTIFACT_DIR/" 2>/dev/null || true
       cp -r /tmp/pg_tde-build/meson-logs "$ARTIFACT_DIR/meson-logs" 2>/dev/null || true
-      find /tmp/pg_tde-build/testrun -name "*.log" -type f 2>/dev/null | \
-        xargs -I{} cp --parents {} "$ARTIFACT_DIR/" || true
+      # Strip /tmp/pg_tde-build/ prefix so logs land at testrun/<test>/log/*.log
+      find /tmp/pg_tde-build/testrun -name "*.log" -type f 2>/dev/null | while read f; do
+        rel="${f#/tmp/pg_tde-build/}"
+        mkdir -p "$ARTIFACT_DIR/$(dirname "$rel")"
+        cp "$f" "$ARTIFACT_DIR/$rel"
+      done || true
       find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       # Collect tmp_check directories for tap test logs
@@ -945,6 +953,7 @@
       cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/installcheck-world-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
       tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
