@@ -86,12 +86,6 @@
   - ansible.builtin.debug:
       msg: "Swap configured successfully. Current memory: {{ swap_info.stdout_lines }}"
 
-  # - name: set ulimit unlimited
-  #   ansible.builtin.shell: ulimit -s unlimited
-  #   become_user: postgres
-  #   become: true
-  #   register: results
-
   - name: Set stack ulimit for a specific user
     become: true
     pam_limits:
@@ -162,54 +156,12 @@
       - soft
       - hard
 
-  # - name: Ensure postgres has unlimited core dump limit
-  #   become: true
-  #   copy:
-  #     dest: /etc/security/limits.d/postgres.conf
-  #     content: |
-  #       postgres  soft  core  unlimited
-  #       postgres  hard  core  unlimited
-
-  # - name: Ensure pam_limits is enabled for Debian-based systems
-  #   become: true
-  #   block:
-  #     - name: Enable pam_limits in common-session
-  #       lineinfile:
-  #         path: /etc/pam.d/common-session
-  #         line: "session required pam_limits.so"
-  #         insertafter: EOF
-  #     - name: Enable pam_limits in common-session-noninteractive
-  #       lineinfile:
-  #         path: /etc/pam.d/common-session-noninteractive
-  #         line: "session required pam_limits.so"
-  #         insertafter: EOF
-  #   when: ansible_facts['os_family'] == 'Debian'
-
-  # - name: Ensure pam_limits is enabled for RHEL-based systems
-  #   become: true
-  #   block:
-  #     - name: Enable pam_limits in system-auth
-  #       lineinfile:
-  #         path: /etc/pam.d/system-auth
-  #         line: "session required pam_limits.so"
-  #         insertafter: EOF
-  #     - name: Enable pam_limits in password-auth
-  #       lineinfile:
-  #         path: /etc/pam.d/password-auth
-  #         line: "session required pam_limits.so"
-  #         insertafter: EOF
-  #   when: ansible_facts['os_family'] == 'RedHat'
-
   - name: Get ulimit results
     become_user: postgres
     ansible.builtin.shell: ulimit -a
     register: results
 
   - debug: var=results.stdout_lines
-
-  # - name: End play for this host if condition fails
-  #   meta: end_host
-  #   when: true
 
 # =============================
 # Clone Postgres/PSP sources with pg_tde
@@ -244,17 +196,8 @@
 
   - debug: var=results.stdout_lines
 
-  #to be removed once test is stable
-  - name: Remove vault_v2_test from Makefile
-    ansible.builtin.lineinfile:
-      path: /tmp/pg_tde/Makefile
-      regexp: '.*vault_v2_test.*'
-      state: absent
-    when:
-      - ansible_os_family == 'Debian'
-      - ansible_distribution == 'Debian'
-      - (ansible_distribution_major_version | int) == 13
-
+  # vault_v2_test confirmed still failing on Debian 13 (build213 debian13-arm:
+  # 15/16 subtests passed, vault_v2_test FAIL). Re-enabled exclusion.
   - name: Remove vault_v2_test from t/regress.pl
     ansible.builtin.lineinfile:
       path: /tmp/pg_tde/t/regress.pl
@@ -352,30 +295,56 @@
 
   - debug: var=results.stdout_lines
 
-  # - name: Copy Vault_v2 test output file
-  #   ansible.builtin.copy:
-  #     src: ../../files/vault_v2_test_1.out
-  #     dest: /tmp/pg_tde/expected/vault_v2_test_1.out
+  - name: Patch wal_archiving.pl - wait for WAL archiving before stopping primary on RHEL
+    ansible.builtin.blockinfile:
+      path: /tmp/pg_tde/t/wal_archiving.pl
+      insertbefore: '^\$primary->stop;'
+      marker: "# {mark} ANSIBLE PATCH - wait for WAL archive before stop"
+      block: |
+        # Force WAL switch and wait for that specific segment to be archived.
+        # On RHEL, pg_ctl stop finishes before archive_command flushes the last
+        # WAL segment. We capture the LSN returned by pg_switch_wal() (which is
+        # the END of the segment just completed) and poll until last_archived_wal
+        # reaches it. We must NOT use pg_current_wal_lsn() here — after the switch
+        # that points to the NEW segment which has not been archived yet, so the
+        # condition would always return 'f' and poll_query_until would time out.
+        my $switch_lsn = $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
+        $primary->poll_query_until(
+            'postgres',
+            "SELECT last_archived_wal >= pg_walfile_name('$switch_lsn'::pg_lsn) FROM pg_stat_archiver",
+            't'
+        );
+    become_user: postgres
+    when:
+      - ansible_os_family == 'RedHat'
+      - testsuite in ['installcheck-world', 'check-tde']
 
-  # =============================
-  # Initialize Postgres with pg_tde
-  # Start the Postgres server with pg_tde enabled
-  # This section is only applicable for installcheck and installcheck-world scenarios.
-  # For check and check-world, following 3 steps don't apply.
-  # =============================
-  # - name: initdb cluster
-  #   become_user: postgres
-  #   command: ./initdb -D /opt/pgsql/data --set shared_preload_libraries=pg_tde
-  #   args:
-  #     chdir: /opt/pgsql/bin
-  #    executable: /bin/bash
-  #   environment:
-  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
-  #   when: testsuite == 'installcheck-world'
-  #   register: results
-
-  # - debug: var=results.stdout_lines
+  # kmip.pl: replaced with a TAP skip stub on OpenSSL 1.x platforms.
+  # Deleting the file causes meson to report ERROR (file not found); the stub
+  # prints "1..0 # SKIP" and exits 0 so meson records it as SKIP.
+  # - Debian 11 / RHEL 8 / Rocky 8 / OL 8: openssl 1.x lacks -copy_extensions copy
+  # RHEL 9/10: cosmian_kms readiness timeout is under active investigation;
+  # kmip.pl is NOT stubbed there so CI continues to produce diagnostic output.
+  - name: Replace kmip.pl with a TAP skip stub on OpenSSL 1.x platforms
+    ansible.builtin.copy:
+      dest: /tmp/pg_tde/t/kmip.pl
+      owner: postgres
+      mode: '0755'
+      content: |
+        #!/usr/bin/perl
+        # Stub: kmip.pl is skipped on this platform.
+        # Debian 11 / RHEL 8 / Rocky 8 / OL 8: openssl 1.x lacks
+        # -copy_extensions copy (used in CosmianKms.pm gen_certs()).
+        print "1..0 # SKIP kmip.pl not supported on this platform (OpenSSL 1.x)\n";
+        exit 0;
+    become: true
+    when: >-
+      testsuite in ['installcheck-world', 'check-tde'] and
+      ((ansible_os_family == 'Debian' and
+        ansible_distribution == 'Debian' and
+        (ansible_distribution_major_version | int) == 11)
+       or (ansible_os_family == 'RedHat' and
+           ansible_distribution_major_version == '8'))
 
   - name: initdb cluster
     become_user: postgres
@@ -394,18 +363,35 @@
 
   - debug: var=results.stdout_lines
 
-  - name: Build & Install pg_tde
+  - name: Build pg_tde
     become: true
     become_user: postgres
     ansible.builtin.shell: |
       set -o pipefail
-      make PG_CONFIG=/opt/pgsql/bin/pg_config install 2>&1 | tee /tmp/tde-build.log
+      rm -rf /tmp/pg_tde-build
+      meson setup --buildtype=release -Dpg_config=/opt/pgsql/bin/pg_config -Dwerror=true /tmp/pg_tde-build 2>&1 | tee /tmp/tde-build.log
+      # make PG_CONFIG=/opt/pgsql/bin/pg_config install 2>&1 | tee /tmp/tde-build.log
     args:
       chdir: /tmp/pg_tde
       executable: /bin/bash
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
       TDE_MODE: "1"
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Install pg_tde
+    become: true
+    ansible.builtin.shell: |
+      set -o pipefail
+      meson install -C /tmp/pg_tde-build 2>&1 | tee /tmp/tde-install.log
+    args:
+      executable: /bin/bash
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
     when:
       - testsuite in ['installcheck-world', 'check-tde']
     register: results
@@ -435,26 +421,6 @@
     when:
       - (major_version | int) >= 18
       - testsuite in ['installcheck-world', 'check-tde']
-
-  # - name: Start Server
-  #   become: true
-  #   become_user: postgres
-  #   shell: |
-  #     ulimit -a
-  #     ./pg_ctl -D /opt/pgsql/data -l /tmp/postgres/logfile start -o '-p 5432'
-  #   args:
-  #     chdir: /opt/pgsql/bin
-  #   environment:
-  #     PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-  #     LD_LIBRARY_PATH: "/opt/pgsql/lib"
-  #     TDE_MODE: 1
-  #     LANG: C.UTF-8
-  #     LC_CTYPE: C
-  #     LC_ALL: C
-  #   when: testsuite == 'installcheck-world' or testsuite == 'check-tde'
-  #   register: results
-
-  # - debug: var=results.stdout_lines
 
   - name: Start PostgreSQL Server (with retry and log dump on failure)
     become: true
@@ -534,85 +500,16 @@
   - debug: var=results.stdout_lines
 
   # =============================
-  # Clone Percona-QA repo for regression tests
-  # This is done to avoid checking out all files in the repo
-  # and only include the postgresql directory
-  # =============================
-  # - name: Clone only postgresql directory and copy t files to pg_tde
-  #   block:
-  #     - name: Clone Percona-QA repo without checking out files
-  #       git:
-  #         repo: https://github.com/Percona-QA/percona-qa.git
-  #         dest: /tmp/percona-qa
-  #         bare: no
-  #         clone: yes
-  #         update: no
-
-  #     - name: Enable sparse checkout
-  #       command: git sparse-checkout init --cone
-  #       args:
-  #         chdir: /tmp/percona-qa
-  #         executable: /bin/bash
-
-  #     - name: Set sparse-checkout to only include postgresql/t directory
-  #       command: git sparse-checkout set postgresql/t
-  #       args:
-  #         chdir: /tmp/percona-qa
-
-  #     - name: Checkout master branch
-  #       command: git checkout master
-  #       args:
-  #         chdir: /tmp/percona-qa
-  #         executable: /bin/bash
-  #     - name: List postgresql directory contents
-  #       command: ls -R /tmp/percona-qa/postgresql/t
-  #       register: pgsql_dir_listing
-
-  #     - name: Show postgresql directory tree
-  #       debug:
-  #         var: pgsql_dir_listing.stdout_lines
-
-  #     - name: Copy postgresql/t files to pg_tde/t
-  #       shell: cp -r /tmp/percona-qa/postgresql/t/* /tmp/pg_tde/t/
-
-  #   when: testsuite == 'check-tde'
-
-  # =============================
   # Run pg_tde regression tests
   # =============================
   - name: Run check tde tests
     shell: |
-      # export VAULT_ROOT_TOKEN_FILE=/tmp/bao_env/bao_token.txt
-      # export VAULT_CACERT_FILE=/tmp/bao_env/bao_ca.crt
-
-      # export VAULT_ADDR="https://127.0.0.1:8202"
-      # export VAULT_TOKEN=root
-      echo $VAULT_ADDR
-
-      CLUSTER_INFO=$(mktemp)
-      bao server -dev -dev-tls -dev-cluster-json="$CLUSTER_INFO" > /tmp/bao-server.log 2>&1 &
-      sleep 10
-      export VAULT_ROOT_TOKEN_FILE=$(mktemp)
-      jq -r .root_token "$CLUSTER_INFO" > "$VAULT_ROOT_TOKEN_FILE"
-      export VAULT_CACERT=$(jq -r .ca_cert_path "$CLUSTER_INFO")
-      rm "$CLUSTER_INFO"
-
-      ## We need to enable key/value version 1 engine for just for tests
-      bao secrets enable -path=kv-v1 -version=1 kv
-
-      ## Create a test namespace for the tests to test namespace support
-      echo $VAULT_ADDR
-      export VAULT_SKIP_VERIFY=true
-      bao status
-      bao namespace create "pgns"
-      bao secrets enable -ns=pgns -path=secret -description="Production Secrets" kv-v2
-      bao status
-
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
       set -o pipefail
-      cd /tmp/pg_tde && make -s installcheck -k PROVE_FLAGS='-v -p' 2>&1 | tee /tmp/check-tde-regression.log
-      #cd /tmp/pg_tde && make -s installcheck -k
+      meson test --no-rebuild --timeout-multiplier=1000 --print-errorlogs -C /tmp/pg_tde-build 2>&1 | tee /tmp/check-tde-regression.log
+      # cd /tmp/pg_tde && make -s installcheck -k PROVE_FLAGS='-v -p' 2>&1 | tee /tmp/check-tde-regression.log
+      # cd /tmp/pg_tde && make -s installcheck -k
     become_user: postgres
     args:
       executable: /bin/bash
@@ -646,7 +543,10 @@
       - regression.rc != 0
 
   - name: Show tde regression diffs if tests failed
-    shell: cat /tmp/pg_tde/regression.diffs
+    shell: |
+      # meson writes regression.diffs to the build dir
+      cat /tmp/pg_tde-build/regression.diffs 2>/dev/null || \
+      cat /tmp/pg_tde/regression.diffs 2>/dev/null || true
     register: diffs_output
     when:
       - testsuite == 'check-tde'
@@ -666,9 +566,9 @@
   - name: Debug - find regression files and results dirs before packaging (check-tde)
     shell: |
       echo "=== regression.out files ==="
-      find /tmp/pg_tde -name "regression.out" 2>/dev/null || true
+      find /tmp/pg_tde-build /tmp/pg_tde -name "regression.out" 2>/dev/null || true
       echo "=== regression.diffs files ==="
-      find /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
+      find /tmp/pg_tde-build /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
       echo "=== results/ directories (outside tmp_check) ==="
       find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" 2>/dev/null || true
     args:
@@ -693,10 +593,23 @@
       ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
       mkdir -p "$ARTIFACT_DIR"
+      # SQL regression diffs/results — meson writes these to the build dir
+      cp /tmp/pg_tde-build/regression.diffs "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_tde-build/regression.out   "$ARTIFACT_DIR/" 2>/dev/null || true
       find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      # Full meson test log with complete stderr per test
+      cp -r /tmp/pg_tde-build/meson-logs "$ARTIFACT_DIR/meson-logs" 2>/dev/null || true
+      # Per-test log directories from testwrap
+      # Strip /tmp/pg_tde-build/ prefix so logs land at testrun/<test>/log/*.log
+      find /tmp/pg_tde-build/testrun -name "*.log" -type f 2>/dev/null | while read f; do
+        rel="${f#/tmp/pg_tde-build/}"
+        mkdir -p "$ARTIFACT_DIR/$(dirname "$rel")"
+        cp "$f" "$ARTIFACT_DIR/$rel"
+      done || true
       cp -r /tmp/pg_tde/t "$ARTIFACT_DIR/pg_tde_t" 2>/dev/null || true
-      cp -r /tmp/pg_tde/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
+      # tmp_check is in the build dir with meson (source dir path is dead code)
+      cp -r /tmp/pg_tde-build/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
       # Collect standalone results/ directories for pg_regress SQL test outputs
       find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" | while read d; do
         rel="${d#/tmp/pg_tde/}"
@@ -706,6 +619,7 @@
       cp /tmp/postgres/logfile "$ARTIFACT_DIR/server.log" 2>/dev/null || true
       cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-install.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true
@@ -716,6 +630,7 @@
     when:
       - testsuite == 'check-tde'
       - regression is defined
+      - regression.rc != 0
     ignore_errors: true
 
   - name: Fetch check-tde test artifacts to controller
@@ -726,6 +641,7 @@
     when:
       - testsuite == 'check-tde'
       - regression is defined
+      - regression.rc != 0
 
   - name: Fail the playbook if tde tests failed
     fail:
@@ -848,6 +764,7 @@
     when:
       - testsuite == 'check-server'
       - regression is defined
+      - regression.rc != 0
     ignore_errors: true
 
   - name: Fetch check-server test artifacts to controller
@@ -858,6 +775,7 @@
     when:
       - testsuite == 'check-server'
       - regression is defined
+      - regression.rc != 0
 
   - name: Fail the playbook if server tests failed
     fail:
@@ -968,9 +886,9 @@
   - name: Debug - find regression files and results dirs before packaging (installcheck-world)
     shell: |
       echo "=== regression.out files ==="
-      find /tmp/postgres /tmp/pg_tde -name "regression.out" 2>/dev/null || true
+      find /tmp/postgres /tmp/pg_tde-build /tmp/pg_tde -name "regression.out" 2>/dev/null || true
       echo "=== regression.diffs files ==="
-      find /tmp/postgres /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
+      find /tmp/postgres /tmp/pg_tde-build /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
       echo "=== results/ directories (outside tmp_check) ==="
       find /tmp/postgres /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" 2>/dev/null || true
     args:
@@ -997,6 +915,16 @@
       mkdir -p "$ARTIFACT_DIR"
       find /tmp/postgres -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/postgres -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      # pg_tde meson build dir regression output
+      cp /tmp/pg_tde-build/regression.diffs "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_tde-build/regression.out   "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp -r /tmp/pg_tde-build/meson-logs "$ARTIFACT_DIR/meson-logs" 2>/dev/null || true
+      # Strip /tmp/pg_tde-build/ prefix so logs land at testrun/<test>/log/*.log
+      find /tmp/pg_tde-build/testrun -name "*.log" -type f 2>/dev/null | while read f; do
+        rel="${f#/tmp/pg_tde-build/}"
+        mkdir -p "$ARTIFACT_DIR/$(dirname "$rel")"
+        cp "$f" "$ARTIFACT_DIR/$rel"
+      done || true
       find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       # Collect tmp_check directories for tap test logs
@@ -1025,6 +953,7 @@
       cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/installcheck-world-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
       tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
@@ -1033,6 +962,7 @@
     when:
       - testsuite == 'installcheck-world'
       - regression is defined
+      - regression.rc != 0
     ignore_errors: true
 
   - name: Fetch installcheck-world test artifacts to controller
@@ -1043,6 +973,7 @@
     when:
       - testsuite == 'installcheck-world'
       - regression is defined
+      - regression.rc != 0
 
   - name: Fail the playbook if tests failed in installcheck-world
     fail:

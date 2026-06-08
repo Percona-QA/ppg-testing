@@ -553,6 +553,27 @@ def test_llvmjit_pg_config_compiled_with_llvm(host):
     )
 
 
+def test_openssl_version_matches_ubi(host):
+    """Verify the OpenSSL version in the container matches the expected version for the UBI base.
+
+    - UBI 8  -> OpenSSL 1.x
+    - UBI 9  -> OpenSSL 3.x
+    - UBI 10 -> OpenSSL 3.x
+    """
+    EXPECTED_OPENSSL_MAJOR = {'8': '1', '9': '3', '10': '3'}
+    ubi_major = _expected_ubi_major_version()
+    expected = EXPECTED_OPENSSL_MAJOR[ubi_major]
+
+    result = host.run("openssl version")
+    assert result.rc == 0, f"openssl version failed: {result.stderr}"
+    actual_major = result.stdout.strip().split()[1].split('.')[0]
+    assert actual_major == expected, (
+        f"OpenSSL version mismatch for UBI {ubi_major}: "
+        f"expected major {expected}, got '{result.stdout.strip()}'"
+    )
+
+
+
 @pytest.mark.needs_preload
 def test_pg_stat_monitor_extension_version(host):
     # 1. Ensure extension is created
@@ -592,15 +613,9 @@ def test_build_with_liburing(host):
     if MAJOR_VER not in ["18"]:
         pytest.skip("Skipping, test only for PostgreSQL 18 version")
 
-    distribution = host.system_info.distribution.lower()
-    if distribution in [
-        "redhat",
-        "centos",
-        "rhel",
-        "rocky",
-        "ol",
-    ] and host.system_info.release.startswith("8"):
-        pytest.skip(f"liburing not supported on {distribution} 8 for postgres {MAJOR_VER}")
+    ubi_major = _expected_ubi_major_version()
+    if ubi_major == '8':
+        pytest.skip(f"liburing not supported on UBI/RHEL 8 for postgres {MAJOR_VER}")
 
     cmd = "pg_config --configure"
     output = host.check_output(cmd)

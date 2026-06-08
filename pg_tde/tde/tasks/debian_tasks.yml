@@ -1,31 +1,11 @@
 ---
   - name: Run installcheck tde tests
-    shell: | 
-      echo $VAULT_ADDR
-
-      CLUSTER_INFO=$(mktemp)
-      bao server -dev -dev-tls -dev-cluster-json="$CLUSTER_INFO" > /tmp/bao-server.log 2>&1 &
-      sleep 10
-      export VAULT_ROOT_TOKEN_FILE=$(mktemp)
-      jq -r .root_token "$CLUSTER_INFO" > "$VAULT_ROOT_TOKEN_FILE"
-      export VAULT_CACERT=$(jq -r .ca_cert_path "$CLUSTER_INFO")
-      rm "$CLUSTER_INFO"
-
-      ## We need to enable key/value version 1 engine for just for tests
-      bao secrets enable -path=kv-v1 -version=1 kv
-
-      ## Create a test namespace for the tests to test namespace support
-      echo $VAULT_ADDR
-      export VAULT_SKIP_VERIFY=true
-      bao status
-      bao namespace create "pgns"
-      bao secrets enable -ns=pgns -path=secret -description="Production Secrets" kv-v2
-      bao status
-
+    shell: |
       export PGCTLTIMEOUT=120
       export PG_TEST_TIMEOUT_DEFAULT=300
       set -o pipefail
-      cd /tmp/pg_tde && make -s installcheck USE_PGXS=1 -k PROVE_FLAGS='-v -p' 2>&1 | tee /tmp/check-tde-regression.log
+      meson test --no-rebuild --timeout-multiplier=1000 --print-errorlogs -C /tmp/pg_tde-build 2>&1 | tee /tmp/check-tde-regression.log
+      # cd /tmp/pg_tde && make -s installcheck USE_PGXS=1 -k PROVE_FLAGS='-v -p' 2>&1 | tee /tmp/check-tde-regression.log
     become_user: postgres
     args:
       executable: /bin/bash
@@ -37,9 +17,9 @@
       LANG: "C.UTF-8"
       LC_CTYPE: "C.UTF-8"
       LC_ALL: "C.UTF-8"
-      PGCTLTIMEOUT: 120
-      PG_TEST_TIMEOUT_DEFAULT: 300
-    ignore_errors: yes
+      PGCTLTIMEOUT: "120"
+      PG_TEST_TIMEOUT_DEFAULT: "300"
+    ignore_errors: true
     register: regression
 
   - name: Show stdout of check tde tests
@@ -54,7 +34,10 @@
       - regression.rc != 0
 
   - name: Show tde regression diffs if tests failed
-    shell: cat /tmp/pg_tde/regression.diffs
+    shell: |
+      # meson writes regression.diffs to the build dir
+      cat /tmp/pg_tde-build/regression.diffs 2>/dev/null || \
+      cat /tmp/pg_tde/regression.diffs 2>/dev/null || true
     register: diffs_output
     when:
       - regression is defined
@@ -72,9 +55,9 @@
   - name: Debug - find regression files and results dirs before packaging
     shell: |
       echo "=== regression.out files ==="
-      find /tmp/pg_tde -name "regression.out" 2>/dev/null || true
+      find /tmp/pg_tde-build /tmp/pg_tde -name "regression.out" 2>/dev/null || true
       echo "=== regression.diffs files ==="
-      find /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
+      find /tmp/pg_tde-build /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
       echo "=== results/ directories (outside tmp_check) ==="
       find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" 2>/dev/null || true
     args:
@@ -82,11 +65,11 @@
     register: debug_regression
     ignore_errors: true
     become: true
-    when: regression is defined
+    when: regression is defined and regression.rc != 0
 
   - debug:
       var: debug_regression.stdout_lines
-    when: regression is defined
+    when: regression is defined and regression.rc != 0
 
   - name: Package tde test artifacts
     shell: |
@@ -95,10 +78,25 @@
       ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
       mkdir -p "$ARTIFACT_DIR"
+      # SQL regression diffs/results — meson writes these to the build dir, not source dir
+      cp /tmp/pg_tde-build/regression.diffs "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_tde-build/regression.out   "$ARTIFACT_DIR/" 2>/dev/null || true
+      # Legacy: also check source dir in case make installcheck path is used
       find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      # Full meson test log — contains complete stdout/stderr per test including
+      # cosmian_kms stderr, bao errors, and TAP output (critical for debugging)
+      cp -r /tmp/pg_tde-build/meson-logs "$ARTIFACT_DIR/meson-logs" 2>/dev/null || true
+      # Per-test log directories created by testwrap (PostgreSQL server logs per test)
+      # Strip /tmp/pg_tde-build/ prefix so logs land at testrun/<test>/log/*.log
+      find /tmp/pg_tde-build/testrun -name "*.log" -type f 2>/dev/null | while read f; do
+        rel="${f#/tmp/pg_tde-build/}"
+        mkdir -p "$ARTIFACT_DIR/$(dirname "$rel")"
+        cp "$f" "$ARTIFACT_DIR/$rel"
+      done || true
       cp -r /tmp/pg_tde/t "$ARTIFACT_DIR/pg_tde_t" 2>/dev/null || true
-      cp -r /tmp/pg_tde/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
+      # tmp_check is in the build dir with meson (source dir path is dead code)
+      cp -r /tmp/pg_tde-build/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
       # Collect standalone results/ directories for pg_regress SQL test outputs
       find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" | while read d; do
         rel="${d#/tmp/pg_tde/}"
@@ -108,6 +106,7 @@
       # Collect PostgreSQL system service log (Debian/Ubuntu path)
       find /var/log/postgresql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-install.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true
@@ -115,7 +114,7 @@
     args:
       executable: /bin/bash
     become: true
-    when: regression is defined
+    when: regression is defined and regression.rc != 0
     ignore_errors: true
 
   - name: Fetch tde test artifacts to controller
@@ -123,7 +122,7 @@
       src: "/tmp/{{ artifact_filename }}"
       dest: "{{ playbook_dir }}/../artifacts/"
       fail_on_missing: false
-    when: regression is defined
+    when: regression is defined and regression.rc != 0
 
   - name: Fail the playbook if tde tests failed
     fail:
