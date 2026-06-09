@@ -185,18 +185,18 @@ timescaledb = {
     "16.13": {"version": "2.26.0"},
     "17.9": {"version": "2.26.0"},
     "18.3": {"version": "2.26.0"},
-    "16.14": {"version": "2.26.4"},
-    "17.10": {"version": "2.26.4"},
-    "18.4": {"version": "2.26.4"},
+    "16.14": {"version": "2.27.2"},
+    "17.10": {"version": "2.27.2"},
+    "18.4": {"version": "2.27.2"},
 }
 
 h3 = {
     "16.13": {"version": "4.2.3"},
     "17.9": {"version": "4.2.3"},
     "18.3": {"version": "4.2.3"},
-    "16.14": {"version": "4.2.3"},
-    "17.10": {"version": "4.2.3"},
-    "18.4": {"version": "4.2.3"},
+    "16.14": {"version": "4.5.0"},
+    "17.10": {"version": "4.5.0"},
+    "18.4": {"version": "4.5.0"},
 }
 
 pgrouting = {
@@ -217,18 +217,18 @@ hll = {
     "16.13": {"version": "2.19"},
     "17.9": {"version": "2.19"},
     "18.3": {"version": "2.19"},
-    "16.14": {"version": "2.19"},
-    "17.10": {"version": "2.19"},
-    "18.4": {"version": "2.19"},
+    "16.14": {"version": "2.21"},
+    "17.10": {"version": "2.21"},
+    "18.4": {"version": "2.21"},
 }
 
 ip4r = {
     "16.13": {"version": "2.4.2", "extension_version": "2.4"},
     "17.9": {"version": "2.4.2", "extension_version": "2.4"},
     "18.3": {"version": "2.4.2", "extension_version": "2.4"},
-    "16.14": {"version": "2.4.2", "extension_version": "2.4"},
-    "17.10": {"version": "2.4.2", "extension_version": "2.4"},
-    "18.4": {"version": "2.4.2", "extension_version": "2.4"},
+    "16.14": {"version": "2.4.3", "extension_version": "2.4"},
+    "17.10": {"version": "2.4.3", "extension_version": "2.4"},
+    "18.4": {"version": "2.4.3", "extension_version": "2.4"},
 }
 
 pg_cron = {
@@ -289,9 +289,9 @@ anonymizer = {
     "16.13": {"version": "3.0.13"},
     "17.9": {"version": "3.0.13"},
     "18.3": {"version": "3.0.13"},
-    "16.14": {"version": "3.0.13"},
-    "17.10": {"version": "3.0.13"},
-    "18.4": {"version": "3.0.13"},
+    "16.14": {"version": "3.1.0"},
+    "17.10": {"version": "3.1.0"},
+    "18.4": {"version": "3.1.0"},
 }
 
 # Base extension list — common across all supported major versions.
