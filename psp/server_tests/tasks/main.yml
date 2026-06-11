@@ -542,49 +542,21 @@
       - regression is defined
       - regression.rc != 0
 
-  - name: Show tde regression diffs if tests failed
-    shell: |
-      # meson writes regression.diffs to the build dir
-      cat /tmp/pg_tde-build/regression.diffs 2>/dev/null || \
-      cat /tmp/pg_tde/regression.diffs 2>/dev/null || true
-    register: diffs_output
+  - name: Show meson test summary on failure
+    shell: cat /tmp/pg_tde-build/meson-logs/testlog.txt 2>/dev/null || true
+    register: testlog_output
     when:
       - testsuite == 'check-tde'
       - regression is defined
       - regression.rc != 0
     ignore_errors: true
-
-  - name: Print tde regression diffs
-    debug:
-      msg: "{{ diffs_output.stdout_lines }}"
-    when:
-      - testsuite == 'check-tde'
-      - regression is defined
-      - regression.rc != 0
-      - diffs_output is defined
-
-  - name: Debug - find regression files and results dirs before packaging (check-tde)
-    shell: |
-      echo "=== regression.out files ==="
-      find /tmp/pg_tde-build /tmp/pg_tde -name "regression.out" 2>/dev/null || true
-      echo "=== regression.diffs files ==="
-      find /tmp/pg_tde-build /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
-      echo "=== results/ directories (outside tmp_check) ==="
-      find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" 2>/dev/null || true
-    args:
-      executable: /bin/bash
-    register: debug_regression
-    ignore_errors: true
-    become: true
-    when:
-      - testsuite == 'check-tde'
-      - regression is defined
 
   - debug:
-      var: debug_regression.stdout_lines
+      var: testlog_output.stdout_lines
     when:
       - testsuite == 'check-tde'
       - regression is defined
+      - regression.rc != 0
 
   - name: Package check-tde test artifacts
     shell: |
@@ -593,29 +565,12 @@
       ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
       mkdir -p "$ARTIFACT_DIR"
-      # SQL regression diffs/results — meson writes these to the build dir
-      cp /tmp/pg_tde-build/regression.diffs "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/pg_tde-build/regression.out   "$ARTIFACT_DIR/" 2>/dev/null || true
-      find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
-      find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
-      # Full meson test log with complete stderr per test
-      cp -r /tmp/pg_tde-build/meson-logs "$ARTIFACT_DIR/meson-logs" 2>/dev/null || true
-      # Per-test log directories from testwrap
-      # Strip /tmp/pg_tde-build/ prefix so logs land at testrun/<test>/log/*.log
-      find /tmp/pg_tde-build/testrun -name "*.log" -type f 2>/dev/null | while read f; do
-        rel="${f#/tmp/pg_tde-build/}"
-        mkdir -p "$ARTIFACT_DIR/$(dirname "$rel")"
-        cp "$f" "$ARTIFACT_DIR/$rel"
-      done || true
-      cp -r /tmp/pg_tde/t "$ARTIFACT_DIR/pg_tde_t" 2>/dev/null || true
-      # tmp_check is in the build dir with meson (source dir path is dead code)
-      cp -r /tmp/pg_tde-build/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
-      # Collect standalone results/ directories for pg_regress SQL test outputs
-      find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" | while read d; do
-        rel="${d#/tmp/pg_tde/}"
-        mkdir -p "$ARTIFACT_DIR/pg_tde/$rel"
-        cp -r "$d/." "$ARTIFACT_DIR/pg_tde/$rel/" 2>/dev/null || true
-      done
+      # Full source and build trees
+      cp -r /tmp/pg_tde "$ARTIFACT_DIR/pg_tde" 2>/dev/null || true
+      cp -r /tmp/pg_tde-build "$ARTIFACT_DIR/pg_tde-build" 2>/dev/null || true
+      # Runtime keyring/provider files written directly to /tmp by tests
+      cp /tmp/*.per "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_tde_change_key_provider-* "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/postgres/logfile "$ARTIFACT_DIR/server.log" 2>/dev/null || true
       cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
