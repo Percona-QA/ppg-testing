@@ -385,6 +385,7 @@
     become_user: postgres
     ansible.builtin.shell: |
       set -o pipefail
+      export LD_LIBRARY_PATH="/opt/pgsql/lib:${LD_LIBRARY_PATH:-}"
       rm -rf /tmp/pg_tde-build
       meson setup --buildtype=release -Dpg_config=/opt/pgsql/bin/pg_config -Dwerror=true /tmp/pg_tde-build 2>&1 | tee /tmp/tde-build.log
       # make PG_CONFIG=/opt/pgsql/bin/pg_config install 2>&1 | tee /tmp/tde-build.log
@@ -598,19 +599,27 @@
       ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
       mkdir -p "$ARTIFACT_DIR"
-      # Full source and build trees
+      # pg_tde source tree and meson build tree (includes meson-logs/, testrun/)
       cp -r /tmp/pg_tde "$ARTIFACT_DIR/pg_tde" 2>/dev/null || true
       cp -r /tmp/pg_tde-build "$ARTIFACT_DIR/pg_tde-build" 2>/dev/null || true
-      # Runtime keyring/provider files written directly to /tmp by tests
+      # Runtime keyring/provider files written by tests to /tmp
       cp /tmp/*.per "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/pg_tde_change_key_provider-* "$ARTIFACT_DIR/" 2>/dev/null || true
+      # PSP server logs: pg_ctl logfile and data-dir server logs
       cp /tmp/postgres/logfile "$ARTIFACT_DIR/server.log" 2>/dev/null || true
+      find /opt/pgsql/data/log /opt/pgsql/data/pg_log -name "*.log" -type f \
+        -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      # PSP build logs: configure (build.log) and autoconf detail (config.log)
       cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/postgres/config.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      # pg_tde build and install logs
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-install.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      # Tool build/runtime logs
       cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      # Test regression output
+      cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
       tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
       executable: /bin/bash
@@ -796,7 +805,12 @@
       done
       # Note: no /tmp/postgres/logfile for check-server — make check-world manages its own
       # temp instances; their per-node server logs are inside the tmp_check/log/ dirs above.
+      # PSP build logs: configure output and autoconf detail
       cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/postgres/config.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      # PSP data-dir server logs (present if a persistent server was started)
+      find /opt/pgsql/data/log /opt/pgsql/data/pg_log -name "*.log" -type f \
+        -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       cp /tmp/check-server-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
       tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
@@ -1016,8 +1030,14 @@
         mkdir -p "$ARTIFACT_DIR/pg_tde/$rel"
         cp -r "$d/." "$ARTIFACT_DIR/pg_tde/$rel/" 2>/dev/null || true
       done
+      # PSP server logs: pg_ctl logfile and data-dir server logs
       cp /tmp/postgres/logfile "$ARTIFACT_DIR/server.log" 2>/dev/null || true
+      find /opt/pgsql/data/log /opt/pgsql/data/pg_log -name "*.log" -type f \
+        -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      # PSP build logs: configure output and autoconf detail
       cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/postgres/config.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      # pg_tde and tool build/runtime logs
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true

@@ -18,6 +18,8 @@
     pg_config_path: "/usr/lib/postgresql/{{ major_version }}/bin/pg_config"
     pg_bin_dir: "/usr/lib/postgresql/{{ major_version }}/bin"
     pg_lib_dir: "/usr/lib/postgresql/{{ major_version }}/lib"
+    pg_log_dir: "/var/log/postgresql"
+    pg_socket_dir: "/var/run/postgresql"
   when: ansible_os_family == "Debian"
 
 - name: Set PostgreSQL config path for RHEL/CentOS/Rocky
@@ -26,6 +28,8 @@
     pg_config_path: "/usr/pgsql-{{ major_version }}/bin/pg_config"
     pg_bin_dir: "/usr/pgsql-{{ major_version }}/bin"
     pg_lib_dir: "/usr/pgsql-{{ major_version }}/lib"
+    pg_log_dir: "/var/lib/pgsql"
+    pg_socket_dir: "/run/postgresql,/tmp"
   when: ansible_os_family == "RedHat"
 
 - name: End play on RHEL 8 and Rocky 8 for pg-18>= and io_uring, as uring not supported
@@ -278,6 +282,7 @@
     source /opt/rh/gcc-toolset-14/enable
     {% endif %}
     set -o pipefail
+    export LD_LIBRARY_PATH="{{ pg_lib_dir }}:${LD_LIBRARY_PATH:-}"
     rm -rf /tmp/pg_tde-build
     meson setup --buildtype=release -Dpg_config={{ pg_config_path }} -Dwerror=true /tmp/pg_tde-build 2>&1 | tee /tmp/tde-build.log
     # make USE_PGXS=1 PG_CONFIG={{ pg_config_path }} \
@@ -397,44 +402,39 @@
 # archived. The replica cannot restore it and cannot promote cleanly within the
 # 300-second timeout.
 #
-# Fix: force TWO consecutive pg_switch_wal() calls before $primary->stop, each
-# followed by poll_query_until waiting for that segment to appear in
-# last_archived_wal. After two switches:
-#   - Switch 1 archives the data segment (the one with foobar_enc).
-#   - Switch 2 archives the next (empty) segment.
-#   - $primary->stop writes the shutdown checkpoint to the segment after that.
-# The replica restores cleanly through both switched segments, fails to find
-# the stop segment, reaches "waiting for WAL to become available", and promotes
-# — the same terminal state as on Debian, where the shutdown checkpoint segment
-# is in the archive. No raw file copying required.
-# TEMPORARILY DISABLED - testing baseline behaviour on all RHEL platforms
-# without any wal_archiving.pl patching. Re-enable by removing the comment
-# markers below (proven to work in PSP build 482 with a single pg_switch_wal).
-# - name: Patch wal_archiving.pl - wait for WAL archive before stop on RHEL
-#   ansible.builtin.blockinfile:
-#     path: /tmp/pg_tde/t/wal_archiving.pl
-#     insertbefore: '^\$primary->stop;'
-#     marker: "# {mark} ANSIBLE PATCH - wait for WAL archive before stop"
-#     block: |
-#       # Force WAL switch and wait for that specific segment to be archived.
-#       # On RHEL, pg_ctl stop finishes before archive_command flushes the last
-#       # WAL segment. We capture the LSN returned by pg_switch_wal() (which is
-#       # the END of the segment just completed) and poll until last_archived_wal
-#       # reaches it. We must NOT use pg_current_wal_lsn() here — after the
-#       # switch that points to the NEW segment which has not been archived yet,
-#       # so the condition would always return 'f' and poll_query_until would
-#       # time out.
-#       my $switch_lsn = $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
-#       $primary->poll_query_until(
-#           'postgres',
-#           "SELECT last_archived_wal >= pg_walfile_name('$switch_lsn'::pg_lsn) FROM pg_stat_archiver",
-#           't'
-#       );
-#   become_user: postgres
-#   when:
-#     - ansible_os_family == 'RedHat'
-#     - (major_version | int) < 18
-#     - tde_build_output.rc | default(1) == 0
+# Fix: force a pg_switch_wal() before $primary->stop and poll until that
+# segment appears in last_archived_wal. This ensures the data WAL segment is
+# fully archived before shutdown, so the replica can restore it and reach
+# "waiting for WAL to become available", then promote cleanly.
+# Applied only on RHEL 9+ (major_version >= 9): baseline run 242 confirmed
+# the race fails on RHEL 9/10. RHEL 8 is excluded here because the pg_tde
+# build itself fails there (shsplit/LD_LIBRARY_PATH); fix that separately.
+- name: Patch wal_archiving.pl - wait for WAL archive before stop on RHEL
+  ansible.builtin.blockinfile:
+    path: /tmp/pg_tde/t/wal_archiving.pl
+    insertbefore: '^\$primary->stop;'
+    marker: "# {mark} ANSIBLE PATCH - wait for WAL archive before stop"
+    block: |
+      # Force WAL switch and wait for that specific segment to be archived.
+      # On RHEL, pg_ctl stop finishes before archive_command flushes the last
+      # WAL segment. We capture the LSN returned by pg_switch_wal() (which is
+      # the END of the segment just completed) and poll until last_archived_wal
+      # reaches it. We must NOT use pg_current_wal_lsn() here — after the
+      # switch that points to the NEW segment which has not been archived yet,
+      # so the condition would always return 'f' and poll_query_until would
+      # time out.
+      my $switch_lsn = $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
+      $primary->poll_query_until(
+          'postgres',
+          "SELECT last_archived_wal >= pg_walfile_name('$switch_lsn'::pg_lsn) FROM pg_stat_archiver",
+          't'
+      );
+  become_user: postgres
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version | int >= 9
+    - (major_version | int) < 18
+    - tde_build_output.rc | default(1) == 0
 
 - name: Copy pg_tde test files
   ansible.builtin.copy:
@@ -471,8 +471,128 @@
 # - name: Change ownership of /tmp/bao_env to postgres
 
 # =============================
-# OS-specific tasks
+# Run pg_tde regression tests
 # =============================
-- name: Install OS-specific tasks
-  ansible.builtin.include_tasks: "{{ ansible_os_family | lower }}_tasks.yml"
-  when: tde_build_output.rc | default(1) == 0
+- name: Run check-tde tests
+  ansible.builtin.shell: |
+    export PGCTLTIMEOUT=120
+    export PG_TEST_TIMEOUT_DEFAULT=300
+    set -o pipefail
+    meson test --no-rebuild --timeout-multiplier=1000 --print-errorlogs -C /tmp/pg_tde-build 2>&1 | tee /tmp/check-tde-regression.log
+  become_user: postgres
+  args:
+    executable: /bin/bash
+    chdir: "/tmp/pg_tde"
+  environment:
+    PG_TEST_PORT_DIR: "/tmp/pg_tde"
+    PGHOST: "{{ pg_socket_dir }}"
+    PGPORT: "5432"
+    LANG: "C.UTF-8"
+    LC_CTYPE: "C.UTF-8"
+    LC_ALL: "C.UTF-8"
+    PGCTLTIMEOUT: "120"
+    PG_TEST_TIMEOUT_DEFAULT: "300"
+  ignore_errors: true
+  register: regression
+  when:
+    - tde_build_output.rc | default(1) == 0
+    - tde_install_output is defined
+    - tde_install_output.rc | default(1) == 0
+
+- name: Show stdout of check-tde tests
+  debug:
+    var: regression.stdout_lines
+  when: regression is defined
+
+- name: Show stderr if tests failed
+  debug:
+    var: regression.stderr_lines
+  when:
+    - regression is defined
+    - regression.rc != 0
+
+- name: Show meson test summary on failure
+  ansible.builtin.shell: cat /tmp/pg_tde-build/meson-logs/testlog.txt 2>/dev/null || true
+  register: testlog_output
+  when:
+    - regression is defined
+    - regression.rc != 0
+  ignore_errors: true
+
+- debug:
+    var: testlog_output.stdout_lines
+  when:
+    - regression is defined
+    - regression.rc != 0
+
+# =============================
+# Artifacts — always runs, collects whatever exists
+# =============================
+- name: Package tde test artifacts
+  ansible.builtin.shell: |
+    set -uo pipefail
+    ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
+    ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
+    rm -rf "$ARTIFACT_DIR"
+    mkdir -p "$ARTIFACT_DIR"
+    # pg_tde source tree (t/ scripts, meson.build, shsplit, ci_scripts)
+    cp -r /tmp/pg_tde "$ARTIFACT_DIR/pg_tde" 2>/dev/null || true
+    # meson build tree: compiled objects, testrun/<test>/{log,data}/, meson-logs/
+    cp -r /tmp/pg_tde-build "$ARTIFACT_DIR/pg_tde-build" 2>/dev/null || true
+    # meson logs at top level for quick access (meson-log.txt, testlog.txt)
+    mkdir -p "$ARTIFACT_DIR/meson-logs"
+    cp -r /tmp/pg_tde-build/meson-logs/. "$ARTIFACT_DIR/meson-logs/" 2>/dev/null || true
+    # Runtime keyring/provider files written by tests to /tmp
+    cp /tmp/*.per "$ARTIFACT_DIR/" 2>/dev/null || true
+    cp /tmp/pg_tde_change_key_provider-* "$ARTIFACT_DIR/" 2>/dev/null || true
+    # PostgreSQL system service logs (/var/lib/pgsql on RHEL, /var/log/postgresql on Debian)
+    find {{ pg_log_dir }} -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+    # Build and install logs
+    cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+    cp /tmp/tde-install.log "$ARTIFACT_DIR/" 2>/dev/null || true
+    # Tool build/runtime logs
+    cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+    cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true
+    # Test regression output
+    cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
+    tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
+  args:
+    executable: /bin/bash
+  become: true
+  when: >
+    (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
+    (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
+    (regression is defined and regression.rc != 0)
+  ignore_errors: true
+
+- name: Fetch tde test artifacts to controller
+  ansible.builtin.fetch:
+    src: "/tmp/{{ artifact_filename }}"
+    dest: "{{ playbook_dir }}/../artifacts/"
+    fail_on_missing: false
+  when: >
+    (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
+    (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
+    (regression is defined and regression.rc != 0)
+
+# =============================
+# Fail tasks — always reachable, not gated on prior success
+# =============================
+- name: Fail if pg_tde build failed
+  ansible.builtin.fail:
+    msg: "pg_tde build failed on {{ inventory_hostname }} (rc={{ tde_build_output.rc | default(1) }}). See /tmp/tde-build.log"
+  when: tde_build_output.rc | default(1) != 0
+
+- name: Fail if pg_tde install failed
+  ansible.builtin.fail:
+    msg: "pg_tde install failed on {{ inventory_hostname }} (rc={{ tde_install_output.rc | default(1) }}). See /tmp/tde-install.log"
+  when:
+    - tde_install_output is defined
+    - tde_install_output.rc | default(1) != 0
+
+- name: Fail if tde regression tests failed
+  ansible.builtin.fail:
+    msg: "TDE regression tests failed with return code {{ regression.rc }}"
+  when:
+    - regression is defined
+    - regression.rc != 0
