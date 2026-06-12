@@ -408,23 +408,26 @@
 # — the same terminal state as on Debian, where the shutdown checkpoint segment
 # is in the archive. No raw file copying required.
 # TEMPORARILY DISABLED - testing baseline behaviour on all RHEL platforms
-# without any wal_archiving.pl patching.
-# - name: Patch wal_archiving.pl - double WAL switch before stop on RHEL
+# without any wal_archiving.pl patching. Re-enable by removing the comment
+# markers below (proven to work in PSP build 482 with a single pg_switch_wal).
+# - name: Patch wal_archiving.pl - wait for WAL archive before stop on RHEL
 #   ansible.builtin.blockinfile:
 #     path: /tmp/pg_tde/t/wal_archiving.pl
 #     insertbefore: '^\$primary->stop;'
-#     marker: "# {mark} ANSIBLE PATCH - double WAL switch before stop"
+#     marker: "# {mark} ANSIBLE PATCH - wait for WAL archive before stop"
 #     block: |
-#       my $switch_lsn1 = $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
+#       # Force WAL switch and wait for that specific segment to be archived.
+#       # On RHEL, pg_ctl stop finishes before archive_command flushes the last
+#       # WAL segment. We capture the LSN returned by pg_switch_wal() (which is
+#       # the END of the segment just completed) and poll until last_archived_wal
+#       # reaches it. We must NOT use pg_current_wal_lsn() here — after the
+#       # switch that points to the NEW segment which has not been archived yet,
+#       # so the condition would always return 'f' and poll_query_until would
+#       # time out.
+#       my $switch_lsn = $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
 #       $primary->poll_query_until(
 #           'postgres',
-#           "SELECT last_archived_wal >= pg_walfile_name('$switch_lsn1'::pg_lsn) FROM pg_stat_archiver",
-#           't'
-#       );
-#       my $switch_lsn2 = $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
-#       $primary->poll_query_until(
-#           'postgres',
-#           "SELECT last_archived_wal >= pg_walfile_name('$switch_lsn2'::pg_lsn) FROM pg_stat_archiver",
+#           "SELECT last_archived_wal >= pg_walfile_name('$switch_lsn'::pg_lsn) FROM pg_stat_archiver",
 #           't'
 #       );
 #   become_user: postgres

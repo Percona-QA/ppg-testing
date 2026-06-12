@@ -307,29 +307,32 @@
 
   - debug: var=results.stdout_lines
 
-  - name: Patch wal_archiving.pl - wait for WAL archiving before stopping primary on RHEL
-    ansible.builtin.blockinfile:
-      path: /tmp/pg_tde/t/wal_archiving.pl
-      insertbefore: '^\$primary->stop;'
-      marker: "# {mark} ANSIBLE PATCH - wait for WAL archive before stop"
-      block: |
-        # Force WAL switch and wait for that specific segment to be archived.
-        # On RHEL, pg_ctl stop finishes before archive_command flushes the last
-        # WAL segment. We capture the LSN returned by pg_switch_wal() (which is
-        # the END of the segment just completed) and poll until last_archived_wal
-        # reaches it. We must NOT use pg_current_wal_lsn() here — after the switch
-        # that points to the NEW segment which has not been archived yet, so the
-        # condition would always return 'f' and poll_query_until would time out.
-        my $switch_lsn = $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
-        $primary->poll_query_until(
-            'postgres',
-            "SELECT last_archived_wal >= pg_walfile_name('$switch_lsn'::pg_lsn) FROM pg_stat_archiver",
-            't'
-        );
-    become_user: postgres
-    when:
-      - ansible_os_family == 'RedHat'
-      - testsuite in ['installcheck-world', 'check-tde']
+  # TEMPORARILY DISABLED - testing baseline behaviour on all RHEL platforms
+  # without any wal_archiving.pl patching. Re-enable by removing the comment
+  # markers below (proven to work in PSP build 482).
+  # - name: Patch wal_archiving.pl - wait for WAL archiving before stopping primary on RHEL
+  #   ansible.builtin.blockinfile:
+  #     path: /tmp/pg_tde/t/wal_archiving.pl
+  #     insertbefore: '^\$primary->stop;'
+  #     marker: "# {mark} ANSIBLE PATCH - wait for WAL archive before stop"
+  #     block: |
+  #       # Force WAL switch and wait for that specific segment to be archived.
+  #       # On RHEL, pg_ctl stop finishes before archive_command flushes the last
+  #       # WAL segment. We capture the LSN returned by pg_switch_wal() (which is
+  #       # the END of the segment just completed) and poll until last_archived_wal
+  #       # reaches it. We must NOT use pg_current_wal_lsn() here — after the switch
+  #       # that points to the NEW segment which has not been archived yet, so the
+  #       # condition would always return 'f' and poll_query_until would time out.
+  #       my $switch_lsn = $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
+  #       $primary->poll_query_until(
+  #           'postgres',
+  #           "SELECT last_archived_wal >= pg_walfile_name('$switch_lsn'::pg_lsn) FROM pg_stat_archiver",
+  #           't'
+  #       );
+  #   become_user: postgres
+  #   when:
+  #     - ansible_os_family == 'RedHat'
+  #     - testsuite in ['installcheck-world', 'check-tde']
 
   # kmip.pl: replaced with a TAP skip stub on OpenSSL 1.x platforms.
   # Deleting the file causes meson to report ERROR (file not found); the stub
