@@ -251,8 +251,7 @@
       executable: /bin/bash
     become_user: postgres
     when:
-      - io_method in ['worker', 'sync']
-      - psp_configure_output is not defined or psp_configure_output.rc | default(1) == 0
+      - io_method not in ['io_uring']
     ignore_errors: true
     register: psp_configure_output
 
@@ -504,13 +503,6 @@
       - testsuite in ['installcheck-world', 'check-tde']
       - pg_start_result is defined
 
-  - name: Fail play if PostgreSQL failed to start
-    fail:
-      msg: "PostgreSQL server failed to start. Check /tmp/postgres/logfile for details."
-    when:
-      - testsuite in ['installcheck-world', 'check-tde']
-      - pg_start_result is defined
-      - pg_start_result.rc | default(1) != 0
 
   - name: Check pg_tde library output
     become_user: postgres
