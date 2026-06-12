@@ -71,7 +71,10 @@
     args:
       executable: /bin/bash
     become: true
-    when: regression is defined and regression.rc != 0
+    when: >
+      (tde_build_output is defined and tde_build_output.rc != 0) or
+      (tde_install_output is defined and tde_install_output.rc != 0) or
+      (regression is defined and regression.rc != 0)
     ignore_errors: true
 
   - name: Fetch tde test artifacts to controller
@@ -79,7 +82,24 @@
       src: "/tmp/{{ artifact_filename }}"
       dest: "{{ playbook_dir }}/../artifacts/"
       fail_on_missing: false
-    when: regression is defined and regression.rc != 0
+    when: >
+      (tde_build_output is defined and tde_build_output.rc != 0) or
+      (tde_install_output is defined and tde_install_output.rc != 0) or
+      (regression is defined and regression.rc != 0)
+
+  - name: Fail the playbook if tde build failed
+    fail:
+      msg: "pg_tde build failed with return code {{ tde_build_output.rc }}"
+    when:
+      - tde_build_output is defined
+      - tde_build_output.rc != 0
+
+  - name: Fail the playbook if tde install failed
+    fail:
+      msg: "pg_tde install failed with return code {{ tde_install_output.rc }}"
+    when:
+      - tde_install_output is defined
+      - tde_install_output.rc != 0
 
   - name: Fail the playbook if tde tests failed
     fail:

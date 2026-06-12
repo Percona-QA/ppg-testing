@@ -235,9 +235,11 @@
     when:
       - (major_version | int) >= 18
       - io_method in ['io_uring']
-    register: results
+    ignore_errors: true
+    register: psp_configure_output
 
-  - debug: var=results.stdout_lines
+  - debug: var=psp_configure_output.stdout_lines
+    when: psp_configure_output is defined
 
   - name: Configure Postgres/PSP from sources
     ansible.builtin.shell: |
@@ -250,9 +252,12 @@
     become_user: postgres
     when:
       - io_method in ['worker', 'sync']
-    register: results
+      - psp_configure_output is not defined or psp_configure_output.rc == 0
+    ignore_errors: true
+    register: psp_configure_output
 
-  - debug: var=results.stdout_lines
+  - debug: var=psp_configure_output.stdout_lines
+    when: psp_configure_output is defined
 
   - name: Run make install-world with parallel jobs
     ansible.builtin.shell: |
@@ -264,9 +269,12 @@
     become_user: postgres
     environment:
       TDE_MODE: "1"
-    register: results
+    when: psp_configure_output is defined and psp_configure_output.rc == 0
+    ignore_errors: true
+    register: psp_build_output
 
-  - debug: var=results.stdout_lines
+  - debug: var=psp_build_output.stdout_lines
+    when: psp_build_output is defined
 
   - name: Run make install for Injection points, as this extension is not built by default
     ansible.builtin.command: make install -j -s -C src/test/modules/injection_points
@@ -276,15 +284,20 @@
     become_user: postgres
     environment:
       TDE_MODE: "1"
-    register: results
     when:
-        - (major_version | int) >= 17 
+      - (major_version | int) >= 17
+      - psp_build_output is defined
+      - psp_build_output.rc == 0
+    ignore_errors: true
+    register: psp_inject_output
 
-  - debug: var=results.stdout_lines
+  - debug: var=psp_inject_output.stdout_lines
+    when: psp_inject_output is defined
 
   - name: Copy pg_config to /usr/bin
-    become: true 
+    become: true
     command: sudo cp /opt/pgsql/bin/pg_config /usr/bin
+    when: psp_build_output is defined and psp_build_output.rc == 0
 
   - name: Remove multiple extensions tap test case from pg_tde
     become_user: postgres
@@ -359,6 +372,8 @@
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
     when:
       - testsuite in ['installcheck-world', 'check-tde']
+      - psp_build_output is defined
+      - psp_build_output.rc == 0
     register: results
 
   - debug: var=results.stdout_lines
@@ -379,9 +394,11 @@
       TDE_MODE: "1"
     when:
       - testsuite in ['installcheck-world', 'check-tde']
-    register: results
+    ignore_errors: true
+    register: tde_build_output
 
-  - debug: var=results.stdout_lines
+  - debug: var=tde_build_output.stdout_lines
+    when: tde_build_output is defined
 
   - name: Install pg_tde
     become: true
@@ -394,9 +411,13 @@
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
     when:
       - testsuite in ['installcheck-world', 'check-tde']
-    register: results
+      - tde_build_output is defined
+      - tde_build_output.rc == 0
+    ignore_errors: true
+    register: tde_install_output
 
-  - debug: var=results.stdout_lines
+  - debug: var=tde_install_output.stdout_lines
+    when: tde_install_output is defined
 
   - name: Add pg_tde to postgresql.conf
     lineinfile:
@@ -584,8 +605,10 @@
     become: true
     when:
       - testsuite == 'check-tde'
-      - regression is defined
-      - regression.rc != 0
+      - >
+        (tde_build_output is defined and tde_build_output.rc != 0) or
+        (tde_install_output is defined and tde_install_output.rc != 0) or
+        (regression is defined and regression.rc != 0)
     ignore_errors: true
 
   - name: Fetch check-tde test artifacts to controller
@@ -595,8 +618,26 @@
       fail_on_missing: false
     when:
       - testsuite == 'check-tde'
-      - regression is defined
-      - regression.rc != 0
+      - >
+        (tde_build_output is defined and tde_build_output.rc != 0) or
+        (tde_install_output is defined and tde_install_output.rc != 0) or
+        (regression is defined and regression.rc != 0)
+
+  - name: Fail the playbook if tde build failed
+    fail:
+      msg: "pg_tde build failed with return code {{ tde_build_output.rc }}"
+    when:
+      - testsuite == 'check-tde'
+      - tde_build_output is defined
+      - tde_build_output.rc != 0
+
+  - name: Fail the playbook if tde install failed
+    fail:
+      msg: "pg_tde install failed with return code {{ tde_install_output.rc }}"
+    when:
+      - testsuite == 'check-tde'
+      - tde_install_output is defined
+      - tde_install_output.rc != 0
 
   - name: Fail the playbook if tde tests failed
     fail:
@@ -718,8 +759,10 @@
     become: true
     when:
       - testsuite == 'check-server'
-      - regression is defined
-      - regression.rc != 0
+      - >
+        (psp_configure_output is defined and psp_configure_output.rc != 0) or
+        (psp_build_output is defined and psp_build_output.rc != 0) or
+        (regression is defined and regression.rc != 0)
     ignore_errors: true
 
   - name: Fetch check-server test artifacts to controller
@@ -729,8 +772,26 @@
       fail_on_missing: false
     when:
       - testsuite == 'check-server'
-      - regression is defined
-      - regression.rc != 0
+      - >
+        (psp_configure_output is defined and psp_configure_output.rc != 0) or
+        (psp_build_output is defined and psp_build_output.rc != 0) or
+        (regression is defined and regression.rc != 0)
+
+  - name: Fail the playbook if server configure failed
+    fail:
+      msg: "PSP configure failed with return code {{ psp_configure_output.rc }}"
+    when:
+      - testsuite == 'check-server'
+      - psp_configure_output is defined
+      - psp_configure_output.rc != 0
+
+  - name: Fail the playbook if server build failed
+    fail:
+      msg: "PSP build failed with return code {{ psp_build_output.rc }}"
+    when:
+      - testsuite == 'check-server'
+      - psp_build_output is defined
+      - psp_build_output.rc != 0
 
   - name: Fail the playbook if server tests failed
     fail:
@@ -916,8 +977,12 @@
     become: true
     when:
       - testsuite == 'installcheck-world'
-      - regression is defined
-      - regression.rc != 0
+      - >
+        (psp_configure_output is defined and psp_configure_output.rc != 0) or
+        (psp_build_output is defined and psp_build_output.rc != 0) or
+        (tde_build_output is defined and tde_build_output.rc != 0) or
+        (tde_install_output is defined and tde_install_output.rc != 0) or
+        (regression is defined and regression.rc != 0)
     ignore_errors: true
 
   - name: Fetch installcheck-world test artifacts to controller
@@ -927,8 +992,44 @@
       fail_on_missing: false
     when:
       - testsuite == 'installcheck-world'
-      - regression is defined
-      - regression.rc != 0
+      - >
+        (psp_configure_output is defined and psp_configure_output.rc != 0) or
+        (psp_build_output is defined and psp_build_output.rc != 0) or
+        (tde_build_output is defined and tde_build_output.rc != 0) or
+        (tde_install_output is defined and tde_install_output.rc != 0) or
+        (regression is defined and regression.rc != 0)
+
+  - name: Fail the playbook if server configure failed
+    fail:
+      msg: "PSP configure failed with return code {{ psp_configure_output.rc }}"
+    when:
+      - testsuite == 'installcheck-world'
+      - psp_configure_output is defined
+      - psp_configure_output.rc != 0
+
+  - name: Fail the playbook if server build failed
+    fail:
+      msg: "PSP build failed with return code {{ psp_build_output.rc }}"
+    when:
+      - testsuite == 'installcheck-world'
+      - psp_build_output is defined
+      - psp_build_output.rc != 0
+
+  - name: Fail the playbook if tde build failed
+    fail:
+      msg: "pg_tde build failed with return code {{ tde_build_output.rc }}"
+    when:
+      - testsuite == 'installcheck-world'
+      - tde_build_output is defined
+      - tde_build_output.rc != 0
+
+  - name: Fail the playbook if tde install failed
+    fail:
+      msg: "pg_tde install failed with return code {{ tde_install_output.rc }}"
+    when:
+      - testsuite == 'installcheck-world'
+      - tde_install_output is defined
+      - tde_install_output.rc != 0
 
   - name: Fail the playbook if tests failed in installcheck-world
     fail:

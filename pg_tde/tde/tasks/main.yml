@@ -291,6 +291,7 @@
     LD_LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu:{{ pg_lib_dir }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
     LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu:{{ pg_lib_dir }}:{{ ansible_env.LIBRARY_PATH | default('') }}"
     TDE_MODE: "1"
+  ignore_errors: true
   register: tde_build_output
 
 - debug:
@@ -308,10 +309,13 @@
     executable: /bin/bash
   environment:
     PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:{{ ansible_env.PATH }}"
+  ignore_errors: true
+  when: tde_build_output.rc == 0
   register: tde_install_output
 
 - debug:
     var: tde_install_output.stdout_lines
+  when: tde_install_output is defined
 
 # Remove old io_method (if PG18+)
 - name: Comment out any io_method line (PG18+)
