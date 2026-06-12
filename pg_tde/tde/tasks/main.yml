@@ -310,7 +310,7 @@
   environment:
     PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:{{ ansible_env.PATH }}"
   ignore_errors: true
-  when: tde_build_output.rc == 0
+  when: tde_build_output.rc | default(1) == 0
   register: tde_install_output
 
 - debug:

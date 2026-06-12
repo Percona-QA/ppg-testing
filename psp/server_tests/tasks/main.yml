@@ -252,7 +252,7 @@
     become_user: postgres
     when:
       - io_method in ['worker', 'sync']
-      - psp_configure_output is not defined or psp_configure_output.rc == 0
+      - psp_configure_output is not defined or psp_configure_output.rc | default(1) == 0
     ignore_errors: true
     register: psp_configure_output
 
@@ -269,7 +269,7 @@
     become_user: postgres
     environment:
       TDE_MODE: "1"
-    when: psp_configure_output is defined and psp_configure_output.rc == 0
+    when: psp_configure_output is defined and psp_configure_output.rc | default(1) == 0
     ignore_errors: true
     register: psp_build_output
 
@@ -287,7 +287,7 @@
     when:
       - (major_version | int) >= 17
       - psp_build_output is defined
-      - psp_build_output.rc == 0
+      - psp_build_output.rc | default(1) == 0
     ignore_errors: true
     register: psp_inject_output
 
@@ -297,7 +297,7 @@
   - name: Copy pg_config to /usr/bin
     become: true
     command: sudo cp /opt/pgsql/bin/pg_config /usr/bin
-    when: psp_build_output is defined and psp_build_output.rc == 0
+    when: psp_build_output is defined and psp_build_output.rc | default(1) == 0
 
   - name: Remove multiple extensions tap test case from pg_tde
     become_user: postgres
@@ -373,7 +373,7 @@
     when:
       - testsuite in ['installcheck-world', 'check-tde']
       - psp_build_output is defined
-      - psp_build_output.rc == 0
+      - psp_build_output.rc | default(1) == 0
     register: results
 
   - debug: var=results.stdout_lines
@@ -412,7 +412,7 @@
     when:
       - testsuite in ['installcheck-world', 'check-tde']
       - tde_build_output is defined
-      - tde_build_output.rc == 0
+      - tde_build_output.rc | default(1) == 0
     ignore_errors: true
     register: tde_install_output
 
@@ -606,8 +606,8 @@
     when:
       - testsuite == 'check-tde'
       - >
-        (tde_build_output is defined and tde_build_output.rc != 0) or
-        (tde_install_output is defined and tde_install_output.rc != 0) or
+        (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
+        (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
         (regression is defined and regression.rc != 0)
     ignore_errors: true
 
@@ -619,8 +619,8 @@
     when:
       - testsuite == 'check-tde'
       - >
-        (tde_build_output is defined and tde_build_output.rc != 0) or
-        (tde_install_output is defined and tde_install_output.rc != 0) or
+        (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
+        (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
         (regression is defined and regression.rc != 0)
 
   - name: Fail the playbook if tde build failed
@@ -629,7 +629,7 @@
     when:
       - testsuite == 'check-tde'
       - tde_build_output is defined
-      - tde_build_output.rc != 0
+      - tde_build_output.rc | default(1) != 0
 
   - name: Fail the playbook if tde install failed
     fail:
@@ -637,7 +637,7 @@
     when:
       - testsuite == 'check-tde'
       - tde_install_output is defined
-      - tde_install_output.rc != 0
+      - tde_install_output.rc | default(1) != 0
 
   - name: Fail the playbook if tde tests failed
     fail:
@@ -760,8 +760,8 @@
     when:
       - testsuite == 'check-server'
       - >
-        (psp_configure_output is defined and psp_configure_output.rc != 0) or
-        (psp_build_output is defined and psp_build_output.rc != 0) or
+        (psp_configure_output is defined and psp_configure_output.rc | default(1) != 0) or
+        (psp_build_output is defined and psp_build_output.rc | default(1) != 0) or
         (regression is defined and regression.rc != 0)
     ignore_errors: true
 
@@ -773,8 +773,8 @@
     when:
       - testsuite == 'check-server'
       - >
-        (psp_configure_output is defined and psp_configure_output.rc != 0) or
-        (psp_build_output is defined and psp_build_output.rc != 0) or
+        (psp_configure_output is defined and psp_configure_output.rc | default(1) != 0) or
+        (psp_build_output is defined and psp_build_output.rc | default(1) != 0) or
         (regression is defined and regression.rc != 0)
 
   - name: Fail the playbook if server configure failed
@@ -783,7 +783,7 @@
     when:
       - testsuite == 'check-server'
       - psp_configure_output is defined
-      - psp_configure_output.rc != 0
+      - psp_configure_output.rc | default(1) != 0
 
   - name: Fail the playbook if server build failed
     fail:
@@ -791,7 +791,7 @@
     when:
       - testsuite == 'check-server'
       - psp_build_output is defined
-      - psp_build_output.rc != 0
+      - psp_build_output.rc | default(1) != 0
 
   - name: Fail the playbook if server tests failed
     fail:
@@ -978,10 +978,10 @@
     when:
       - testsuite == 'installcheck-world'
       - >
-        (psp_configure_output is defined and psp_configure_output.rc != 0) or
-        (psp_build_output is defined and psp_build_output.rc != 0) or
-        (tde_build_output is defined and tde_build_output.rc != 0) or
-        (tde_install_output is defined and tde_install_output.rc != 0) or
+        (psp_configure_output is defined and psp_configure_output.rc | default(1) != 0) or
+        (psp_build_output is defined and psp_build_output.rc | default(1) != 0) or
+        (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
+        (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
         (regression is defined and regression.rc != 0)
     ignore_errors: true
 
@@ -993,10 +993,10 @@
     when:
       - testsuite == 'installcheck-world'
       - >
-        (psp_configure_output is defined and psp_configure_output.rc != 0) or
-        (psp_build_output is defined and psp_build_output.rc != 0) or
-        (tde_build_output is defined and tde_build_output.rc != 0) or
-        (tde_install_output is defined and tde_install_output.rc != 0) or
+        (psp_configure_output is defined and psp_configure_output.rc | default(1) != 0) or
+        (psp_build_output is defined and psp_build_output.rc | default(1) != 0) or
+        (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
+        (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
         (regression is defined and regression.rc != 0)
 
   - name: Fail the playbook if server configure failed
@@ -1005,7 +1005,7 @@
     when:
       - testsuite == 'installcheck-world'
       - psp_configure_output is defined
-      - psp_configure_output.rc != 0
+      - psp_configure_output.rc | default(1) != 0
 
   - name: Fail the playbook if server build failed
     fail:
@@ -1013,7 +1013,7 @@
     when:
       - testsuite == 'installcheck-world'
       - psp_build_output is defined
-      - psp_build_output.rc != 0
+      - psp_build_output.rc | default(1) != 0
 
   - name: Fail the playbook if tde build failed
     fail:
@@ -1021,7 +1021,7 @@
     when:
       - testsuite == 'installcheck-world'
       - tde_build_output is defined
-      - tde_build_output.rc != 0
+      - tde_build_output.rc | default(1) != 0
 
   - name: Fail the playbook if tde install failed
     fail:
@@ -1029,7 +1029,7 @@
     when:
       - testsuite == 'installcheck-world'
       - tde_install_output is defined
-      - tde_install_output.rc != 0
+      - tde_install_output.rc | default(1) != 0
 
   - name: Fail the playbook if tests failed in installcheck-world
     fail:
