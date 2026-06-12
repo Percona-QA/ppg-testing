@@ -287,7 +287,7 @@
     chdir: /tmp/pg_tde
     executable: /bin/bash
   environment:
-    PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:{{ ansible_env.PATH }}"
+    PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
     LD_LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu:{{ pg_lib_dir }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
     LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu:{{ pg_lib_dir }}:{{ ansible_env.LIBRARY_PATH | default('') }}"
     TDE_MODE: "1"
@@ -308,7 +308,7 @@
   args:
     executable: /bin/bash
   environment:
-    PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:{{ ansible_env.PATH }}"
+    PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
   ignore_errors: true
   when: tde_build_output.rc | default(1) == 0
   register: tde_install_output
@@ -323,7 +323,9 @@
     path: "{{ pg_conf }}"
     regexp: '^(?!#)(.*io_method.*)$'
     replace: '# \1'
-  when: (major_version | int) >= 18
+  when:
+    - (major_version | int) >= 18
+    - tde_install_output.rc | default(1) == 0
 
 # Add or set io_method (PG18+)
 - name: Update io_method in postgresql.conf for PG18+
@@ -331,7 +333,9 @@
     path: "{{ pg_conf }}"
     regexp: "^io_method"
     line: "io_method = {{ io_method }}"
-  when: (major_version | int) >= 18
+  when:
+    - (major_version | int) >= 18
+    - tde_install_output.rc | default(1) == 0
 
 # =============================
 # pg_tde test setup
@@ -341,6 +345,7 @@
     path: /tmp/pg_tde/t/multiple_extensions.pl
     state: absent
   become_user: postgres
+  when: tde_build_output.rc | default(1) == 0
 
 # kmip.pl is skipped (replaced with a TAP skip stub) on platforms where it
 # cannot pass due to a confirmed, unresolvable OpenSSL version incompatibility:
@@ -374,11 +379,12 @@
       print "1..0 # SKIP kmip.pl not supported on this platform (OpenSSL 1.x)\n";
       exit 0;
   when: >-
-    (ansible_os_family == 'Debian' and
-     ansible_distribution == 'Debian' and
-     (ansible_distribution_major_version | int) == 11)
-    or (ansible_os_family == 'RedHat' and
-        ansible_distribution_major_version == '8')
+    tde_build_output.rc | default(1) == 0 and
+    ((ansible_os_family == 'Debian' and
+      ansible_distribution == 'Debian' and
+      (ansible_distribution_major_version | int) == 11)
+     or (ansible_os_family == 'RedHat' and
+         ansible_distribution_major_version == '8'))
 
 # wal_archiving.pl fix for RHEL/Rocky/OL: build216 data confirmed the root cause.
 # The replica's pg_tde_restore_encrypt restore_command loops for ~300s waiting
@@ -406,7 +412,9 @@
           't'
       );
   become_user: postgres
-  when: ansible_os_family == 'RedHat'
+  when:
+    - ansible_os_family == 'RedHat'
+    - tde_build_output.rc | default(1) == 0
 
 - name: Copy pg_tde test files
   ansible.builtin.copy:
@@ -422,6 +430,7 @@
     pg_tde_dest:
       multiple_extensions.pl: /tmp/pg_tde/t/multiple_extensions.pl
       delete_principal_key_1.out: /tmp/pg_tde/expected/delete_principal_key_1.out
+  when: tde_build_output.rc | default(1) == 0
 
 # run_kmip_vault_server.yml is no longer needed with meson test.
 # Previously (make installcheck era) it installed Docker and ran KMIP as a
@@ -446,3 +455,4 @@
 # =============================
 - name: Install OS-specific tasks
   ansible.builtin.include_tasks: "{{ ansible_os_family | lower }}_tasks.yml"
+  when: tde_build_output.rc | default(1) == 0

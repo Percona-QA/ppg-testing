@@ -390,10 +390,11 @@
       chdir: /tmp/pg_tde
       executable: /bin/bash
     environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
       TDE_MODE: "1"
     when:
       - testsuite in ['installcheck-world', 'check-tde']
+      - psp_build_output.rc | default(1) == 0
     ignore_errors: true
     register: tde_build_output
 
@@ -408,7 +409,7 @@
     args:
       executable: /bin/bash
     environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
     when:
       - testsuite in ['installcheck-world', 'check-tde']
       - tde_build_output is defined
@@ -425,6 +426,8 @@
       line: shared_preload_libraries = 'pg_tde'
     when:
       - testsuite in ['installcheck-world', 'check-tde']
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) == 0
 
   - name: Comment out any line containing 'io_method'
     ansible.builtin.replace:
@@ -434,6 +437,8 @@
     when:
       - (major_version | int) >= 18
       - testsuite in ['installcheck-world', 'check-tde']
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) == 0
 
   - name: Update io_method in postgresql.conf for pg-18
     ansible.builtin.lineinfile:
@@ -442,6 +447,8 @@
     when:
       - (major_version | int) >= 18
       - testsuite in ['installcheck-world', 'check-tde']
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) == 0
 
   - name: Start PostgreSQL Server (with retry and log dump on failure)
     become: true
@@ -483,30 +490,31 @@
       LC_ALL: "C.UTF-8"
     when:
       - testsuite in ['installcheck-world', 'check-tde']
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) == 0
+      - tde_install_output is defined
+      - tde_install_output.rc | default(1) == 0
     register: pg_start_result
-    ignore_errors: true  # Let Ansible continue to handle fail condition below
+    ignore_errors: true
 
   - name: Display PostgreSQL start output
     debug:
       var: pg_start_result.stdout_lines
     when:
       - testsuite in ['installcheck-world', 'check-tde']
-
-  - debug: var=results.stdout_lines
+      - pg_start_result is defined
 
   - name: Fail play if PostgreSQL failed to start
     fail:
-      msg: "❌ PostgreSQL server failed to start after retry. Check /tmp/postgres/logfile for details."
+      msg: "PostgreSQL server failed to start. Check /tmp/postgres/logfile for details."
     when:
       - testsuite in ['installcheck-world', 'check-tde']
-      - pg_start_result.rc != 0
-    register: results
-
-  - debug: var=results.stdout_lines
+      - pg_start_result is defined
+      - pg_start_result.rc | default(1) != 0
 
   - name: Check pg_tde library output
     become_user: postgres
-    shell: | 
+    shell: |
       psql -c "select * from pg_available_extensions where name like 'pg_tde';"
     args:
       executable: /bin/bash
@@ -516,9 +524,12 @@
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
     when:
       - testsuite in ['installcheck-world', 'check-tde']
+      - pg_start_result is defined
+      - pg_start_result.rc | default(1) == 0
     register: results
 
   - debug: var=results.stdout_lines
+    when: results is defined
 
   # =============================
   # Run pg_tde regression tests
@@ -546,14 +557,19 @@
       LANG: "C.UTF-8"
       LC_CTYPE: "C.UTF-8"
       LC_ALL: "C.UTF-8"
-    when: testsuite == 'check-tde'
+    when:
+      - testsuite == 'check-tde'
+      - pg_start_result is defined
+      - pg_start_result.rc | default(1) == 0
     ignore_errors: true
     register: regression
 
   - name: Show stdout of check tde tests
     debug:
       var: regression.stdout_lines
-    when: testsuite == 'check-tde'
+    when:
+      - testsuite == 'check-tde'
+      - regression is defined
 
   - name: Show stderr if test fails
     debug:
@@ -606,8 +622,11 @@
     when:
       - testsuite == 'check-tde'
       - >
+        (psp_configure_output is defined and psp_configure_output.rc | default(1) != 0) or
+        (psp_build_output is defined and psp_build_output.rc | default(1) != 0) or
         (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
         (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
+        (pg_start_result is defined and pg_start_result.rc | default(1) != 0) or
         (regression is defined and regression.rc != 0)
     ignore_errors: true
 
@@ -619,9 +638,28 @@
     when:
       - testsuite == 'check-tde'
       - >
+        (psp_configure_output is defined and psp_configure_output.rc | default(1) != 0) or
+        (psp_build_output is defined and psp_build_output.rc | default(1) != 0) or
         (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
         (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
+        (pg_start_result is defined and pg_start_result.rc | default(1) != 0) or
         (regression is defined and regression.rc != 0)
+
+  - name: Fail the playbook if server configure failed
+    fail:
+      msg: "PSP configure failed with return code {{ psp_configure_output.rc }}"
+    when:
+      - testsuite == 'check-tde'
+      - psp_configure_output is defined
+      - psp_configure_output.rc | default(1) != 0
+
+  - name: Fail the playbook if server build failed
+    fail:
+      msg: "PSP build failed with return code {{ psp_build_output.rc }}"
+    when:
+      - testsuite == 'check-tde'
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) != 0
 
   - name: Fail the playbook if tde build failed
     fail:
@@ -638,6 +676,14 @@
       - testsuite == 'check-tde'
       - tde_install_output is defined
       - tde_install_output.rc | default(1) != 0
+
+  - name: Fail the playbook if PostgreSQL failed to start
+    fail:
+      msg: "PostgreSQL server failed to start with return code {{ pg_start_result.rc }}"
+    when:
+      - testsuite == 'check-tde'
+      - pg_start_result is defined
+      - pg_start_result.rc | default(1) != 0
 
   - name: Fail the playbook if tde tests failed
     fail:
@@ -670,7 +716,10 @@
       LANG: "C.UTF-8"
       LC_CTYPE: "C.UTF-8"
       LC_ALL: "C.UTF-8"
-    when: testsuite == 'check-server'
+    when:
+      - testsuite == 'check-server'
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) == 0
     ignore_errors: true
     register: regression
 
@@ -828,7 +877,10 @@
       LC_ALL: "C.UTF-8"
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
     ignore_errors: true
-    when: testsuite == 'installcheck-world'
+    when:
+      - testsuite == 'installcheck-world'
+      - pg_start_result is defined
+      - pg_start_result.rc | default(1) == 0
 
   - name: Run installcheck-world with tde (as root shell, sudo inside)
     become: true
@@ -862,7 +914,10 @@
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
       PGCTLTIMEOUT: "120"
       PG_TEST_TIMEOUT_DEFAULT: "300"
-    when: testsuite == 'installcheck-world'
+    when:
+      - testsuite == 'installcheck-world'
+      - pg_start_result is defined
+      - pg_start_result.rc | default(1) == 0
     register: regression
 
   - name: Show stdout of installcheck-world regression tests
