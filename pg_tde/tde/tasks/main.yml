@@ -386,67 +386,52 @@
      or (ansible_os_family == 'RedHat' and
          ansible_distribution_major_version == '8'))
 
-# wal_archiving.pl fix for RHEL/Rocky/OL: build236 data confirmed the full root cause.
+# wal_archiving.pl fix for RHEL/Rocky/OL on PG17.
 #
-# Problem 1: pg_ctl stop on RHEL completes before archive_command finishes flushing
-# the last WAL segment written before stop. Fix: force pg_switch_wal() and wait for
-# last_archived_wal to reach that segment before calling $primary->stop.
+# On Debian, $primary->stop wins the race: the WAL archiver finishes archiving
+# the shutdown-checkpoint segment before the postmaster kills it. The replica
+# restores all segments including the shutdown checkpoint, then waits for the
+# next one (which doesn't exist), and promotes cleanly.
 #
-# Problem 2: the shutdown checkpoint itself writes a new WAL segment (one beyond the
-# switch point). That segment is never archived because archiving is disabled during
-# shutdown. The replica's restore_command then loops for ~300s waiting for it.
-# Fix: after $primary->stop, copy any remaining unarchived full WAL segments from
-# pg_wal to the archive directory so the replica can restore them.
+# On RHEL, the archiver loses this race. The shutdown-checkpoint segment is never
+# archived. The replica cannot restore it and cannot promote cleanly within the
+# 300-second timeout.
 #
-# This cannot be fixed in the pg_tde repo by us, so we patch it in-place via Ansible.
-- name: Patch wal_archiving.pl - archive WAL before and after stopping primary on RHEL
-  ansible.builtin.blockinfile:
-    path: /tmp/pg_tde/t/wal_archiving.pl
-    insertbefore: '^\$primary->stop;'
-    marker: "# {mark} ANSIBLE PATCH - wait for WAL archive before stop"
-    block: |
-      # Force WAL switch and wait for that specific segment to be archived.
-      # On RHEL, pg_ctl stop finishes before archive_command flushes the last
-      # WAL segment. We capture the LSN returned by pg_switch_wal() (which is
-      # the END of the segment just completed) and poll until last_archived_wal
-      # reaches it. We must NOT use pg_current_wal_lsn() here — after the switch
-      # that points to the NEW segment which has not been archived yet, so the
-      # condition would always return 'f' and poll_query_until would time out.
-      my $switch_lsn = $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
-      $primary->poll_query_until(
-          'postgres',
-          "SELECT last_archived_wal >= pg_walfile_name('$switch_lsn'::pg_lsn) FROM pg_stat_archiver",
-          't'
-      );
-  become_user: postgres
-  when:
-    - ansible_os_family == 'RedHat'
-    - (major_version | int) < 18
-    - tde_build_output.rc | default(1) == 0
-
-- name: Patch wal_archiving.pl - copy shutdown WAL to archive after stop on RHEL
-  ansible.builtin.blockinfile:
-    path: /tmp/pg_tde/t/wal_archiving.pl
-    insertafter: '^\$primary->stop;'
-    marker: "# {mark} ANSIBLE PATCH - copy shutdown WAL to archive after stop"
-    block: |
-      # The shutdown checkpoint writes a new WAL segment that is never archived
-      # (archiving is disabled during shutdown). Copy any full WAL segments that
-      # are not yet in the archive so replicas can restore to a consistent state.
-      use File::Copy qw(copy);
-      my $wal_dir = $primary->data_dir . '/pg_wal';
-      opendir(my $dh, $wal_dir) or die "Cannot open $wal_dir: $!";
-      while (my $f = readdir($dh)) {
-          next unless $f =~ /^[0-9A-F]{24}$/;
-          my $dst = $archive_dir . '/' . $f;
-          copy("$wal_dir/$f", $dst) unless -f $dst;
-      }
-      closedir($dh);
-  become_user: postgres
-  when:
-    - ansible_os_family == 'RedHat'
-    - (major_version | int) < 18
-    - tde_build_output.rc | default(1) == 0
+# Fix: force TWO consecutive pg_switch_wal() calls before $primary->stop, each
+# followed by poll_query_until waiting for that segment to appear in
+# last_archived_wal. After two switches:
+#   - Switch 1 archives the data segment (the one with foobar_enc).
+#   - Switch 2 archives the next (empty) segment.
+#   - $primary->stop writes the shutdown checkpoint to the segment after that.
+# The replica restores cleanly through both switched segments, fails to find
+# the stop segment, reaches "waiting for WAL to become available", and promotes
+# — the same terminal state as on Debian, where the shutdown checkpoint segment
+# is in the archive. No raw file copying required.
+# TEMPORARILY DISABLED - testing baseline behaviour on all RHEL platforms
+# without any wal_archiving.pl patching.
+# - name: Patch wal_archiving.pl - double WAL switch before stop on RHEL
+#   ansible.builtin.blockinfile:
+#     path: /tmp/pg_tde/t/wal_archiving.pl
+#     insertbefore: '^\$primary->stop;'
+#     marker: "# {mark} ANSIBLE PATCH - double WAL switch before stop"
+#     block: |
+#       my $switch_lsn1 = $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
+#       $primary->poll_query_until(
+#           'postgres',
+#           "SELECT last_archived_wal >= pg_walfile_name('$switch_lsn1'::pg_lsn) FROM pg_stat_archiver",
+#           't'
+#       );
+#       my $switch_lsn2 = $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
+#       $primary->poll_query_until(
+#           'postgres',
+#           "SELECT last_archived_wal >= pg_walfile_name('$switch_lsn2'::pg_lsn) FROM pg_stat_archiver",
+#           't'
+#       );
+#   become_user: postgres
+#   when:
+#     - ansible_os_family == 'RedHat'
+#     - (major_version | int) < 18
+#     - tde_build_output.rc | default(1) == 0
 
 - name: Copy pg_tde test files
   ansible.builtin.copy:
