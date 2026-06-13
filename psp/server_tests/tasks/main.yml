@@ -220,6 +220,17 @@
 
   - debug: var=results.stdout_lines
 
+  # RHEL/OL/Rocky 8 ships Python 3.6 which does not support subprocess.run(text=True)
+  # (text= was added in Python 3.7). universal_newlines=True is the identical
+  # backport-safe spelling that works on 3.6+.
+  - name: Fix shsplit Python 3.6 compatibility (text= added in 3.7; universal_newlines= is identical and works on 3.6+)
+    ansible.builtin.replace:
+      path: /tmp/pg_tde/shsplit
+      regexp: 'text=True'
+      replace: 'universal_newlines=True'
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
+
   - name: Configure Postgres/PSP from sources with liburing for supported OS.
     ansible.builtin.shell: |
       set -o pipefail
@@ -235,9 +246,11 @@
     when:
       - (major_version | int) >= 18
       - io_method in ['io_uring']
-    register: results
+    ignore_errors: true
+    register: psp_configure_output
 
-  - debug: var=results.stdout_lines
+  - debug: var=psp_configure_output.stdout_lines
+    when: psp_configure_output is defined
 
   - name: Configure Postgres/PSP from sources
     ansible.builtin.shell: |
@@ -249,10 +262,12 @@
       executable: /bin/bash
     become_user: postgres
     when:
-      - io_method in ['worker', 'sync']
-    register: results
+      - io_method not in ['io_uring']
+    ignore_errors: true
+    register: psp_configure_output
 
-  - debug: var=results.stdout_lines
+  - debug: var=psp_configure_output.stdout_lines
+    when: psp_configure_output is defined
 
   - name: Run make install-world with parallel jobs
     ansible.builtin.shell: |
@@ -264,9 +279,12 @@
     become_user: postgres
     environment:
       TDE_MODE: "1"
-    register: results
+    when: psp_configure_output is defined and psp_configure_output.rc | default(1) == 0
+    ignore_errors: true
+    register: psp_build_output
 
-  - debug: var=results.stdout_lines
+  - debug: var=psp_build_output.stdout_lines
+    when: psp_build_output is defined
 
   - name: Run make install for Injection points, as this extension is not built by default
     ansible.builtin.command: make install -j -s -C src/test/modules/injection_points
@@ -276,15 +294,20 @@
     become_user: postgres
     environment:
       TDE_MODE: "1"
-    register: results
     when:
-        - (major_version | int) >= 17 
+      - (major_version | int) >= 17
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) == 0
+    ignore_errors: true
+    register: psp_inject_output
 
-  - debug: var=results.stdout_lines
+  - debug: var=psp_inject_output.stdout_lines
+    when: psp_inject_output is defined
 
   - name: Copy pg_config to /usr/bin
-    become: true 
+    become: true
     command: sudo cp /opt/pgsql/bin/pg_config /usr/bin
+    when: psp_build_output is defined and psp_build_output.rc | default(1) == 0
 
   - name: Remove multiple extensions tap test case from pg_tde
     become_user: postgres
@@ -295,29 +318,32 @@
 
   - debug: var=results.stdout_lines
 
-  - name: Patch wal_archiving.pl - wait for WAL archiving before stopping primary on RHEL
-    ansible.builtin.blockinfile:
-      path: /tmp/pg_tde/t/wal_archiving.pl
-      insertbefore: '^\$primary->stop;'
-      marker: "# {mark} ANSIBLE PATCH - wait for WAL archive before stop"
-      block: |
-        # Force WAL switch and wait for that specific segment to be archived.
-        # On RHEL, pg_ctl stop finishes before archive_command flushes the last
-        # WAL segment. We capture the LSN returned by pg_switch_wal() (which is
-        # the END of the segment just completed) and poll until last_archived_wal
-        # reaches it. We must NOT use pg_current_wal_lsn() here — after the switch
-        # that points to the NEW segment which has not been archived yet, so the
-        # condition would always return 'f' and poll_query_until would time out.
-        my $switch_lsn = $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
-        $primary->poll_query_until(
-            'postgres',
-            "SELECT last_archived_wal >= pg_walfile_name('$switch_lsn'::pg_lsn) FROM pg_stat_archiver",
-            't'
-        );
-    become_user: postgres
-    when:
-      - ansible_os_family == 'RedHat'
-      - testsuite in ['installcheck-world', 'check-tde']
+  # TEMPORARILY DISABLED - testing baseline behaviour on all RHEL platforms
+  # without any wal_archiving.pl patching. Re-enable by removing the comment
+  # markers below (proven to work in PSP build 482).
+  # - name: Patch wal_archiving.pl - wait for WAL archiving before stopping primary on RHEL
+  #   ansible.builtin.blockinfile:
+  #     path: /tmp/pg_tde/t/wal_archiving.pl
+  #     insertbefore: '^\$primary->stop;'
+  #     marker: "# {mark} ANSIBLE PATCH - wait for WAL archive before stop"
+  #     block: |
+  #       # Force WAL switch and wait for that specific segment to be archived.
+  #       # On RHEL, pg_ctl stop finishes before archive_command flushes the last
+  #       # WAL segment. We capture the LSN returned by pg_switch_wal() (which is
+  #       # the END of the segment just completed) and poll until last_archived_wal
+  #       # reaches it. We must NOT use pg_current_wal_lsn() here — after the switch
+  #       # that points to the NEW segment which has not been archived yet, so the
+  #       # condition would always return 'f' and poll_query_until would time out.
+  #       my $switch_lsn = $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
+  #       $primary->poll_query_until(
+  #           'postgres',
+  #           "SELECT last_archived_wal >= pg_walfile_name('$switch_lsn'::pg_lsn) FROM pg_stat_archiver",
+  #           't'
+  #       );
+  #   become_user: postgres
+  #   when:
+  #     - ansible_os_family == 'RedHat'
+  #     - testsuite in ['installcheck-world', 'check-tde']
 
   # kmip.pl: replaced with a TAP skip stub on OpenSSL 1.x platforms.
   # Deleting the file causes meson to report ERROR (file not found); the stub
@@ -359,6 +385,8 @@
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
     when:
       - testsuite in ['installcheck-world', 'check-tde']
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) == 0
     register: results
 
   - debug: var=results.stdout_lines
@@ -368,6 +396,7 @@
     become_user: postgres
     ansible.builtin.shell: |
       set -o pipefail
+      export LD_LIBRARY_PATH="/opt/pgsql/lib:${LD_LIBRARY_PATH:-}"
       rm -rf /tmp/pg_tde-build
       meson setup --buildtype=release -Dpg_config=/opt/pgsql/bin/pg_config -Dwerror=true /tmp/pg_tde-build 2>&1 | tee /tmp/tde-build.log
       # make PG_CONFIG=/opt/pgsql/bin/pg_config install 2>&1 | tee /tmp/tde-build.log
@@ -375,13 +404,17 @@
       chdir: /tmp/pg_tde
       executable: /bin/bash
     environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
       TDE_MODE: "1"
     when:
       - testsuite in ['installcheck-world', 'check-tde']
-    register: results
+      - psp_build_output.rc | default(1) == 0
+    ignore_errors: true
+    register: tde_build_output
 
-  - debug: var=results.stdout_lines
+  - debug: var=tde_build_output.stdout_lines
+    when: tde_build_output is defined
 
   - name: Install pg_tde
     become: true
@@ -391,12 +424,16 @@
     args:
       executable: /bin/bash
     environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
     when:
       - testsuite in ['installcheck-world', 'check-tde']
-    register: results
+      - tde_build_output is defined
+      - tde_build_output.rc | default(1) == 0
+    ignore_errors: true
+    register: tde_install_output
 
-  - debug: var=results.stdout_lines
+  - debug: var=tde_install_output.stdout_lines
+    when: tde_install_output is defined
 
   - name: Add pg_tde to postgresql.conf
     lineinfile:
@@ -404,6 +441,8 @@
       line: shared_preload_libraries = 'pg_tde'
     when:
       - testsuite in ['installcheck-world', 'check-tde']
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) == 0
 
   - name: Comment out any line containing 'io_method'
     ansible.builtin.replace:
@@ -413,6 +452,8 @@
     when:
       - (major_version | int) >= 18
       - testsuite in ['installcheck-world', 'check-tde']
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) == 0
 
   - name: Update io_method in postgresql.conf for pg-18
     ansible.builtin.lineinfile:
@@ -421,6 +462,8 @@
     when:
       - (major_version | int) >= 18
       - testsuite in ['installcheck-world', 'check-tde']
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) == 0
 
   - name: Start PostgreSQL Server (with retry and log dump on failure)
     become: true
@@ -462,30 +505,24 @@
       LC_ALL: "C.UTF-8"
     when:
       - testsuite in ['installcheck-world', 'check-tde']
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) == 0
+      - tde_install_output is defined
+      - tde_install_output.rc | default(1) == 0
     register: pg_start_result
-    ignore_errors: true  # Let Ansible continue to handle fail condition below
+    ignore_errors: true
 
   - name: Display PostgreSQL start output
     debug:
       var: pg_start_result.stdout_lines
     when:
       - testsuite in ['installcheck-world', 'check-tde']
+      - pg_start_result is defined
 
-  - debug: var=results.stdout_lines
-
-  - name: Fail play if PostgreSQL failed to start
-    fail:
-      msg: "❌ PostgreSQL server failed to start after retry. Check /tmp/postgres/logfile for details."
-    when:
-      - testsuite in ['installcheck-world', 'check-tde']
-      - pg_start_result.rc != 0
-    register: results
-
-  - debug: var=results.stdout_lines
 
   - name: Check pg_tde library output
     become_user: postgres
-    shell: | 
+    shell: |
       psql -c "select * from pg_available_extensions where name like 'pg_tde';"
     args:
       executable: /bin/bash
@@ -495,9 +532,12 @@
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
     when:
       - testsuite in ['installcheck-world', 'check-tde']
+      - pg_start_result is defined
+      - pg_start_result.rc | default(1) == 0
     register: results
 
   - debug: var=results.stdout_lines
+    when: results is defined
 
   # =============================
   # Run pg_tde regression tests
@@ -525,14 +565,19 @@
       LANG: "C.UTF-8"
       LC_CTYPE: "C.UTF-8"
       LC_ALL: "C.UTF-8"
-    when: testsuite == 'check-tde'
+    when:
+      - testsuite == 'check-tde'
+      - pg_start_result is defined
+      - pg_start_result.rc | default(1) == 0
     ignore_errors: true
     register: regression
 
   - name: Show stdout of check tde tests
     debug:
       var: regression.stdout_lines
-    when: testsuite == 'check-tde'
+    when:
+      - testsuite == 'check-tde'
+      - regression is defined
 
   - name: Show stderr if test fails
     debug:
@@ -540,51 +585,23 @@
     when:
       - testsuite == 'check-tde'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
 
-  - name: Show tde regression diffs if tests failed
-    shell: |
-      # meson writes regression.diffs to the build dir
-      cat /tmp/pg_tde-build/regression.diffs 2>/dev/null || \
-      cat /tmp/pg_tde/regression.diffs 2>/dev/null || true
-    register: diffs_output
+  - name: Show meson test summary on failure
+    shell: cat /tmp/pg_tde-build/meson-logs/testlog.txt 2>/dev/null || true
+    register: testlog_output
     when:
       - testsuite == 'check-tde'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
     ignore_errors: true
-
-  - name: Print tde regression diffs
-    debug:
-      msg: "{{ diffs_output.stdout_lines }}"
-    when:
-      - testsuite == 'check-tde'
-      - regression is defined
-      - regression.rc != 0
-      - diffs_output is defined
-
-  - name: Debug - find regression files and results dirs before packaging (check-tde)
-    shell: |
-      echo "=== regression.out files ==="
-      find /tmp/pg_tde-build /tmp/pg_tde -name "regression.out" 2>/dev/null || true
-      echo "=== regression.diffs files ==="
-      find /tmp/pg_tde-build /tmp/pg_tde -name "regression.diffs" 2>/dev/null || true
-      echo "=== results/ directories (outside tmp_check) ==="
-      find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" 2>/dev/null || true
-    args:
-      executable: /bin/bash
-    register: debug_regression
-    ignore_errors: true
-    become: true
-    when:
-      - testsuite == 'check-tde'
-      - regression is defined
 
   - debug:
-      var: debug_regression.stdout_lines
+      var: testlog_output.stdout_lines
     when:
       - testsuite == 'check-tde'
       - regression is defined
+      - regression.rc | default(0) != 0
 
   - name: Package check-tde test artifacts
     shell: |
@@ -593,44 +610,40 @@
       ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
       mkdir -p "$ARTIFACT_DIR"
-      # SQL regression diffs/results — meson writes these to the build dir
-      cp /tmp/pg_tde-build/regression.diffs "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/pg_tde-build/regression.out   "$ARTIFACT_DIR/" 2>/dev/null || true
-      find /tmp/pg_tde -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
-      find /tmp/pg_tde -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
-      # Full meson test log with complete stderr per test
-      cp -r /tmp/pg_tde-build/meson-logs "$ARTIFACT_DIR/meson-logs" 2>/dev/null || true
-      # Per-test log directories from testwrap
-      # Strip /tmp/pg_tde-build/ prefix so logs land at testrun/<test>/log/*.log
-      find /tmp/pg_tde-build/testrun -name "*.log" -type f 2>/dev/null | while read f; do
-        rel="${f#/tmp/pg_tde-build/}"
-        mkdir -p "$ARTIFACT_DIR/$(dirname "$rel")"
-        cp "$f" "$ARTIFACT_DIR/$rel"
-      done || true
-      cp -r /tmp/pg_tde/t "$ARTIFACT_DIR/pg_tde_t" 2>/dev/null || true
-      # tmp_check is in the build dir with meson (source dir path is dead code)
-      cp -r /tmp/pg_tde-build/tmp_check "$ARTIFACT_DIR/tmp_check" 2>/dev/null || true
-      # Collect standalone results/ directories for pg_regress SQL test outputs
-      find /tmp/pg_tde -type d -name "results" -not -path "*/tmp_check/*" | while read d; do
-        rel="${d#/tmp/pg_tde/}"
-        mkdir -p "$ARTIFACT_DIR/pg_tde/$rel"
-        cp -r "$d/." "$ARTIFACT_DIR/pg_tde/$rel/" 2>/dev/null || true
-      done
+      # pg_tde source tree and meson build tree (includes meson-logs/, testrun/)
+      cp -r /tmp/pg_tde "$ARTIFACT_DIR/pg_tde" 2>/dev/null || true
+      cp -r /tmp/pg_tde-build "$ARTIFACT_DIR/pg_tde-build" 2>/dev/null || true
+      # Runtime keyring/provider files written by tests to /tmp
+      cp /tmp/*.per "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_tde_change_key_provider-* "$ARTIFACT_DIR/" 2>/dev/null || true
+      # PSP server logs: pg_ctl logfile and data-dir server logs
       cp /tmp/postgres/logfile "$ARTIFACT_DIR/server.log" 2>/dev/null || true
+      find /opt/pgsql/data/log /opt/pgsql/data/pg_log -name "*.log" -type f \
+        -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      # PSP build logs: configure (build.log) and autoconf detail (config.log)
       cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/postgres/config.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      # pg_tde build and install logs
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-install.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      # Tool build/runtime logs
       cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      # Test regression output
+      cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
       tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
       executable: /bin/bash
     become: true
     when:
       - testsuite == 'check-tde'
-      - regression is defined
-      - regression.rc != 0
+      - >
+        (psp_configure_output is defined and psp_configure_output.rc | default(1) != 0) or
+        (psp_build_output is defined and psp_build_output.rc | default(1) != 0) or
+        (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
+        (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
+        (pg_start_result is defined and pg_start_result.rc | default(1) != 0) or
+        (regression is defined and regression.rc | default(0) != 0)
     ignore_errors: true
 
   - name: Fetch check-tde test artifacts to controller
@@ -640,16 +653,61 @@
       fail_on_missing: false
     when:
       - testsuite == 'check-tde'
-      - regression is defined
-      - regression.rc != 0
+      - >
+        (psp_configure_output is defined and psp_configure_output.rc | default(1) != 0) or
+        (psp_build_output is defined and psp_build_output.rc | default(1) != 0) or
+        (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
+        (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
+        (pg_start_result is defined and pg_start_result.rc | default(1) != 0) or
+        (regression is defined and regression.rc | default(0) != 0)
+
+  - name: Fail the playbook if server configure failed
+    fail:
+      msg: "PSP configure failed with return code {{ psp_configure_output.rc }}"
+    when:
+      - testsuite == 'check-tde'
+      - psp_configure_output is defined
+      - psp_configure_output.rc | default(1) != 0
+
+  - name: Fail the playbook if server build failed
+    fail:
+      msg: "PSP build failed with return code {{ psp_build_output.rc }}"
+    when:
+      - testsuite == 'check-tde'
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) != 0
+
+  - name: Fail the playbook if tde build failed
+    fail:
+      msg: "pg_tde build failed with return code {{ tde_build_output.rc }}"
+    when:
+      - testsuite == 'check-tde'
+      - tde_build_output is defined
+      - tde_build_output.rc | default(1) != 0
+
+  - name: Fail the playbook if tde install failed
+    fail:
+      msg: "pg_tde install failed with return code {{ tde_install_output.rc }}"
+    when:
+      - testsuite == 'check-tde'
+      - tde_install_output is defined
+      - tde_install_output.rc | default(1) != 0
+
+  - name: Fail the playbook if PostgreSQL failed to start
+    fail:
+      msg: "PostgreSQL server failed to start with return code {{ pg_start_result.rc }}"
+    when:
+      - testsuite == 'check-tde'
+      - pg_start_result is defined
+      - pg_start_result.rc | default(1) != 0
 
   - name: Fail the playbook if tde tests failed
     fail:
-      msg: "TDE regression tests failed with return code {{ regression.rc }}"
+      msg: "TDE regression tests failed with return code {{ regression.rc | default('N/A') }}"
     when:
       - testsuite == 'check-tde'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
 
   # =============================
   # Run server regression tests
@@ -674,7 +732,10 @@
       LANG: "C.UTF-8"
       LC_CTYPE: "C.UTF-8"
       LC_ALL: "C.UTF-8"
-    when: testsuite == 'check-server'
+    when:
+      - testsuite == 'check-server'
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) == 0
     ignore_errors: true
     register: regression
 
@@ -689,7 +750,7 @@
     when:
       - testsuite == 'check-server'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
 
   - name: Show server regression diffs if tests failed
     shell: cat /tmp/postgres/src/test/regress/regression.diffs
@@ -697,7 +758,7 @@
     when:
       - testsuite == 'check-server'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
     ignore_errors: true
 
   - name: Print regression diffs
@@ -706,7 +767,7 @@
     when:
       - testsuite == 'check-server'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
       - diffs_output.stdout is defined
 
   - name: Debug - find regression files and results dirs before packaging (check-server)
@@ -755,7 +816,12 @@
       done
       # Note: no /tmp/postgres/logfile for check-server — make check-world manages its own
       # temp instances; their per-node server logs are inside the tmp_check/log/ dirs above.
+      # PSP build logs: configure output and autoconf detail
       cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/postgres/config.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      # PSP data-dir server logs (present if a persistent server was started)
+      find /opt/pgsql/data/log /opt/pgsql/data/pg_log -name "*.log" -type f \
+        -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
       cp /tmp/check-server-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
       tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
@@ -763,8 +829,10 @@
     become: true
     when:
       - testsuite == 'check-server'
-      - regression is defined
-      - regression.rc != 0
+      - >
+        (psp_configure_output is defined and psp_configure_output.rc | default(1) != 0) or
+        (psp_build_output is defined and psp_build_output.rc | default(1) != 0) or
+        (regression is defined and regression.rc | default(0) != 0)
     ignore_errors: true
 
   - name: Fetch check-server test artifacts to controller
@@ -774,16 +842,34 @@
       fail_on_missing: false
     when:
       - testsuite == 'check-server'
-      - regression is defined
-      - regression.rc != 0
+      - >
+        (psp_configure_output is defined and psp_configure_output.rc | default(1) != 0) or
+        (psp_build_output is defined and psp_build_output.rc | default(1) != 0) or
+        (regression is defined and regression.rc | default(0) != 0)
+
+  - name: Fail the playbook if server configure failed
+    fail:
+      msg: "PSP configure failed with return code {{ psp_configure_output.rc }}"
+    when:
+      - testsuite == 'check-server'
+      - psp_configure_output is defined
+      - psp_configure_output.rc | default(1) != 0
+
+  - name: Fail the playbook if server build failed
+    fail:
+      msg: "PSP build failed with return code {{ psp_build_output.rc }}"
+    when:
+      - testsuite == 'check-server'
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) != 0
 
   - name: Fail the playbook if server tests failed
     fail:
-      msg: "Server regression tests failed with return code {{ regression.rc }}"
+      msg: "Server regression tests failed with return code {{ regression.rc | default('N/A') }}"
     when:
       - testsuite == 'check-server'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
 
   # =============================
   # Run installcheck-world regression tests with pg_tde
@@ -812,7 +898,10 @@
       LC_ALL: "C.UTF-8"
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
     ignore_errors: true
-    when: testsuite == 'installcheck-world'
+    when:
+      - testsuite == 'installcheck-world'
+      - pg_start_result is defined
+      - pg_start_result.rc | default(1) == 0
 
   - name: Run installcheck-world with tde (as root shell, sudo inside)
     become: true
@@ -846,7 +935,10 @@
       PERCONA_SERVER_VERSION: "{{ percona_server_version }}"
       PGCTLTIMEOUT: "120"
       PG_TEST_TIMEOUT_DEFAULT: "300"
-    when: testsuite == 'installcheck-world'
+    when:
+      - testsuite == 'installcheck-world'
+      - pg_start_result is defined
+      - pg_start_result.rc | default(1) == 0
     register: regression
 
   - name: Show stdout of installcheck-world regression tests
@@ -860,7 +952,7 @@
     when:
       - testsuite == 'installcheck-world'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
 
   - name: Find regression.diffs files if installcheck-world tests fail
     find:
@@ -871,7 +963,7 @@
     when:
       - testsuite == 'installcheck-world'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
 
   - name: Show contents of regression.diffs with directory name
     shell: |
@@ -881,7 +973,7 @@
     when:
       - testsuite == 'installcheck-world'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
 
   - name: Debug - find regression files and results dirs before packaging (installcheck-world)
     shell: |
@@ -949,8 +1041,14 @@
         mkdir -p "$ARTIFACT_DIR/pg_tde/$rel"
         cp -r "$d/." "$ARTIFACT_DIR/pg_tde/$rel/" 2>/dev/null || true
       done
+      # PSP server logs: pg_ctl logfile and data-dir server logs
       cp /tmp/postgres/logfile "$ARTIFACT_DIR/server.log" 2>/dev/null || true
+      find /opt/pgsql/data/log /opt/pgsql/data/pg_log -name "*.log" -type f \
+        -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      # PSP build logs: configure output and autoconf detail
       cp /tmp/postgres/build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/postgres/config.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      # pg_tde and tool build/runtime logs
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true
@@ -961,8 +1059,12 @@
     become: true
     when:
       - testsuite == 'installcheck-world'
-      - regression is defined
-      - regression.rc != 0
+      - >
+        (psp_configure_output is defined and psp_configure_output.rc | default(1) != 0) or
+        (psp_build_output is defined and psp_build_output.rc | default(1) != 0) or
+        (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
+        (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
+        (regression is defined and regression.rc | default(0) != 0)
     ignore_errors: true
 
   - name: Fetch installcheck-world test artifacts to controller
@@ -972,13 +1074,49 @@
       fail_on_missing: false
     when:
       - testsuite == 'installcheck-world'
-      - regression is defined
-      - regression.rc != 0
+      - >
+        (psp_configure_output is defined and psp_configure_output.rc | default(1) != 0) or
+        (psp_build_output is defined and psp_build_output.rc | default(1) != 0) or
+        (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
+        (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
+        (regression is defined and regression.rc | default(0) != 0)
+
+  - name: Fail the playbook if server configure failed
+    fail:
+      msg: "PSP configure failed with return code {{ psp_configure_output.rc }}"
+    when:
+      - testsuite == 'installcheck-world'
+      - psp_configure_output is defined
+      - psp_configure_output.rc | default(1) != 0
+
+  - name: Fail the playbook if server build failed
+    fail:
+      msg: "PSP build failed with return code {{ psp_build_output.rc }}"
+    when:
+      - testsuite == 'installcheck-world'
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) != 0
+
+  - name: Fail the playbook if tde build failed
+    fail:
+      msg: "pg_tde build failed with return code {{ tde_build_output.rc }}"
+    when:
+      - testsuite == 'installcheck-world'
+      - tde_build_output is defined
+      - tde_build_output.rc | default(1) != 0
+
+  - name: Fail the playbook if tde install failed
+    fail:
+      msg: "pg_tde install failed with return code {{ tde_install_output.rc }}"
+    when:
+      - testsuite == 'installcheck-world'
+      - tde_install_output is defined
+      - tde_install_output.rc | default(1) != 0
 
   - name: Fail the playbook if tests failed in installcheck-world
     fail:
-      msg: "All regression tests failed with return code {{ regression.rc }}"
+      msg: "All regression tests failed with return code {{ regression.rc | default('N/A') }}"
     when:
       - testsuite == 'installcheck-world'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0

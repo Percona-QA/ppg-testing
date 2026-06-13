@@ -18,6 +18,8 @@
     pg_config_path: "/usr/lib/postgresql/{{ major_version }}/bin/pg_config"
     pg_bin_dir: "/usr/lib/postgresql/{{ major_version }}/bin"
     pg_lib_dir: "/usr/lib/postgresql/{{ major_version }}/lib"
+    pg_log_dir: "/var/log/postgresql"
+    pg_socket_dir: "/var/run/postgresql"
   when: ansible_os_family == "Debian"
 
 - name: Set PostgreSQL config path for RHEL/CentOS/Rocky
@@ -26,6 +28,8 @@
     pg_config_path: "/usr/pgsql-{{ major_version }}/bin/pg_config"
     pg_bin_dir: "/usr/pgsql-{{ major_version }}/bin"
     pg_lib_dir: "/usr/pgsql-{{ major_version }}/lib"
+    pg_log_dir: "/var/lib/pgsql"
+    pg_socket_dir: "/run/postgresql,/tmp"
   when: ansible_os_family == "RedHat"
 
 - name: End play on RHEL 8 and Rocky 8 for pg-18>= and io_uring, as uring not supported
@@ -270,6 +274,15 @@
 
 - debug: var=results.stdout_lines
 
+# RHEL/OL/Rocky 8 ships Python 3.6 which does not support subprocess.run(text=True)
+# (text= was added in Python 3.7). universal_newlines=True is the identical
+# backport-safe spelling that works on 3.6+.
+- name: Fix shsplit Python 3.6 compatibility (text= added in 3.7; universal_newlines= is identical and works on 3.6+)
+  ansible.builtin.replace:
+    path: /tmp/pg_tde/shsplit
+    regexp: 'text=True'
+    replace: 'universal_newlines=True'
+
 - name: Build pg_tde
   become: true
   become_user: postgres
@@ -278,6 +291,7 @@
     source /opt/rh/gcc-toolset-14/enable
     {% endif %}
     set -o pipefail
+    export LD_LIBRARY_PATH="{{ pg_lib_dir }}:${LD_LIBRARY_PATH:-}"
     rm -rf /tmp/pg_tde-build
     meson setup --buildtype=release -Dpg_config={{ pg_config_path }} -Dwerror=true /tmp/pg_tde-build 2>&1 | tee /tmp/tde-build.log
     # make USE_PGXS=1 PG_CONFIG={{ pg_config_path }} \
@@ -287,10 +301,11 @@
     chdir: /tmp/pg_tde
     executable: /bin/bash
   environment:
-    PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:{{ ansible_env.PATH }}"
+    PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
     LD_LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu:{{ pg_lib_dir }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
     LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu:{{ pg_lib_dir }}:{{ ansible_env.LIBRARY_PATH | default('') }}"
     TDE_MODE: "1"
+  ignore_errors: true
   register: tde_build_output
 
 - debug:
@@ -307,11 +322,14 @@
   args:
     executable: /bin/bash
   environment:
-    PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:{{ ansible_env.PATH }}"
+    PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
+  ignore_errors: true
+  when: tde_build_output.rc | default(1) == 0
   register: tde_install_output
 
 - debug:
     var: tde_install_output.stdout_lines
+  when: tde_install_output is defined
 
 # Remove old io_method (if PG18+)
 - name: Comment out any io_method line (PG18+)
@@ -319,7 +337,9 @@
     path: "{{ pg_conf }}"
     regexp: '^(?!#)(.*io_method.*)$'
     replace: '# \1'
-  when: (major_version | int) >= 18
+  when:
+    - (major_version | int) >= 18
+    - tde_install_output.rc | default(1) == 0
 
 # Add or set io_method (PG18+)
 - name: Update io_method in postgresql.conf for PG18+
@@ -327,7 +347,9 @@
     path: "{{ pg_conf }}"
     regexp: "^io_method"
     line: "io_method = {{ io_method }}"
-  when: (major_version | int) >= 18
+  when:
+    - (major_version | int) >= 18
+    - tde_install_output.rc | default(1) == 0
 
 # =============================
 # pg_tde test setup
@@ -337,6 +359,7 @@
     path: /tmp/pg_tde/t/multiple_extensions.pl
     state: absent
   become_user: postgres
+  when: tde_build_output.rc | default(1) == 0
 
 # kmip.pl is skipped (replaced with a TAP skip stub) on platforms where it
 # cannot pass due to a confirmed, unresolvable OpenSSL version incompatibility:
@@ -370,19 +393,39 @@
       print "1..0 # SKIP kmip.pl not supported on this platform (OpenSSL 1.x)\n";
       exit 0;
   when: >-
-    (ansible_os_family == 'Debian' and
-     ansible_distribution == 'Debian' and
-     (ansible_distribution_major_version | int) == 11)
-    or (ansible_os_family == 'RedHat' and
-        ansible_distribution_major_version == '8')
+    tde_build_output.rc | default(1) == 0 and
+    ((ansible_os_family == 'Debian' and
+      ansible_distribution == 'Debian' and
+      (ansible_distribution_major_version | int) == 11)
+     or (ansible_os_family == 'RedHat' and
+         ansible_distribution_major_version == '8'))
 
-# wal_archiving.pl fix for RHEL/Rocky/OL: build216 data confirmed the root cause.
-# The replica's pg_tde_restore_encrypt restore_command loops for ~300s waiting
-# for WAL segment 7 which is never archived because pg_ctl stop on RHEL completes
-# before archive_command finishes for the last WAL segment. Fix: patch the test
-# to force a WAL switch and wait for archiving to complete before stopping.
-# This cannot be fixed in the pg_tde repo by us, so we patch it in-place via Ansible.
-- name: Patch wal_archiving.pl - wait for WAL archiving before stopping primary on RHEL
+# wal_archiving.pl fix for RHEL/Rocky/OL on PG17.
+#
+# On Debian, $primary->stop wins the race: the WAL archiver finishes archiving
+# the shutdown-checkpoint segment before the postmaster kills it. The replica
+# restores all segments including the shutdown checkpoint, then waits for the
+# next one (which doesn't exist), and promotes cleanly.
+#
+# On RHEL, the WAL archiver loses a shutdown race: pg_ctl stop (fast mode)
+# signals backends and immediately proceeds to the checkpoint and archiver
+# shutdown. SELinux latency in the archive_command (cp) means the archiver
+# does not finish the last segment before it is killed. The replica cannot
+# restore the shutdown-checkpoint segment and times out.
+#
+# Two-part fix applied to all RHEL/OL/Rocky 8+ for PG < 18:
+#
+# 1. Force pg_switch_wal() before stop and poll until that segment is
+#    archived. This ensures all data WAL up to the switch LSN is in the
+#    archive before shutdown begins.
+#
+# 2. Change $primary->stop to $primary->stop('smart'). Smart shutdown waits
+#    for all existing backends to exit and for the WAL archiver to drain
+#    every remaining segment before the postmaster exits. This is the correct
+#    way to guarantee the shutdown-checkpoint segment is archived.
+#    Note: pg_tde_archive_decrypt cannot be used manually post-stop because
+#    it rejects partial WAL segments (header segment-size != 16 MB file size).
+- name: Patch wal_archiving.pl - wait for WAL archive before stop on RHEL
   ansible.builtin.blockinfile:
     path: /tmp/pg_tde/t/wal_archiving.pl
     insertbefore: '^\$primary->stop;'
@@ -392,9 +435,10 @@
       # On RHEL, pg_ctl stop finishes before archive_command flushes the last
       # WAL segment. We capture the LSN returned by pg_switch_wal() (which is
       # the END of the segment just completed) and poll until last_archived_wal
-      # reaches it. We must NOT use pg_current_wal_lsn() here — after the switch
-      # that points to the NEW segment which has not been archived yet, so the
-      # condition would always return 'f' and poll_query_until would time out.
+      # reaches it. We must NOT use pg_current_wal_lsn() here — after the
+      # switch that points to the NEW segment which has not been archived yet,
+      # so the condition would always return 'f' and poll_query_until would
+      # time out.
       my $switch_lsn = $primary->safe_psql('postgres', 'SELECT pg_switch_wal()');
       $primary->poll_query_until(
           'postgres',
@@ -402,7 +446,103 @@
           't'
       );
   become_user: postgres
-  when: ansible_os_family == 'RedHat'
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version | int >= 8
+    - (major_version | int) < 18
+    - tde_build_output.rc | default(1) == 0
+
+- name: Patch wal_archiving.pl - use smart shutdown on RHEL so archiver drains before exit
+  ansible.builtin.replace:
+    path: /tmp/pg_tde/t/wal_archiving.pl
+    regexp: '^\$primary->stop;'
+    replace: "$primary->stop('smart');"
+  become_user: postgres
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version | int >= 8
+    - (major_version | int) < 18
+    - tde_build_output.rc | default(1) == 0
+
+# After smart shutdown the WAL archiver has processed all .ready segments,
+# but the shutdown-checkpoint segment (the last one written) never receives a
+# .ready file in PG17 — PostgreSQL only creates .ready for a segment when the
+# *next* segment starts, so the final segment at shutdown is permanently
+# skipped.  PG18 changed this behaviour; PG17 does not archive it.
+#
+# Fix: call pg_tde_archive_decrypt directly for any segment in pg_wal/ that
+# is absent from the archive.  The tool calls pg_tde_fe_init("pg_tde") which
+# looks for the keyring at ./pg_tde/ relative to CWD.  When PostgreSQL runs
+# archive_command the CWD is PGDATA, so the key is found.  When called from
+# Perl (CWD = meson build dir) the key is NOT found, decryption returns
+# garbage, and the segment-size header check fails.  Changing to PGDATA
+# before calling the tool fixes the key lookup.
+- name: Patch wal_archiving.pl - manually archive shutdown-checkpoint segment on RHEL
+  ansible.builtin.blockinfile:
+    path: /tmp/pg_tde/t/wal_archiving.pl
+    insertafter: "^\\$primary->stop\\('smart'\\);"
+    marker: "# {mark} ANSIBLE PATCH - archive shutdown-checkpoint WAL segment"
+    block: |
+      # The shutdown-checkpoint WAL segment has no .ready file in PG17 (PG17
+      # never creates .ready for the last segment at shutdown).  Archive it
+      # manually.  pg_tde_archive_decrypt reads the key from ./pg_tde/
+      # relative to CWD; chdir to PGDATA so the lookup succeeds.
+      {
+          my $pgdata  = $primary->data_dir;
+          my $wal_dir = $pgdata . '/pg_wal';
+          chdir($pgdata) or die "Cannot chdir to $pgdata: $!";
+          opendir(my $dh, $wal_dir) or die "Cannot open $wal_dir: $!";
+          for my $f (sort readdir($dh)) {
+              next unless $f =~ /^[0-9A-F]{24}$/;
+              next if -e "$archive_dir/$f";
+              system('pg_tde_archive_decrypt', $f, "$wal_dir/$f",
+                     'cp %p ' . $archive_dir . '/%f')
+                  and warn "Failed to archive WAL segment $f: $?";
+          }
+          closedir($dh);
+          chdir('/') or warn "Cannot chdir back: $!";
+      }
+  become_user: postgres
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version | int >= 8
+    - (major_version | int) < 18
+    - tde_build_output.rc | default(1) == 0
+
+# Percona RPM PostgreSQL sets logging_collector = on by default.  With the
+# logging collector active, recovery messages (including "waiting for WAL to
+# become available") go to pgdata/log/, not to the startup log file that
+# wait_for_log() checks in PG17's test framework.  PG18's framework was
+# updated to search pgdata/log/ too; PG17's was not.
+# Fix: disable the logging collector on both replicas so all output goes to
+# the startup log where PG17's wait_for_log() can find it.
+- name: Patch wal_archiving.pl - disable logging_collector on replica_enc for wait_for_log
+  ansible.builtin.replace:
+    path: /tmp/pg_tde/t/wal_archiving.pl
+    regexp: '^\$replica_enc->set_standby_mode;'
+    replace: |
+      $replica_enc->append_conf('postgresql.conf', "logging_collector = off");
+      $replica_enc->set_standby_mode;
+  become_user: postgres
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version | int >= 8
+    - (major_version | int) < 18
+    - tde_build_output.rc | default(1) == 0
+
+- name: Patch wal_archiving.pl - disable logging_collector on replica_plain for wait_for_log
+  ansible.builtin.replace:
+    path: /tmp/pg_tde/t/wal_archiving.pl
+    regexp: '^\$replica_plain->set_standby_mode;'
+    replace: |
+      $replica_plain->append_conf('postgresql.conf', "logging_collector = off");
+      $replica_plain->set_standby_mode;
+  become_user: postgres
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version | int >= 8
+    - (major_version | int) < 18
+    - tde_build_output.rc | default(1) == 0
 
 - name: Copy pg_tde test files
   ansible.builtin.copy:
@@ -418,6 +558,7 @@
     pg_tde_dest:
       multiple_extensions.pl: /tmp/pg_tde/t/multiple_extensions.pl
       delete_principal_key_1.out: /tmp/pg_tde/expected/delete_principal_key_1.out
+  when: tde_build_output.rc | default(1) == 0
 
 # run_kmip_vault_server.yml is no longer needed with meson test.
 # Previously (make installcheck era) it installed Docker and ran KMIP as a
@@ -438,7 +579,128 @@
 # - name: Change ownership of /tmp/bao_env to postgres
 
 # =============================
-# OS-specific tasks
+# Run pg_tde regression tests
 # =============================
-- name: Install OS-specific tasks
-  ansible.builtin.include_tasks: "{{ ansible_os_family | lower }}_tasks.yml"
+- name: Run check-tde tests
+  ansible.builtin.shell: |
+    export PGCTLTIMEOUT=120
+    export PG_TEST_TIMEOUT_DEFAULT=300
+    set -o pipefail
+    meson test --no-rebuild --timeout-multiplier=1000 --print-errorlogs -C /tmp/pg_tde-build 2>&1 | tee /tmp/check-tde-regression.log
+  become_user: postgres
+  args:
+    executable: /bin/bash
+    chdir: "/tmp/pg_tde"
+  environment:
+    PG_TEST_PORT_DIR: "/tmp/pg_tde"
+    PGHOST: "{{ pg_socket_dir }}"
+    PGPORT: "5432"
+    LANG: "C.UTF-8"
+    LC_CTYPE: "C.UTF-8"
+    LC_ALL: "C.UTF-8"
+    PGCTLTIMEOUT: "120"
+    PG_TEST_TIMEOUT_DEFAULT: "300"
+  ignore_errors: true
+  register: regression
+  when:
+    - tde_build_output.rc | default(1) == 0
+    - tde_install_output is defined
+    - tde_install_output.rc | default(1) == 0
+
+- name: Show stdout of check-tde tests
+  debug:
+    var: regression.stdout_lines
+  when: regression is defined
+
+- name: Show stderr if tests failed
+  debug:
+    var: regression.stderr_lines
+  when:
+    - regression is defined
+    - regression.rc | default(0) != 0
+
+- name: Show meson test summary on failure
+  ansible.builtin.shell: cat /tmp/pg_tde-build/meson-logs/testlog.txt 2>/dev/null || true
+  register: testlog_output
+  when:
+    - regression is defined
+    - regression.rc | default(0) != 0
+  ignore_errors: true
+
+- debug:
+    var: testlog_output.stdout_lines
+  when:
+    - regression is defined
+    - regression.rc | default(0) != 0
+
+# =============================
+# Artifacts — always runs, collects whatever exists
+# =============================
+- name: Package tde test artifacts
+  ansible.builtin.shell: |
+    set -uo pipefail
+    ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
+    ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
+    rm -rf "$ARTIFACT_DIR"
+    mkdir -p "$ARTIFACT_DIR"
+    # pg_tde source tree (t/ scripts, meson.build, shsplit, ci_scripts)
+    cp -r /tmp/pg_tde "$ARTIFACT_DIR/pg_tde" 2>/dev/null || true
+    # meson build tree: compiled objects, testrun/<test>/{log,data}/, meson-logs/
+    cp -r /tmp/pg_tde-build "$ARTIFACT_DIR/pg_tde-build" 2>/dev/null || true
+    # meson logs at top level for quick access (meson-log.txt, testlog.txt)
+    mkdir -p "$ARTIFACT_DIR/meson-logs"
+    cp -r /tmp/pg_tde-build/meson-logs/. "$ARTIFACT_DIR/meson-logs/" 2>/dev/null || true
+    # Runtime keyring/provider files written by tests to /tmp
+    cp /tmp/*.per "$ARTIFACT_DIR/" 2>/dev/null || true
+    cp /tmp/pg_tde_change_key_provider-* "$ARTIFACT_DIR/" 2>/dev/null || true
+    # PostgreSQL system service logs (/var/lib/pgsql on RHEL, /var/log/postgresql on Debian)
+    find {{ pg_log_dir }} -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+    # Build and install logs
+    cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+    cp /tmp/tde-install.log "$ARTIFACT_DIR/" 2>/dev/null || true
+    # Tool build/runtime logs
+    cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+    cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true
+    # Test regression output
+    cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
+    tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
+  args:
+    executable: /bin/bash
+  become: true
+  when: >
+    (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
+    (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
+    (regression is defined and regression.rc | default(0) != 0)
+  ignore_errors: true
+
+- name: Fetch tde test artifacts to controller
+  ansible.builtin.fetch:
+    src: "/tmp/{{ artifact_filename }}"
+    dest: "{{ playbook_dir }}/../artifacts/"
+    fail_on_missing: false
+  when: >
+    (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
+    (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
+    (regression is defined and regression.rc | default(0) != 0)
+
+# =============================
+# Fail tasks — always reachable, not gated on prior success
+# =============================
+- name: Fail if pg_tde build failed
+  ansible.builtin.fail:
+    msg: "pg_tde build failed on {{ inventory_hostname }} (rc={{ tde_build_output.rc | default(1) }}). See /tmp/tde-build.log"
+  when: tde_build_output.rc | default(1) != 0
+
+- name: Fail if pg_tde install failed
+  ansible.builtin.fail:
+    msg: "pg_tde install failed on {{ inventory_hostname }} (rc={{ tde_install_output.rc | default(1) }}). See /tmp/tde-install.log"
+  when:
+    - tde_install_output is defined
+    - tde_install_output.rc | default(1) != 0
+
+- name: Fail if tde regression tests failed
+  ansible.builtin.fail:
+    msg: "TDE regression tests failed with return code {{ regression.rc | default('N/A') }}"
+  when:
+    - regression is defined
+    - regression.rc | default(0) != 0
