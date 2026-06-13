@@ -574,7 +574,7 @@
     when:
       - testsuite == 'check-tde'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
 
   - name: Show meson test summary on failure
     shell: cat /tmp/pg_tde-build/meson-logs/testlog.txt 2>/dev/null || true
@@ -582,7 +582,7 @@
     when:
       - testsuite == 'check-tde'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
     ignore_errors: true
 
   - debug:
@@ -590,7 +590,7 @@
     when:
       - testsuite == 'check-tde'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
 
   - name: Package check-tde test artifacts
     shell: |
@@ -632,7 +632,7 @@
         (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
         (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
         (pg_start_result is defined and pg_start_result.rc | default(1) != 0) or
-        (regression is defined and regression.rc != 0)
+        (regression is defined and regression.rc | default(0) != 0)
     ignore_errors: true
 
   - name: Fetch check-tde test artifacts to controller
@@ -648,7 +648,7 @@
         (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
         (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
         (pg_start_result is defined and pg_start_result.rc | default(1) != 0) or
-        (regression is defined and regression.rc != 0)
+        (regression is defined and regression.rc | default(0) != 0)
 
   - name: Fail the playbook if server configure failed
     fail:
@@ -692,11 +692,11 @@
 
   - name: Fail the playbook if tde tests failed
     fail:
-      msg: "TDE regression tests failed with return code {{ regression.rc }}"
+      msg: "TDE regression tests failed with return code {{ regression.rc | default('N/A') }}"
     when:
       - testsuite == 'check-tde'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
 
   # =============================
   # Run server regression tests
@@ -739,7 +739,7 @@
     when:
       - testsuite == 'check-server'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
 
   - name: Show server regression diffs if tests failed
     shell: cat /tmp/postgres/src/test/regress/regression.diffs
@@ -747,7 +747,7 @@
     when:
       - testsuite == 'check-server'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
     ignore_errors: true
 
   - name: Print regression diffs
@@ -756,7 +756,7 @@
     when:
       - testsuite == 'check-server'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
       - diffs_output.stdout is defined
 
   - name: Debug - find regression files and results dirs before packaging (check-server)
@@ -821,7 +821,7 @@
       - >
         (psp_configure_output is defined and psp_configure_output.rc | default(1) != 0) or
         (psp_build_output is defined and psp_build_output.rc | default(1) != 0) or
-        (regression is defined and regression.rc != 0)
+        (regression is defined and regression.rc | default(0) != 0)
     ignore_errors: true
 
   - name: Fetch check-server test artifacts to controller
@@ -834,7 +834,7 @@
       - >
         (psp_configure_output is defined and psp_configure_output.rc | default(1) != 0) or
         (psp_build_output is defined and psp_build_output.rc | default(1) != 0) or
-        (regression is defined and regression.rc != 0)
+        (regression is defined and regression.rc | default(0) != 0)
 
   - name: Fail the playbook if server configure failed
     fail:
@@ -854,11 +854,11 @@
 
   - name: Fail the playbook if server tests failed
     fail:
-      msg: "Server regression tests failed with return code {{ regression.rc }}"
+      msg: "Server regression tests failed with return code {{ regression.rc | default('N/A') }}"
     when:
       - testsuite == 'check-server'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
 
   # =============================
   # Run installcheck-world regression tests with pg_tde
@@ -941,7 +941,7 @@
     when:
       - testsuite == 'installcheck-world'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
 
   - name: Find regression.diffs files if installcheck-world tests fail
     find:
@@ -952,7 +952,7 @@
     when:
       - testsuite == 'installcheck-world'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
 
   - name: Show contents of regression.diffs with directory name
     shell: |
@@ -962,7 +962,7 @@
     when:
       - testsuite == 'installcheck-world'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0
 
   - name: Debug - find regression files and results dirs before packaging (installcheck-world)
     shell: |
@@ -1053,7 +1053,7 @@
         (psp_build_output is defined and psp_build_output.rc | default(1) != 0) or
         (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
         (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
-        (regression is defined and regression.rc != 0)
+        (regression is defined and regression.rc | default(0) != 0)
     ignore_errors: true
 
   - name: Fetch installcheck-world test artifacts to controller
@@ -1068,7 +1068,7 @@
         (psp_build_output is defined and psp_build_output.rc | default(1) != 0) or
         (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
         (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
-        (regression is defined and regression.rc != 0)
+        (regression is defined and regression.rc | default(0) != 0)
 
   - name: Fail the playbook if server configure failed
     fail:
@@ -1104,8 +1104,8 @@
 
   - name: Fail the playbook if tests failed in installcheck-world
     fail:
-      msg: "All regression tests failed with return code {{ regression.rc }}"
+      msg: "All regression tests failed with return code {{ regression.rc | default('N/A') }}"
     when:
       - testsuite == 'installcheck-world'
       - regression is defined
-      - regression.rc != 0
+      - regression.rc | default(0) != 0

@@ -509,21 +509,21 @@
     var: regression.stderr_lines
   when:
     - regression is defined
-    - regression.rc != 0
+    - regression.rc | default(0) != 0
 
 - name: Show meson test summary on failure
   ansible.builtin.shell: cat /tmp/pg_tde-build/meson-logs/testlog.txt 2>/dev/null || true
   register: testlog_output
   when:
     - regression is defined
-    - regression.rc != 0
+    - regression.rc | default(0) != 0
   ignore_errors: true
 
 - debug:
     var: testlog_output.stdout_lines
   when:
     - regression is defined
-    - regression.rc != 0
+    - regression.rc | default(0) != 0
 
 # =============================
 # Artifacts — always runs, collects whatever exists
@@ -562,7 +562,7 @@
   when: >
     (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
     (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
-    (regression is defined and regression.rc != 0)
+    (regression is defined and regression.rc | default(0) != 0)
   ignore_errors: true
 
 - name: Fetch tde test artifacts to controller
@@ -573,7 +573,7 @@
   when: >
     (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
     (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
-    (regression is defined and regression.rc != 0)
+    (regression is defined and regression.rc | default(0) != 0)
 
 # =============================
 # Fail tasks — always reachable, not gated on prior success
@@ -592,7 +592,7 @@
 
 - name: Fail if tde regression tests failed
   ansible.builtin.fail:
-    msg: "TDE regression tests failed with return code {{ regression.rc }}"
+    msg: "TDE regression tests failed with return code {{ regression.rc | default('N/A') }}"
   when:
     - regression is defined
-    - regression.rc != 0
+    - regression.rc | default(0) != 0
