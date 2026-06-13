@@ -509,6 +509,41 @@
     - (major_version | int) < 18
     - tde_build_output.rc | default(1) == 0
 
+# Percona RPM PostgreSQL sets logging_collector = on by default.  With the
+# logging collector active, recovery messages (including "waiting for WAL to
+# become available") go to pgdata/log/, not to the startup log file that
+# wait_for_log() checks in PG17's test framework.  PG18's framework was
+# updated to search pgdata/log/ too; PG17's was not.
+# Fix: disable the logging collector on both replicas so all output goes to
+# the startup log where PG17's wait_for_log() can find it.
+- name: Patch wal_archiving.pl - disable logging_collector on replica_enc for wait_for_log
+  ansible.builtin.replace:
+    path: /tmp/pg_tde/t/wal_archiving.pl
+    regexp: '^\$replica_enc->set_standby_mode;'
+    replace: |
+      $replica_enc->append_conf('postgresql.conf', "logging_collector = off");
+      $replica_enc->set_standby_mode;
+  become_user: postgres
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version | int >= 8
+    - (major_version | int) < 18
+    - tde_build_output.rc | default(1) == 0
+
+- name: Patch wal_archiving.pl - disable logging_collector on replica_plain for wait_for_log
+  ansible.builtin.replace:
+    path: /tmp/pg_tde/t/wal_archiving.pl
+    regexp: '^\$replica_plain->set_standby_mode;'
+    replace: |
+      $replica_plain->append_conf('postgresql.conf', "logging_collector = off");
+      $replica_plain->set_standby_mode;
+  become_user: postgres
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version | int >= 8
+    - (major_version | int) < 18
+    - tde_build_output.rc | default(1) == 0
+
 - name: Copy pg_tde test files
   ansible.builtin.copy:
     src: "{{ item }}"
