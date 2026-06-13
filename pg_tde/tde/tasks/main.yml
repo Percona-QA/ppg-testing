@@ -464,6 +464,51 @@
     - (major_version | int) < 18
     - tde_build_output.rc | default(1) == 0
 
+# After smart shutdown the WAL archiver has processed all .ready segments,
+# but the shutdown-checkpoint segment (the last one written) never receives a
+# .ready file in PG17 — PostgreSQL only creates .ready for a segment when the
+# *next* segment starts, so the final segment at shutdown is permanently
+# skipped.  PG18 changed this behaviour; PG17 does not archive it.
+#
+# Fix: call pg_tde_archive_decrypt directly for any segment in pg_wal/ that
+# is absent from the archive.  The tool calls pg_tde_fe_init("pg_tde") which
+# looks for the keyring at ./pg_tde/ relative to CWD.  When PostgreSQL runs
+# archive_command the CWD is PGDATA, so the key is found.  When called from
+# Perl (CWD = meson build dir) the key is NOT found, decryption returns
+# garbage, and the segment-size header check fails.  Changing to PGDATA
+# before calling the tool fixes the key lookup.
+- name: Patch wal_archiving.pl - manually archive shutdown-checkpoint segment on RHEL
+  ansible.builtin.blockinfile:
+    path: /tmp/pg_tde/t/wal_archiving.pl
+    insertafter: "^\\$primary->stop\\('smart'\\);"
+    marker: "# {mark} ANSIBLE PATCH - archive shutdown-checkpoint WAL segment"
+    block: |
+      # The shutdown-checkpoint WAL segment has no .ready file in PG17 (PG17
+      # never creates .ready for the last segment at shutdown).  Archive it
+      # manually.  pg_tde_archive_decrypt reads the key from ./pg_tde/
+      # relative to CWD; chdir to PGDATA so the lookup succeeds.
+      {
+          my $pgdata  = $primary->data_dir;
+          my $wal_dir = $pgdata . '/pg_wal';
+          chdir($pgdata) or die "Cannot chdir to $pgdata: $!";
+          opendir(my $dh, $wal_dir) or die "Cannot open $wal_dir: $!";
+          for my $f (sort readdir($dh)) {
+              next unless $f =~ /^[0-9A-F]{24}$/;
+              next if -e "$archive_dir/$f";
+              system('pg_tde_archive_decrypt', $f, "$wal_dir/$f",
+                     'cp %p ' . $archive_dir . '/%f')
+                  and warn "Failed to archive WAL segment $f: $?";
+          }
+          closedir($dh);
+          chdir('/') or warn "Cannot chdir back: $!";
+      }
+  become_user: postgres
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version | int >= 8
+    - (major_version | int) < 18
+    - tde_build_output.rc | default(1) == 0
+
 - name: Copy pg_tde test files
   ansible.builtin.copy:
     src: "{{ item }}"
