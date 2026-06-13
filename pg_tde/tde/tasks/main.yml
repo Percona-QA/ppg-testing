@@ -407,17 +407,24 @@
 # restores all segments including the shutdown checkpoint, then waits for the
 # next one (which doesn't exist), and promotes cleanly.
 #
-# On RHEL, the archiver loses this race. The shutdown-checkpoint segment is never
-# archived. The replica cannot restore it and cannot promote cleanly within the
-# 300-second timeout.
+# On RHEL, the WAL archiver loses a shutdown race: pg_ctl stop (fast mode)
+# signals backends and immediately proceeds to the checkpoint and archiver
+# shutdown. SELinux latency in the archive_command (cp) means the archiver
+# does not finish the last segment before it is killed. The replica cannot
+# restore the shutdown-checkpoint segment and times out.
 #
-# Fix: force a pg_switch_wal() before $primary->stop and poll until that
-# segment appears in last_archived_wal. This ensures the data WAL segment is
-# fully archived before shutdown, so the replica can restore it and reach
-# "waiting for WAL to become available", then promote cleanly.
-# Applied only on RHEL 9+ (major_version >= 9): baseline run 242 confirmed
-# the race fails on RHEL 9/10. RHEL 8 is excluded here because the pg_tde
-# build itself fails there (shsplit Python 3.6 incompatibility, fixed above).
+# Two-part fix applied to all RHEL/OL/Rocky 8+ for PG < 18:
+#
+# 1. Force pg_switch_wal() before stop and poll until that segment is
+#    archived. This ensures all data WAL up to the switch LSN is in the
+#    archive before shutdown begins.
+#
+# 2. Change $primary->stop to $primary->stop('smart'). Smart shutdown waits
+#    for all existing backends to exit and for the WAL archiver to drain
+#    every remaining segment before the postmaster exits. This is the correct
+#    way to guarantee the shutdown-checkpoint segment is archived.
+#    Note: pg_tde_archive_decrypt cannot be used manually post-stop because
+#    it rejects partial WAL segments (header segment-size != 16 MB file size).
 - name: Patch wal_archiving.pl - wait for WAL archive before stop on RHEL
   ansible.builtin.blockinfile:
     path: /tmp/pg_tde/t/wal_archiving.pl
@@ -441,41 +448,19 @@
   become_user: postgres
   when:
     - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version | int >= 9
+    - ansible_distribution_major_version | int >= 8
     - (major_version | int) < 18
     - tde_build_output.rc | default(1) == 0
 
-# After $primary->stop the shutdown-checkpoint WAL segment (the one created
-# by pg_switch_wal() above) is still in pg_wal/ but was never processed by
-# archive_command because the archiver is killed as part of shutdown.
-# We decrypt-archive every segment in pg_wal/ that is absent from the archive
-# so the replica's restore_command can fetch it and complete recovery.
-- name: Patch wal_archiving.pl - archive shutdown WAL segment after primary stop
-  ansible.builtin.blockinfile:
+- name: Patch wal_archiving.pl - use smart shutdown on RHEL so archiver drains before exit
+  ansible.builtin.replace:
     path: /tmp/pg_tde/t/wal_archiving.pl
-    insertafter: '^\$primary->stop;'
-    marker: "# {mark} ANSIBLE PATCH - archive remaining WAL after stop"
-    block: |
-      # The shutdown-checkpoint segment is in pg_wal/ but may not be in the
-      # archive (archiver killed before completing it on RHEL).  Manually
-      # decrypt-archive any segment absent from $archive_dir so replicas can
-      # restore through the shutdown point.
-      {
-          my $wal_dir = $primary->data_dir . '/pg_wal';
-          opendir(my $dh, $wal_dir) or die "Cannot open $wal_dir: $!";
-          for my $f (sort readdir($dh)) {
-              next unless $f =~ /^[0-9A-F]{24}$/;
-              next if -e "$archive_dir/$f";
-              system('pg_tde_archive_decrypt', $f, "$wal_dir/$f",
-                     'cp %p ' . $archive_dir . '/%f')
-                  and warn "Failed to archive WAL segment $f: $?";
-          }
-          closedir($dh);
-      }
+    regexp: '^\$primary->stop;'
+    replace: "$primary->stop('smart');"
   become_user: postgres
   when:
     - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version | int >= 9
+    - ansible_distribution_major_version | int >= 8
     - (major_version | int) < 18
     - tde_build_output.rc | default(1) == 0
 
