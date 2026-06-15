@@ -13,7 +13,10 @@ RUN COSMIAN_VERSION=5.21.0 && \
     wget -q "https://package.cosmian.com/kms/${COSMIAN_VERSION}/deb/${ARCH}/non-fips/static/cosmian-kms-server-non-fips-static-openssl_${COSMIAN_VERSION}_${ARCH}.deb" \
       -O /tmp/cosmian.deb && \
     dpkg -i /tmp/cosmian.deb && \
-    chmod 0755 /usr/sbin/cosmian_kms && \
+    KMS_BIN=$(find /usr /opt -name cosmian_kms -type f 2>/dev/null | head -1) && \
+    echo "cosmian_kms installed at: $KMS_BIN" && \
+    test -n "$KMS_BIN" && chmod 0755 "$KMS_BIN" && \
+    ln -sf "$KMS_BIN" /usr/local/bin/cosmian_kms && \
     chmod 0755 /usr/local/cosmian/lib/ossl-modules/legacy.so 2>/dev/null || true && \
     rm /tmp/cosmian.deb
 

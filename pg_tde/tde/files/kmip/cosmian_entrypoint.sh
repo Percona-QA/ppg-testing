@@ -39,4 +39,4 @@ rust_log = "info,cosmian_kms=info"
 EOF
 
 export OPENSSL_MODULES=/usr/local/cosmian/lib/ossl-modules
-exec /usr/sbin/cosmian_kms -c /opt/cosmian/kms.toml
+exec cosmian_kms -c /opt/cosmian/kms.toml
