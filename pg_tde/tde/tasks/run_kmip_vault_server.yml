@@ -58,12 +58,12 @@
 
 - name: Copy cosmian certs Dockerfile
   ansible.builtin.copy:
-    src: ../../files/kmip/Dockerfile.cosmian_certs
+    src: ../files/kmip/Dockerfile.cosmian_certs
     dest: /tmp/cosmian_certs_build/Dockerfile
 
 - name: Copy cert generation script
   ansible.builtin.copy:
-    src: ../../files/kmip/gen_certs.sh
+    src: ../files/kmip/gen_certs.sh
     dest: /tmp/cosmian_certs_build/gen_certs.sh
     mode: '0755'
 
