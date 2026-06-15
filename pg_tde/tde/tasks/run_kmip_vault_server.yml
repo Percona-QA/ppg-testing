@@ -1,346 +1,110 @@
-- name: yum install -y yum-utils
+# Sets up Docker and uses a Ubuntu Jammy container (OpenSSL 3) to run the same
+# openssl commands that CosmianKms::gen_certs() would run.  This is needed on
+# platforms that ship OpenSSL 1.x (RHEL/Rocky/OL 8, Debian 11) where
+# `openssl x509 -copy_extensions copy` is not supported.
+#
+# The generated certs are written directly to /tmp/cosmian_certs/ on the host
+# via a Docker volume mount.  cosmian_kms itself runs natively (its binary is
+# statically linked and works on OpenSSL 1.x platforms).
+#
+# After this task file runs, CosmianKms.pm::gen_certs() is patched (in
+# main.yml) to copy from /tmp/cosmian_certs/ instead of calling openssl.
+
+- name: Install yum-utils (RHEL)
   become: true
-  command: yum install -y yum-utils
+  ansible.builtin.command: yum install -y yum-utils
   when: ansible_os_family == "RedHat"
 
-- name: Install docker RHEL
+- name: Add Docker CE repo (RHEL)
   become: true
-  command: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+  ansible.builtin.command: >
+    yum-config-manager --add-repo
+    https://download.docker.com/linux/centos/docker-ce.repo
   when: ansible_os_family == "RedHat"
 
-# --nobest is used to avoid the best match error
-# temporary fix for the best match error
-- name: Yum update
+- name: Install Docker CE (RHEL)
   become: true
-  command: yum -y update --nobest
+  ansible.builtin.command: yum install -y docker-ce docker-ce-cli containerd.io
   when: ansible_os_family == "RedHat"
 
-- name: Ensure Docker SDK for Python is installed
-  ansible.builtin.pip:
-    name:
-      - docker
-      - requests
-    executable: pip3
+- name: Start Docker service (RHEL)
   become: true
-  when: ansible_os_family == "RedHat"
-
-- name: Install docker
-  become: true
-  command: yum install -y docker-ce docker-ce-cli containerd.io
-  when: ansible_os_family == "RedHat"
-
-- name: Start docker
-  become: true
-  service:
+  ansible.builtin.service:
     name: docker
     state: started
-    enabled: yes
+    enabled: true
   when: ansible_os_family == "RedHat"
 
-- name: Install docker.io Deb
+- name: Install docker.io (Debian)
   become: true
-  apt:
+  ansible.builtin.apt:
     name: docker.io
-    update_cache: yes
+    update_cache: true
   when: ansible_os_family == "Debian"
 
-- name: show docker version
-  command: docker -v
+- name: Show docker version
+  ansible.builtin.command: docker -v
   register: docker_version_result
+  changed_when: false
 
-- debug:
+- ansible.builtin.debug:
     var: docker_version_result.stdout
 
-- name: Create KMIP build directory
+- name: Create cosmian certs build directory
   ansible.builtin.file:
-    path: /tmp/kmip_server
+    path: /tmp/cosmian_certs_build
     state: directory
     mode: '0755'
 
-- name: Copy KMIP Dockerfile
+- name: Copy cosmian certs Dockerfile
   ansible.builtin.copy:
-    src: ../../files/kmip/Dockerfile
-    dest: /tmp/kmip_server/Dockerfile
+    src: ../../files/kmip/Dockerfile.cosmian_certs
+    dest: /tmp/cosmian_certs_build/Dockerfile
 
-- name: Copy KMIP entrypoint.sh
+- name: Copy cert generation script
   ansible.builtin.copy:
-    src: ../../files/kmip/entrypoint.sh
-    dest: /tmp/kmip_server/entrypoint.sh
+    src: ../../files/kmip/gen_certs.sh
+    dest: /tmp/cosmian_certs_build/gen_certs.sh
     mode: '0755'
 
-- name: Build KMIP Docker image using CLI
+- name: Create /tmp/cosmian_certs directory
+  ansible.builtin.file:
+    path: /tmp/cosmian_certs
+    state: directory
+    mode: '0755'
+
+- name: Build cosmian-certs Docker image
   become: true
   ansible.builtin.shell: |
     set -o pipefail
-    docker build -t kmip-server . 2>&1 | tee /tmp/kmip-build.log
+    docker build -t cosmian-certs . 2>&1 | tee /tmp/cosmian-certs-build.log
   args:
-    chdir: /tmp/kmip_server
+    chdir: /tmp/cosmian_certs_build
     executable: /bin/bash
 
-- name: Run KMIP Docker container using CLI
+- name: Run cosmian-certs container (writes certs to /tmp/cosmian_certs via volume)
   become: true
   ansible.builtin.shell: |
-    docker run -d --name kmip -p 5696:5696 \
-      --restart unless-stopped \
-      kmip-server
-
-- name: Wait for KMIP server to listen on port 5696
-  ansible.builtin.wait_for:
-    port: 5696
-    host: 0.0.0.0
-    delay: 5
-    timeout: 60
-    state: started
-
-- name: Copy KMIP certificates from container to host
-  ansible.builtin.shell: |
-    docker cp kmip:/opt/certs/server_certificate.pem /tmp/
-    docker cp kmip:/opt/certs/client_key_jane_doe.pem /tmp/
-    docker cp kmip:/opt/certs/client_certificate_jane_doe.pem /tmp/
+    docker run --rm \
+      -v /tmp/cosmian_certs:/opt/cosmian_certs \
+      cosmian-certs
   args:
     executable: /bin/bash
 
-# - name: Create Vault env dir
-#   ansible.builtin.file:
-#     path: /tmp/vault_env
-#     state: directory
-#     mode: '0755'
+- name: Set permissions on /tmp/cosmian_certs for postgres
+  become: true
+  ansible.builtin.file:
+    path: /tmp/cosmian_certs
+    state: directory
+    recurse: true
+    mode: '0755'
 
-# # - name: Run Vault container with TLS enabled in dev mode
-# #   community.docker.docker_container:
-# #     name: vault
-# #     image: hashicorp/vault:latest
-# #     state: started
-# #     restart_policy: unless-stopped
-# #     ports:
-# #       - "8200:8200"
-# #     env:
-# #       VAULT_DEV_ROOT_TOKEN_ID: root
-# #       BAO_ADDR: https://0.0.0.0:8200
-# #     capabilities:
-# #       - IPC_LOCK
-# #     command: >
-# #       vault server -dev
-# #       -dev-tls
-# #       -dev-listen-address=0.0.0.0:8200
-# #     volumes:
-# #       - /tmp/vault_env:/vault/env  # Shared volume for environment output (optional)
+- name: Verify certs were generated
+  ansible.builtin.stat:
+    path: /tmp/cosmian_certs/ca.pem
+  register: ca_pem_stat
 
-# - name: Run Vault container (fallback)
-#   become: true
-#   ansible.builtin.shell: |
-    # docker run -d --name vault \
-    #   --cap-add=IPC_LOCK \
-    #   -e VAULT_DEV_ROOT_TOKEN_ID=root \
-    #   -e BAO_ADDR=https://0.0.0.0:8200 \
-    #   -p 8200:8200 \
-    #   -v /tmp/vault_env:/vault/env \
-    #   hashicorp/vault:latest \
-    #   vault server -dev -dev-tls -dev-listen-address=0.0.0.0:8200
-
-
-# - name: Wait for Vault with TLS to start
-#   ansible.builtin.wait_for:
-#     port: 8200
-#     host: 127.0.0.1
-#     delay: 5
-#     timeout: 30
-#     state: started
-
-# - name: Extract Vault root token from logs
-#   become: true
-#   ansible.builtin.shell: |
-#     docker logs vault 2>&1 | grep 'Root Token:' | tail -1 | awk -F': ' '{print $2}' | xargs
-#   register: vault_root_token
-#   changed_when: false
-
-# - name: Save Vault root token to file
-#   copy:
-#     dest: /tmp/vault_env/vault_token.txt
-#     content: "{{ vault_root_token.stdout }}"
-#     mode: '0600'
-
-# - name: Extract CA cert path from Vault container logs
-#   shell: docker logs vault 2>&1 | grep BAO_CACERT | tail -1 | awk -F"'" '{print $2}'
-#   register: ca_cert_path_output
-#   changed_when: false
-#   become: true
-
-# - name: Set fact with parsed CA cert path
-#   set_fact:
-#     vault_ca_cert_path: "{{ ca_cert_path_output.stdout }}"
-
-# - name: Debug CA cert path
-#   debug:
-#     msg: "Vault CA cert path inside container: {{ vault_ca_cert_path }}"
-
-# - name: Copy Vault CA cert from container
-#   ansible.builtin.shell: |
-#     docker cp vault:{{ vault_ca_cert_path }} /tmp/vault_env/vault_ca.crt
-#   args:
-#     executable: /bin/bash
-#   become: true
-
-# - name: Show Vault debug info
-#   debug:
-#     msg:
-#       - "Vault Root Token: {{ vault_root_token.stdout }}"
-#       - "Vault CA cert saved at: /tmp/vault_env/vault_ca.crt"
-
-# -----------------------
-# - name: Create Vault env dir
-#   ansible.builtin.file:
-#     path: /tmp/bao_env
-#     state: directory
-#     mode: '0755'
-
-# - name: Run openbao container (fallback)
-#   become: true
-#   ansible.builtin.shell: |
-#     docker run -d --name bao \
-#       --cap-add=IPC_LOCK \
-#       -e VAULT_DEV_ROOT_TOKEN_ID=root \
-#       -e BAO_ADDR=https://0.0.0.0:8200 \
-#       -p 8200:8200 \
-#       -v /tmp/bao_env:/bao/env \
-#       openbao/openbao \
-#       bao server -dev -dev-tls -dev-listen-address=0.0.0.0:8200
-
-# - name: Wait for Vault with TLS to start
-#   ansible.builtin.wait_for:
-#     port: 8200
-#     host: 127.0.0.1
-#     delay: 5
-#     timeout: 30
-#     state: started
-
-# - name: Extract Vault root token from logs
-#   become: true
-#   ansible.builtin.shell: |
-#     docker logs bao 2>&1 | grep 'Root Token:' | tail -1 | awk -F': ' '{print $2}' | xargs
-#   register: bao_root_token
-#   changed_when: false
-
-# - name: Save Vault root token to file
-#   copy:
-#     dest: /tmp/bao_env/bao_token.txt
-#     content: "{{ bao_root_token.stdout }}"
-#     mode: '0600'
-
-# - name: Extract CA cert path from Vault container logs
-#   shell: docker logs bao 2>&1 | grep BAO_CACERT | tail -1 | awk -F"'" '{print $2}'
-#   register: ca_cert_path_output
-#   changed_when: false
-#   become: true
-
-# - name: Set fact with parsed CA cert path
-#   set_fact:
-#     bao_ca_cert_path: "{{ ca_cert_path_output.stdout }}"
-
-# - name: Debug CA cert path
-#   debug:
-#     msg: "Vault CA cert path inside container: {{ bao_ca_cert_path }}"
-
-# - name: Copy Vault CA cert from container
-#   ansible.builtin.shell: |
-#     docker cp bao:{{ bao_ca_cert_path }} /tmp/bao_env/bao_ca.crt
-#   args:
-#     executable: /bin/bash
-#   become: true
-
-# - name: Show Vault debug info
-#   debug:
-#     msg:
-#       - "Vault Root Token: {{ bao_root_token.stdout }}"
-#       - "Vault CA cert saved at: /tmp/bao_env/bao_ca.crt"
-
-# - name: Create namespace "pgns" inside Bao container
-#   community.docker.docker_container_exec:
-#     container: bao
-#     command: |
-#       bash -c "export VAULT_SKIP_VERIFY=true && bao namespace create 'pgns'"
-#   register: create_ns
-#   ignore_errors: true
-
-# - name: Enable kv-v2 secrets in namespace "pgns"
-#   community.docker.docker_container_exec:
-#     container: bao
-#     command: |
-#       bash -c "export VAULT_SKIP_VERIFY=true && bao secrets enable -ns=pgns -path=secret -description='Production Secrets' kv-v2"
-#   register: enable_kv
-#   ignore_errors: true
-
-# - name: Debug namespace creation output
-#   debug:
-#     var: create_ns.stdout_lines
-
-# - name: Debug kv enable output
-#   debug:
-#     var: enable_kv.stdout_lines
-
-- name: Set Bao version and base URL facts
-  ansible.builtin.set_fact:
-    bao_version: "2.4.3"
-    bao_base_url: "https://github.com/openbao/openbao/releases/download/v2.4.3"
-
-- name: Detect architecture
-  ansible.builtin.set_fact:
-    arch: >-
-      {% if ansible_architecture in ['x86_64', 'amd64'] %}amd64
-      {% elif ansible_architecture in ['aarch64', 'arm64'] %}arm64
-      {% else %}unsupported{% endif %}
-
-- name: Fail if architecture is unsupported
+- name: Fail if cert generation did not produce ca.pem
   ansible.builtin.fail:
-    msg: "Unsupported architecture: {{ ansible_architecture }}"
-  when: arch == "unsupported"
-
-- name: Set OS architecture fact
-  ansible.builtin.set_fact:
-    OS_ARCH: "{{ arch | trim }}"
-
-- name: Set Bao package extension fact
-  ansible.builtin.set_fact:
-    bao_pkg_ext: "{{ 'deb' if ansible_os_family == 'Debian' else 'rpm' }}"
-
-- name: Set Bao package URL and filename facts
-  ansible.builtin.set_fact:
-    bao_pkg_file: "/tmp/bao_{{ bao_version }}_linux_{{ OS_ARCH }}.{{ bao_pkg_ext }}"
-    bao_pkg_url: "{{ bao_base_url }}/bao_{{ bao_version }}_linux_{{ OS_ARCH }}.{{ bao_pkg_ext }}"
-
-- name: Debug Bao URL and file (for safety)
-  ansible.builtin.debug:
-    msg:
-      - "URL: {{ bao_pkg_url }}"
-      - "File: {{ bao_pkg_file }}"
-
-- name: Download OpenBao package
-  ansible.builtin.get_url:
-    url: "{{ bao_pkg_url | trim }}"
-    dest: "{{ bao_pkg_file | trim }}"
-    mode: '0644'
-    timeout: 120
-  register: bao_download
-  retries: 3
-  delay: 15
-  until: bao_download is succeeded
-
-- name: Install OpenBao on Debian-based systems
-  ansible.builtin.apt:
-    deb: "{{ bao_pkg_file | trim }}"
-  when: ansible_os_family == "Debian"
-
-- name: Install OpenBao on RHEL-based systems
-  ansible.builtin.dnf:
-    name: "{{ bao_pkg_file | trim }}"
-    disable_gpg_check: true
-    state: present
-  when: ansible_os_family == "RedHat"
-
-- name: Verify Bao installation
-  ansible.builtin.command: bao version
-  register: bao_version_out
-  changed_when: false
-
-- debug:
-    msg: "✅ Installed {{ bao_version_out.stdout }}"
+    msg: "cosmian-certs container did not produce /tmp/cosmian_certs/ca.pem"
+  when: not ca_pem_stat.stat.exists
