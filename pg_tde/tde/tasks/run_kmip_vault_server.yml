@@ -1,14 +1,15 @@
-# Sets up Docker and uses a Ubuntu Jammy container (OpenSSL 3) to run the same
-# openssl commands that CosmianKms::gen_certs() would run.  This is needed on
-# platforms that ship OpenSSL 1.x (RHEL/Rocky/OL 8, Debian 11) where
-# `openssl x509 -copy_extensions copy` is not supported.
+# Runs cosmian_kms inside a Ubuntu Jammy Docker container on platforms that
+# ship OpenSSL 1.x or an incompatible glibc (RHEL/Rocky/OL 8, Debian 11).
 #
-# The generated certs are written directly to /tmp/cosmian_certs/ on the host
-# via a Docker volume mount.  cosmian_kms itself runs natively (its binary is
-# statically linked and works on OpenSSL 1.x platforms).
+# The container:
+#   - generates certs on first start using OpenSSL 3 (Ubuntu Jammy)
+#   - exposes KMIP on 127.0.0.1:5556 and HTTP on 127.0.0.1:9998
+#   - writes certs to /tmp/cosmian_certs/ on the host via a volume mount
 #
-# After this task file runs, CosmianKms.pm::gen_certs() is patched (in
-# main.yml) to copy from /tmp/cosmian_certs/ instead of calling openssl.
+# CosmianKms.pm is patched in main.yml to:
+#   - copy certs from /tmp/cosmian_certs/ instead of calling openssl
+#   - return fixed ports (5556/9998) instead of spawning a local process
+#   - restart the container (docker stop/start) for the negative-path test
 
 - name: Install yum-utils (RHEL)
   become: true
@@ -42,6 +43,13 @@
     update_cache: true
   when: ansible_os_family == "Debian"
 
+- name: Add postgres user to docker group
+  become: true
+  ansible.builtin.user:
+    name: postgres
+    groups: docker
+    append: true
+
 - name: Show docker version
   ansible.builtin.command: docker -v
   register: docker_version_result
@@ -50,46 +58,91 @@
 - ansible.builtin.debug:
     var: docker_version_result.stdout
 
-- name: Create cosmian certs build directory
+- name: Detect architecture for Docker build
+  ansible.builtin.set_fact:
+    cosmian_arch: >-
+      {% if ansible_architecture in ['x86_64', 'amd64'] %}amd64
+      {% elif ansible_architecture in ['aarch64', 'arm64'] %}arm64
+      {% else %}unsupported{% endif %}
+
+- name: Fail if architecture is unsupported
+  ansible.builtin.fail:
+    msg: "Unsupported architecture: {{ ansible_architecture }}"
+  when: cosmian_arch | trim == "unsupported"
+
+- name: Create cosmian server build directory
   ansible.builtin.file:
-    path: /tmp/cosmian_certs_build
+    path: /tmp/cosmian_server_build
     state: directory
     mode: '0755'
 
-- name: Copy cosmian certs Dockerfile
+- name: Copy Dockerfile.cosmian_server
   ansible.builtin.copy:
-    src: ../files/kmip/Dockerfile.cosmian_certs
-    dest: /tmp/cosmian_certs_build/Dockerfile
+    src: ../files/kmip/Dockerfile.cosmian_server
+    dest: /tmp/cosmian_server_build/Dockerfile
 
-- name: Copy cert generation script
+- name: Copy gen_certs.sh
   ansible.builtin.copy:
     src: ../files/kmip/gen_certs.sh
-    dest: /tmp/cosmian_certs_build/gen_certs.sh
+    dest: /tmp/cosmian_server_build/gen_certs.sh
     mode: '0755'
 
-- name: Create /tmp/cosmian_certs directory
+- name: Copy cosmian_entrypoint.sh
+  ansible.builtin.copy:
+    src: ../files/kmip/cosmian_entrypoint.sh
+    dest: /tmp/cosmian_server_build/cosmian_entrypoint.sh
+    mode: '0755'
+
+- name: Create /tmp/cosmian_certs on host (cert volume mount point)
   ansible.builtin.file:
     path: /tmp/cosmian_certs
     state: directory
-    mode: '0755'
+    mode: '0777'
 
-- name: Build cosmian-certs Docker image
+- name: Build cosmian-server Docker image
   become: true
   ansible.builtin.shell: |
     set -o pipefail
-    docker build -t cosmian-certs . 2>&1 | tee /tmp/cosmian-certs-build.log
+    docker build --build-arg ARCH={{ cosmian_arch | trim }} \
+      -t cosmian-server . 2>&1 | tee /tmp/cosmian-server-build.log
   args:
-    chdir: /tmp/cosmian_certs_build
+    chdir: /tmp/cosmian_server_build
     executable: /bin/bash
 
-- name: Run cosmian-certs container (writes certs to /tmp/cosmian_certs via volume)
+- name: Stop and remove any existing cosmian-server container
   become: true
   ansible.builtin.shell: |
-    docker run --rm \
-      -v /tmp/cosmian_certs:/opt/cosmian_certs \
-      cosmian-certs
+    docker stop cosmian-server 2>/dev/null || true
+    docker rm   cosmian-server 2>/dev/null || true
   args:
     executable: /bin/bash
+
+- name: Run cosmian-server container
+  become: true
+  ansible.builtin.shell: |
+    docker run -d --name cosmian-server \
+      -p 127.0.0.1:5556:5556 \
+      -p 127.0.0.1:9998:9998 \
+      -v /tmp/cosmian_certs:/opt/cosmian/certs \
+      cosmian-server
+  args:
+    executable: /bin/bash
+
+- name: Wait for cosmian-server KMIP port 5556 to be ready
+  ansible.builtin.wait_for:
+    port: 5556
+    host: 127.0.0.1
+    delay: 2
+    timeout: 60
+    state: started
+
+- name: Wait for cosmian-server HTTP port 9998 to be ready
+  ansible.builtin.wait_for:
+    port: 9998
+    host: 127.0.0.1
+    delay: 2
+    timeout: 30
+    state: started
 
 - name: Set permissions on /tmp/cosmian_certs for postgres
   become: true
@@ -99,12 +152,12 @@
     recurse: true
     mode: '0755'
 
-- name: Verify certs were generated
+- name: Verify certs were generated in /tmp/cosmian_certs
   ansible.builtin.stat:
     path: /tmp/cosmian_certs/ca.pem
   register: ca_pem_stat
 
-- name: Fail if cert generation did not produce ca.pem
+- name: Fail if cosmian container did not produce ca.pem
   ansible.builtin.fail:
-    msg: "cosmian-certs container did not produce /tmp/cosmian_certs/ca.pem"
+    msg: "cosmian-server container did not produce /tmp/cosmian_certs/ca.pem"
   when: not ca_pem_stat.stat.exists

@@ -1,0 +1,27 @@
+FROM ubuntu:jammy
+
+ARG ARCH=amd64
+
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    openssl wget curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install cosmian_kms from official packages (Ubuntu Jammy has glibc 2.35,
+# which satisfies the binary's requirements regardless of the host OS).
+RUN COSMIAN_VERSION=5.21.0 && \
+    wget -q "https://package.cosmian.com/kms/${COSMIAN_VERSION}/deb/${ARCH}/non-fips/static/cosmian-kms-server-non-fips-static-openssl_${COSMIAN_VERSION}_${ARCH}.deb" \
+      -O /tmp/cosmian.deb && \
+    dpkg -i /tmp/cosmian.deb && \
+    chmod 0755 /usr/sbin/cosmian_kms && \
+    chmod 0755 /usr/local/cosmian/lib/ossl-modules/legacy.so 2>/dev/null || true && \
+    rm /tmp/cosmian.deb
+
+COPY gen_certs.sh /gen_certs.sh
+COPY cosmian_entrypoint.sh /cosmian_entrypoint.sh
+RUN chmod +x /gen_certs.sh /cosmian_entrypoint.sh
+
+# KMIP port: 5556  HTTP port: 9998
+EXPOSE 5556 9998
+
+CMD ["/cosmian_entrypoint.sh"]

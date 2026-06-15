@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-DIR=/opt/cosmian_certs
+DIR=${CERT_OUTPUT_DIR:-/opt/cosmian_certs}
 mkdir -p "$DIR"
 
 # CA
