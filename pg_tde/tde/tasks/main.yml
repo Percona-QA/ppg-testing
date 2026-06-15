@@ -707,6 +707,8 @@
     # Tool build/runtime logs
     cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
     cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true
+    cp /tmp/cosmian-server-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+    docker logs cosmian-server > "$ARTIFACT_DIR/cosmian-server-container.log" 2>&1 || true
     # Test regression output
     cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
     tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
