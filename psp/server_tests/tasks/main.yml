@@ -345,6 +345,69 @@
   #     - ansible_os_family == 'RedHat'
   #     - testsuite in ['installcheck-world', 'check-tde']
 
+  - name: initdb cluster
+    become_user: postgres
+    command: >
+      ./initdb -D /opt/pgsql/data
+      {{ '--locale=C.UTF-8' if ansible_distribution == 'Debian' else '' }}
+    args:
+      chdir: /opt/pgsql/bin
+      executable: /bin/bash
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) == 0
+    register: results
+
+  - debug: var=results.stdout_lines
+
+  - name: Build pg_tde
+    become: true
+    become_user: postgres
+    ansible.builtin.shell: |
+      set -o pipefail
+      export LD_LIBRARY_PATH="/opt/pgsql/lib:${LD_LIBRARY_PATH:-}"
+      rm -rf /tmp/pg_tde-build
+      meson setup --buildtype=release -Dpg_config=/opt/pgsql/bin/pg_config -Dwerror=true /tmp/pg_tde-build 2>&1 | tee /tmp/tde-build.log
+      # make PG_CONFIG=/opt/pgsql/bin/pg_config install 2>&1 | tee /tmp/tde-build.log
+    args:
+      chdir: /tmp/pg_tde
+      executable: /bin/bash
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "/opt/pgsql/lib"
+      TDE_MODE: "1"
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
+      - psp_build_output.rc | default(1) == 0
+    ignore_errors: true
+    register: tde_build_output
+
+  - debug: var=tde_build_output.stdout_lines
+    when: tde_build_output is defined
+
+  - name: Install pg_tde
+    become: true
+    ansible.builtin.shell: |
+      set -o pipefail
+      meson install -C /tmp/pg_tde-build 2>&1 | tee /tmp/tde-install.log
+    args:
+      executable: /bin/bash
+    environment:
+      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
+    when:
+      - testsuite in ['installcheck-world', 'check-tde']
+      - tde_build_output is defined
+      - tde_build_output.rc | default(1) == 0
+    ignore_errors: true
+    register: tde_install_output
+
+  - debug: var=tde_install_output.stdout_lines
+    when: tde_install_output is defined
+
   - name: Start cosmian_kms in Docker on OpenSSL 1.x / older-glibc platforms
     ansible.builtin.include_tasks: run_kmip_vault_server.yml
     when:
@@ -411,69 +474,6 @@
       - tde_build_output.rc | default(1) == 0
       - (ansible_os_family == 'Debian' and ansible_distribution == 'Debian' and ansible_distribution_major_version | int == 11)
         or (ansible_os_family == 'RedHat' and ansible_distribution_major_version == '8')
-
-  - name: initdb cluster
-    become_user: postgres
-    command: >
-      ./initdb -D /opt/pgsql/data
-      {{ '--locale=C.UTF-8' if ansible_distribution == 'Debian' else '' }}
-    args:
-      chdir: /opt/pgsql/bin
-      executable: /bin/bash
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-    when:
-      - testsuite in ['installcheck-world', 'check-tde']
-      - psp_build_output is defined
-      - psp_build_output.rc | default(1) == 0
-    register: results
-
-  - debug: var=results.stdout_lines
-
-  - name: Build pg_tde
-    become: true
-    become_user: postgres
-    ansible.builtin.shell: |
-      set -o pipefail
-      export LD_LIBRARY_PATH="/opt/pgsql/lib:${LD_LIBRARY_PATH:-}"
-      rm -rf /tmp/pg_tde-build
-      meson setup --buildtype=release -Dpg_config=/opt/pgsql/bin/pg_config -Dwerror=true /tmp/pg_tde-build 2>&1 | tee /tmp/tde-build.log
-      # make PG_CONFIG=/opt/pgsql/bin/pg_config install 2>&1 | tee /tmp/tde-build.log
-    args:
-      chdir: /tmp/pg_tde
-      executable: /bin/bash
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
-      LD_LIBRARY_PATH: "/opt/pgsql/lib"
-      TDE_MODE: "1"
-    when:
-      - testsuite in ['installcheck-world', 'check-tde']
-      - psp_build_output.rc | default(1) == 0
-    ignore_errors: true
-    register: tde_build_output
-
-  - debug: var=tde_build_output.stdout_lines
-    when: tde_build_output is defined
-
-  - name: Install pg_tde
-    become: true
-    ansible.builtin.shell: |
-      set -o pipefail
-      meson install -C /tmp/pg_tde-build 2>&1 | tee /tmp/tde-install.log
-    args:
-      executable: /bin/bash
-    environment:
-      PATH: "/opt/pgsql/bin:/opt/pgsql/lib:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
-    when:
-      - testsuite in ['installcheck-world', 'check-tde']
-      - tde_build_output is defined
-      - tde_build_output.rc | default(1) == 0
-    ignore_errors: true
-    register: tde_install_output
-
-  - debug: var=tde_install_output.stdout_lines
-    when: tde_install_output is defined
 
   - name: Add pg_tde to postgresql.conf
     lineinfile:
