@@ -345,32 +345,72 @@
   #     - ansible_os_family == 'RedHat'
   #     - testsuite in ['installcheck-world', 'check-tde']
 
-  # kmip.pl: replaced with a TAP skip stub on OpenSSL 1.x platforms.
-  # Deleting the file causes meson to report ERROR (file not found); the stub
-  # prints "1..0 # SKIP" and exits 0 so meson records it as SKIP.
-  # - Debian 11 / RHEL 8 / Rocky 8 / OL 8: openssl 1.x lacks -copy_extensions copy
-  # RHEL 9/10: cosmian_kms readiness timeout is under active investigation;
-  # kmip.pl is NOT stubbed there so CI continues to produce diagnostic output.
-  - name: Replace kmip.pl with a TAP skip stub on OpenSSL 1.x platforms
-    ansible.builtin.copy:
-      dest: /tmp/pg_tde/t/kmip.pl
-      owner: postgres
-      mode: '0755'
-      content: |
-        #!/usr/bin/perl
-        # Stub: kmip.pl is skipped on this platform.
-        # Debian 11 / RHEL 8 / Rocky 8 / OL 8: openssl 1.x lacks
-        # -copy_extensions copy (used in CosmianKms.pm gen_certs()).
-        print "1..0 # SKIP kmip.pl not supported on this platform (OpenSSL 1.x)\n";
-        exit 0;
+  - name: Start cosmian_kms in Docker on OpenSSL 1.x / older-glibc platforms
+    ansible.builtin.include_tasks: run_kmip_vault_server.yml
+    when:
+      - tde_build_output.rc | default(1) == 0
+      - (ansible_os_family == 'Debian' and ansible_distribution == 'Debian' and ansible_distribution_major_version | int == 11)
+        or (ansible_os_family == 'RedHat' and ansible_distribution_major_version == '8')
+
+  - name: Patch CosmianKms.pm - gen_certs uses Docker-generated certs
+    ansible.builtin.blockinfile:
+      path: /tmp/pg_tde/src/keyring/CosmianKms.pm
+      insertafter: '^\tmake_path\(\$dir\);'
+      marker: "# {mark} ANSIBLE MANAGED - docker gen_certs fallback"
+      block: |
+        if (-d '/tmp/cosmian_certs') {
+            require File::Copy;
+            for my $f (qw(ca.pem ca.key server.pem server.key server.p12 client.pem client.key)) {
+                File::Copy::copy("/tmp/cosmian_certs/$f", "$dir/$f")
+                    or BAIL_OUT("copy $f from /tmp/cosmian_certs: $!");
+            }
+            return;
+        }
     become: true
-    when: >-
-      testsuite in ['installcheck-world', 'check-tde'] and
-      ((ansible_os_family == 'Debian' and
-        ansible_distribution == 'Debian' and
-        (ansible_distribution_major_version | int) == 11)
-       or (ansible_os_family == 'RedHat' and
-           ansible_distribution_major_version == '8'))
+    when:
+      - tde_build_output.rc | default(1) == 0
+      - (ansible_os_family == 'Debian' and ansible_distribution == 'Debian' and ansible_distribution_major_version | int == 11)
+        or (ansible_os_family == 'RedHat' and ansible_distribution_major_version == '8')
+
+  - name: Patch CosmianKms.pm - start_with_free_port returns Docker container ports
+    ansible.builtin.blockinfile:
+      path: /tmp/pg_tde/src/keyring/CosmianKms.pm
+      insertafter: '^\tmy \(\$bin, \$dir\) = @_;'
+      marker: "# {mark} ANSIBLE MANAGED - docker start_with_free_port"
+      block: |
+        if (-d '/tmp/cosmian_certs') {
+            return (undef, 5556, 9998);
+        }
+    become: true
+    when:
+      - tde_build_output.rc | default(1) == 0
+      - (ansible_os_family == 'Debian' and ansible_distribution == 'Debian' and ansible_distribution_major_version | int == 11)
+        or (ansible_os_family == 'RedHat' and ansible_distribution_major_version == '8')
+
+  - name: Patch CosmianKms.pm - start_on_ports restarts Docker container
+    ansible.builtin.blockinfile:
+      path: /tmp/pg_tde/src/keyring/CosmianKms.pm
+      insertafter: '^\tmy \(\$bin, \$dir, \$kmip_port, \$http_port\) = @_;'
+      marker: "# {mark} ANSIBLE MANAGED - docker start_on_ports"
+      block: |
+        if (-d '/tmp/cosmian_certs') {
+            system('docker', 'stop', 'cosmian-server') == 0
+                or BAIL_OUT("docker stop cosmian-server failed: $?");
+            system('docker', 'start', 'cosmian-server') == 0
+                or BAIL_OUT("docker start cosmian-server failed: $?");
+            my $deadline = time() + 30;
+            while (time() < $deadline) {
+                my $rc = system("curl -fsSk -m 1 https://127.0.0.1:$http_port/version > /dev/null 2>&1");
+                return undef if ($rc >> 8) == 0;
+                usleep(200_000);
+            }
+            BAIL_OUT("cosmian-server not ready after docker restart (http=$http_port)");
+        }
+    become: true
+    when:
+      - tde_build_output.rc | default(1) == 0
+      - (ansible_os_family == 'Debian' and ansible_distribution == 'Debian' and ansible_distribution_major_version | int == 11)
+        or (ansible_os_family == 'RedHat' and ansible_distribution_major_version == '8')
 
   - name: initdb cluster
     become_user: postgres
@@ -627,8 +667,8 @@
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-install.log "$ARTIFACT_DIR/" 2>/dev/null || true
       # Tool build/runtime logs
-      cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/cosmian-server-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      docker logs cosmian-server > "$ARTIFACT_DIR/cosmian-server-container.log" 2>&1 || true
       # Test regression output
       cp /tmp/check-tde-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
       tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
@@ -1050,8 +1090,8 @@
       cp /tmp/postgres/config.log "$ARTIFACT_DIR/" 2>/dev/null || true
       # pg_tde and tool build/runtime logs
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/cosmian-server-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      docker logs cosmian-server > "$ARTIFACT_DIR/cosmian-server-container.log" 2>&1 || true
       cp /tmp/installcheck-world-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
       tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
