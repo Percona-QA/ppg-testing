@@ -283,6 +283,22 @@
     regexp: 'text=True'
     replace: 'universal_newlines=True'
 
+# Copy our custom TAP test before meson setup so it is registered in the build.
+- name: Copy multiple_extensions.pl to pg_tde test directory
+  ansible.builtin.copy:
+    src: multiple_extensions.pl
+    dest: /tmp/pg_tde/t/multiple_extensions.pl
+    owner: postgres
+    mode: '0644'
+  become: true
+
+- name: Register multiple_extensions.pl in meson.build
+  ansible.builtin.lineinfile:
+    path: /tmp/pg_tde/meson.build
+    insertafter: "'t/basic.pl',"
+    line: "  't/multiple_extensions.pl',"
+  become_user: postgres
+
 - name: Build pg_tde
   become: true
   become_user: postgres
@@ -354,12 +370,6 @@
 # =============================
 # pg_tde test setup
 # =============================
-- name: Remove old multiple extensions test case
-  ansible.builtin.file:
-    path: /tmp/pg_tde/t/multiple_extensions.pl
-    state: absent
-  become_user: postgres
-  when: tde_build_output.rc | default(1) == 0
 
 # kmip.pl on OpenSSL 1.x / older glibc platforms (RHEL/Rocky/OL 8, Debian 11):
 #
@@ -601,22 +611,6 @@
     - ansible_distribution_major_version | int >= 8
     - (major_version | int) < 18
     - tde_build_output.rc | default(1) == 0
-
-- name: Copy pg_tde test files
-  ansible.builtin.copy:
-    src: "{{ item }}"
-    dest: "{{ pg_tde_dest[item] }}"
-    owner: postgres
-    mode: '0644'
-  loop: "{{ pg_tde_files }}"
-  vars:
-    pg_tde_files:
-      - multiple_extensions.pl
-      - delete_principal_key_1.out
-    pg_tde_dest:
-      multiple_extensions.pl: /tmp/pg_tde/t/multiple_extensions.pl
-      delete_principal_key_1.out: /tmp/pg_tde/expected/delete_principal_key_1.out
-  when: tde_build_output.rc | default(1) == 0
 
 # run_kmip_vault_server.yml is now used only for OpenSSL 1.x platforms
 # (RHEL/Rocky/OL 8, Debian 11).  It installs Docker and generates KMIP certs

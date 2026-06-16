@@ -2,213 +2,125 @@
 
 use strict;
 use warnings;
-use File::Basename;
+use PostgreSQL::Test::Cluster;
+use PostgreSQL::Test::Utils;
 use Test::More;
-use lib 't';
-use pgtde;
 
-PGTDE::setup_files_dir(basename($0));
+my ($cmdret, $stdout, $stderr);
+
+my $keydir = PostgreSQL::Test::Utils::tempdir;
 
 my $node = PostgreSQL::Test::Cluster->new('main');
 $node->init;
 $node->append_conf('postgresql.conf',
 	"shared_preload_libraries = 'pg_tde, pg_stat_monitor, pgaudit, set_user, pg_repack'"
 );
-$node->append_conf('postgresql.conf',
-	"pg_stat_monitor.pgsm_bucket_time = 360000");
-$node->append_conf('postgresql.conf',
-	"pg_stat_monitor.pgsm_normalized_query = 'yes'");
+$node->append_conf('postgresql.conf', "pg_stat_monitor.pgsm_bucket_time = 360000");
+$node->append_conf('postgresql.conf', "pg_stat_monitor.pgsm_normalized_query = 'yes'");
 $node->start;
 
-# Create PGSM extension
-my ($cmdret, $stdout, $stderr) = $node->psql(
-	'postgres',
-	'CREATE EXTENSION IF NOT EXISTS pg_stat_monitor;',
-	extra_params => ['-a']);
-ok($cmdret == 0, "CREATE PGSM EXTENSION");
-PGTDE::append_to_debug_file($stdout);
+# Create extensions
+($cmdret, $stdout, $stderr) = $node->psql('postgres',
+	'CREATE EXTENSION IF NOT EXISTS pg_stat_monitor;');
+is($cmdret, 0, 'CREATE pg_stat_monitor EXTENSION');
 
-($cmdret, $stdout, $stderr) = $node->psql(
-	'postgres',
-	'SELECT pg_stat_monitor_reset();',
-	extra_params => [ '-a', '-Pformat=aligned', '-Ptuples_only=off' ]);
-ok($cmdret == 0, "Reset PGSM EXTENSION");
-PGTDE::append_to_debug_file($stdout);
+($cmdret, $stdout, $stderr) = $node->psql('postgres',
+	'SELECT pg_stat_monitor_reset();');
+is($cmdret, 0, 'Reset pg_stat_monitor');
 
-# Create pg_tde extension
-($cmdret, $stdout, $stderr) =
-  $node->psql('postgres', 'CREATE EXTENSION pg_tde;', extra_params => ['-a']);
-ok($cmdret == 0, "CREATE PGTDE EXTENSION");
-PGTDE::append_to_result_file($stdout);
+($cmdret, $stdout, $stderr) = $node->psql('postgres',
+	'CREATE EXTENSION pg_tde;');
+is($cmdret, 0, 'CREATE pg_tde EXTENSION');
 
-# Create Other extensions
-($cmdret, $stdout, $stderr) = $node->psql(
-	'postgres',
-	'CREATE EXTENSION IF NOT EXISTS pgaudit;',
-	extra_params => ['-a']);
-ok($cmdret == 0, "CREATE pgaudit EXTENSION");
-PGTDE::append_to_debug_file($stdout);
-($cmdret, $stdout, $stderr) = $node->psql(
-	'postgres',
-	'CREATE EXTENSION IF NOT EXISTS set_user;',
-	extra_params => ['-a']);
-ok($cmdret == 0, "CREATE set_user EXTENSION");
-PGTDE::append_to_debug_file($stdout);
-($cmdret, $stdout, $stderr) = $node->psql(
-	'postgres',
-	'CREATE EXTENSION IF NOT EXISTS pg_repack;',
-	extra_params => ['-a']);
-ok($cmdret == 0, "CREATE pg_repack EXTENSION");
-PGTDE::append_to_debug_file($stdout);
-($cmdret, $stdout, $stderr) = $node->psql(
-	'postgres',
-	"SET pgaudit.log = 'none'; CREATE EXTENSION IF NOT EXISTS postgis; SET pgaudit.log = 'all';",
-	extra_params => ['-a']);
-ok($cmdret == 0, "CREATE postgis EXTENSION");
-PGTDE::append_to_debug_file($stdout);
-($cmdret, $stdout, $stderr) = $node->psql(
-	'postgres',
-	'CREATE EXTENSION IF NOT EXISTS postgis_raster;',
-	extra_params => ['-a']);
-ok($cmdret == 0, "CREATE postgis_raster EXTENSION");
-PGTDE::append_to_debug_file($stdout);
-($cmdret, $stdout, $stderr) = $node->psql(
-	'postgres',
-	'CREATE EXTENSION IF NOT EXISTS postgis_sfcgal;',
-	extra_params => ['-a']);
-ok($cmdret == 0, "CREATE postgis_sfcgal EXTENSION");
-PGTDE::append_to_debug_file($stdout);
-($cmdret, $stdout, $stderr) = $node->psql(
-	'postgres',
-	'CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;',
-	extra_params => ['-a']);
-ok($cmdret == 0, "CREATE fuzzystrmatch EXTENSION");
-PGTDE::append_to_debug_file($stdout);
-($cmdret, $stdout, $stderr) = $node->psql(
-	'postgres',
-	'CREATE EXTENSION IF NOT EXISTS address_standardizer;',
-	extra_params => ['-a']);
-ok($cmdret == 0, "CREATE address_standardizer EXTENSION");
-PGTDE::append_to_debug_file($stdout);
-($cmdret, $stdout, $stderr) = $node->psql(
-	'postgres',
-	'CREATE EXTENSION IF NOT EXISTS address_standardizer_data_us;',
-	extra_params => ['-a']);
-ok($cmdret == 0, "CREATE address_standardizer_data_us EXTENSION");
-PGTDE::append_to_debug_file($stdout);
-($cmdret, $stdout, $stderr) = $node->psql(
-	'postgres',
-	'CREATE EXTENSION IF NOT EXISTS postgis_tiger_geocoder;',
-	extra_params => ['-a']);
-ok($cmdret == 0, "CREATE postgis_tiger_geocoder EXTENSION");
-PGTDE::append_to_debug_file($stdout);
+($cmdret, $stdout, $stderr) = $node->psql('postgres',
+	'CREATE EXTENSION IF NOT EXISTS pgaudit;');
+is($cmdret, 0, 'CREATE pgaudit EXTENSION');
 
-# SELECT pg_tde_add_database_key_provider_file('reg_file-vault', '/tmp/pg_wal_db_keyring_file');
-# SELECT pg_tde_create_key_using_database_key_provider('test-db-key', 'reg_file-vault');
-# SELECT pg_tde_set_key_using_database_key_provider('test-db-key', 'reg_file-vault');
+($cmdret, $stdout, $stderr) = $node->psql('postgres',
+	'CREATE EXTENSION IF NOT EXISTS set_user;');
+is($cmdret, 0, 'CREATE set_user EXTENSION');
 
-unlink('multiple_extensions_keyring_file');
+($cmdret, $stdout, $stderr) = $node->psql('postgres',
+	'CREATE EXTENSION IF NOT EXISTS pg_repack;');
+is($cmdret, 0, 'CREATE pg_repack EXTENSION');
 
-$node->psql(
-	'postgres',
-	"SELECT pg_tde_add_database_key_provider_file('reg_file-vault', '/tmp/multiple_extensions_keyring_file');",
-	extra_params => ['-a']);
-$node->psql(
-	'postgres',
-	"SELECT pg_tde_create_key_using_database_key_provider('test-db-key', 'reg_file-vault');",
-	extra_params => ['-a']);
-$node->psql(
-	'postgres',
-	"SELECT pg_tde_set_key_using_database_key_provider('test-db-key', 'reg_file-vault');",
-	extra_params => ['-a']);
+($cmdret, $stdout, $stderr) = $node->psql('postgres',
+	"SET pgaudit.log = 'none'; CREATE EXTENSION IF NOT EXISTS postgis; SET pgaudit.log = 'all';");
+is($cmdret, 0, 'CREATE postgis EXTENSION');
 
-$stdout = $node->safe_psql(
-	'postgres',
-	'CREATE TABLE test_enc1 (id SERIAL, k INTEGER, PRIMARY KEY (id)) USING tde_heap;',
-	extra_params => ['-a']);
-PGTDE::append_to_result_file($stdout);
+($cmdret, $stdout, $stderr) = $node->psql('postgres',
+	'CREATE EXTENSION IF NOT EXISTS postgis_raster;');
+is($cmdret, 0, 'CREATE postgis_raster EXTENSION');
 
-$stdout = $node->safe_psql(
-	'postgres',
-	'INSERT INTO test_enc1 (k) VALUES (5), (6);',
-	extra_params => ['-a']);
-PGTDE::append_to_result_file($stdout);
+($cmdret, $stdout, $stderr) = $node->psql('postgres',
+	'CREATE EXTENSION IF NOT EXISTS postgis_sfcgal;');
+is($cmdret, 0, 'CREATE postgis_sfcgal EXTENSION');
 
-$stdout = $node->safe_psql(
-	'postgres',
-	'SELECT * FROM test_enc1 ORDER BY id;',
-	extra_params => ['-a']);
-PGTDE::append_to_result_file($stdout);
+($cmdret, $stdout, $stderr) = $node->psql('postgres',
+	'CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;');
+is($cmdret, 0, 'CREATE fuzzystrmatch EXTENSION');
 
-PGTDE::append_to_result_file("-- server restart");
+($cmdret, $stdout, $stderr) = $node->psql('postgres',
+	'CREATE EXTENSION IF NOT EXISTS address_standardizer;');
+is($cmdret, 0, 'CREATE address_standardizer EXTENSION');
+
+($cmdret, $stdout, $stderr) = $node->psql('postgres',
+	'CREATE EXTENSION IF NOT EXISTS address_standardizer_data_us;');
+is($cmdret, 0, 'CREATE address_standardizer_data_us EXTENSION');
+
+($cmdret, $stdout, $stderr) = $node->psql('postgres',
+	'CREATE EXTENSION IF NOT EXISTS postgis_tiger_geocoder;');
+is($cmdret, 0, 'CREATE postgis_tiger_geocoder EXTENSION');
+
+# Set up pg_tde key provider and principal key
+$node->safe_psql('postgres', qq(
+	SELECT pg_tde_add_database_key_provider_file('reg_file-vault', '$keydir/multiple_ext.keys');
+	SELECT pg_tde_create_key_using_database_key_provider('test-db-key', 'reg_file-vault');
+	SELECT pg_tde_set_key_using_database_key_provider('test-db-key', 'reg_file-vault');
+));
+
+# Create encrypted table and insert data
+$node->safe_psql('postgres',
+	'CREATE TABLE test_enc1 (id SERIAL, k INTEGER, PRIMARY KEY (id)) USING tde_heap;');
+
+$node->safe_psql('postgres',
+	'INSERT INTO test_enc1 (k) VALUES (5), (6);');
+
+$stdout = $node->safe_psql('postgres',
+	'SELECT * FROM test_enc1 ORDER BY id;');
+is($stdout, "1|5\n2|6", 'encrypted table data readable before restart');
+
+# Restart and verify data survives
 $node->restart;
 
-$stdout = $node->safe_psql(
-	'postgres',
-	'SELECT * FROM test_enc1 ORDER BY id;',
-	extra_params => ['-a']);
-PGTDE::append_to_result_file($stdout);
+$stdout = $node->safe_psql('postgres',
+	'SELECT * FROM test_enc1 ORDER BY id;');
+is($stdout, "1|5\n2|6", 'encrypted table data readable after restart');
 
-$stdout = $node->safe_psql(
-	'postgres',
-	'DROP TABLE test_enc1;',
-	extra_params => ['-a']);
-PGTDE::append_to_result_file($stdout);
+$node->safe_psql('postgres', 'DROP TABLE test_enc1;');
 
-# Print PGSM settings
-($cmdret, $stdout, $stderr) = $node->psql(
-	'postgres',
-	"SELECT name, setting, unit, context, vartype, source, min_val, max_val, enumvals, boot_val, reset_val, pending_restart FROM pg_settings WHERE name = 'pg_stat_monitor.pgsm_query_shared_buffer';",
-	extra_params => [ '-a', '-Pformat=aligned', '-Ptuples_only=off' ]);
-ok($cmdret == 0, "Print PGTDE EXTENSION Settings");
-PGTDE::append_to_debug_file($stdout);
-
-# Create example database and run pgbench init
-($cmdret, $stdout, $stderr) =
-  $node->psql('postgres', 'CREATE database example;', extra_params => ['-a']);
-print "cmdret $cmdret\n";
-ok($cmdret == 0, "CREATE Database example");
-PGTDE::append_to_debug_file($stdout);
+# Create example database and run pgbench
+($cmdret, $stdout, $stderr) = $node->psql('postgres',
+	'CREATE DATABASE example;');
+is($cmdret, 0, 'CREATE DATABASE example');
 
 my $port = $node->port;
-print "port $port \n";
 
-my $out = system("pgbench -i -s 20 -p $port example");
-print " out: $out \n";
-ok($cmdret == 0, "Perform pgbench init");
+my $pgbench_init = system("pgbench -i -s 20 -p $port example");
+is($pgbench_init, 0, 'pgbench init on example database');
 
-$out = system("pgbench -c 10 -j 2 -t 5000 -p $port example");
-print " out: $out \n";
-ok($cmdret == 0, "Run pgbench");
+my $pgbench_run = system("pgbench -c 10 -j 2 -t 5000 -p $port example");
+is($pgbench_run, 0, 'pgbench workload on example database');
 
-($cmdret, $stdout, $stderr) = $node->psql(
-	'postgres',
-	'SELECT datname, substr(query, 0, 150) AS query, SUM(calls) AS calls FROM pg_stat_monitor GROUP BY datname, query ORDER BY datname, query, calls;',
-	extra_params => [ '-a', '-Pformat=aligned', '-Ptuples_only=off' ]);
-ok($cmdret == 0, "SELECT XXX FROM pg_stat_monitor");
-PGTDE::append_to_debug_file($stdout);
+# Verify pg_stat_monitor captured queries
+($cmdret, $stdout, $stderr) = $node->psql('postgres',
+	'SELECT COUNT(*) FROM pg_stat_monitor;');
+is($cmdret, 0, 'pg_stat_monitor has query stats');
 
-$stdout = $node->safe_psql(
-	'postgres',
-	'DROP EXTENSION pg_tde;',
-	extra_params => ['-a']);
-ok($cmdret == 0, "DROP PGTDE EXTENSION");
-PGTDE::append_to_result_file($stdout);
-
-$stdout = $node->safe_psql(
-	'postgres',
-	'DROP EXTENSION pg_stat_monitor;',
-	extra_params => ['-a']);
-ok($cmdret == 0, "DROP PGTDE EXTENSION");
-PGTDE::append_to_debug_file($stdout);
+# Cleanup
+$node->safe_psql('postgres', 'DROP EXTENSION pg_tde;');
+$node->safe_psql('postgres', 'DROP EXTENSION pg_stat_monitor;');
 
 $node->stop;
-
-# Compare the expected and out file
-my $compare = PGTDE->compare_results();
-
-is($compare, 0,
-	"Compare Files: $PGTDE::expected_filename_with_path and $PGTDE::out_filename_with_path files."
-);
 
 done_testing();
