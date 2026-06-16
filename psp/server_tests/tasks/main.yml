@@ -354,7 +354,7 @@
 
   - name: Patch CosmianKms.pm - gen_certs uses Docker-generated certs
     ansible.builtin.blockinfile:
-      path: /tmp/pg_tde/src/keyring/CosmianKms.pm
+      path: /tmp/pg_tde/t/CosmianKms.pm
       insertafter: '^\tmake_path\(\$dir\);'
       marker: "# {mark} ANSIBLE MANAGED - docker gen_certs fallback"
       block: |
@@ -374,7 +374,7 @@
 
   - name: Patch CosmianKms.pm - start_with_free_port returns Docker container ports
     ansible.builtin.blockinfile:
-      path: /tmp/pg_tde/src/keyring/CosmianKms.pm
+      path: /tmp/pg_tde/t/CosmianKms.pm
       insertafter: '^\tmy \(\$bin, \$dir\) = @_;'
       marker: "# {mark} ANSIBLE MANAGED - docker start_with_free_port"
       block: |
@@ -389,7 +389,7 @@
 
   - name: Patch CosmianKms.pm - start_on_ports restarts Docker container
     ansible.builtin.blockinfile:
-      path: /tmp/pg_tde/src/keyring/CosmianKms.pm
+      path: /tmp/pg_tde/t/CosmianKms.pm
       insertafter: '^\tmy \(\$bin, \$dir, \$kmip_port, \$http_port\) = @_;'
       marker: "# {mark} ANSIBLE MANAGED - docker start_on_ports"
       block: |
