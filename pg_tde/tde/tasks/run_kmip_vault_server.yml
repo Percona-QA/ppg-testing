@@ -58,18 +58,6 @@
 - ansible.builtin.debug:
     var: docker_version_result.stdout
 
-- name: Detect architecture for Docker build
-  ansible.builtin.set_fact:
-    cosmian_arch: >-
-      {% if ansible_architecture in ['x86_64', 'amd64'] %}amd64
-      {% elif ansible_architecture in ['aarch64', 'arm64'] %}arm64
-      {% else %}unsupported{% endif %}
-
-- name: Fail if architecture is unsupported
-  ansible.builtin.fail:
-    msg: "Unsupported architecture: {{ ansible_architecture }}"
-  when: cosmian_arch | trim == "unsupported"
-
 - name: Create cosmian server build directory
   ansible.builtin.file:
     path: /tmp/cosmian_server_build
@@ -103,8 +91,7 @@
   become: true
   ansible.builtin.shell: |
     set -o pipefail
-    docker build --progress=plain --build-arg ARCH={{ cosmian_arch | trim }} \
-      -t cosmian-server . 2>&1 | tee /tmp/cosmian-server-build.log
+    docker build --progress=plain -t cosmian-server . 2>&1 | tee /tmp/cosmian-server-build.log
   args:
     chdir: /tmp/cosmian_server_build
     executable: /bin/bash

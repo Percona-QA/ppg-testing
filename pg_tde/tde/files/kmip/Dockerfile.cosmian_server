@@ -1,31 +1,19 @@
 FROM ubuntu:jammy
 
-ARG ARCH=amd64
-
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     openssl wget curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Install cosmian_kms from official packages (Ubuntu Jammy has glibc 2.35,
-# which satisfies the binary's requirements regardless of the host OS).
+# Mirror exactly what debian_depends.yml does on working platforms.
 RUN COSMIAN_VERSION=5.21.0 && \
-    wget -q "https://package.cosmian.com/kms/${COSMIAN_VERSION}/deb/${ARCH}/non-fips/static/cosmian-kms-server-non-fips-static-openssl_${COSMIAN_VERSION}_${ARCH}.deb" \
-      -O /tmp/cosmian.deb && \
-    dpkg -i /tmp/cosmian.deb && \
-    echo "=== dpkg installed files ===" && \
-    dpkg -L cosmian-kms-server-non-fips-static-openssl 2>/dev/null || true && \
-    rm /tmp/cosmian.deb
-
-# Locate cosmian_kms (exact install path varies by package version) and
-# symlink it into PATH.  Separate RUN so || true cannot mask a missing binary.
-RUN KMS_BIN=$(find / -path /proc -prune -o -path /sys -prune -o \
-        -name cosmian_kms -type f -print 2>/dev/null | head -1) && \
-    echo "cosmian_kms binary: ${KMS_BIN:-NOT FOUND}" && \
-    test -n "$KMS_BIN" && \
-    chmod 0755 "$KMS_BIN" && \
-    ln -sf "$KMS_BIN" /usr/local/bin/cosmian_kms
-
+    ARCH=$(dpkg --print-architecture) && \
+    wget "https://package.cosmian.com/kms/${COSMIAN_VERSION}/deb/${ARCH}/non-fips/static/cosmian-kms-server-non-fips-static-openssl_${COSMIAN_VERSION}_${ARCH}.deb" \
+      -O /tmp/cosmian_kms.deb && \
+    dpkg -i /tmp/cosmian_kms.deb && \
+    chmod 0755 /usr/sbin/cosmian_kms && \
+    rm -f /tmp/cosmian_kms.deb
+# Separate RUN so || true cannot mask the critical install steps above.
 RUN chmod 0755 /usr/local/cosmian/lib/ossl-modules/legacy.so 2>/dev/null || true
 
 COPY gen_certs.sh /gen_certs.sh
