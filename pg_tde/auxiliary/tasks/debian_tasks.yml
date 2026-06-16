@@ -58,6 +58,8 @@
         - zstd
         - unzip
         - sysbench
+        - meson
+        - ninja-build
         - lcov
         - perltidy
         - lsof

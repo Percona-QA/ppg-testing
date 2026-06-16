@@ -421,6 +421,7 @@
       cp /tmp/pgtest/initdb.log           "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/psp-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-install.log             "$ARTIFACT_DIR/" 2>/dev/null || true
 
       # -------------------------------------------------------
       # logs/: per-test subdirectories created by test_runner

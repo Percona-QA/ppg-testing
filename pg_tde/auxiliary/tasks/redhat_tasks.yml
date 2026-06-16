@@ -180,6 +180,8 @@
       - unzip
       - lsof
       - sysbench
+      - meson
+      - ninja-build
 
   - name: Install liburing packages
     yum:
