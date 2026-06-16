@@ -2,7 +2,7 @@ FROM ubuntu:jammy
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    openssl wget curl && \
+    ca-certificates openssl wget curl && \
     rm -rf /var/lib/apt/lists/*
 
 # Mirror exactly what debian_depends.yml does on working platforms.
