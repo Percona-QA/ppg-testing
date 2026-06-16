@@ -13,12 +13,20 @@ RUN COSMIAN_VERSION=5.21.0 && \
     wget -q "https://package.cosmian.com/kms/${COSMIAN_VERSION}/deb/${ARCH}/non-fips/static/cosmian-kms-server-non-fips-static-openssl_${COSMIAN_VERSION}_${ARCH}.deb" \
       -O /tmp/cosmian.deb && \
     dpkg -i /tmp/cosmian.deb && \
-    KMS_BIN=$(find /usr /opt -name cosmian_kms -type f 2>/dev/null | head -1) && \
-    echo "cosmian_kms installed at: $KMS_BIN" && \
-    test -n "$KMS_BIN" && chmod 0755 "$KMS_BIN" && \
-    ln -sf "$KMS_BIN" /usr/local/bin/cosmian_kms && \
-    chmod 0755 /usr/local/cosmian/lib/ossl-modules/legacy.so 2>/dev/null || true && \
+    echo "=== dpkg installed files ===" && \
+    dpkg -L cosmian-kms-server-non-fips-static-openssl 2>/dev/null || true && \
     rm /tmp/cosmian.deb
+
+# Locate cosmian_kms (exact install path varies by package version) and
+# symlink it into PATH.  Separate RUN so || true cannot mask a missing binary.
+RUN KMS_BIN=$(find / -path /proc -prune -o -path /sys -prune -o \
+        -name cosmian_kms -type f -print 2>/dev/null | head -1) && \
+    echo "cosmian_kms binary: ${KMS_BIN:-NOT FOUND}" && \
+    test -n "$KMS_BIN" && \
+    chmod 0755 "$KMS_BIN" && \
+    ln -sf "$KMS_BIN" /usr/local/bin/cosmian_kms
+
+RUN chmod 0755 /usr/local/cosmian/lib/ossl-modules/legacy.so 2>/dev/null || true
 
 COPY gen_certs.sh /gen_certs.sh
 COPY cosmian_entrypoint.sh /cosmian_entrypoint.sh

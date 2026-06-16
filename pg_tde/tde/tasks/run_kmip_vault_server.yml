@@ -103,7 +103,7 @@
   become: true
   ansible.builtin.shell: |
     set -o pipefail
-    docker build --build-arg ARCH={{ cosmian_arch | trim }} \
+    docker build --progress=plain --build-arg ARCH={{ cosmian_arch | trim }} \
       -t cosmian-server . 2>&1 | tee /tmp/cosmian-server-build.log
   args:
     chdir: /tmp/cosmian_server_build
