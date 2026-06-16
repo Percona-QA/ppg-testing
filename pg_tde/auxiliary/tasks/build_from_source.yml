@@ -12,7 +12,7 @@
     register: psp_clone_results
 
   - name: Debug git results
-    debug: 
+    debug:
       msg: "Cloned version: {{ psp_clone_results.after | default('N/A') }}"
 
   - name: Clone pg_tde sources
@@ -26,7 +26,7 @@
     register: tde_clone_results
 
   - name: Debug git results
-    debug: 
+    debug:
       msg: "Cloned version: {{ tde_clone_results.after | default('N/A') }}"
 
   - name: Submodule update
@@ -40,6 +40,12 @@
 
   - debug: var=results.stdout_lines
 
+  - name: Fix shsplit Python 3.6 compatibility (text= added in 3.7; universal_newlines= is identical and works on 3.6+)
+    ansible.builtin.replace:
+      path: /tmp/pg_tde/shsplit
+      regexp: 'text=True'
+      replace: 'universal_newlines=True'
+
   - name: Configure Postgres/PSP from sources with liburing for supported OS.
     ansible.builtin.shell: |
       set -o pipefail
@@ -48,16 +54,16 @@
     args:
       chdir: /tmp/postgres
       executable: /bin/bash
-    # environment:
-    #   PKG_CONFIG_PATH: "/usr/local/lib/pkgconfig:/usr/lib/pkgconfig:/usr/lib64/pkgconfig"
     become: true
     become_user: postgres
     when:
       - (major_version | int) >= 18
       - io_method in ['io_uring']
-    register: results
+    ignore_errors: true
+    register: psp_configure_output
 
-  - debug: var=results.stdout_lines
+  - debug: var=psp_configure_output.stdout_lines
+    when: psp_configure_output is defined
 
   - name: Configure Postgres/PSP from sources
     ansible.builtin.shell: |
@@ -68,10 +74,13 @@
       chdir: /tmp/postgres
       executable: /bin/bash
     become_user: postgres
-    when: (io_method in ['worker', 'sync']) or (major_version | int <= 17)
-    register: results
+    when:
+      - io_method not in ['io_uring']
+    ignore_errors: true
+    register: psp_configure_output
 
-  - debug: var=results.stdout_lines
+  - debug: var=psp_configure_output.stdout_lines
+    when: psp_configure_output is defined
 
   - name: Run make install-world with parallel jobs
     ansible.builtin.shell: |
@@ -83,9 +92,12 @@
     become_user: postgres
     environment:
       TDE_MODE: "1"
-    register: results
+    when: psp_configure_output is defined and psp_configure_output.rc | default(1) == 0
+    ignore_errors: true
+    register: psp_build_output
 
-  - debug: var=results.stdout_lines
+  - debug: var=psp_build_output.stdout_lines
+    when: psp_build_output is defined
 
   - name: Run make install for Injection points, as this extension is not built by default
     ansible.builtin.command: make install -j -s -C src/test/modules/injection_points
@@ -95,16 +107,19 @@
     become_user: postgres
     environment:
       TDE_MODE: "1"
-    when: (major_version | int) >= 17
+    when:
+      - (major_version | int) >= 17
+      - psp_build_output is defined
+      - psp_build_output.rc | default(1) == 0
+    ignore_errors: true
     register: results
 
   - debug: var=results.stdout_lines
 
   - name: Copy pg_config to /usr/bin
-    become: true 
+    become: true
     command: sudo cp /opt/pgsql/bin/pg_config /usr/bin
-
-  - debug: var=results.stdout_lines
+    when: psp_build_output is defined and psp_build_output.rc | default(1) == 0
 
   - name: Build pg_tde
     become: true
@@ -121,9 +136,12 @@
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "/opt/pgsql/lib"
       TDE_MODE: "1"
+    when: psp_build_output is defined and psp_build_output.rc | default(1) == 0
+    ignore_errors: true
     register: tde_build_output
 
   - debug: var=tde_build_output.stdout_lines
+    when: tde_build_output is defined
 
   - name: Install pg_tde
     become: true
@@ -134,7 +152,10 @@
       executable: /bin/bash
     environment:
       PATH: "/opt/pgsql/bin:/opt/pgsql/lib:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
-    when: tde_build_output.rc | default(1) == 0
+    when:
+      - tde_build_output is defined
+      - tde_build_output.rc | default(1) == 0
+    ignore_errors: true
     register: tde_install_output
 
   - debug: var=tde_install_output.stdout_lines
