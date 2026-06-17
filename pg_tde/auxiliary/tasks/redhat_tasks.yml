@@ -219,6 +219,7 @@
       name: br_netfilter
       state: present
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+    ignore_errors: true
 
   - name: Install cpanm File::Rename
     become: true

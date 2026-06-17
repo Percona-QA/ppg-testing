@@ -26,6 +26,7 @@
     name: br_netfilter
     state: present
   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+  ignore_errors: true
 
 - name: Add Docker CE repository RHEL 8,9
   become: true
