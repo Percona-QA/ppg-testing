@@ -40,12 +40,6 @@
 
   - debug: var=results.stdout_lines
 
-  - name: Fix shsplit Python 3.6 compatibility (text= added in 3.7; universal_newlines= is identical and works on 3.6+)
-    ansible.builtin.replace:
-      path: /tmp/pg_tde/shsplit
-      regexp: 'text=True'
-      replace: 'universal_newlines=True'
-
   - name: Configure Postgres/PSP from sources with liburing for supported OS.
     ansible.builtin.shell: |
       set -o pipefail
