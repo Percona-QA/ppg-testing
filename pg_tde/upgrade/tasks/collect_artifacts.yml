@@ -1,0 +1,43 @@
+---
+# Collect pg_upgrade, build, and service logs into a single tarball and fetch
+# it back to the Ansible controller for CI artifact archiving.
+
+  - name: Package upgrade test artifacts
+    shell: |
+      set -uo pipefail
+      ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
+      ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
+      rm -rf "$ARTIFACT_DIR"
+      mkdir -p "$ARTIFACT_DIR"
+
+      # pg_upgrade logs
+      cp /tmp/pg_upgrade.log           "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_upgrade_internal.log  "$ARTIFACT_DIR/" 2>/dev/null || true
+
+      # pg_tde build / install logs (FROM and TO)
+      cp /tmp/tde-from-build.log       "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-from-install.log     "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-from-rebuild.log     "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-from-reinstall.log   "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-to-build.log         "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-to-install.log       "$ARTIFACT_DIR/" 2>/dev/null || true
+
+      # PostgreSQL service logs (RHEL)
+      find /var/lib/pgsql -name "*.log" -type f 2>/dev/null \
+        -exec cp {} "$ARTIFACT_DIR/" \; || true
+
+      # PostgreSQL service logs (Debian/Ubuntu)
+      find /var/log/postgresql -name "*.log" -type f 2>/dev/null \
+        -exec cp {} "$ARTIFACT_DIR/" \; || true
+
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
+    args:
+      executable: /bin/bash
+    become: true
+    ignore_errors: true
+
+  - name: Fetch upgrade test artifacts to controller
+    fetch:
+      src: "/tmp/{{ artifact_filename }}"
+      dest: "{{ playbook_dir }}/../artifacts/"
+      fail_on_missing: false

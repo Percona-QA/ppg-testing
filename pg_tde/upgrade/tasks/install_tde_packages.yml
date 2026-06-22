@@ -1,0 +1,20 @@
+---
+# Install Percona pg_tde packages for a given PostgreSQL major version.
+# Caller must pass:
+#   pg_major - e.g. "16"
+
+  - name: Install pg_tde packages for PG {{ pg_major }} (RHEL)
+    yum:
+      name:
+        - "percona-pg_tde{{ pg_major }}"
+      state: latest
+      update_cache: true
+    when: ansible_os_family == "RedHat"
+
+  - name: Install pg_tde packages for PG {{ pg_major }} (Debian/Ubuntu)
+    apt:
+      name:
+        - "percona-pg-tde{{ pg_major }}"
+      state: latest
+      update_cache: true
+    when: ansible_os_family == "Debian"

@@ -1,0 +1,24 @@
+---
+# Install Percona PostgreSQL packages for a given major version on Debian/Ubuntu.
+# Caller must pass:
+#   pg_major - e.g. "16"
+
+  - name: Install Percona PostgreSQL {{ pg_major }} packages (Debian/Ubuntu)
+    apt:
+      name:
+        - "percona-postgresql-{{ pg_major }}"
+        - "percona-postgresql-client-{{ pg_major }}"
+        - "percona-postgresql-{{ pg_major }}-pgvector"
+        - percona-postgresql-common
+        - percona-postgresql-client-common
+      state: latest
+      update_cache: true
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  - name: Install PostgreSQL {{ pg_major }} server dev package (Debian/Ubuntu)
+    apt:
+      name: "percona-postgresql-server-dev-{{ pg_major }}"
+      state: latest
+      update_cache: true
+    ignore_errors: true

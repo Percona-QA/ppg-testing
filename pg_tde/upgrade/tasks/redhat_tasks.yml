@@ -1,0 +1,185 @@
+---
+# OS prerequisites for the upgrade role on RHEL/Rocky/OL.
+# Installs compilers, build tools, and sets up the postgres user.
+# KMS servers (OpenBao, Cosmian) are NOT installed — upgrade tests use a
+# file-based TDE key provider and have no dependency on external KMS services.
+
+  - name: Set up EPEL repository
+    yum:
+      name: epel-release
+      update_cache: true
+      state: present
+
+  - name: Clean dnf cache (RHEL 8)
+    command: dnf clean all -y
+    become: true
+    when: ansible_distribution_major_version == "8"
+
+  - name: Ensure the postgres group exists
+    ansible.builtin.group:
+      name: postgres
+      state: present
+      gid: 1040
+    become: true
+
+  - name: Ensure the postgres user exists with correct groups
+    ansible.builtin.user:
+      name: postgres
+      shell: /bin/bash
+      uid: 1040
+      group: postgres
+      groups: wheel
+      append: true
+    become: true
+
+  - name: Allow postgres user passwordless sudo
+    ansible.builtin.lineinfile:
+      path: /etc/sudoers.d/allow-postgres-sudo
+      line: "postgres ALL=(ALL) NOPASSWD: ALL"
+      validate: '/usr/sbin/visudo -cf %s'
+      create: true
+      owner: root
+      group: root
+      mode: '0440'
+    become: true
+
+  - name: Create /opt/pgsql directory
+    ansible.builtin.file:
+      path: /opt/pgsql
+      state: directory
+      owner: postgres
+      group: wheel
+      mode: '0775'
+
+  - name: Enable llvm-toolset dnf module (RHEL 8)
+    command: dnf module enable llvm-toolset -y
+    become: true
+    when: ansible_distribution_major_version == "8"
+
+  - name: Install Development Tools group
+    command: yum -y groupinstall "Development tools"
+    become: true
+
+  - name: Install build and utility packages
+    yum:
+      name:
+        - clang
+        - clang-devel
+        - llvm
+        - llvm-toolset
+        - llvm-devel
+        - gcc
+        - make
+        - autoconf
+        - git
+        - wget
+        - curl
+        - vim
+        - unzip
+        - jq
+        - lsof
+        - zlib-devel
+        - readline-devel
+        - openssl-devel
+        - libcurl-devel
+        - libxml2-devel
+        - libxslt-devel
+        - libicu-devel
+        - libzstd
+        - libzstd-devel
+        - lz4
+        - lz4-devel
+        - krb5-devel
+        - pam-devel
+        - openldap-devel
+        - libuuid-devel
+        - systemd-devel
+        - python3
+        - python3-dev
+        - json-c-devel
+        - meson
+        - ninja-build
+        - perl-CPAN
+        - perl-App-cpanminus
+        - cpanminus
+      state: latest
+      update_cache: true
+
+  - name: Install liburing (required for io_uring builds)
+    yum:
+      name:
+        - liburing
+        - liburing-devel
+      state: latest
+      update_cache: true
+
+  - name: Install RHEL 8/9 specific packages
+    yum:
+      name:
+        - lcov
+        - prename
+      state: latest
+      update_cache: true
+    when: ansible_distribution_major_version in ["8", "9"]
+
+  - name: Install kernel-modules-extra (RHEL 10)
+    dnf:
+      name: kernel-modules-extra
+      state: present
+    become: true
+    when: ansible_distribution_major_version == "10"
+
+  - name: Load br_netfilter module (RHEL 10)
+    community.general.modprobe:
+      name: br_netfilter
+      state: present
+    become: true
+    when: ansible_distribution_major_version == "10"
+    ignore_errors: true
+
+  - name: Install cpanm File::Rename (RHEL 10)
+    command: cpanm File::Rename
+    become: true
+    when: ansible_distribution_major_version == "10"
+
+  - name: Install perl Text::Trim
+    command: cpanm Text::Trim
+    become: true
+    ignore_errors: true
+
+  - name: Install Perl modules for RHEL 9
+    yum:
+      name:
+        - perl-FindBin
+        - perl-Opcode
+      state: latest
+      update_cache: true
+    when: ansible_distribution_major_version == "9"
+
+  - name: Set stack ulimit for postgres user
+    community.general.pam_limits:
+      domain: postgres
+      limit_type: "-"
+      limit_item: stack
+      value: 102400
+    become: true
+
+  - name: Allow postgres user unlimited core dumps
+    community.general.pam_limits:
+      domain: postgres
+      limit_item: core
+      limit_type: "{{ item }}"
+      value: unlimited
+    loop:
+      - soft
+      - hard
+    become: true
+
+  - name: Set memlock limit for postgres (RHEL 8 ARM)
+    community.general.pam_limits:
+      domain: postgres
+      limit_type: '-'
+      limit_item: memlock
+      value: 128
+      comment: 128 KB memory lock for postgres
+    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'

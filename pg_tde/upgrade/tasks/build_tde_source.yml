@@ -1,0 +1,86 @@
+---
+# Build and install pg_tde from source against a specific PostgreSQL installation.
+# Caller must pass:
+#   tde_branch_to_build  - git branch/tag to check out
+#   tde_src_dest         - where to clone pg_tde (e.g. /tmp/pg_tde_from)
+#   tde_build_dest       - meson build directory (e.g. /tmp/pg_tde_from-build)
+#   pg_config_path       - full path to pg_config binary
+#   pg_bin_dir           - PostgreSQL bin directory (for PATH)
+#   pg_lib_dir           - PostgreSQL lib directory (for LD_LIBRARY_PATH)
+#   tde_build_log        - path to capture build output
+#   tde_install_log      - path to capture install output
+# tde_repo is expected to be set as a play-level fact by main.yml.
+
+  - name: Clone pg_tde (branch {{ tde_branch_to_build }}) to {{ tde_src_dest }}
+    git:
+      repo: "{{ tde_repo }}"
+      version: "{{ tde_branch_to_build }}"
+      dest: "{{ tde_src_dest }}"
+      track_submodules: true
+      force: true
+    become: true
+    become_user: postgres
+    register: tde_clone_result
+
+  - name: Initialize pg_tde submodules
+    command: git submodule update --init --recursive
+    args:
+      chdir: "{{ tde_src_dest }}"
+      executable: /bin/bash
+    become_user: postgres
+
+  - name: Run meson setup for pg_tde against {{ pg_config_path }}
+    become: true
+    become_user: postgres
+    shell: |
+      {% if ansible_os_family == 'RedHat' and ansible_distribution_major_version == '9' %}
+      source /opt/rh/gcc-toolset-14/enable
+      {% endif %}
+      set -o pipefail
+      rm -rf "{{ tde_build_dest }}"
+      meson setup --buildtype=release \
+        -Dpg_config={{ pg_config_path }} \
+        -Dwerror=false \
+        "{{ tde_build_dest }}" 2>&1 | tee {{ tde_build_log }}
+    args:
+      chdir: "{{ tde_src_dest }}"
+      executable: /bin/bash
+    environment:
+      PATH: "{{ pg_bin_dir }}:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "{{ pg_lib_dir }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
+    register: tde_build_output
+    ignore_errors: true
+
+  - name: Show pg_tde meson setup output
+    debug:
+      var: tde_build_output.stdout_lines
+
+  - name: Run meson install for pg_tde
+    become: true
+    shell: |
+      set -o pipefail
+      meson install -C "{{ tde_build_dest }}" 2>&1 | tee {{ tde_install_log }}
+    args:
+      executable: /bin/bash
+    environment:
+      PATH: "{{ pg_bin_dir }}:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
+    when: tde_build_output.rc | default(1) == 0
+    register: tde_install_output
+    ignore_errors: true
+
+  - name: Show pg_tde install output
+    debug:
+      var: tde_install_output.stdout_lines
+    when: tde_install_output is defined
+
+  - name: Fail if pg_tde build failed
+    fail:
+      msg: "pg_tde build failed (branch={{ tde_branch_to_build }}, pg_config={{ pg_config_path }}). See {{ tde_build_log }}"
+    when: tde_build_output.rc | default(1) != 0
+
+  - name: Fail if pg_tde install failed
+    fail:
+      msg: "pg_tde install failed (branch={{ tde_branch_to_build }}). See {{ tde_install_log }}"
+    when:
+      - tde_install_output is defined
+      - tde_install_output.rc | default(1) != 0
