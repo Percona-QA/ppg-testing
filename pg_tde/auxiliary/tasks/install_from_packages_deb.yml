@@ -43,7 +43,6 @@
         - autoconf
         - libjson-c-dev
         - libhttp-server-simple-perl
-        - python3-pykmip
         - libjson-perl
         - libicu-dev
         - libzstd-dev

@@ -274,15 +274,6 @@
 
 - debug: var=results.stdout_lines
 
-# RHEL/OL/Rocky 8 ships Python 3.6 which does not support subprocess.run(text=True)
-# (text= was added in Python 3.7). universal_newlines=True is the identical
-# backport-safe spelling that works on 3.6+.
-- name: Fix shsplit Python 3.6 compatibility (text= added in 3.7; universal_newlines= is identical and works on 3.6+)
-  ansible.builtin.replace:
-    path: /tmp/pg_tde/shsplit
-    regexp: 'text=True'
-    replace: 'universal_newlines=True'
-
 # Copy our custom TAP test before meson setup so it is registered in the build.
 - name: Copy multiple_extensions.pl to pg_tde test directory
   ansible.builtin.copy:

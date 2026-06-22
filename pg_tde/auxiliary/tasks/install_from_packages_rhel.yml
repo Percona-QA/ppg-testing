@@ -95,7 +95,7 @@
   - name: Install kernel-modules-extra on RHEL 10
     become: true
     dnf:
-      name: "kernel-modules-extra-{{ ansible_kernel }}"
+      name: "kernel-modules-extra"
       state: present
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
@@ -105,6 +105,7 @@
       name: br_netfilter
       state: present
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+    ignore_errors: true
 
   - name: CLANG Version
     command: clang --version
