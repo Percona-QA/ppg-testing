@@ -13,6 +13,8 @@
       # pg_upgrade logs
       cp /tmp/pg_upgrade.log           "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/pg_upgrade_internal.log  "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_upgrade_server.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_upgrade_utility.log   "$ARTIFACT_DIR/" 2>/dev/null || true
 
       # pg_tde build / install logs (FROM and TO)
       cp /tmp/tde-from-build.log       "$ARTIFACT_DIR/" 2>/dev/null || true
@@ -22,13 +24,17 @@
       cp /tmp/tde-to-build.log         "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-to-install.log       "$ARTIFACT_DIR/" 2>/dev/null || true
 
-      # PostgreSQL service logs (RHEL)
+      # PostgreSQL service logs (RHEL — covers both FROM and TO data dirs)
       find /var/lib/pgsql -name "*.log" -type f 2>/dev/null \
         -exec cp {} "$ARTIFACT_DIR/" \; || true
 
-      # PostgreSQL service logs (Debian/Ubuntu)
+      # PostgreSQL service logs (Debian/Ubuntu — covers FROM and TO clusters)
       find /var/log/postgresql -name "*.log" -type f 2>/dev/null \
         -exec cp {} "$ARTIFACT_DIR/" \; || true
+
+      # systemd journal for PostgreSQL services (RHEL — catches failures not in log files)
+      journalctl -u 'postgresql-*' --no-pager 2>/dev/null \
+        > "$ARTIFACT_DIR/journalctl-postgresql.log" || true
 
       tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
@@ -40,4 +46,5 @@
     fetch:
       src: "/tmp/{{ artifact_filename }}"
       dest: "{{ playbook_dir }}/../artifacts/"
+      flat: true
       fail_on_missing: false
