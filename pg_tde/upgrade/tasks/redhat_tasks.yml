@@ -111,30 +111,6 @@
       state: latest
       update_cache: true
 
-  - name: Install RHEL 8/9 specific packages
-    yum:
-      name:
-        - lcov
-        - prename
-      state: latest
-      update_cache: true
-    when: ansible_distribution_major_version in ["8", "9"]
-
-  - name: Install kernel-modules-extra (RHEL 10)
-    dnf:
-      name: kernel-modules-extra
-      state: present
-    become: true
-    when: ansible_distribution_major_version == "10"
-
-  - name: Load br_netfilter module (RHEL 10)
-    community.general.modprobe:
-      name: br_netfilter
-      state: present
-    become: true
-    when: ansible_distribution_major_version == "10"
-    ignore_errors: true
-
   - name: Set stack ulimit for postgres user
     community.general.pam_limits:
       domain: postgres

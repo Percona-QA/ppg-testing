@@ -20,8 +20,6 @@
         - clang
         - llvm
         - llvm-dev
-        - bison
-        - flex
         - pkg-config
         - pkgconf
         - meson
@@ -45,18 +43,11 @@
         - libjson-c-dev
         - uuid-dev
         - liburing-dev
-        - libnuma-dev
-        - tcl-dev
         - libperl-dev
         - python3-dev
-        - gettext
-        - xsltproc
-        - docbook-xsl
         - perl
         - mawk
         - zstd
-        - lcov
-        - libjson-perl
       state: latest
       update_cache: true
 
@@ -104,12 +95,6 @@
             - llvm-14
             - llvm-14-dev
           state: present
-
-  - name: Install rename tool
-    shell: DEBIAN_FRONTEND=noninteractive apt-get install -y rename
-    args:
-      executable: /bin/bash
-    ignore_errors: true
 
   - name: Ensure postgres group exists
     ansible.builtin.group:
