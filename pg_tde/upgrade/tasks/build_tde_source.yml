@@ -27,6 +27,7 @@
     args:
       chdir: "{{ tde_src_dest }}"
       executable: /bin/bash
+    become: true
     become_user: postgres
 
   - name: Run meson setup for pg_tde against {{ pg_config_path }}
