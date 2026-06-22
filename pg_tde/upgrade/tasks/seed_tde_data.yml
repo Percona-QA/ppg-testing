@@ -14,11 +14,15 @@
       set -e
       psql -v ON_ERROR_STOP=1 -d postgres <<'EOSQL'
       CREATE EXTENSION IF NOT EXISTS pg_tde;
-      SELECT pg_tde_add_key_provider_file(
+      SELECT pg_tde_add_database_key_provider_file(
         'upgrade-file-provider',
         '/tmp/pg_tde_upgrade_keyring.per'
       );
-      SELECT pg_tde_set_principal_key(
+      SELECT pg_tde_create_key_using_database_key_provider(
+        'upgrade-principal-key',
+        'upgrade-file-provider'
+      );
+      SELECT pg_tde_set_key_using_database_key_provider(
         'upgrade-principal-key',
         'upgrade-file-provider'
       );
