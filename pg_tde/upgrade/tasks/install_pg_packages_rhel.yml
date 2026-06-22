@@ -18,8 +18,8 @@
         - "percona-postgresql{{ pg_major }}-contrib"
         - "percona-postgresql{{ pg_major }}-devel"
         - "percona-postgresql{{ pg_major }}-libs"
-        - "percona-postgresql{{ pg_major }}-server"
         - "percona-postgresql{{ pg_major }}-llvmjit"
+        - "percona-postgresql{{ pg_major }}-server"
       state: latest
       update_cache: true
     environment:
@@ -35,6 +35,7 @@
         - "percona-postgresql{{ pg_major }}-contrib"
         - "percona-postgresql{{ pg_major }}-devel"
         - "percona-postgresql{{ pg_major }}-libs"
+        - "percona-postgresql{{ pg_major }}-llvmjit"
         - "percona-postgresql{{ pg_major }}-server"
       state: latest
       update_cache: true

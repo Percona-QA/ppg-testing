@@ -281,6 +281,12 @@
           pg_socket_dir: "{{ to_pg_socket_dir }}"
           check_label:   "post-upgrade"
 
+    rescue:
+      - name: Record upgrade test failure
+        set_fact:
+          upgrade_test_failed: true
+          cacheable: true
+
     always:
       # ===========================================================
       # Collect artifacts — runs even when the play fails
@@ -288,4 +294,11 @@
       - name: Collect and package upgrade test artifacts
         include_tasks:
           file: collect_artifacts.yml
-    ignore_errors: true
+
+  # ===========================================================
+  # Fail the play after artifacts are collected
+  # ===========================================================
+  - name: Fail if upgrade test failed
+    fail:
+      msg: "Upgrade test failed — see artifacts for details"
+    when: upgrade_test_failed | default(false) | bool
