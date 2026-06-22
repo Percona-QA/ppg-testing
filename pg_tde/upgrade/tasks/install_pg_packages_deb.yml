@@ -9,8 +9,6 @@
         - "percona-postgresql-{{ pg_major }}"
         - "percona-postgresql-client-{{ pg_major }}"
         - "percona-postgresql-{{ pg_major }}-pgvector"
-        - percona-postgresql-common
-        - percona-postgresql-client-common
       state: latest
       update_cache: true
     environment:

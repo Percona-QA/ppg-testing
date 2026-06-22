@@ -56,9 +56,6 @@
         - mawk
         - zstd
         - lcov
-        - libtext-trim-perl
-        - libipc-run-perl
-        - libhttp-server-simple-perl
         - libjson-perl
       state: latest
       update_cache: true
@@ -110,18 +107,6 @@
 
   - name: Install rename tool
     shell: DEBIAN_FRONTEND=noninteractive apt-get install -y rename
-    args:
-      executable: /bin/bash
-    ignore_errors: true
-
-  - name: Install IPC::RUN perl module
-    shell: yes | /usr/bin/perl -MCPAN -e 'install IPC::RUN'
-    args:
-      executable: /bin/bash
-    ignore_errors: true
-
-  - name: Install Text::Trim perl module
-    shell: yes | /usr/bin/perl -MCPAN -e 'install Text::Trim'
     args:
       executable: /bin/bash
     ignore_errors: true

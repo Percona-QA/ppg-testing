@@ -90,6 +90,8 @@
     become: true
     when: ansible_os_family == "RedHat"
     ignore_errors: true
+    environment:
+      PGSETUP_INITDB_OPTIONS: "--no-data-checksums"
 
   - name: Stop auto-started TO cluster before pg_upgrade (RHEL)
     service:

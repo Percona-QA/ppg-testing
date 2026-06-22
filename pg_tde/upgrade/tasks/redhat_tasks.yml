@@ -99,9 +99,7 @@
         - json-c-devel
         - meson
         - ninja-build
-        - perl-CPAN
-        - perl-App-cpanminus
-        - cpanminus
+        - perl
       state: latest
       update_cache: true
 
@@ -136,25 +134,6 @@
     become: true
     when: ansible_distribution_major_version == "10"
     ignore_errors: true
-
-  - name: Install cpanm File::Rename (RHEL 10)
-    command: cpanm File::Rename
-    become: true
-    when: ansible_distribution_major_version == "10"
-
-  - name: Install perl Text::Trim
-    command: cpanm Text::Trim
-    become: true
-    ignore_errors: true
-
-  - name: Install Perl modules for RHEL 9
-    yum:
-      name:
-        - perl-FindBin
-        - perl-Opcode
-      state: latest
-      update_cache: true
-    when: ansible_distribution_major_version == "9"
 
   - name: Set stack ulimit for postgres user
     community.general.pam_limits:
