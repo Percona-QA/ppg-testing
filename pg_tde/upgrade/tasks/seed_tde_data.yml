@@ -12,7 +12,7 @@
     become_user: postgres
     shell: |
       set -e
-      psql -d postgres <<'EOSQL'
+      psql -v ON_ERROR_STOP=1 -d postgres <<'EOSQL'
       CREATE EXTENSION IF NOT EXISTS pg_tde;
       SELECT pg_tde_add_key_provider_file(
         'upgrade-file-provider',

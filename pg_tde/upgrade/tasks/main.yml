@@ -24,6 +24,41 @@
       to_major_version:   "{{ to_full_version   | string | split('.') | first }}"
       cacheable: true
 
+  # ===========================================================
+  # Ubuntu 26 (Resolute) version compatibility guard
+  # ===========================================================
+  - name: End play on Ubuntu 26 if FROM_VERSION is not supported
+    meta: end_host
+    vars:
+      ubuntu26_min_versions:
+        '14': '14.23'
+        '15': '15.18'
+        '16': '16.14'
+        '17': '17.10'
+        '18': '18.4'
+      min_ver: "{{ ubuntu26_min_versions[from_major_version] | default('0.0') }}"
+    when:
+      - ansible_distribution == "Ubuntu"
+      - ansible_distribution_major_version == "26"
+      - min_ver != '0.0'
+      - from_full_version is version(min_ver, '<', strict=True)
+
+  - name: End play on Ubuntu 26 if TO_VERSION is not supported
+    meta: end_host
+    vars:
+      ubuntu26_min_versions:
+        '14': '14.23'
+        '15': '15.18'
+        '16': '16.14'
+        '17': '17.10'
+        '18': '18.4'
+      min_ver: "{{ ubuntu26_min_versions[to_major_version] | default('0.0') }}"
+    when:
+      - ansible_distribution == "Ubuntu"
+      - ansible_distribution_major_version == "26"
+      - min_ver != '0.0'
+      - to_full_version is version(min_ver, '<', strict=True)
+
   - name: Set artifact filename
     set_fact:
       artifact_filename: "tde-upgrade-{{ from_version_str }}-to-{{ to_version_str }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ build_number }}.tar.gz"
