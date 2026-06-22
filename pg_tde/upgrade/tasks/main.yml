@@ -116,168 +116,176 @@
         - "TDE from packages: {{ install_from_packages }}"
 
   # ===========================================================
-  # OS prerequisites
+  # Main flow — wrapped in block/always so artifacts are always
+  # collected even when the play fails mid-way.
   # ===========================================================
-  - name: OS prerequisites (RHEL)
-    include_tasks:
-      file: redhat_tasks.yml
-    when: ansible_os_family == "RedHat"
+  - name: Upgrade test main flow
+    block:
 
-  - name: OS prerequisites (Debian)
-    include_tasks:
-      file: debian_tasks.yml
-    when: ansible_os_family == "Debian"
+      # ===========================================================
+      # OS prerequisites
+      # ===========================================================
+      - name: OS prerequisites (RHEL)
+        include_tasks:
+          file: redhat_tasks.yml
+        when: ansible_os_family == "RedHat"
 
-  # ===========================================================
-  # Install Percona release tool + enable FROM version repo
-  # ===========================================================
-  - name: Install percona-release (RHEL)
-    command: yum -y install https://repo.percona.com/yum/percona-release-latest.noarch.rpm
-    when: ansible_os_family == "RedHat"
+      - name: OS prerequisites (Debian)
+        include_tasks:
+          file: debian_tasks.yml
+        when: ansible_os_family == "Debian"
 
-  - name: Refresh yum cache (RHEL)
-    shell: yum clean all && yum makecache
-    when: ansible_os_family == "RedHat"
+      # ===========================================================
+      # Install Percona release tool + enable FROM version repo
+      # ===========================================================
+      - name: Install percona-release (RHEL)
+        command: yum -y install https://repo.percona.com/yum/percona-release-latest.noarch.rpm
+        when: ansible_os_family == "RedHat"
 
-  - name: Install percona-release (Debian)
-    apt:
-      deb: https://repo.percona.com/apt/percona-release_latest.generic_all.deb
-    when: ansible_os_family == "Debian"
+      - name: Refresh yum cache (RHEL)
+        shell: yum clean all && yum makecache
+        when: ansible_os_family == "RedHat"
 
-  - name: Enable Percona repo for FROM version
-    command: percona-release enable-only {{ from_version_str }} {{ repo }}
+      - name: Install percona-release (Debian)
+        apt:
+          deb: https://repo.percona.com/apt/percona-release_latest.generic_all.deb
+        when: ansible_os_family == "Debian"
 
-  # ===========================================================
-  # Install PostgreSQL FROM version packages
-  # ===========================================================
-  - name: Install PostgreSQL FROM version packages (RHEL)
-    include_tasks:
-      file: install_pg_packages_rhel.yml
-    vars:
-      pg_major: "{{ from_major_version }}"
-      pg_full_version: "{{ from_full_version }}"
-    when: ansible_os_family == "RedHat"
+      - name: Enable Percona repo for FROM version
+        command: percona-release enable-only {{ from_version_str }} {{ repo }}
 
-  - name: Install PostgreSQL FROM version packages (Debian)
-    include_tasks:
-      file: install_pg_packages_deb.yml
-    vars:
-      pg_major: "{{ from_major_version }}"
-    when: ansible_os_family == "Debian"
+      # ===========================================================
+      # Install PostgreSQL FROM version packages
+      # ===========================================================
+      - name: Install PostgreSQL FROM version packages (RHEL)
+        include_tasks:
+          file: install_pg_packages_rhel.yml
+        vars:
+          pg_major: "{{ from_major_version }}"
+          pg_full_version: "{{ from_full_version }}"
+        when: ansible_os_family == "RedHat"
 
-  # ===========================================================
-  # Install pg_tde for FROM version
-  # ===========================================================
-  - name: Install pg_tde FROM version packages
-    include_tasks:
-      file: install_tde_packages.yml
-    vars:
-      pg_major: "{{ from_major_version }}"
-    when: install_from_packages | bool
+      - name: Install PostgreSQL FROM version packages (Debian)
+        include_tasks:
+          file: install_pg_packages_deb.yml
+        vars:
+          pg_major: "{{ from_major_version }}"
+        when: ansible_os_family == "Debian"
 
-  - name: Build pg_tde from source for FROM version
-    include_tasks:
-      file: build_tde_source.yml
-    vars:
-      tde_branch_to_build: "{{ from_tde_branch }}"
-      tde_src_dest:        "/tmp/pg_tde_from"
-      tde_build_dest:      "/tmp/pg_tde_from-build"
-      pg_config_path:      "{{ from_pg_config_bin }}"
-      pg_bin_dir:          "{{ from_pg_bin_dir }}"
-      pg_lib_dir:          "{{ from_pg_lib_dir }}"
-      tde_build_log:       "/tmp/tde-from-build.log"
-      tde_install_log:     "/tmp/tde-from-install.log"
-    when: not (install_from_packages | bool)
+      # ===========================================================
+      # Install pg_tde for FROM version
+      # ===========================================================
+      - name: Install pg_tde FROM version packages
+        include_tasks:
+          file: install_tde_packages.yml
+        vars:
+          pg_major: "{{ from_major_version }}"
+        when: install_from_packages | bool
 
-  # ===========================================================
-  # Initialize and start PostgreSQL FROM version
-  # ===========================================================
-  - name: Initialize PostgreSQL FROM version data directory (RHEL)
-    command: /usr/pgsql-{{ from_major_version }}/bin/postgresql-{{ from_major_version }}-setup initdb
-    become: true
-    when: ansible_os_family == "RedHat"
+      - name: Build pg_tde from source for FROM version
+        include_tasks:
+          file: build_tde_source.yml
+        vars:
+          tde_branch_to_build: "{{ from_tde_branch }}"
+          tde_src_dest:        "/tmp/pg_tde_from"
+          tde_build_dest:      "/tmp/pg_tde_from-build"
+          pg_config_path:      "{{ from_pg_config_bin }}"
+          pg_bin_dir:          "{{ from_pg_bin_dir }}"
+          pg_lib_dir:          "{{ from_pg_lib_dir }}"
+          tde_build_log:       "/tmp/tde-from-build.log"
+          tde_install_log:     "/tmp/tde-from-install.log"
+        when: not (install_from_packages | bool)
 
-  - name: Start PostgreSQL FROM version
-    service:
-      name: "{{ from_pg_service }}"
-      state: started
-      enabled: true
-    become: true
+      # ===========================================================
+      # Initialize and start PostgreSQL FROM version
+      # ===========================================================
+      - name: Initialize PostgreSQL FROM version data directory (RHEL)
+        command: /usr/pgsql-{{ from_major_version }}/bin/postgresql-{{ from_major_version }}-setup initdb
+        become: true
+        when: ansible_os_family == "RedHat"
 
-  # ===========================================================
-  # Configure pg_tde: add to shared_preload_libraries + restart
-  # ===========================================================
-  - name: Add pg_tde to shared_preload_libraries (FROM version)
-    include_tasks:
-      file: configure_tde_conf.yml
-    vars:
-      pg_conf: "{{ from_pg_conf }}"
+      - name: Start PostgreSQL FROM version
+        service:
+          name: "{{ from_pg_service }}"
+          state: started
+          enabled: true
+        become: true
 
-  - name: Restart PostgreSQL FROM version to load pg_tde
-    service:
-      name: "{{ from_pg_service }}"
-      state: restarted
-    become: true
+      # ===========================================================
+      # Configure pg_tde: add to shared_preload_libraries + restart
+      # ===========================================================
+      - name: Add pg_tde to shared_preload_libraries (FROM version)
+        include_tasks:
+          file: configure_tde_conf.yml
+        vars:
+          pg_conf: "{{ from_pg_conf }}"
 
-  - name: Wait for PostgreSQL FROM version to be ready
-    become: true
-    become_user: postgres
-    shell: pg_isready -h {{ from_pg_socket_dir }} -p 5432
-    args:
-      executable: /bin/bash
-    environment:
-      PATH: "{{ from_pg_bin_dir }}:{{ ansible_env.PATH }}"
-    register: pg_ready_from
-    until: pg_ready_from.rc == 0
-    retries: 12
-    delay: 5
+      - name: Restart PostgreSQL FROM version to load pg_tde
+        service:
+          name: "{{ from_pg_service }}"
+          state: restarted
+        become: true
 
-  # ===========================================================
-  # Seed TDE test data (pre-upgrade)
-  # ===========================================================
-  - name: Seed TDE encrypted test data
-    include_tasks:
-      file: seed_tde_data.yml
-    vars:
-      pg_bin_dir:    "{{ from_pg_bin_dir }}"
-      pg_socket_dir: "{{ from_pg_socket_dir }}"
+      - name: Wait for PostgreSQL FROM version to be ready
+        become: true
+        become_user: postgres
+        shell: pg_isready -h {{ from_pg_socket_dir }} -p 5432
+        args:
+          executable: /bin/bash
+        environment:
+          PATH: "{{ from_pg_bin_dir }}:{{ ansible_env.PATH }}"
+        register: pg_ready_from
+        until: pg_ready_from.rc == 0
+        retries: 12
+        delay: 5
 
-  - name: Verify TDE data is readable (pre-upgrade)
-    include_tasks:
-      file: verify_tde_data.yml
-    vars:
-      pg_bin_dir:    "{{ from_pg_bin_dir }}"
-      pg_socket_dir: "{{ from_pg_socket_dir }}"
-      check_label:   "pre-upgrade"
+      # ===========================================================
+      # Seed TDE test data (pre-upgrade)
+      # ===========================================================
+      - name: Seed TDE encrypted test data
+        include_tasks:
+          file: seed_tde_data.yml
+        vars:
+          pg_bin_dir:    "{{ from_pg_bin_dir }}"
+          pg_socket_dir: "{{ from_pg_socket_dir }}"
 
-  # ===========================================================
-  # Perform the upgrade
-  # ===========================================================
-  - name: Perform minor version upgrade
-    include_tasks:
-      file: minor_upgrade.yml
-    when: upgrade_type == "minor"
+      - name: Verify TDE data is readable (pre-upgrade)
+        include_tasks:
+          file: verify_tde_data.yml
+        vars:
+          pg_bin_dir:    "{{ from_pg_bin_dir }}"
+          pg_socket_dir: "{{ from_pg_socket_dir }}"
+          check_label:   "pre-upgrade"
 
-  - name: Perform major version upgrade
-    include_tasks:
-      file: major_upgrade.yml
-    when: upgrade_type == "major"
+      # ===========================================================
+      # Perform the upgrade
+      # ===========================================================
+      - name: Perform minor version upgrade
+        include_tasks:
+          file: minor_upgrade.yml
+        when: upgrade_type == "minor"
 
-  # ===========================================================
-  # Verify TDE data post-upgrade
-  # ===========================================================
-  - name: Verify TDE data is readable (post-upgrade)
-    include_tasks:
-      file: verify_tde_data.yml
-    vars:
-      pg_bin_dir:    "{{ to_pg_bin_dir }}"
-      pg_socket_dir: "{{ to_pg_socket_dir }}"
-      check_label:   "post-upgrade"
+      - name: Perform major version upgrade
+        include_tasks:
+          file: major_upgrade.yml
+        when: upgrade_type == "major"
 
-  # ===========================================================
-  # Collect artifacts
-  # ===========================================================
-  - name: Collect and package upgrade test artifacts
-    include_tasks:
-      file: collect_artifacts.yml
+      # ===========================================================
+      # Verify TDE data post-upgrade
+      # ===========================================================
+      - name: Verify TDE data is readable (post-upgrade)
+        include_tasks:
+          file: verify_tde_data.yml
+        vars:
+          pg_bin_dir:    "{{ to_pg_bin_dir }}"
+          pg_socket_dir: "{{ to_pg_socket_dir }}"
+          check_label:   "post-upgrade"
+
+    always:
+      # ===========================================================
+      # Collect artifacts — runs even when the play fails
+      # ===========================================================
+      - name: Collect and package upgrade test artifacts
+        include_tasks:
+          file: collect_artifacts.yml
     ignore_errors: true
