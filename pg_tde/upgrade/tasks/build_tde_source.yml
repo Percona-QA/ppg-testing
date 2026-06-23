@@ -35,6 +35,37 @@
     become: true
     become_user: postgres
 
+  # The JIT bitcode step uses the exact LLVM_CONFIG/CLANG path baked into the
+  # target PostgreSQL's Makefile.global (e.g. /usr/lib64/llvm20/bin/... for PG 18,
+  # an older llvm for PG 16/17). Install the llvm toolchain that matches THIS PG,
+  # rather than pinning a single version — the role builds against several PG
+  # majors, each compiled with a different llvm.
+  - name: Detect llvm major version target PostgreSQL was built with (RHEL)
+    shell: |
+      set -o pipefail
+      grep -hoE '/usr/lib(64)?/llvm[0-9]+' "{{ pg_lib_dir }}/pgxs/src/Makefile.global" 2>/dev/null \
+        | grep -oE '[0-9]+' | head -1
+    args:
+      executable: /bin/bash
+    register: pg_llvm_major
+    changed_when: false
+    failed_when: false
+    when: ansible_os_family == "RedHat"
+
+  - name: Install matching llvm toolchain for JIT bitcode (RHEL)
+    yum:
+      name:
+        - "llvm{{ pg_llvm_major.stdout }}"
+        - "llvm{{ pg_llvm_major.stdout }}-devel"
+        - "clang{{ pg_llvm_major.stdout }}"
+      state: latest
+      update_cache: true
+    become: true
+    ignore_errors: true
+    when:
+      - ansible_os_family == "RedHat"
+      - pg_llvm_major.stdout | default('') | length > 0
+
   # Build-system selection by pg_tde version:
   #   - main branch, or version > 2.2.0  -> meson (newer trees are meson-only)
   #   - version <= 2.2.0 (incl. 2.2.0)   -> PGXS make (older trees ship Makefile)
@@ -102,6 +133,10 @@
     environment:
       PATH: "{{ pg_bin_dir }}:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "{{ pg_lib_dir }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
+      # The pg_tde frontend tools link -lpgfeutils/-lpgcommon/-lpgport, which on
+      # Debian live in pkglibdir (pg_lib_dir), not pg_config --libdir. LIBRARY_PATH
+      # adds that dir to the linker's search path at build time.
+      LIBRARY_PATH: "{{ pg_lib_dir }}:{{ ansible_env.LIBRARY_PATH | default('') }}"
     register: tde_pgxs_result
     ignore_errors: true
     when: not (tde_use_meson | bool)
