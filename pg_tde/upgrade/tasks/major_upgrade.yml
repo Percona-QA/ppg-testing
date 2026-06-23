@@ -127,7 +127,7 @@
   # ==========================================================================
 
   - name: Create TO cluster data directory (Debian)
-    command: pg_createcluster {{ to_major_version }} main
+    command: pg_createcluster {{ to_major_version }} main -- --no-data-checksums
     become: true
     when: ansible_os_family == "Debian"
     ignore_errors: true

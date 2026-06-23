@@ -11,12 +11,17 @@
 #   tde_install_log      - path to capture install output
 # tde_repo is expected to be set as a play-level fact by main.yml.
 
+  - name: Remove existing pg_tde source directory {{ tde_src_dest }}
+    file:
+      path: "{{ tde_src_dest }}"
+      state: absent
+    become: true
+
   - name: Clone pg_tde (branch {{ tde_branch_to_build }}) to {{ tde_src_dest }}
     git:
       repo: "{{ tde_repo }}"
       version: "{{ tde_branch_to_build }}"
       dest: "{{ tde_src_dest }}"
-      track_submodules: true
       force: true
     become: true
     become_user: postgres
