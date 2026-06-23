@@ -43,6 +43,7 @@
         - libjson-c-dev
         - uuid-dev
         - liburing-dev
+        - libnuma-dev
         - libperl-dev
         - python3-dev
         - perl

@@ -97,6 +97,8 @@
         - python3
         - python3-devel
         - json-c-devel
+        - numactl-libs
+        - numactl-devel
         - meson
         - ninja-build
         - perl
