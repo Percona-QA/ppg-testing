@@ -16,6 +16,14 @@
       cp /tmp/pg_upgrade_server.log    "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/pg_upgrade_utility.log   "$ARTIFACT_DIR/" 2>/dev/null || true
 
+      # pg_upgradecluster driver log (Debian/Ubuntu major upgrade)
+      cp /tmp/pg_upgradecluster.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+
+      # pg_upgradecluster relocates pg_upgrade's report/log dir here
+      find /var/log/postgresql -maxdepth 1 -type d -name "pg_upgradecluster-*" 2>/dev/null | while read d; do
+        cp -r "$d" "$ARTIFACT_DIR/$(basename "$d")" 2>/dev/null || true
+      done
+
       # pg_tde build / install logs (FROM and TO)
       cp /tmp/tde-from-build.log       "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-from-install.log     "$ARTIFACT_DIR/" 2>/dev/null || true
