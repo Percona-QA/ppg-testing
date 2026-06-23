@@ -271,6 +271,11 @@
           file: major_upgrade.yml
         when: upgrade_type == "major"
 
+      - name: Perform pg_tde-only upgrade (PostgreSQL version unchanged)
+        include_tasks:
+          file: tde_only_upgrade.yml
+        when: upgrade_type == "tde_only"
+
       # ===========================================================
       # Verify TDE data post-upgrade
       # ===========================================================

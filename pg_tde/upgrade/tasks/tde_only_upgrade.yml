@@ -1,0 +1,84 @@
+---
+# pg_tde-only upgrade: the PostgreSQL version is unchanged
+# (FROM_VERSION == TO_VERSION). Only pg_tde itself is upgraded — from
+# FROM_TDE_BRANCH to TO_TDE_BRANCH on the source path, or to the latest
+# available package on the packages path.
+#
+# No pg_upgrade / pg_tde_upgrade is needed: the data directory and PostgreSQL
+# binaries are untouched. We stop the server, rebuild/reinstall pg_tde, restart
+# to load the new shared library, and run ALTER EXTENSION pg_tde UPDATE.
+
+  - name: Stop PostgreSQL before pg_tde upgrade
+    service:
+      name: "{{ from_pg_service }}"
+      state: stopped
+    become: true
+
+  # --- packages path: update pg_tde package to latest ---
+  - name: Update pg_tde packages to latest (packages path)
+    include_tasks:
+      file: install_tde_packages.yml
+    vars:
+      pg_major: "{{ from_major_version }}"
+    when: install_from_packages | bool
+
+  # --- source path: rebuild pg_tde from TO_TDE_BRANCH against the same PG ---
+  - name: Rebuild pg_tde from TO_TDE_BRANCH (source path)
+    include_tasks:
+      file: build_tde_source.yml
+    vars:
+      tde_branch_to_build: "{{ to_tde_branch }}"
+      tde_src_dest:        "/tmp/pg_tde_to"
+      tde_build_dest:      "/tmp/pg_tde_to-build"
+      pg_config_path:      "{{ from_pg_config_bin }}"
+      pg_bin_dir:          "{{ from_pg_bin_dir }}"
+      pg_lib_dir:          "{{ from_pg_lib_dir }}"
+      tde_build_log:       "/tmp/tde-to-build.log"
+      tde_install_log:     "/tmp/tde-to-install.log"
+    when: not (install_from_packages | bool)
+
+  - name: Start PostgreSQL after pg_tde upgrade
+    service:
+      name: "{{ from_pg_service }}"
+      state: started
+    become: true
+
+  - name: Wait for PostgreSQL to be ready after pg_tde upgrade
+    become: true
+    become_user: postgres
+    shell: pg_isready -h {{ from_pg_socket_dir }} -p 5432
+    args:
+      executable: /bin/bash
+    environment:
+      PATH: "{{ from_pg_bin_dir }}:{{ ansible_env.PATH }}"
+    register: pg_ready_tde_only
+    until: pg_ready_tde_only.rc == 0
+    retries: 12
+    delay: 5
+
+  # PostgreSQL version is unchanged — align to_pg_ facts to from_pg_ so the
+  # post-upgrade verification targets the same cluster.
+  - name: Align to_pg_ path facts with from_pg_ (PG version unchanged)
+    set_fact:
+      to_pg_bin_dir:    "{{ from_pg_bin_dir }}"
+      to_pg_lib_dir:    "{{ from_pg_lib_dir }}"
+      to_pg_service:    "{{ from_pg_service }}"
+      to_pg_socket_dir: "{{ from_pg_socket_dir }}"
+      cacheable: true
+
+  - name: Update pg_tde extension after upgrade
+    become: true
+    become_user: postgres
+    shell: psql -d postgres -c "ALTER EXTENSION pg_tde UPDATE;"
+    args:
+      executable: /bin/bash
+    environment:
+      PGHOST: "{{ from_pg_socket_dir }}"
+      PGPORT: "5432"
+      PATH:   "{{ from_pg_bin_dir }}:{{ ansible_env.PATH }}"
+    ignore_errors: true
+    register: ext_update_tde_only
+
+  - name: Show ALTER EXTENSION result
+    debug:
+      var: ext_update_tde_only.stdout_lines
