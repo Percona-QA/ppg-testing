@@ -2,8 +2,9 @@
 # Collect pg_upgrade, build, and service logs into a single tarball and fetch
 # it back to the Ansible controller for CI artifact archiving.
 
-  - name: Package upgrade test artifacts
-    shell: |
+- name: Package upgrade test artifacts
+  shell:
+    cmd: |
       set -uo pipefail
       ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
       ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
@@ -57,18 +58,17 @@
         > "$ARTIFACT_DIR/journalctl-postgresql.log" || true
 
       tar -czf "/tmp/$ARTIFACT_FILE" -C /tmp "$ARTIFACT_BASENAME"
-    environment:
-      ARTIFACT_FILE: "{{ artifact_filename }}"
-      UNIT_RHEL: "postgresql-*"
-      UNIT_DEB: "postgresql@*"
-    args:
-      executable: /bin/bash
-    become: true
-    ignore_errors: true
+    executable: /bin/bash
+  environment:
+    ARTIFACT_FILE: "{{ artifact_filename }}"
+    UNIT_RHEL: "postgresql-*"
+    UNIT_DEB: "postgresql@*"
+  become: true
+  ignore_errors: true
 
-  - name: Fetch upgrade test artifacts to controller
-    fetch:
-      src: "/tmp/{{ artifact_filename }}"
-      dest: "{{ playbook_dir }}/../artifacts/"
-      flat: true
-      fail_on_missing: false
+- name: Fetch upgrade test artifacts to controller
+  fetch:
+    src: "/tmp/{{ artifact_filename }}"
+    dest: "{{ playbook_dir }}/../artifacts/"
+    flat: true
+    fail_on_missing: false
