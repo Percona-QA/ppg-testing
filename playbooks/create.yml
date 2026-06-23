@@ -135,6 +135,25 @@
       retries: 300
       with_items: "{{ server.results }}"
 
+    # AWS reports the public IP a few seconds after the instance reaches the
+    # 'running' state, so the create return intermittently lacks it. Re-query
+    # with a fresh DescribeInstances call and retry until the IP is populated.
+    - name: Wait until public IP is assigned to instance(s)
+      amazon.aws.ec2_instance_info:
+        region: "{{ item.invocation.module_args.region }}"
+        instance_ids:
+          - "{{ item.instances[0].instance_id }}"
+      register: ec2_info_results
+      until:
+        - ec2_info_results.instances is defined
+        - ec2_info_results.instances | length > 0
+        - ec2_info_results.instances[0].public_ip_address is defined
+        - ec2_info_results.instances[0].public_ip_address | length > 0
+      retries: 30
+      delay: 5
+      with_items: "{{ ec2_jobs.results }}"
+      when: server.changed | bool
+
     # Mandatory configuration for Molecule to function.
     - name: ec2_job info
       debug:
@@ -186,15 +205,15 @@
     - name: Populate instance config dict
       set_fact:
         instance_conf_dict: {
-          'instance': "{{ item.instances[0].tags.Name }}",
+          'instance': "{{ item.item.instances[0].tags.Name }}",
           'address': "{{ item.instances[0].public_ip_address }}",
-          'user': "{{ item.instances[0].tags.ssh_user }}",
+          'user': "{{ item.item.instances[0].tags.ssh_user }}",
           'port': "{{ ssh_port }}",
-          'identity_file': "{{ keypair_path }}-{{ item.invocation.module_args.region }}",
+          'identity_file': "{{ keypair_path }}-{{ item.item.invocation.module_args.region }}",
           'instance_id': "{{ item.instances[0].instance_id }}",
-          'region': "{{ item.invocation.module_args.region }}",
+          'region': "{{ item.item.invocation.module_args.region }}",
         }
-      with_items: "{{ ec2_jobs.results }}"
+      with_items: "{{ ec2_info_results.results }}"
       register: instance_config_dict
       when: server.changed | bool
 
