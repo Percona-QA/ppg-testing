@@ -35,7 +35,27 @@
     become: true
     become_user: postgres
 
-  - name: Run meson setup for pg_tde against {{ pg_config_path }}
+  # Build-system selection by pg_tde version:
+  #   - main branch, or version > 2.2.0  -> meson (newer trees are meson-only)
+  #   - version <= 2.2.0 (incl. 2.2.0)   -> PGXS make (older trees ship Makefile)
+  # The version is parsed from the branch/tag name (e.g. "2.1.2", "release-2.3").
+  # A non-version ref such as "main" has no parseable version and uses meson.
+  - name: Extract pg_tde version from branch/tag {{ tde_branch_to_build }}
+    set_fact:
+      tde_branch_version: "{{ tde_branch_to_build | regex_search('[0-9]+\\.[0-9]+(\\.[0-9]+)?') | default('', true) }}"
+
+  - name: Choose pg_tde build system (meson for main / version > 2.2.0, else PGXS make)
+    set_fact:
+      tde_use_meson: "{{ (tde_branch_version | length == 0) or (tde_branch_version is version('2.2.0', '>')) }}"
+
+  - name: Log selected pg_tde build system
+    debug:
+      msg: "pg_tde branch={{ tde_branch_to_build }} version='{{ tde_branch_version }}' -> {{ 'meson' if (tde_use_meson | bool) else 'PGXS make' }}"
+
+  # -------------------------------------------------------------------------
+  # meson build path (pg_tde 2.2.0+ / main)
+  # -------------------------------------------------------------------------
+  - name: Build and install pg_tde via meson against {{ pg_config_path }}
     become: true
     become_user: postgres
     shell: |
@@ -48,45 +68,62 @@
         -Dpg_config={{ pg_config_path }} \
         -Dwerror=false \
         "{{ tde_build_dest }}" 2>&1 | tee {{ tde_build_log }}
+      meson install -C "{{ tde_build_dest }}" 2>&1 | tee {{ tde_install_log }}
     args:
       chdir: "{{ tde_src_dest }}"
       executable: /bin/bash
     environment:
       PATH: "{{ pg_bin_dir }}:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
       LD_LIBRARY_PATH: "{{ pg_lib_dir }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
-    register: tde_build_output
+    register: tde_meson_result
     ignore_errors: true
+    when: tde_use_meson | bool
 
-  - name: Show pg_tde meson setup output
+  - name: Show pg_tde meson build output
     debug:
-      var: tde_build_output.stdout_lines
+      var: tde_meson_result.stdout_lines
+    when: tde_use_meson | bool
 
-  - name: Run meson install for pg_tde
+  # -------------------------------------------------------------------------
+  # PGXS build path (pg_tde 2.1.x and older — Makefile only)
+  # -------------------------------------------------------------------------
+  - name: Build and install pg_tde via PGXS against {{ pg_config_path }}
     become: true
     shell: |
+      {% if ansible_os_family == 'RedHat' and ansible_distribution_major_version == '9' %}
+      source /opt/rh/gcc-toolset-14/enable
+      {% endif %}
       set -o pipefail
-      meson install -C "{{ tde_build_dest }}" 2>&1 | tee {{ tde_install_log }}
+      make USE_PGXS=1 PG_CONFIG={{ pg_config_path }} -j"$(nproc)" 2>&1 | tee {{ tde_build_log }}
+      make USE_PGXS=1 PG_CONFIG={{ pg_config_path }} install 2>&1 | tee {{ tde_install_log }}
     args:
+      chdir: "{{ tde_src_dest }}"
       executable: /bin/bash
     environment:
       PATH: "{{ pg_bin_dir }}:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
-    when: tde_build_output.rc | default(1) == 0
-    register: tde_install_output
+      LD_LIBRARY_PATH: "{{ pg_lib_dir }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
+    register: tde_pgxs_result
     ignore_errors: true
+    when: not (tde_use_meson | bool)
 
-  - name: Show pg_tde install output
+  - name: Show pg_tde PGXS build output
     debug:
-      var: tde_install_output.stdout_lines
-    when: tde_install_output is defined
+      var: tde_pgxs_result.stdout_lines
+    when: not (tde_use_meson | bool)
 
-  - name: Fail if pg_tde build failed
+  # -------------------------------------------------------------------------
+  # Fail if whichever build path ran did not succeed
+  # -------------------------------------------------------------------------
+  - name: Fail if pg_tde meson build failed
     fail:
-      msg: "pg_tde build failed (branch={{ tde_branch_to_build }}, pg_config={{ pg_config_path }}). See {{ tde_build_log }}"
-    when: tde_build_output.rc | default(1) != 0
-
-  - name: Fail if pg_tde install failed
-    fail:
-      msg: "pg_tde install failed (branch={{ tde_branch_to_build }}). See {{ tde_install_log }}"
+      msg: "pg_tde meson build failed (branch={{ tde_branch_to_build }}, pg_config={{ pg_config_path }}). See {{ tde_build_log }} / {{ tde_install_log }}"
     when:
-      - tde_install_output is defined
-      - tde_install_output.rc | default(1) != 0
+      - tde_use_meson | bool
+      - tde_meson_result.rc | default(1) != 0
+
+  - name: Fail if pg_tde PGXS build failed
+    fail:
+      msg: "pg_tde PGXS build failed (branch={{ tde_branch_to_build }}, pg_config={{ pg_config_path }}). See {{ tde_build_log }} / {{ tde_install_log }}"
+    when:
+      - not (tde_use_meson | bool)
+      - tde_pgxs_result.rc | default(1) != 0

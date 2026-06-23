@@ -14,7 +14,8 @@
       tde_repo:              "{{ lookup('env', 'TDE_REPO') | default('https://github.com/percona/pg_tde.git') }}"
       from_tde_branch:       "{{ lookup('env', 'FROM_TDE_BRANCH') | default('main') }}"
       to_tde_branch:         "{{ lookup('env', 'TO_TDE_BRANCH')   | default('main') }}"
-      repo:                  "{{ lookup('env', 'REPO') | default('testing') }}"
+      from_repo:             "{{ lookup('env', 'FROM_REPO') | default('testing') }}"
+      to_repo:               "{{ lookup('env', 'TO_REPO')   | default('testing') }}"
       build_number:          "{{ lookup('env', 'BUILD_NUMBER') | default('0') }}"
       cacheable: true
 
@@ -152,7 +153,7 @@
         when: ansible_os_family == "Debian"
 
       - name: Enable Percona repo for FROM version
-        command: percona-release enable-only {{ from_version_str }} {{ repo }}
+        command: percona-release enable-only {{ from_version_str }} {{ from_repo }}
 
       # ===========================================================
       # Install PostgreSQL FROM version packages

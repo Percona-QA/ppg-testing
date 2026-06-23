@@ -19,7 +19,7 @@
 
   # Switch the Percona repo to the TO minor version so package updates pull the right build
   - name: Enable Percona repo for TO version
-    command: percona-release enable-only {{ to_version_str }} {{ repo }}
+    command: percona-release enable-only {{ to_version_str }} {{ to_repo }}
 
   - name: Update PostgreSQL {{ from_major_version }} packages to latest minor (RHEL)
     yum:

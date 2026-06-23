@@ -39,7 +39,7 @@
 
   # --- Enable repo for TO major version ---
   - name: Enable Percona repo for TO major version
-    command: percona-release enable-only {{ to_version_str }} {{ repo }}
+    command: percona-release enable-only {{ to_version_str }} {{ to_repo }}
 
   # --- Install TO PostgreSQL packages ---
   - name: Install PostgreSQL TO version packages (RHEL)
