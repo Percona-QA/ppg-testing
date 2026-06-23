@@ -8,7 +8,7 @@
       to_full_version:       "{{ lookup('env', 'TO_VERSION')   | regex_replace('^ppg-', '') }}"
       from_version_str:      "{{ lookup('env', 'FROM_VERSION') }}"
       to_version_str:        "{{ lookup('env', 'TO_VERSION')   }}"
-      upgrade_type:          "{{ lookup('env', 'UPGRADE_TYPE') | default('minor') | lower }}"
+      upgrade_type:          "{{ lookup('env', 'UPGRADE_TYPE') | default('server_minor') | lower }}"
       tde_upgrade:           "{{ lookup('env', 'TDE_UPGRADE')  | default('false') | bool }}"
       install_from_packages: "{{ lookup('env', 'INSTALL_FROM_PACKAGES') | default('true') | bool }}"
       tde_repo:              "{{ lookup('env', 'TDE_REPO') | default('https://github.com/percona/pg_tde.git') }}"
@@ -264,12 +264,12 @@
       - name: Perform minor version upgrade
         include_tasks:
           file: minor_upgrade.yml
-        when: upgrade_type == "minor"
+        when: upgrade_type == "server_minor"
 
       - name: Perform major version upgrade
         include_tasks:
           file: major_upgrade.yml
-        when: upgrade_type == "major"
+        when: upgrade_type == "server_major"
 
       - name: Perform pg_tde-only upgrade (PostgreSQL version unchanged)
         include_tasks:
