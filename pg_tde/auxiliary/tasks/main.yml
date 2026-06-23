@@ -424,63 +424,53 @@
     become: true
     when: regression is defined
 
-  - name: Collect and package upgrade test artifacts
-    ansible.builtin.shell: |
+  - name: Package tde auxiliary test artifacts
+    shell: |
       set -uo pipefail
-      ARTIFACT_BASENAME=$(echo "$ARTIFACT_FILE" | sed 's/\.tar\.gz//g')
+      ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
       ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
-      mkdir -p "$ARTIFACT_DIR"
+      mkdir -p "$ARTIFACT_DIR/logs"
+      mkdir -p "$ARTIFACT_DIR/failed_tests"
 
-      # pg_upgrade logs
-      cp /tmp/pg_upgrade.log           "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/pg_upgrade_internal.log  "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/pg_upgrade_server.log    "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/pg_upgrade_utility.log   "$ARTIFACT_DIR/" 2>/dev/null || true
+      # -------------------------------------------------------
+      # Top-level: test runner summary and build logs
+      # -------------------------------------------------------
+      cp /tmp/tde-test-runner-output.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pgtest/initdb.log           "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/psp-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-install.log             "$ARTIFACT_DIR/" 2>/dev/null || true
+      # KMS / Vault service logs
+      cp /tmp/cosmian_kms.log             "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pgtest/bao-server.log       "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/cosmian-server-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+      docker logs cosmian-server > "$ARTIFACT_DIR/cosmian-server-container.log" 2>&1 || true
 
-      # pg_upgradecluster driver log (Debian/Ubuntu major upgrade)
-      cp /tmp/pg_upgradecluster.log    "$ARTIFACT_DIR/" 2>/dev/null || true
-
-      # pg_upgradecluster relocates pg_upgrade's report/log dir here
-      find /var/log/postgresql -maxdepth 1 -type d -name "pg_upgradecluster-*" 2>/dev/null | while read -r d; do
-        cp -r "$d" "$ARTIFACT_DIR/$(basename "$d")" 2>/dev/null || true
-      done
-
-      # pg_tde build / install logs (FROM and TO)
-      cp /tmp/tde-from-build.log       "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/tde-from-install.log     "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/tde-from-rebuild.log     "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/tde-from-reinstall.log   "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/tde-to-build.log         "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/tde-to-install.log       "$ARTIFACT_DIR/" 2>/dev/null || true
-
-      # PostgreSQL service logs (RHEL — covers both FROM and TO data dirs)
+      # -------------------------------------------------------
+      # logs/: per-test subdirectories created by test_runner
+      # Each contains test stdout, server logs, and config files
+      # -------------------------------------------------------
+      find /tmp/pgtest/test_logs -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
+        -exec cp -r {} "$ARTIFACT_DIR/logs/" \; || true
+      # System PostgreSQL service log: RHEL (/var/lib/pgsql)
       find /var/lib/pgsql -name "*.log" -type f 2>/dev/null \
-        -exec cp {} "$ARTIFACT_DIR/" \; || true
-
-      # pg_upgrade diagnostic output directory (RHEL — loadable_libraries.txt etc.)
-      find /var/lib/pgsql -type d -name "pg_upgrade_output.d" 2>/dev/null | while read -r d; do
-        cp -r "$d" "$ARTIFACT_DIR/pg_upgrade_output.d/" 2>/dev/null || true
-      done
-
-      # PostgreSQL service logs (Debian/Ubuntu — covers FROM and TO clusters)
+        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+      # System PostgreSQL service log: Debian (/var/log/postgresql)
       find /var/log/postgresql -name "*.log" -type f 2>/dev/null \
-        -exec cp {} "$ARTIFACT_DIR/" \; || true
+        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+      # PostgreSQL server log when built from source (/opt/pgsql/data)
+      find /opt/pgsql/data -name "*.log" -type f 2>/dev/null \
+        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
 
-      # pg_upgrade diagnostic output directory (Debian/Ubuntu)
-      find /var/lib/postgresql -type d -name "pg_upgrade_output.d" 2>/dev/null | while read -r d; do
-        cp -r "$d" "$ARTIFACT_DIR/pg_upgrade_output.d/" 2>/dev/null || true
+      # -------------------------------------------------------
+      # failed_tests/: PGDATA snapshots saved by test_runner
+      # -------------------------------------------------------
+      find /tmp/pgtest/failed_tests -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while read d; do
+        cp -r "$d" "$ARTIFACT_DIR/failed_tests/" 2>/dev/null || true
       done
 
-      # systemd journal for PostgreSQL services safely using shell variables
-      journalctl -u "$UNIT_RHEL" -u "$UNIT_DEB" --no-pager 2>/dev/null \
-        > "$ARTIFACT_DIR/journalctl-postgresql.log" || true
-
-      tar -czf "/tmp/$ARTIFACT_FILE" -C /tmp "$ARTIFACT_BASENAME"
-    environment:
-      ARTIFACT_FILE: "{{ artifact_filename }}"
-      UNIT_RHEL: "postgresql-*"
-      UNIT_DEB: "postgresql@*"
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
       executable: /bin/bash
     become: true

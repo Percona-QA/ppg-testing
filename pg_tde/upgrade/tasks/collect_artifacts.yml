@@ -20,8 +20,8 @@
       cp /tmp/pg_upgradecluster.log    "$ARTIFACT_DIR/" 2>/dev/null || true
 
       # pg_upgradecluster relocates pg_upgrade's report/log dir here
-      find /var/log/postgresql -maxdepth 1 -type d -name "pg_upgradecluster-*" 2>/dev/null | while read d; do
-        cp -r "$d" "$ARTIFACT_DIR/$(basename "$d")" 2>/dev/null || true
+      find /var/log/postgresql -maxdepth 1 -type d -name "pg_upgradecluster-*" 2>/dev/null | while read -r d; do
+        cp -r "$d" "$ARTIFACT_DIR/${d##*/}" 2>/dev/null || true
       done
 
       # pg_tde build / install logs (FROM and TO)
@@ -37,7 +37,7 @@
         -exec cp {} "$ARTIFACT_DIR/" \; || true
 
       # pg_upgrade diagnostic output directory (RHEL — loadable_libraries.txt etc.)
-      find /var/lib/pgsql -type d -name "pg_upgrade_output.d" 2>/dev/null | while read d; do
+      find /var/lib/pgsql -type d -name "pg_upgrade_output.d" 2>/dev/null | while read -r d; do
         cp -r "$d" "$ARTIFACT_DIR/pg_upgrade_output.d/" 2>/dev/null || true
       done
 
@@ -46,17 +46,21 @@
         -exec cp {} "$ARTIFACT_DIR/" \; || true
 
       # pg_upgrade diagnostic output directory (Debian/Ubuntu)
-      find /var/lib/postgresql -type d -name "pg_upgrade_output.d" 2>/dev/null | while read d; do
+      find /var/lib/postgresql -type d -name "pg_upgrade_output.d" 2>/dev/null | while read -r d; do
         cp -r "$d" "$ARTIFACT_DIR/pg_upgrade_output.d/" 2>/dev/null || true
       done
 
       # systemd journal for PostgreSQL services
       # RHEL unit names: postgresql-17, postgresql-18, ...
       # Debian/Ubuntu unit names: postgresql@17-main, postgresql@18-main, ...
-      journalctl -u 'postgresql-*' -u 'postgresql@*' --no-pager 2>/dev/null \
+      journalctl -u "$UNIT_RHEL" -u "$UNIT_DEB" --no-pager 2>/dev/null \
         > "$ARTIFACT_DIR/journalctl-postgresql.log" || true
 
-      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
+      tar -czf "/tmp/$ARTIFACT_FILE" -C /tmp "$ARTIFACT_BASENAME"
+    environment:
+      ARTIFACT_FILE: "{{ artifact_filename }}"
+      UNIT_RHEL: "postgresql-*"
+      UNIT_DEB: "postgresql@*"
     args:
       executable: /bin/bash
     become: true
