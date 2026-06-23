@@ -1,41 +1,41 @@
 ---
-# Perform a major PostgreSQL version upgrade.
+# Perform a major PostgreSQL version upgrade of a pg_tde-encrypted cluster.
 #
-# RHEL : manual pg_upgrade --link. We initdb a fresh TO cluster, add pg_tde to
-#        its shared_preload_libraries BEFORE pg_upgrade (pg_upgrade starts a
-#        test server against the TO cluster to verify loadable libraries, and
-#        pg_tde refuses dynamic LOAD with "can only be loaded at server
-#        startup"), then run pg_upgrade.
+# Uses pg_tde_upgrade (NOT plain pg_upgrade, and NOT pg_upgradecluster).
 #
-# Debian: pg_upgradecluster (the Debian-native tool, also used by the reference
-#         upgrade script).  It creates the TO cluster, copies the FROM cluster's
-#         postgresql.conf — including shared_preload_libraries = 'pg_tde' — into
-#         the new cluster BEFORE running pg_upgrade, matches the FROM cluster's
-#         data-checksum setting, passes the config directory to pg_upgrade, and
-#         starts the upgraded cluster.  We use "-m upgrade --link" so the test
-#         exercises the same physical pg_upgrade --link path as RHEL (encrypted
-#         tde_heap relation files are hard-linked into the new cluster and read
-#         in place by the new server), rather than a logical dump/restore.
+# pg_tde_upgrade wraps pg_upgrade: it copies the pg_tde key-metadata
+# subdirectory ($PGDATA/pg_tde/) from the old data dir to the new one and uses
+# pg_tde_resetwal instead of pg_resetwal.  Plain pg_upgrade does NOT copy that
+# subdirectory, so the upgraded cluster cannot decrypt the linked tde_heap
+# relation files and fails with "invalid page in block 0 of relation ...".
+# pg_upgradecluster calls plain pg_upgrade internally with no way to substitute
+# pg_tde_upgrade, so it cannot be used for pg_tde clusters either.
+#
+# pg_tde must be in the new cluster's shared_preload_libraries before
+# pg_tde_upgrade runs (pg_upgrade starts a test server against the new cluster
+# to verify loadable libraries, and pg_tde refuses dynamic LOAD).
+#
+# RHEL  : initdb creates the new data dir; config lives inside the data dir.
+# Debian: pg_createcluster creates the new data dir; config lives under
+#         /etc/postgresql/<ver>/main, so pg_tde_upgrade is told where to find
+#         it via --old-options/--new-options '-c config_file=...'.
+# Both initialize the new cluster with --no-data-checksums to match the FROM
+# cluster (pg_upgrade requires matching checksum settings).
 #
 # Steps:
 #   1.  Enable Percona repo for TO version
 #   2.  Install TO PostgreSQL packages
 #   3.  Install or build pg_tde for TO version
-#   RHEL:
-#     4.  Stop FROM cluster
-#     5.  initdb TO cluster (--no-data-checksums)
-#     6.  Stop auto-started TO cluster
-#     7.  Add pg_tde to TO cluster postgresql.conf  ← BEFORE pg_upgrade
-#     8.  pg_upgrade --link
-#   Debian:
-#     4.  Stop all PostgreSQL clusters
-#     5.  pg_upgradecluster -m upgrade --link  (creates + upgrades + starts TO)
-#     6.  Drop old FROM cluster
-#   SHARED:
-#     9.  Start / ensure TO cluster running
-#    10.  Wait for TO cluster to be ready
-#    11.  ALTER EXTENSION pg_tde UPDATE
-#    12.  vacuumdb --all --analyze-in-stages
+#   4.  Stop FROM cluster(s)
+#   5.  Create TO data dir (RHEL initdb / Debian pg_createcluster), no checksums
+#   6.  Stop the auto-started TO cluster
+#   7.  Add pg_tde to TO cluster postgresql.conf  ← BEFORE pg_tde_upgrade
+#   8.  pg_tde_upgrade --link
+#   9.  Drop old FROM cluster (Debian)
+#  10.  Start TO cluster
+#  11.  Wait for TO cluster to be ready
+#  12.  ALTER EXTENSION pg_tde UPDATE
+#  13.  vacuumdb --all --analyze-in-stages
 
   # --- Enable repo for TO major version ---
   - name: Enable Percona repo for TO major version
@@ -98,7 +98,7 @@
       - tde_upgrade | bool
 
   # ==========================================================================
-  # RHEL upgrade path: initdb + configure pg_tde + pg_upgrade --link
+  # Stop FROM cluster(s)
   # ==========================================================================
 
   - name: Stop PostgreSQL FROM cluster (RHEL)
@@ -108,6 +108,17 @@
     become: true
     when: ansible_os_family == "RedHat"
 
+  - name: Stop all PostgreSQL clusters (Debian)
+    service:
+      name: postgresql
+      state: stopped
+    become: true
+    when: ansible_os_family == "Debian"
+
+  # ==========================================================================
+  # Create TO data directory (no checksums, to match the FROM cluster)
+  # ==========================================================================
+
   - name: Initialize TO data directory (RHEL)
     command: /usr/pgsql-{{ to_major_version }}/bin/postgresql-{{ to_major_version }}-setup initdb
     become: true
@@ -116,7 +127,7 @@
     when: ansible_os_family == "RedHat"
     ignore_errors: true
 
-  - name: Stop auto-started TO cluster before pg_upgrade (RHEL)
+  - name: Stop auto-started TO cluster before upgrade (RHEL)
     service:
       name: "{{ to_pg_service }}"
       state: stopped
@@ -124,26 +135,53 @@
     when: ansible_os_family == "RedHat"
     ignore_errors: true
 
-  # pg_upgrade starts a test server against the TO cluster to check loadable
-  # libraries; pg_tde must be in shared_preload_libraries before that runs.
-  # (On Debian, pg_upgradecluster copies this setting from the FROM cluster.)
-  - name: Add pg_tde to TO postgresql.conf before pg_upgrade (RHEL)
+  - name: Create TO cluster data directory (Debian)
+    command: pg_createcluster {{ to_major_version }} main -- --no-data-checksums
+    become: true
+    when: ansible_os_family == "Debian"
+    ignore_errors: true
+
+  - name: Stop auto-started TO cluster before upgrade (Debian)
+    command: pg_ctlcluster {{ to_major_version }} main stop
+    become: true
+    when: ansible_os_family == "Debian"
+    ignore_errors: true
+
+  # ==========================================================================
+  # Configure pg_tde in the TO cluster BEFORE pg_tde_upgrade.
+  #
+  # pg_tde_upgrade (via pg_upgrade) starts a test server against the TO cluster
+  # to verify loadable libraries; pg_tde refuses dynamic LOAD with "can only be
+  # loaded at server startup", so it must be in shared_preload_libraries first.
+  # ==========================================================================
+
+  - name: Add pg_tde to TO postgresql.conf before upgrade
     include_tasks:
       file: configure_tde_conf.yml
     vars:
       pg_conf: "{{ to_pg_conf }}"
-    when: ansible_os_family == "RedHat"
 
-  - name: Run pg_upgrade --link from {{ from_major_version }} to {{ to_major_version }} (RHEL)
+  # ==========================================================================
+  # Run pg_tde_upgrade --link
+  #
+  # On Debian the config files live outside the data dir, so pg_tde_upgrade is
+  # told where to find postgresql.conf via -c config_file=... for both clusters.
+  # ==========================================================================
+
+  - name: Run pg_tde_upgrade --link from {{ from_major_version }} to {{ to_major_version }}
     become: true
     become_user: postgres
     shell: |
       set -o pipefail
-      {{ to_pg_bin_dir }}/pg_upgrade \
+      {{ to_pg_bin_dir }}/pg_tde_upgrade \
         --old-bindir={{ from_pg_bin_dir }} \
         --new-bindir={{ to_pg_bin_dir }} \
         --old-datadir={{ from_pg_data_dir }} \
         --new-datadir={{ to_pg_data_dir }} \
+        {% if ansible_os_family == 'Debian' %}
+        --old-options '-c config_file=/etc/postgresql/{{ from_major_version }}/main/postgresql.conf' \
+        --new-options '-c config_file=/etc/postgresql/{{ to_major_version }}/main/postgresql.conf' \
+        {% endif %}
         --link \
         2>&1 | tee /tmp/pg_upgrade.log
     args:
@@ -151,70 +189,24 @@
       chdir: /tmp
     register: pg_upgrade_result
     ignore_errors: true
-    when: ansible_os_family == "RedHat"
 
-  - name: Show pg_upgrade output (RHEL)
+  - name: Show pg_tde_upgrade output
     debug:
       var: pg_upgrade_result.stdout_lines
-    when: ansible_os_family == "RedHat"
 
-  - name: Show pg_upgrade stderr on failure (RHEL)
+  - name: Show pg_tde_upgrade stderr on failure
     debug:
       var: pg_upgrade_result.stderr_lines
-    when:
-      - ansible_os_family == "RedHat"
-      - pg_upgrade_result.rc | default(1) != 0
+    when: pg_upgrade_result.rc | default(1) != 0
 
-  - name: Fail if pg_upgrade failed (RHEL)
+  - name: Fail if pg_tde_upgrade failed
     fail:
-      msg: "pg_upgrade failed (rc={{ pg_upgrade_result.rc | default(1) }}). See /tmp/pg_upgrade.log"
-    when:
-      - ansible_os_family == "RedHat"
-      - pg_upgrade_result.rc | default(1) != 0
+      msg: "pg_tde_upgrade failed (rc={{ pg_upgrade_result.rc | default(1) }}). See /tmp/pg_upgrade.log"
+    when: pg_upgrade_result.rc | default(1) != 0
 
   # ==========================================================================
-  # Debian upgrade path: pg_upgradecluster -m upgrade --link
-  #
-  # pg_upgradecluster creates the TO cluster, copies the FROM cluster's
-  # postgresql.conf (incl. shared_preload_libraries = 'pg_tde') into it before
-  # running pg_upgrade, matches the FROM data-checksum setting, passes the
-  # config directory to pg_upgrade, and starts the upgraded cluster.
-  # The FROM cluster must be stopped first (pg_upgrade requires both stopped).
+  # Debian post-upgrade: drop old FROM cluster
   # ==========================================================================
-
-  - name: Stop all PostgreSQL clusters (Debian)
-    service:
-      name: postgresql
-      state: stopped
-    become: true
-    when: ansible_os_family == "Debian"
-
-  - name: Run pg_upgradecluster -m upgrade --link {{ from_major_version }} to {{ to_major_version }} (Debian)
-    become: true
-    become_user: postgres
-    shell: |
-      set -o pipefail
-      pg_upgradecluster -v {{ to_major_version }} -m upgrade --link \
-        {{ from_major_version }} main \
-        2>&1 | tee /tmp/pg_upgradecluster.log
-    args:
-      executable: /bin/bash
-      chdir: /tmp
-    register: pg_upgradecluster_result
-    ignore_errors: true
-    when: ansible_os_family == "Debian"
-
-  - name: Show pg_upgradecluster output (Debian)
-    debug:
-      var: pg_upgradecluster_result.stdout_lines
-    when: ansible_os_family == "Debian"
-
-  - name: Fail if pg_upgradecluster failed (Debian)
-    fail:
-      msg: "pg_upgradecluster failed (rc={{ pg_upgradecluster_result.rc | default(1) }}). See /tmp/pg_upgradecluster.log"
-    when:
-      - ansible_os_family == "Debian"
-      - pg_upgradecluster_result.rc | default(1) != 0
 
   - name: Drop old PG {{ from_major_version }} cluster (Debian)
     become: true
@@ -224,10 +216,7 @@
     when: ansible_os_family == "Debian"
 
   # ==========================================================================
-  # Start / ensure TO cluster running
-  #
-  # RHEL : start the freshly upgraded cluster.
-  # Debian: pg_upgradecluster already started it; ensure it is up (idempotent).
+  # Start TO cluster
   # ==========================================================================
 
   - name: Start TO PostgreSQL cluster (RHEL)
@@ -237,11 +226,10 @@
     become: true
     when: ansible_os_family == "RedHat"
 
-  - name: Ensure TO PostgreSQL cluster is running (Debian)
+  - name: Start TO PostgreSQL cluster (Debian)
     command: pg_ctlcluster {{ to_major_version }} main start
     become: true
     when: ansible_os_family == "Debian"
-    ignore_errors: true
 
   - name: Wait for TO PostgreSQL to be ready
     become: true
