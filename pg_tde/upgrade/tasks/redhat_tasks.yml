@@ -142,6 +142,14 @@
         - perl
       state: latest
       update_cache: true
+    # Rocky AppStream/BaseOS mirrors occasionally lag: a -devel package
+    # (e.g. libxml2-devel, systemd-devel) lands before the exact-version
+    # runtime lib it requires is synced, producing a transient depsolve error.
+    # Retry with a fresh metadata cache to ride out the mirror sync.
+    register: rhel_build_pkgs
+    until: rhel_build_pkgs is succeeded
+    retries: 3
+    delay: 30
 
   - name: Install liburing (required for io_uring builds)
     yum:
