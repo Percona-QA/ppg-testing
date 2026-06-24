@@ -115,7 +115,8 @@
   # -------------------------------------------------------------------------
   # meson build path (pg_tde 2.2.0+ / main)
   # -------------------------------------------------------------------------
-  - name: Build and install pg_tde via meson against {{ pg_config_path }}
+  # Build (setup + compile) as postgres into the postgres-owned build dir.
+  - name: Build pg_tde via meson against {{ pg_config_path }}
     become: true
     become_user: postgres
     shell: |
@@ -128,7 +129,7 @@
         -Dpg_config={{ pg_config_path }} \
         -Dwerror=false \
         "{{ tde_build_dest }}" 2>&1 | tee {{ tde_build_log }}
-      meson install -C "{{ tde_build_dest }}" 2>&1 | tee {{ tde_install_log }}
+      meson compile -C "{{ tde_build_dest }}" 2>&1 | tee -a {{ tde_build_log }}
     args:
       chdir: "{{ tde_src_dest }}"
       executable: /bin/bash
@@ -142,6 +143,32 @@
   - name: Show pg_tde meson build output
     debug:
       var: tde_meson_result.stdout_lines
+    when: tde_use_meson | bool
+
+  # meson install must run as root: it writes pg_tde.so, the control file and
+  # SQL scripts into PostgreSQL's lib/share dirs (root-owned). Running install
+  # as postgres makes meson attempt a privilege escalation that fails with
+  # "Error executing command as another user: Not authorized" (rc 127).
+  - name: Install pg_tde via meson (root)
+    become: true
+    shell: |
+      set -o pipefail
+      meson install -C "{{ tde_build_dest }}" 2>&1 | tee {{ tde_install_log }}
+    args:
+      chdir: "{{ tde_src_dest }}"
+      executable: /bin/bash
+    environment:
+      PATH: "{{ pg_bin_dir }}:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "{{ pg_lib_dir }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
+    register: tde_meson_install_result
+    ignore_errors: true
+    when:
+      - tde_use_meson | bool
+      - tde_meson_result.rc | default(1) == 0
+
+  - name: Show pg_tde meson install output
+    debug:
+      var: tde_meson_install_result.stdout_lines
     when: tde_use_meson | bool
 
   # -------------------------------------------------------------------------
@@ -178,12 +205,12 @@
   # -------------------------------------------------------------------------
   # Fail if whichever build path ran did not succeed
   # -------------------------------------------------------------------------
-  - name: Fail if pg_tde meson build failed
+  - name: Fail if pg_tde meson build or install failed
     fail:
-      msg: "pg_tde meson build failed (branch={{ tde_branch_to_build }}, pg_config={{ pg_config_path }}). See {{ tde_build_log }} / {{ tde_install_log }}"
+      msg: "pg_tde meson build/install failed (branch={{ tde_branch_to_build }}, pg_config={{ pg_config_path }}). See {{ tde_build_log }} / {{ tde_install_log }}"
     when:
       - tde_use_meson | bool
-      - tde_meson_result.rc | default(1) != 0
+      - (tde_meson_result.rc | default(1) != 0) or (tde_meson_install_result.rc | default(1) != 0)
 
   - name: Fail if pg_tde PGXS build failed
     fail:
