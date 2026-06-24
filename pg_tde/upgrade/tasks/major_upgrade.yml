@@ -215,6 +215,18 @@
     ignore_errors: true
     when: ansible_os_family == "Debian"
 
+  # pg_createcluster picks the next free port, and because the FROM cluster's
+  # config still reserves 5432, the TO cluster is assigned 5433. The downstream
+  # verification (pg_isready, psql) targets 5432, so once the FROM cluster is
+  # dropped, pin the TO cluster back to 5432 before starting it.
+  - name: Pin TO cluster to port 5432 (Debian)
+    lineinfile:
+      path: "/etc/postgresql/{{ to_major_version }}/main/postgresql.conf"
+      regexp: '^\s*#?\s*port\s*='
+      line: "port = 5432"
+    become: true
+    when: ansible_os_family == "Debian"
+
   # ==========================================================================
   # Start TO cluster
   # ==========================================================================

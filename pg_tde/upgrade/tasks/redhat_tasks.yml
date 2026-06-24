@@ -4,6 +4,33 @@
 # KMS servers (OpenBao, Cosmian) are NOT installed — upgrade tests use a
 # file-based TDE key provider and have no dependency on external KMS services.
 
+  # On EL10 the distro AppStream ships postgresql<major>-server as a plain
+  # versioned package (modularity was removed, so it cannot be gated with
+  # `dnf module disable`). The cloud images come with it pre-installed, and any
+  # `state: latest` / `dnf update` transaction upgrades it — its
+  # /usr/lib/systemd/system/postgresql.service then file-conflicts with the
+  # pre-installed percona-postgresql-common and aborts. Remove the distro
+  # packages and exclude them so later transactions never pull them back in.
+  # This must run before the first broad yum task below (e.g. liburing).
+  - name: Exclude distro PostgreSQL server packages from dnf (EL10)
+    ansible.builtin.lineinfile:
+      path: /etc/dnf/dnf.conf
+      line: "exclude=postgresql-server postgresql*-server"
+      insertafter: '^\[main\]'
+    become: true
+    when: ansible_distribution_major_version == "10"
+
+  - name: Remove pre-installed distro PostgreSQL server packages (EL10)
+    dnf:
+      name:
+        - postgresql-server
+        - "postgresql*-server"
+      state: absent
+      autoremove: true
+    become: true
+    ignore_errors: true
+    when: ansible_distribution_major_version == "10"
+
   - name: Set up EPEL repository
     yum:
       name: epel-release
@@ -59,6 +86,17 @@
   - name: Install Development Tools group
     command: yum -y groupinstall "Development tools"
     become: true
+
+  # pg_tde source builds on RHEL/Rocky/OL 9 source gcc-toolset-14 (newer LTO
+  # toolchain matching the target PostgreSQL build). It is pre-baked into some
+  # x86 images but not the ARM ones, so install it explicitly. Mirrors the
+  # working pg_tde/tde role (redhat_depends.yml).
+  - name: Install gcc-toolset-14 for source builds (RHEL/Rocky/OL 9)
+    dnf:
+      name: gcc-toolset-14
+      state: present
+    become: true
+    when: ansible_distribution_major_version == "9"
 
   - name: Install build and utility packages
     yum:

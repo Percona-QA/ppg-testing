@@ -4,10 +4,14 @@
 #   pg_major        - e.g. "16"
 #   pg_full_version - e.g. "16.4" (used to decide whether llvmjit is available)
 
-  - name: Disable postgresql dnf module before installing PG {{ pg_major }} (RHEL 8)
+  # Disable the distro's postgresql AppStream module (EL8/EL9) so its
+  # postgresql<major>-server package is never pulled in. EL10 has no modules
+  # (modularity removed) — there the distro package is excluded in redhat_tasks.
+  - name: Disable distro postgresql dnf module before installing PG {{ pg_major }} (EL8/EL9)
     command: dnf module disable postgresql -y
-    when: ansible_distribution_major_version == "8"
+    become: true
     ignore_errors: true
+    when: ansible_distribution_major_version in ["8", "9"]
 
   - name: Install Percona PostgreSQL {{ pg_major }} packages (RHEL 8)
     yum:
