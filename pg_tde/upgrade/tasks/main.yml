@@ -258,6 +258,15 @@
           pg_socket_dir: "{{ from_pg_socket_dir }}"
           check_label:   "pre-upgrade"
 
+      - name: Capture pg_tde version (FROM, pre-upgrade)
+        include_tasks:
+          file: capture_tde_version.yml
+        vars:
+          pg_bin_dir:    "{{ from_pg_bin_dir }}"
+          pg_socket_dir: "{{ from_pg_socket_dir }}"
+          version_log:   "/tmp/tde-from-version.log"
+          version_label: "FROM"
+
       # ===========================================================
       # Perform the upgrade
       # ===========================================================
@@ -286,6 +295,15 @@
           pg_bin_dir:    "{{ to_pg_bin_dir }}"
           pg_socket_dir: "{{ to_pg_socket_dir }}"
           check_label:   "post-upgrade"
+
+      - name: Capture pg_tde version (TO, post-upgrade)
+        include_tasks:
+          file: capture_tde_version.yml
+        vars:
+          pg_bin_dir:    "{{ to_pg_bin_dir }}"
+          pg_socket_dir: "{{ to_pg_socket_dir }}"
+          version_log:   "/tmp/tde-to-version.log"
+          version_label: "TO"
 
     rescue:
       - name: Record upgrade test failure

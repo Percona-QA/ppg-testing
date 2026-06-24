@@ -40,6 +40,10 @@
       cp /tmp/tde-to-build.log         "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-to-install.log       "$ARTIFACT_DIR/" 2>/dev/null || true
 
+      # pg_tde version info (extension + SQL/default version, FROM and TO)
+      cp /tmp/tde-from-version.log     "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-to-version.log       "$ARTIFACT_DIR/" 2>/dev/null || true
+
       # PostgreSQL service logs (RHEL — covers both FROM and TO data dirs)
       find /var/lib/pgsql -name "*.log" -type f 2>/dev/null \
         -exec cp {} "$ARTIFACT_DIR/" \; || true

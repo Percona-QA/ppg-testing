@@ -1,0 +1,53 @@
+---
+# Capture pg_tde version information for debugging/verification and write it to
+# a log file (collected into the artifact tarball) as well as the console.
+#
+# Two distinct versions are recorded:
+#   - extension_version : the version actually installed in the database
+#                         (pg_extension.extversion) — i.e. the SQL/catalog
+#                         version after CREATE/ALTER EXTENSION.
+#   - sql_default_version: the default_version advertised by the installed
+#                          pg_tde control file (pg_available_extensions) — i.e.
+#                          what the on-disk SQL scripts would upgrade to.
+#   - shared library marker from the pg_tde extension, when available.
+#
+# Caller must pass:
+#   pg_bin_dir    - PostgreSQL bin directory
+#   pg_socket_dir - directory for the Unix socket (PGHOST)
+#   version_log   - path to write the captured version info (e.g. /tmp/tde-from-version.log)
+#   version_label - human label for this capture (e.g. "FROM", "TO")
+
+  - name: Capture pg_tde version info ({{ version_label }})
+    become: true
+    become_user: postgres
+    shell: |
+      set -o pipefail
+      {
+        echo "=== pg_tde version [{{ version_label }}] ==="
+        echo "captured_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo
+        echo "-- installed extension version (pg_extension.extversion):"
+        psql -d postgres -c \
+          "SELECT extname, extversion FROM pg_extension WHERE extname = 'pg_tde';"
+        echo "-- available/default SQL version (pg_available_extensions):"
+        psql -d postgres -c \
+          "SELECT name, default_version, installed_version, comment FROM pg_available_extensions WHERE name = 'pg_tde';"
+        echo "-- pg_tde package version (shared library build, PG_TDE_VERSION_STRING):"
+        psql -d postgres -c \
+          "SELECT pg_tde_version();" 2>/dev/null || echo "(pg_tde_version() not available in this build)"
+        echo "-- loaded shared library version (pg_get_loaded_modules):"
+        psql -d postgres -c \
+          "SELECT module_name, version, file_name FROM pg_get_loaded_modules() WHERE file_name IN ('pg_tde.so', 'pg_tde.dylib');" 2>/dev/null || true
+      } 2>&1 | tee {{ version_log }}
+    args:
+      executable: /bin/bash
+    environment:
+      PGHOST: "{{ pg_socket_dir }}"
+      PGPORT: "5432"
+      PATH:   "{{ pg_bin_dir }}:{{ ansible_env.PATH }}"
+    register: tde_version_result
+    ignore_errors: true
+
+  - name: Show pg_tde version info ({{ version_label }})
+    debug:
+      var: tde_version_result.stdout_lines
