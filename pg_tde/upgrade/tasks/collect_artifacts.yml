@@ -11,11 +11,26 @@
       rm -rf "$ARTIFACT_DIR"
       mkdir -p "$ARTIFACT_DIR"
 
+      # Scenario parameters — written first so they survive even total failures
+      cat > "$ARTIFACT_DIR/scenario-params.txt" <<PARAMS
+      UPGRADE_TYPE=$UPGRADE_TYPE
+      INSTALL_FROM_PACKAGES=$INSTALL_FROM_PACKAGES
+      FROM_REPO=$FROM_REPO
+      TO_REPO=$TO_REPO
+      FROM_TDE_BRANCH=$FROM_TDE_BRANCH
+      TO_TDE_BRANCH=$TO_TDE_BRANCH
+      TDE_UPGRADE=$TDE_UPGRADE
+      TDE_REPO=$TDE_REPO
+      PARAMS
+
       # pg_upgrade logs
       cp /tmp/pg_upgrade.log           "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/pg_upgrade_internal.log  "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/pg_upgrade_server.log    "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/pg_upgrade_utility.log   "$ARTIFACT_DIR/" 2>/dev/null || true
+
+      # pg_upgrade_output.d — created in CWD of pg_tde_upgrade, which is /tmp
+      cp -r /tmp/pg_upgrade_output.d "$ARTIFACT_DIR/" 2>/dev/null || true
 
       # pg_tde build / install logs (FROM and TO)
       cp /tmp/tde-from-build.log       "$ARTIFACT_DIR/" 2>/dev/null || true
@@ -29,19 +44,12 @@
       find /var/lib/pgsql -name "*.log" -type f 2>/dev/null \
         -exec cp {} "$ARTIFACT_DIR/" \; || true
 
-      # pg_upgrade diagnostic output directory (RHEL — loadable_libraries.txt etc.)
-      find /var/lib/pgsql -type d -name "pg_upgrade_output.d" 2>/dev/null | while read -r d; do
-        cp -r "$d" "$ARTIFACT_DIR/pg_upgrade_output.d/" 2>/dev/null || true
-      done
-
       # PostgreSQL service logs (Debian/Ubuntu — covers FROM and TO clusters)
       find /var/log/postgresql -name "*.log" -type f 2>/dev/null \
         -exec cp {} "$ARTIFACT_DIR/" \; || true
 
-      # pg_upgrade diagnostic output directory (Debian/Ubuntu)
-      find /var/lib/postgresql -type d -name "pg_upgrade_output.d" 2>/dev/null | while read -r d; do
-        cp -r "$d" "$ARTIFACT_DIR/pg_upgrade_output.d/" 2>/dev/null || true
-      done
+      # Debian/Ubuntu cluster status at collection time
+      pg_lsclusters 2>/dev/null > "$ARTIFACT_DIR/pg_lsclusters.txt" || true
 
       # systemd journal for PostgreSQL services
       # RHEL unit names: postgresql-17, postgresql-18, ...
@@ -55,6 +63,14 @@
     ARTIFACT_FILE: "{{ artifact_filename }}"
     UNIT_RHEL: "postgresql-*"
     UNIT_DEB: "postgresql@*"
+    UPGRADE_TYPE:          "{{ upgrade_type }}"
+    INSTALL_FROM_PACKAGES: "{{ install_from_packages }}"
+    FROM_REPO:             "{{ from_repo }}"
+    TO_REPO:               "{{ to_repo }}"
+    FROM_TDE_BRANCH:       "{{ from_tde_branch }}"
+    TO_TDE_BRANCH:         "{{ to_tde_branch }}"
+    TDE_UPGRADE:           "{{ tde_upgrade }}"
+    TDE_REPO:              "{{ tde_repo }}"
   become: true
   ignore_errors: true
 

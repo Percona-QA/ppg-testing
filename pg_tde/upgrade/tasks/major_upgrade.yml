@@ -230,6 +230,20 @@
     command: pg_ctlcluster {{ to_major_version }} main start
     become: true
     when: ansible_os_family == "Debian"
+    register: pg_start_debian
+    ignore_errors: true
+
+  - name: Show pg_ctlcluster start output (Debian)
+    debug:
+      var: pg_start_debian
+    when: ansible_os_family == "Debian"
+
+  - name: Fail if pg_ctlcluster start failed (Debian)
+    fail:
+      msg: "pg_ctlcluster {{ to_major_version }} main start failed (rc={{ pg_start_debian.rc | default(1) }}). See pg_start_debian output above."
+    when:
+      - ansible_os_family == "Debian"
+      - pg_start_debian.rc | default(1) != 0
 
   - name: Wait for TO PostgreSQL to be ready
     become: true
