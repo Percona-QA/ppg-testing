@@ -103,28 +103,33 @@
       file: "debian_tasks.yml"
     when: ansible_os_family == 'Debian'
 
+  # Enabling the docker setup file for verification. TEMP
+  - name: Include Docker setup file
+    include_tasks:
+      file: "install_docker.yml"
+
   # Docker is only needed on old-glibc platforms (RHEL/Rocky/OL 8, Debian 11)
   # where the native cosmian_kms binary requires glibc >= 2.33 but the platform
   # ships 2.28 (RHEL 8) or 2.31 (Debian 11). On all other platforms cosmian_kms
   # runs natively and Docker is not installed.
-  - name: Include Docker setup file (old-glibc platforms only)
-    include_tasks:
-      file: "install_docker.yml"
-    when: >
-      (ansible_os_family == 'Debian' and
-       ansible_distribution == 'Debian' and
-       ansible_distribution_major_version | int == 11)
-      or (ansible_os_family == 'RedHat' and
-          ansible_distribution_major_version | int == 8)
+  ##- name: Include Docker setup file (old-glibc platforms only)
+  ##  include_tasks:
+  ##    file: "install_docker.yml"
+  ##  when: >
+  ##    (ansible_os_family == 'Debian' and
+  ##     ansible_distribution == 'Debian' and
+  ##     ansible_distribution_major_version | int == 11)
+  ##    or (ansible_os_family == 'RedHat' and
+  ##        ansible_distribution_major_version | int == 8)
 
-  - name: Start cosmian_kms in Docker on old-glibc platforms
-    ansible.builtin.include_tasks: run_cosmian_docker.yml
-    when: >
-      (ansible_os_family == 'Debian' and
-       ansible_distribution == 'Debian' and
-       ansible_distribution_major_version | int == 11)
-      or (ansible_os_family == 'RedHat' and
-          ansible_distribution_major_version | int == 8)
+  ##- name: Start cosmian_kms in Docker on old-glibc platforms
+  ##  ansible.builtin.include_tasks: run_cosmian_docker.yml
+  ##  when: >
+  ##    (ansible_os_family == 'Debian' and
+  ##     ansible_distribution == 'Debian' and
+  ##     ansible_distribution_major_version | int == 11)
+  ##    or (ansible_os_family == 'RedHat' and
+  ##        ansible_distribution_major_version | int == 8)
 
   - name: Get ulimit results
     become_user: postgres
