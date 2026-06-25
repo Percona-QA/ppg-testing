@@ -29,6 +29,11 @@
     changed_when: false
     when: pkg_release | default('') | length > 0
 
+  - name: Show resolved server package version (Debian)
+    debug:
+      msg: "server pin request='{{ pg_full_version }}-{{ pkg_release }}' resolved to '{{ deb_pin_ver.stdout | default('') | trim }}'"
+    when: pkg_release | default('') | length > 0
+
   - name: Fail if pinned server build not found in channel (Debian)
     fail:
       msg: "No percona-postgresql-{{ pg_major }} build matching {{ pg_full_version }}-{{ pkg_release }} in the enabled repo"

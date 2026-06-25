@@ -39,6 +39,13 @@
       - ansible_os_family == "Debian"
       - tde_pkg_version | default('') | length > 0
 
+  - name: Show resolved pg_tde version (Debian)
+    debug:
+      msg: "pg_tde pin request='{{ tde_pkg_version }}' resolved to '{{ deb_tde_pin_ver.stdout | default('') | trim }}'"
+    when:
+      - ansible_os_family == "Debian"
+      - tde_pkg_version | default('') | length > 0
+
   - name: Fail if pinned pg_tde version not found in channel (Debian)
     fail:
       msg: "No percona-pg-tde{{ pg_major }} version matching {{ tde_pkg_version }} in the enabled repo"

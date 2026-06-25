@@ -12,6 +12,7 @@
 #   - shared library marker from the pg_tde extension, when available.
 #
 # Caller must pass:
+#   pg_major      - PostgreSQL major version (e.g. "18"), for the package NEVR query
 #   pg_bin_dir    - PostgreSQL bin directory
 #   pg_socket_dir - directory for the Unix socket (PGHOST)
 #   version_log   - path to write the captured version info (e.g. /tmp/tde-from-version.log)
@@ -41,6 +42,12 @@
         echo "-- loaded shared library version (pg_get_loaded_modules):"
         psql -d postgres -c \
           "SELECT module_name, version, file_name FROM pg_get_loaded_modules() WHERE file_name IN ('pg_tde.so', 'pg_tde.dylib');" 2>/dev/null || true
+        echo "-- installed pg_tde package (NEVR on disk; compare with loaded version above):"
+        if command -v rpm >/dev/null 2>&1; then
+          rpm -q "percona-pg_tde{{ pg_major }}" 2>&1 || true
+        else
+          dpkg-query -W -f='percona-pg-tde{{ pg_major }} ${Version}\n' "percona-pg-tde{{ pg_major }}" 2>&1 || true
+        fi
       } 2>&1 | tee {{ version_log }}
     args:
       executable: /bin/bash
