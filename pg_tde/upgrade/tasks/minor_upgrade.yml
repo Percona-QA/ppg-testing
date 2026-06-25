@@ -86,10 +86,14 @@
       - not (tde_upgrade | bool)
       - not (install_from_packages | bool)
 
-  - name: Start PostgreSQL after minor upgrade
+  # Use restarted, not started: on Debian the server-package postinst auto-starts
+  # the cluster during the package update (before pg_tde is updated), so a plain
+  # "started" would be a no-op and the old pg_tde .so would stay loaded. A restart
+  # guarantees the cluster reloads the freshly-installed pg_tde shared library.
+  - name: Restart PostgreSQL after minor upgrade
     service:
       name: "{{ from_pg_service }}"
-      state: started
+      state: restarted
     become: true
 
   - name: Wait for PostgreSQL to be ready after minor upgrade

@@ -38,10 +38,12 @@
       tde_install_log:     "/tmp/tde-to-install.log"
     when: not (install_from_packages | bool)
 
-  - name: Start PostgreSQL after pg_tde upgrade
+  # restarted (not started) so the cluster always reloads the freshly-installed
+  # pg_tde shared library, even if something left it running.
+  - name: Restart PostgreSQL after pg_tde upgrade
     service:
       name: "{{ from_pg_service }}"
-      state: started
+      state: restarted
     become: true
 
   - name: Wait for PostgreSQL to be ready after pg_tde upgrade
