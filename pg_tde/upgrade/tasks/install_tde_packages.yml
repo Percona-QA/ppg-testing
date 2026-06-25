@@ -25,9 +25,12 @@
       apt-get update >/dev/null 2>&1 || true
       # madison: "pkg | <version> | repo". Strip epoch + debrev to get the upstream
       # version and match it exactly against the requested pg_tde version.
+      # NB: do not 'exit' from awk on first match — under 'set -o pipefail' that
+      # closes the pipe while madison is still writing (SIGPIPE -> rc 141). Read
+      # the whole stream and print only the first match via a flag.
       apt-cache madison "percona-pg-tde{{ pg_major }}" \
         | awk -F'|' -v want="{{ tde_pkg_version }}" \
-            '{gsub(/ /,"",$2); v=$2; up=v; sub(/^[0-9]+:/,"",up); sub(/-.*/,"",up); if (up==want) {print v; exit}}'
+            '!done {gsub(/ /,"",$2); v=$2; up=v; sub(/^[0-9]+:/,"",up); sub(/-.*/,"",up); if (up==want) {print v; done=1}}'
     args:
       executable: /bin/bash
     register: deb_tde_pin_ver
@@ -46,7 +49,7 @@
 
   - name: Install pg_tde packages for PG {{ pg_major }} (Debian/Ubuntu)
     apt:
-      name: "percona-pg-tde{{ pg_major }}{{ ('=' ~ (deb_tde_pin_ver.stdout | trim)) if (tde_pkg_version | default('') | length > 0) else '' }}"
+      name: "percona-pg-tde{{ pg_major }}{{ ('=' ~ (deb_tde_pin_ver.stdout | trim)) if ((tde_pkg_version | default('') | length > 0) and ((deb_tde_pin_ver.stdout | default('') | trim) | length > 0)) else '' }}"
       state: "{{ 'present' if (tde_pkg_version | default('') | length > 0) else 'latest' }}"
       allow_downgrade: true
       update_cache: true

@@ -16,6 +16,9 @@
 #   pg_socket_dir - directory for the Unix socket (PGHOST)
 #   version_log   - path to write the captured version info (e.g. /tmp/tde-from-version.log)
 #   version_label - human label for this capture (e.g. "FROM", "TO")
+# Caller may pass:
+#   expected_tde_version - pg_tde version to assert (e.g. "2.2.1"). When set, the
+#                          play fails if pg_tde_version() does not report it.
 
   - name: Capture pg_tde version info ({{ version_label }})
     become: true
@@ -51,3 +54,14 @@
   - name: Show pg_tde version info ({{ version_label }})
     debug:
       var: tde_version_result.stdout_lines
+
+  # Optional gate: when an expected pg_tde version is given, assert pg_tde_version()
+  # reports it (e.g. "pg_tde 2.2.1 "). Trailing space disambiguates 2.2.1 from 2.2.10.
+  - name: Verify pg_tde version matches expected ({{ version_label }})
+    fail:
+      msg: >-
+        Expected pg_tde version '{{ expected_tde_version }}' on the {{ version_label }}
+        cluster, but pg_tde_version() did not report it. See {{ version_log }}.
+    when:
+      - expected_tde_version | default('') | length > 0
+      - ('pg_tde ' ~ expected_tde_version ~ ' ') not in (tde_version_result.stdout | default(''))

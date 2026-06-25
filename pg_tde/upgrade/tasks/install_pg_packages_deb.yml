@@ -17,9 +17,12 @@
       # madison: "pkg | <version> | repo". Split each version into upstream and
       # build increment (strip epoch, then upstream before '-', build after);
       # match upstream == pg_full_version and build == pkg_release exactly.
+      # NB: do not 'exit' from awk on first match — under 'set -o pipefail' that
+      # closes the pipe while madison is still writing (SIGPIPE -> rc 141). Read
+      # the whole stream and print only the first match via a flag.
       apt-cache madison "percona-postgresql-{{ pg_major }}" \
         | awk -F'|' -v ver="{{ pg_full_version }}" -v rel="{{ pkg_release }}" \
-            '{gsub(/ /,"",$2); v=$2; e=v; sub(/^[0-9]+:/,"",e); split(e,a,"-"); b=a[2]; sub(/[.~+].*/,"",b); if (a[1]==ver && b==rel) {print v; exit}}'
+            '!done {gsub(/ /,"",$2); v=$2; e=v; sub(/^[0-9]+:/,"",e); split(e,a,"-"); b=a[2]; sub(/[.~+].*/,"",b); if (a[1]==ver && b==rel) {print v; done=1}}'
     args:
       executable: /bin/bash
     register: deb_pin_ver
@@ -33,9 +36,11 @@
       - pkg_release | default('') | length > 0
       - (deb_pin_ver.stdout | default('') | trim) | length == 0
 
+  # Only append "=<version>" when a version actually resolved; never a bare "=".
+  # (The fail-closed task above already aborts when a pin can't be satisfied.)
   - name: Compute server package version qualifier (Debian)
     set_fact:
-      deb_ver_suffix: "{{ ('=' ~ (deb_pin_ver.stdout | trim)) if (pkg_release | default('') | length > 0) else '' }}"
+      deb_ver_suffix: "{{ ('=' ~ (deb_pin_ver.stdout | trim)) if ((pkg_release | default('') | length > 0) and ((deb_pin_ver.stdout | default('') | trim) | length > 0)) else '' }}"
 
   - name: Install Percona PostgreSQL {{ pg_major }} core packages (Debian/Ubuntu)
     apt:

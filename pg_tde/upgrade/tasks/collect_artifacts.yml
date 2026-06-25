@@ -21,6 +21,12 @@
       TO_TDE_BRANCH=$TO_TDE_BRANCH
       TDE_UPGRADE=$TDE_UPGRADE
       TDE_REPO=$TDE_REPO
+      FROM_PKG_RELEASE=$FROM_PKG_RELEASE
+      TO_PKG_RELEASE=$TO_PKG_RELEASE
+      FROM_TDE_PKG_VERSION=$FROM_TDE_PKG_VERSION
+      TO_TDE_PKG_VERSION=$TO_TDE_PKG_VERSION
+      FROM_PERCONA_SERVER_VERSION=$FROM_PERCONA_SERVER_VERSION
+      TO_PERCONA_SERVER_VERSION=$TO_PERCONA_SERVER_VERSION
       PARAMS
 
       # pg_upgrade logs
@@ -79,6 +85,12 @@
     TO_TDE_BRANCH:         "{{ to_tde_branch }}"
     TDE_UPGRADE:           "{{ tde_upgrade }}"
     TDE_REPO:              "{{ tde_repo }}"
+    FROM_PKG_RELEASE:      "{{ from_pkg_release }}"
+    TO_PKG_RELEASE:        "{{ to_pkg_release }}"
+    FROM_TDE_PKG_VERSION:  "{{ from_tde_pkg_version }}"
+    TO_TDE_PKG_VERSION:    "{{ to_tde_pkg_version }}"
+    FROM_PERCONA_SERVER_VERSION: "{{ from_percona_server_version }}"
+    TO_PERCONA_SERVER_VERSION:   "{{ to_percona_server_version }}"
   become: true
   ignore_errors: true
 

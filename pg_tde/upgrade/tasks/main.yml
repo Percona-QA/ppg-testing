@@ -24,6 +24,10 @@
       to_pkg_release:        "{{ lookup('env', 'TO_PKG_RELEASE')   | default('', true) }}"
       from_tde_pkg_version:  "{{ lookup('env', 'FROM_TDE_PKG_VERSION') | default('', true) }}"
       to_tde_pkg_version:    "{{ lookup('env', 'TO_TDE_PKG_VERSION')   | default('', true) }}"
+      # Optional expected Percona server patch versions (e.g. 18.4.1 / 18.4.2). When
+      # set, the version captures assert SELECT version() reports them and fail if not.
+      from_percona_server_version: "{{ lookup('env', 'FROM_PERCONA_SERVER_VERSION') | default('', true) }}"
+      to_percona_server_version:   "{{ lookup('env', 'TO_PERCONA_SERVER_VERSION')   | default('', true) }}"
       cacheable: true
 
   - name: Set derived major version facts
@@ -273,20 +277,22 @@
         include_tasks:
           file: capture_server_version.yml
         vars:
-          pg_major:      "{{ from_major_version }}"
-          pg_bin_dir:    "{{ from_pg_bin_dir }}"
-          pg_socket_dir: "{{ from_pg_socket_dir }}"
-          version_log:   "/tmp/server-from-version.log"
-          version_label: "FROM"
+          pg_major:         "{{ from_major_version }}"
+          pg_bin_dir:       "{{ from_pg_bin_dir }}"
+          pg_socket_dir:    "{{ from_pg_socket_dir }}"
+          version_log:      "/tmp/server-from-version.log"
+          version_label:    "FROM"
+          expected_version: "{{ from_percona_server_version }}"
 
       - name: Capture pg_tde version (FROM, pre-upgrade)
         include_tasks:
           file: capture_tde_version.yml
         vars:
-          pg_bin_dir:    "{{ from_pg_bin_dir }}"
-          pg_socket_dir: "{{ from_pg_socket_dir }}"
-          version_log:   "/tmp/tde-from-version.log"
-          version_label: "FROM"
+          pg_bin_dir:           "{{ from_pg_bin_dir }}"
+          pg_socket_dir:        "{{ from_pg_socket_dir }}"
+          version_log:          "/tmp/tde-from-version.log"
+          version_label:        "FROM"
+          expected_tde_version: "{{ from_tde_pkg_version }}"
 
       # ===========================================================
       # Perform the upgrade
@@ -321,20 +327,22 @@
         include_tasks:
           file: capture_server_version.yml
         vars:
-          pg_major:      "{{ to_major_version }}"
-          pg_bin_dir:    "{{ to_pg_bin_dir }}"
-          pg_socket_dir: "{{ to_pg_socket_dir }}"
-          version_log:   "/tmp/server-to-version.log"
-          version_label: "TO"
+          pg_major:         "{{ to_major_version }}"
+          pg_bin_dir:       "{{ to_pg_bin_dir }}"
+          pg_socket_dir:    "{{ to_pg_socket_dir }}"
+          version_log:      "/tmp/server-to-version.log"
+          version_label:    "TO"
+          expected_version: "{{ to_percona_server_version }}"
 
       - name: Capture pg_tde version (TO, post-upgrade)
         include_tasks:
           file: capture_tde_version.yml
         vars:
-          pg_bin_dir:    "{{ to_pg_bin_dir }}"
-          pg_socket_dir: "{{ to_pg_socket_dir }}"
-          version_log:   "/tmp/tde-to-version.log"
-          version_label: "TO"
+          pg_bin_dir:           "{{ to_pg_bin_dir }}"
+          pg_socket_dir:        "{{ to_pg_socket_dir }}"
+          version_log:          "/tmp/tde-to-version.log"
+          version_label:        "TO"
+          expected_tde_version: "{{ to_tde_pkg_version }}"
 
     rescue:
       - name: Record upgrade test failure

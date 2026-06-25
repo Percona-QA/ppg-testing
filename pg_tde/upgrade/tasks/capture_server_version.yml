@@ -16,6 +16,9 @@
 #   pg_socket_dir - directory for the Unix socket (PGHOST)
 #   version_log   - path to write the captured info (e.g. /tmp/server-from-version.log)
 #   version_label - human label for this capture (e.g. "FROM", "TO")
+# Caller may pass:
+#   expected_version - Percona patch version to assert (e.g. "18.4.2"). When set,
+#                      the play fails if SELECT version() does not report it.
 
   - name: Capture server version info ({{ version_label }})
     become: true
@@ -47,3 +50,15 @@
   - name: Show server version info ({{ version_label }})
     debug:
       var: server_version_result.stdout_lines
+
+  # Optional gate: when an expected Percona patch version is given, assert that
+  # SELECT version() actually reports it (e.g. "Percona Server for PostgreSQL 18.4.2 ").
+  # The trailing space disambiguates 18.4.1 from 18.4.10.
+  - name: Verify server version matches expected ({{ version_label }})
+    fail:
+      msg: >-
+        Expected Percona Server version '{{ expected_version }}' on the {{ version_label }}
+        cluster, but SELECT version() did not report it. See {{ version_log }}.
+    when:
+      - expected_version | default('') | length > 0
+      - ('PostgreSQL ' ~ expected_version ~ ' ') not in (server_version_result.stdout | default(''))
