@@ -3,6 +3,9 @@
 # Caller must pass:
 #   pg_major        - e.g. "16"
 #   pg_full_version - e.g. "16.4" (used to decide whether llvmjit is available)
+# Caller may pass:
+#   pkg_release     - Percona build increment to pin (e.g. "2" -> 18.4-2). Empty
+#                     (default) installs the latest build in the channel.
 
   # Disable the distro's postgresql AppStream module (EL8/EL9) so its
   # postgresql<major>-server package is never pulled in. EL10 has no modules
@@ -13,36 +16,27 @@
     ignore_errors: true
     when: ansible_distribution_major_version in ["8", "9"]
 
-  - name: Install Percona PostgreSQL {{ pg_major }} packages (RHEL 8)
-    yum:
-      name:
-        - percona-postgresql-client-common
-        - percona-postgresql-common
-        - "percona-postgresql{{ pg_major }}"
-        - "percona-postgresql{{ pg_major }}-contrib"
-        - "percona-postgresql{{ pg_major }}-devel"
-        - "percona-postgresql{{ pg_major }}-libs"
-        - "percona-postgresql{{ pg_major }}-llvmjit"
-        - "percona-postgresql{{ pg_major }}-server"
-      state: latest
-      update_cache: true
-    environment:
-      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
-    when: ansible_distribution_major_version == "8"
+  # When pinning a build increment, qualify the version-bearing server packages
+  # with an NEVR glob (e.g. percona-postgresql18-server-18.4-2*). dnf matches the
+  # trailing .elN.arch via the glob. The *-common packages carry their own
+  # independent version, so they stay unpinned (latest).
+  - name: Compute server package pin suffix (RHEL)
+    set_fact:
+      pg_pin_suffix: "{{ ('-' ~ pg_full_version ~ '-' ~ pkg_release ~ '*') if (pkg_release | default('') | length > 0) else '' }}"
 
-  - name: Install Percona PostgreSQL {{ pg_major }} packages (RHEL 9/10)
+  - name: Install Percona PostgreSQL {{ pg_major }} packages (RHEL)
     yum:
       name:
         - percona-postgresql-client-common
         - percona-postgresql-common
-        - "percona-postgresql{{ pg_major }}"
-        - "percona-postgresql{{ pg_major }}-contrib"
-        - "percona-postgresql{{ pg_major }}-devel"
-        - "percona-postgresql{{ pg_major }}-libs"
-        - "percona-postgresql{{ pg_major }}-llvmjit"
-        - "percona-postgresql{{ pg_major }}-server"
-      state: latest
+        - "percona-postgresql{{ pg_major }}{{ pg_pin_suffix }}"
+        - "percona-postgresql{{ pg_major }}-contrib{{ pg_pin_suffix }}"
+        - "percona-postgresql{{ pg_major }}-devel{{ pg_pin_suffix }}"
+        - "percona-postgresql{{ pg_major }}-libs{{ pg_pin_suffix }}"
+        - "percona-postgresql{{ pg_major }}-llvmjit{{ pg_pin_suffix }}"
+        - "percona-postgresql{{ pg_major }}-server{{ pg_pin_suffix }}"
+      state: "{{ 'present' if (pkg_release | default('') | length > 0) else 'latest' }}"
+      allow_downgrade: true
       update_cache: true
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
-    when: ansible_distribution_major_version != "8"

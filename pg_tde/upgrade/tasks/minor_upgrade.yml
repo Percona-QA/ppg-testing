@@ -21,26 +21,24 @@
   - name: Enable Percona repo for TO version
     command: percona-release enable-only {{ to_version_str }} {{ to_repo }}
 
-  - name: Update PostgreSQL {{ from_major_version }} packages to latest minor (RHEL)
-    yum:
-      name:
-        - "percona-postgresql{{ from_major_version }}"
-        - "percona-postgresql{{ from_major_version }}-contrib"
-        - "percona-postgresql{{ from_major_version }}-devel"
-        - "percona-postgresql{{ from_major_version }}-libs"
-        - "percona-postgresql{{ from_major_version }}-server"
-      state: latest
-      update_cache: true
+  # Update the server packages via the shared (pin-aware) install tasks. TO_PKG_RELEASE
+  # pins a specific Percona build increment (e.g. 18.4-2); empty = latest in the channel.
+  - name: Update PostgreSQL {{ from_major_version }} server packages (RHEL)
+    include_tasks:
+      file: install_pg_packages_rhel.yml
+    vars:
+      pg_major:        "{{ from_major_version }}"
+      pg_full_version: "{{ to_full_version }}"
+      pkg_release:     "{{ to_pkg_release }}"
     when: ansible_os_family == "RedHat"
 
-  - name: Update PostgreSQL {{ from_major_version }} packages to latest minor (Debian)
-    apt:
-      name:
-        - "percona-postgresql-{{ from_major_version }}"
-        - "percona-postgresql-client-{{ from_major_version }}"
-        - "percona-postgresql-server-dev-{{ from_major_version }}"
-      state: latest
-      update_cache: true
+  - name: Update PostgreSQL {{ from_major_version }} server packages (Debian)
+    include_tasks:
+      file: install_pg_packages_deb.yml
+    vars:
+      pg_major:        "{{ from_major_version }}"
+      pg_full_version: "{{ to_full_version }}"
+      pkg_release:     "{{ to_pkg_release }}"
     when: ansible_os_family == "Debian"
 
   # --- pg_tde from packages + TDE_UPGRADE=true: update pg_tde package ---
@@ -49,6 +47,7 @@
       file: install_tde_packages.yml
     vars:
       pg_major: "{{ from_major_version }}"
+      tde_pkg_version: "{{ to_tde_pkg_version }}"
     when:
       - tde_upgrade | bool
       - install_from_packages | bool

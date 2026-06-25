@@ -20,6 +20,7 @@
       file: install_tde_packages.yml
     vars:
       pg_major: "{{ from_major_version }}"
+      tde_pkg_version: "{{ to_tde_pkg_version }}"
     when: install_from_packages | bool
 
   # --- source path: rebuild pg_tde from TO_TDE_BRANCH against the same PG ---

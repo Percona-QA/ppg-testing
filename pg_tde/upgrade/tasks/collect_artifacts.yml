@@ -44,6 +44,10 @@
       cp /tmp/tde-from-version.log     "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-to-version.log       "$ARTIFACT_DIR/" 2>/dev/null || true
 
+      # server version info (SELECT version() + package NEVR, FROM and TO)
+      cp /tmp/server-from-version.log  "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/server-to-version.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+
       # PostgreSQL service logs (RHEL — covers both FROM and TO data dirs)
       find /var/lib/pgsql -name "*.log" -type f 2>/dev/null \
         -exec cp {} "$ARTIFACT_DIR/" \; || true

@@ -48,13 +48,16 @@
     vars:
       pg_major:        "{{ to_major_version }}"
       pg_full_version: "{{ to_full_version }}"
+      pkg_release:     "{{ to_pkg_release }}"
     when: ansible_os_family == "RedHat"
 
   - name: Install PostgreSQL TO version packages (Debian)
     include_tasks:
       file: install_pg_packages_deb.yml
     vars:
-      pg_major: "{{ to_major_version }}"
+      pg_major:        "{{ to_major_version }}"
+      pg_full_version: "{{ to_full_version }}"
+      pkg_release:     "{{ to_pkg_release }}"
     when: ansible_os_family == "Debian"
 
   # --- Install or build pg_tde for TO version ---
@@ -63,6 +66,7 @@
       file: install_tde_packages.yml
     vars:
       pg_major: "{{ to_major_version }}"
+      tde_pkg_version: "{{ to_tde_pkg_version }}"
     when: install_from_packages | bool
 
   - name: Build pg_tde from FROM_TDE_BRANCH against TO PG (source, TDE_UPGRADE=false)

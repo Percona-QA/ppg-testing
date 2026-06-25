@@ -1,0 +1,49 @@
+---
+# Capture PostgreSQL (Percona) server version info for debugging/verification and
+# write it to a log file (collected into the artifact tarball) plus the console.
+#
+# This complements capture_tde_version.yml. It records the SERVER side, which is
+# what distinguishes a Percona patched-release upgrade (e.g. 18.4.1 -> 18.4.2):
+#   - SELECT version()  : the in-DB Percona patch string, e.g.
+#                         "Percona Server for PostgreSQL 18.4.2".
+#   - package NEVR      : the installed server package build, e.g. "18.4-2.el9"
+#                         (RHEL rpm) / "2:18.4-2..." (Debian dpkg) — the build
+#                         increment that the version string alone does not show.
+#
+# Caller must pass:
+#   pg_major      - PostgreSQL major version (e.g. "18")
+#   pg_bin_dir    - PostgreSQL bin directory
+#   pg_socket_dir - directory for the Unix socket (PGHOST)
+#   version_log   - path to write the captured info (e.g. /tmp/server-from-version.log)
+#   version_label - human label for this capture (e.g. "FROM", "TO")
+
+  - name: Capture server version info ({{ version_label }})
+    become: true
+    shell: |
+      set -o pipefail
+      {
+        echo "=== PostgreSQL server version [{{ version_label }}] ==="
+        echo "captured_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo
+        echo "-- in-DB server version (SELECT version()):"
+        sudo -u postgres env PGHOST="{{ pg_socket_dir }}" PGPORT=5432 \
+          "{{ pg_bin_dir }}/psql" -d postgres -c "SELECT version();" 2>&1 || true
+        echo "-- in-DB server_version / server_version_num:"
+        sudo -u postgres env PGHOST="{{ pg_socket_dir }}" PGPORT=5432 \
+          "{{ pg_bin_dir }}/psql" -d postgres -c "SHOW server_version;" 2>&1 || true
+        echo "-- installed server package build (NEVR):"
+        if command -v rpm >/dev/null 2>&1; then
+          rpm -q "percona-postgresql{{ pg_major }}-server" 2>&1 || true
+        else
+          dpkg-query -W -f='percona-postgresql-{{ pg_major }} ${Version}\n' \
+            "percona-postgresql-{{ pg_major }}" 2>&1 || true
+        fi
+      } 2>&1 | tee {{ version_log }}
+    args:
+      executable: /bin/bash
+    register: server_version_result
+    ignore_errors: true
+
+  - name: Show server version info ({{ version_label }})
+    debug:
+      var: server_version_result.stdout_lines

@@ -2,21 +2,64 @@
 # Install Percona PostgreSQL packages for a given major version on Debian/Ubuntu.
 # Caller must pass:
 #   pg_major - e.g. "16"
+# Caller may pass:
+#   pkg_release     - Percona build increment to pin (e.g. "2" -> 18.4-2). Empty
+#                     (default) installs the latest build in the channel.
+#   pg_full_version - e.g. "18.4" (only needed when pinning, to match the version).
 
-  - name: Install Percona PostgreSQL {{ pg_major }} packages (Debian/Ubuntu)
+  # Resolve the exact apt version string for the requested build increment, since
+  # apt cannot glob versions. madison lists "pkg | <version> | repo"; match the
+  # upstream version + build (e.g. 18.4-2) and pin all core server packages to it.
+  - name: Resolve pinned server package version (Debian)
+    shell: |
+      set -o pipefail
+      apt-get update >/dev/null 2>&1 || true
+      # madison: "pkg | <version> | repo". Split each version into upstream and
+      # build increment (strip epoch, then upstream before '-', build after);
+      # match upstream == pg_full_version and build == pkg_release exactly.
+      apt-cache madison "percona-postgresql-{{ pg_major }}" \
+        | awk -F'|' -v ver="{{ pg_full_version }}" -v rel="{{ pkg_release }}" \
+            '{gsub(/ /,"",$2); v=$2; e=v; sub(/^[0-9]+:/,"",e); split(e,a,"-"); b=a[2]; sub(/[.~+].*/,"",b); if (a[1]==ver && b==rel) {print v; exit}}'
+    args:
+      executable: /bin/bash
+    register: deb_pin_ver
+    changed_when: false
+    when: pkg_release | default('') | length > 0
+
+  - name: Fail if pinned server build not found in channel (Debian)
+    fail:
+      msg: "No percona-postgresql-{{ pg_major }} build matching {{ pg_full_version }}-{{ pkg_release }} in the enabled repo"
+    when:
+      - pkg_release | default('') | length > 0
+      - (deb_pin_ver.stdout | default('') | trim) | length == 0
+
+  - name: Compute server package version qualifier (Debian)
+    set_fact:
+      deb_ver_suffix: "{{ ('=' ~ (deb_pin_ver.stdout | trim)) if (pkg_release | default('') | length > 0) else '' }}"
+
+  - name: Install Percona PostgreSQL {{ pg_major }} core packages (Debian/Ubuntu)
     apt:
       name:
-        - "percona-postgresql-{{ pg_major }}"
-        - "percona-postgresql-client-{{ pg_major }}"
-        - "percona-postgresql-{{ pg_major }}-pgvector"
-      state: latest
+        - "percona-postgresql-{{ pg_major }}{{ deb_ver_suffix }}"
+        - "percona-postgresql-client-{{ pg_major }}{{ deb_ver_suffix }}"
+      state: "{{ 'present' if (pkg_release | default('') | length > 0) else 'latest' }}"
+      allow_downgrade: true
       update_cache: true
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
+  # pgvector is a separate component with its own version, so it is never pinned.
+  - name: Install Percona PostgreSQL {{ pg_major }} pgvector (Debian/Ubuntu)
+    apt:
+      name: "percona-postgresql-{{ pg_major }}-pgvector"
+      state: latest
+      update_cache: true
+    ignore_errors: true
+
   - name: Install PostgreSQL {{ pg_major }} server dev package (Debian/Ubuntu)
     apt:
-      name: "percona-postgresql-server-dev-{{ pg_major }}"
-      state: latest
+      name: "percona-postgresql-server-dev-{{ pg_major }}{{ deb_ver_suffix }}"
+      state: "{{ 'present' if (pkg_release | default('') | length > 0) else 'latest' }}"
+      allow_downgrade: true
       update_cache: true
     ignore_errors: true

@@ -17,6 +17,13 @@
       from_repo:             "{{ lookup('env', 'FROM_REPO') | default('testing') }}"
       to_repo:               "{{ lookup('env', 'TO_REPO')   | default('testing') }}"
       build_number:          "{{ lookup('env', 'BUILD_NUMBER') | default('0') }}"
+      # Optional package pins for Percona patched-release upgrades. Empty = latest
+      # in the channel (current behaviour). Server is pinned by build increment
+      # (e.g. "2" -> 18.4-2); pg_tde is pinned by package version (e.g. "2.2.0").
+      from_pkg_release:      "{{ lookup('env', 'FROM_PKG_RELEASE') | default('', true) }}"
+      to_pkg_release:        "{{ lookup('env', 'TO_PKG_RELEASE')   | default('', true) }}"
+      from_tde_pkg_version:  "{{ lookup('env', 'FROM_TDE_PKG_VERSION') | default('', true) }}"
+      to_tde_pkg_version:    "{{ lookup('env', 'TO_TDE_PKG_VERSION')   | default('', true) }}"
       cacheable: true
 
   - name: Set derived major version facts
@@ -164,6 +171,7 @@
         vars:
           pg_major: "{{ from_major_version }}"
           pg_full_version: "{{ from_full_version }}"
+          pkg_release: "{{ from_pkg_release }}"
         when: ansible_os_family == "RedHat"
 
       - name: Install PostgreSQL FROM version packages (Debian)
@@ -171,6 +179,8 @@
           file: install_pg_packages_deb.yml
         vars:
           pg_major: "{{ from_major_version }}"
+          pg_full_version: "{{ from_full_version }}"
+          pkg_release: "{{ from_pkg_release }}"
         when: ansible_os_family == "Debian"
 
       # ===========================================================
@@ -181,6 +191,7 @@
           file: install_tde_packages.yml
         vars:
           pg_major: "{{ from_major_version }}"
+          tde_pkg_version: "{{ from_tde_pkg_version }}"
         when: install_from_packages | bool
 
       - name: Build pg_tde from source for FROM version
@@ -258,6 +269,16 @@
           pg_socket_dir: "{{ from_pg_socket_dir }}"
           check_label:   "pre-upgrade"
 
+      - name: Capture server version (FROM, pre-upgrade)
+        include_tasks:
+          file: capture_server_version.yml
+        vars:
+          pg_major:      "{{ from_major_version }}"
+          pg_bin_dir:    "{{ from_pg_bin_dir }}"
+          pg_socket_dir: "{{ from_pg_socket_dir }}"
+          version_log:   "/tmp/server-from-version.log"
+          version_label: "FROM"
+
       - name: Capture pg_tde version (FROM, pre-upgrade)
         include_tasks:
           file: capture_tde_version.yml
@@ -295,6 +316,16 @@
           pg_bin_dir:    "{{ to_pg_bin_dir }}"
           pg_socket_dir: "{{ to_pg_socket_dir }}"
           check_label:   "post-upgrade"
+
+      - name: Capture server version (TO, post-upgrade)
+        include_tasks:
+          file: capture_server_version.yml
+        vars:
+          pg_major:      "{{ to_major_version }}"
+          pg_bin_dir:    "{{ to_pg_bin_dir }}"
+          pg_socket_dir: "{{ to_pg_socket_dir }}"
+          version_log:   "/tmp/server-to-version.log"
+          version_label: "TO"
 
       - name: Capture pg_tde version (TO, post-upgrade)
         include_tasks:
