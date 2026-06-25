@@ -4080,7 +4080,7 @@ def get_settings(distro_type):
         },
         "ppg-17.10": {
             "version": "17.10",
-            "percona-version": "17.10.1",
+            "percona-version": "17.10.2",
             "deb_pkg_ver": ppg_versions["ppg-17.10"]["deb_pkg_ver"],
             "deb_packages": ppg_versions["ppg-17.10"]["deb_packages"],
             "percona-postgresql-common": "290",
@@ -4226,7 +4226,7 @@ def get_settings(distro_type):
         },
         "ppg-18.4": {
             "version": "18.4",
-            "percona-version": "18.4.1",
+            "percona-version": "18.4.2",
             "deb_pkg_ver": ppg_versions["ppg-18.4"]["deb_pkg_ver"],
             "deb_packages": ppg_versions["ppg-18.4"]["deb_packages"],
             "percona-postgresql-common": "290",
