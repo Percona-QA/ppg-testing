@@ -52,8 +52,8 @@
       var: server_version_result.stdout_lines
 
   # Optional gate: when an expected Percona patch version is given, assert that
-  # SELECT version() actually reports it (e.g. "Percona Server for PostgreSQL 18.4.2 ").
-  # The trailing space disambiguates 18.4.1 from 18.4.10.
+  # SELECT version() reports it. Match "PostgreSQL <ver>" followed by whitespace
+  # or end-of-line. Dots are escaped so 18.4.1 does not match 18.4.10.
   - name: Verify server version matches expected ({{ version_label }})
     fail:
       msg: >-
@@ -61,4 +61,4 @@
         cluster, but SELECT version() did not report it. See {{ version_log }}.
     when:
       - expected_version | default('') | length > 0
-      - ('PostgreSQL ' ~ expected_version ~ ' ') not in (server_version_result.stdout | default(''))
+      - (server_version_result.stdout | default('')) is not search('PostgreSQL ' ~ (expected_version | replace('.', '\\.')) ~ '(\\s|$)')

@@ -56,7 +56,9 @@
       var: tde_version_result.stdout_lines
 
   # Optional gate: when an expected pg_tde version is given, assert pg_tde_version()
-  # reports it (e.g. "pg_tde 2.2.1 "). Trailing space disambiguates 2.2.1 from 2.2.10.
+  # reports it. Match "pg_tde <ver>" followed by whitespace or end-of-line (psql
+  # does not pad the trailing column, so there is no trailing space). Dots are
+  # escaped so 2.2.1 does not match 2.2.10.
   - name: Verify pg_tde version matches expected ({{ version_label }})
     fail:
       msg: >-
@@ -64,4 +66,4 @@
         cluster, but pg_tde_version() did not report it. See {{ version_log }}.
     when:
       - expected_tde_version | default('') | length > 0
-      - ('pg_tde ' ~ expected_tde_version ~ ' ') not in (tde_version_result.stdout | default(''))
+      - (tde_version_result.stdout | default('')) is not search('pg_tde ' ~ (expected_tde_version | replace('.', '\\.')) ~ '(\\s|$)')
