@@ -98,38 +98,6 @@
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     when: ansible_distribution_major_version == "9"
 
-  - name: LLVM Version
-    command: llvm-config --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: CLANG Version
-    command: clang --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: Debug 1
-    command: rpm -qi systemtap-sdt-devel
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: Debug 2
-    command: yum -v search systemtap-sdt-devel
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
   - name: install tools
     yum:
       name: "{{ packages }}"
@@ -239,13 +207,6 @@
       - prename
     when: ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
 
-  - name: Install kernel-modules-extra on RHEL 10
-    become: true
-    dnf:
-      name: "kernel-modules-extra"
-      state: present
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
-
   - name: Install cpanm File::Rename
     become: true
     command: cpanm File::Rename
@@ -261,29 +222,9 @@
       - CGI::Session
       - HTTP::Server::Simple::CGI
 
-  - name: Debug 3
-    command: rpm -qi systemtap-sdt-devel
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: Debug 4
-    command: yum -v search systemtap-sdt-devel
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: Debug 5
+  - name: Install systemtap-sdt-devel
     command: yum install -y systemtap-sdt-devel --allowerasing
     ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
 
   - name: Install perl Text-trim
     command: cpanm Text::Trim
@@ -301,28 +242,6 @@
       - perl-Opcode
     when: ansible_distribution_major_version == "9"
 
-  - name: LLVM Version
-    command: llvm-config --version
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout
-
-  - name: CLANG Version
-    command: clang --version
-    ignore_errors: true
-    register: results
-
-  - name: Get ulimit on Rocky 8 ARM for postgres user
-    become_user: postgres
-    command: ulimit -a
-    register: results
-    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
-
-  - debug: var=results.stdout_lines
-    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
-
   - name: Modify memlock, both soft and hard, limit for the user postgres
     community.general.pam_limits:
       domain: postgres
@@ -330,16 +249,4 @@
       limit_item: memlock
       value: 128
       comment: 128kb memory lock for postgres
-    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
-
-  - debug: var=results.stdout_lines
-    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
-
-  - name: Get ulimit on Rocky 8 ARM for postgres user
-    become_user: postgres
-    command: ulimit -a
-    register: results
-    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
-
-  - debug: var=results.stdout_lines
     when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'
