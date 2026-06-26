@@ -1,4 +1,9 @@
 
+- name: Update yum cache before Docker setup
+  become: true
+  command: yum -y update
+  when: ansible_os_family == "RedHat"
+
 - name: Ensure required dependencies are installed
   ansible.builtin.yum:
     name:
@@ -17,7 +22,7 @@
 
 - name: Install kernel-modules-extra on RHEL 10
   dnf:
-    name: "kernel-modules-extra"
+    name: "kernel-modules-extra-{{ ansible_kernel }}"
     state: present
   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
@@ -28,9 +33,14 @@
   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
   ignore_errors: true
 
-- name: Add Docker CE repository RHEL 8,9
+- name: Add Docker CE repository
   become: true
   command: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+  when: ansible_os_family == "RedHat"
+
+- name: Update yum cache after adding Docker repo
+  become: true
+  command: yum -y update
   when: ansible_os_family == "RedHat"
 
 - name: Install Docker packages

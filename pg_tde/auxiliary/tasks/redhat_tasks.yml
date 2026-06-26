@@ -183,37 +183,38 @@
       - meson
       - ninja-build
 
-  - name: Install OpenBao
-    become: true
-    ansible.builtin.shell: |
-      OPENBAO_VERSION=2.5.4
-      # tar.gz arch uses Linux uname convention (x86_64 / arm64 capitalised as Linux_x86_64)
-      ARCH_TAR=$(uname -m | sed 's/aarch64/arm64/')
-      wget -q https://github.com/openbao/openbao/releases/download/v${OPENBAO_VERSION}/bao_${OPENBAO_VERSION}_Linux_${ARCH_TAR}.tar.gz -O /tmp/openbao.tar.gz
-      # Install to /usr/bin so it is in the default RHEL PATH (/usr/local/bin is
-      # not included in the minimal PATH that meson test subprocesses inherit on RHEL)
-      tar -xzf /tmp/openbao.tar.gz -C /usr/bin bao
-      chmod 0755 /usr/bin/bao
-      rm -f /tmp/openbao.tar.gz
-    args:
-      executable: /bin/bash
+  ## Handled by percona-qa helper scripts at test runtime
+  ##- name: Install OpenBao
+  ##  become: true
+  ##  ansible.builtin.shell: |
+  ##    OPENBAO_VERSION=2.5.4
+  ##    # tar.gz arch uses Linux uname convention (x86_64 / arm64 capitalised as Linux_x86_64)
+  ##    ARCH_TAR=$(uname -m | sed 's/aarch64/arm64/')
+  ##    wget -q https://github.com/openbao/openbao/releases/download/v${OPENBAO_VERSION}/bao_${OPENBAO_VERSION}_Linux_${ARCH_TAR}.tar.gz -O /tmp/openbao.tar.gz
+  ##    # Install to /usr/bin so it is in the default RHEL PATH (/usr/local/bin is
+  ##    # not included in the minimal PATH that meson test subprocesses inherit on RHEL)
+  ##    tar -xzf /tmp/openbao.tar.gz -C /usr/bin bao
+  ##    chmod 0755 /usr/bin/bao
+  ##    rm -f /tmp/openbao.tar.gz
+  ##  args:
+  ##    executable: /bin/bash
 
-  - name: Install Cosmian KMS (RHEL 9+ only — RHEL 8 uses Docker fallback due to glibc < 2.33)
-    become: true
-    ansible.builtin.shell: |
-      COSMIAN_VERSION=5.21.0
-      # RPM dir path uses amd64/arm64 but RPM filename uses x86_64/aarch64 (RPM convention)
-      ARCH_DIR=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-      ARCH_RPM=$(uname -m)
-      wget -q https://package.cosmian.com/kms/${COSMIAN_VERSION}/rpm/${ARCH_DIR}/non-fips/static/cosmian-kms-server-non-fips-static-openssl_${COSMIAN_VERSION}_${ARCH_RPM}.rpm -O /tmp/cosmian_kms.rpm
-      rpm -ivh /tmp/cosmian_kms.rpm || true
-      chmod 0755 /usr/sbin/cosmian_kms || true
-      chmod 0755 /usr/local/cosmian/lib/ossl-modules/legacy.so || true
-      chmod 0755 /usr/local/cosmian/lib/ossl-modules/ || true
-      rm -f /tmp/cosmian_kms.rpm
-    args:
-      executable: /bin/bash
-    when: ansible_distribution_major_version | int >= 9
+  ##- name: Install Cosmian KMS (RHEL 9+ only — RHEL 8 uses Docker fallback due to glibc < 2.33)
+  ##  become: true
+  ##  ansible.builtin.shell: |
+  ##    COSMIAN_VERSION=5.21.0
+  ##    # RPM dir path uses amd64/arm64 but RPM filename uses x86_64/aarch64 (RPM convention)
+  ##    ARCH_DIR=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+  ##    ARCH_RPM=$(uname -m)
+  ##    wget -q https://package.cosmian.com/kms/${COSMIAN_VERSION}/rpm/${ARCH_DIR}/non-fips/static/cosmian-kms-server-non-fips-static-openssl_${COSMIAN_VERSION}_${ARCH_RPM}.rpm -O /tmp/cosmian_kms.rpm
+  ##    rpm -ivh /tmp/cosmian_kms.rpm || true
+  ##    chmod 0755 /usr/sbin/cosmian_kms || true
+  ##    chmod 0755 /usr/local/cosmian/lib/ossl-modules/legacy.so || true
+  ##    chmod 0755 /usr/local/cosmian/lib/ossl-modules/ || true
+  ##    rm -f /tmp/cosmian_kms.rpm
+  ##  args:
+  ##    executable: /bin/bash
+  ##  when: ansible_distribution_major_version | int >= 9
 
   - name: Install liburing packages
     yum:
@@ -244,14 +245,6 @@
       name: "kernel-modules-extra"
       state: present
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
-
-  - name: Ensure br_netfilter module is loaded
-    become: true
-    community.general.modprobe:
-      name: br_netfilter
-      state: present
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
-    ignore_errors: true
 
   - name: Install cpanm File::Rename
     become: true
