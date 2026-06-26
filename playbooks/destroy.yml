@@ -16,25 +16,23 @@
             instance_conf: {}
             skip_instances: true
 
+    # Synchronous, hard-bounded teardown. The old fire-and-forget (async: 7200,
+    # poll: 0) + async_status retry:300 loop could hang for hours if a
+    # termination stalled or the async worker died ("worker found in dead
+    # state"). ec2_instance owns the wait here with a real timeout; the terminate
+    # request is issued to AWS regardless, so no VM leak. failed_when: false keeps
+    # a slow teardown from reddening an otherwise-green test run.
     - name: Destroy molecule instance(s)
       amazon.aws.ec2_instance:
         state: absent
         instance_ids: "{{ item.instance_id }}"
         region: "{{ item.region }}"
+        wait: true
+        wait_timeout: 600
       register: server
       with_items: "{{ instance_conf }}"
       when: not skip_instances
-      async: 7200
-      poll: 0
-
-    - name: Wait for instance(s) deletion to complete
-      async_status:
-        jid: "{{ item.ansible_job_id }}"
-      register: ec2_jobs
-      until: ec2_jobs.finished
-      retries: 300
-      with_items: "{{ server.results }}"
-      when: not skip_instances
+      failed_when: false
 
     # Mandatory configuration for Molecule to function.
 

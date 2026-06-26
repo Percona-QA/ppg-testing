@@ -4,6 +4,10 @@
       name: epel-release
       update_cache: yes
       state: present
+    register: epel_setup
+    retries: 5
+    delay: 10
+    until: epel_setup is succeeded
 
   - name: Clean dnf RHEL8
     become: true
