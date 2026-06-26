@@ -105,12 +105,6 @@
     include_tasks:
       file: "install_docker.yml"
 
-  # >>> TEMP: DOCKER-ONLY VALIDATION
-  # While we stabilise Docker across the OS/arch matrix, the server (PSP) + TDE
-  # build/install and the percona-qa test run are disabled below. This block
-  # verifies Docker is actually up and usable on every platform and fails the
-  # play per-platform if not. Remove this block and restore the commented
-  # sections further down (search "TEMP: DOCKER-ONLY") once Docker is settled.
   - name: Verify Docker daemon is responsive
     become: true
     command: docker info
@@ -118,46 +112,6 @@
     retries: 3
     delay: 5
     until: docker_info.rc == 0
-
-  - name: Verify Docker can run a container (hello-world smoke test)
-    become: true
-    command: docker run --rm hello-world
-    register: docker_hello
-    retries: 3
-    delay: 5
-    until: docker_hello.rc == 0
-
-  - name: Verify Docker can pull the KMIP image used by percona-qa at test runtime
-    become: true
-    command: docker pull mohitpercona/kmip:latest
-    register: docker_pull
-    retries: 3
-    delay: 5
-    until: docker_pull.rc == 0
-
-  - name: Collect Docker validation diagnostics
-    become: true
-    shell: |
-      set +e
-      {
-        echo "===== docker version ====="; docker version
-        echo "===== docker info ====="; docker info
-        echo "===== docker images ====="; docker images
-        echo "===== getenforce ====="; getenforce 2>/dev/null || echo "n/a"
-        echo "===== bridge sysctls ====="; sysctl net.bridge.bridge-nf-call-iptables net.bridge.bridge-nf-call-ip6tables 2>/dev/null || echo "n/a"
-        echo "===== iptables backend ====="; iptables --version 2>/dev/null || echo "iptables not installed"
-        echo "===== journalctl docker (tail) ====="; journalctl -xeu docker.service --no-pager | tail -40
-      } > /tmp/docker-validation.log 2>&1
-    args:
-      executable: /bin/bash
-
-  - name: Fetch Docker validation log to controller
-    fetch:
-      src: /tmp/docker-validation.log
-      dest: "{{ playbook_dir }}/../artifacts/docker-validation-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.log"
-      flat: yes
-      fail_on_missing: false
-  # <<< TEMP: DOCKER-ONLY VALIDATION
 
   - name: Ensure at least 4 GB swap is configured
     become: true
@@ -250,88 +204,85 @@
         - tar
       state: present
 
-  # >>> TEMP: DOCKER-ONLY VALIDATION — Go toolchain is only needed for the
-  # build-from-source path, which is disabled below. Re-enable with the rest.
-  ## - name: Check if Go is already installed
-  ##   shell: "/usr/local/go/bin/go version | grep -q 'go{{ go_version }}'"
-  ##   register: go_exists
-  ##   ignore_errors: true
-  ##   changed_when: false
-  ##
-  ## - name: Installation Block
-  ##   when: go_exists.rc != 0
-  ##   block:
-  ##     - name: Download Go binary
-  ##       get_url:
-  ##         url: "{{ go_download_url }}"
-  ##         dest: "/tmp/{{ go_tarball }}"
-  ##         mode: '0644'
-  ##
-  ##     - name: Remove old Go installation
-  ##       file:
-  ##         path: "{{ go_install_dir }}/go"
-  ##         state: absent
-  ##
-  ##     - name: Extract Go tarball
-  ##       unarchive:
-  ##         src: "/tmp/{{ go_tarball }}"
-  ##         dest: "{{ go_install_dir }}"
-  ##         remote_src: yes
-  ##
-  ## - name: Add Go to system-wide PATH
-  ##   copy:
-  ##     dest: /etc/profile.d/golang.sh
-  ##     content: |
-  ##       export PATH=$PATH:/usr/local/go/bin
-  ##       export GOPATH=$HOME/go
-  ##       export PATH=$PATH:$GOPATH/bin
-  ##     mode: '0644'
-  ##
-  ## - name: Clean up tarball
-  ##   file:
-  ##     path: "/tmp/{{ go_tarball }}"
-  ##     state: absent
+  - name: Check if Go is already installed
+    shell: "/usr/local/go/bin/go version | grep -q 'go{{ go_version }}'"
+    register: go_exists
+    ignore_errors: true
+    changed_when: false
+
+  - name: Installation Block
+    when: go_exists.rc != 0
+    block:
+      - name: Download Go binary
+        get_url:
+          url: "{{ go_download_url }}"
+          dest: "/tmp/{{ go_tarball }}"
+          mode: '0644'
+
+      - name: Remove old Go installation
+        file:
+          path: "{{ go_install_dir }}/go"
+          state: absent
+
+      - name: Extract Go tarball
+        unarchive:
+          src: "/tmp/{{ go_tarball }}"
+          dest: "{{ go_install_dir }}"
+          remote_src: yes
+
+  - name: Add Go to system-wide PATH
+    copy:
+      dest: /etc/profile.d/golang.sh
+      content: |
+        export PATH=$PATH:/usr/local/go/bin
+        export GOPATH=$HOME/go
+        export PATH=$PATH:$GOPATH/bin
+      mode: '0644'
+
+  - name: Clean up tarball
+    file:
+      path: "/tmp/{{ go_tarball }}"
+      state: absent
 
   # =================================================
   # Clone,Build and install, Postgres/PSP with pg_tde
   # =================================================
 
-  ## - name: Build from sources, PSP and TDE
-  ##   include_tasks:
-  ##     file: "build_from_source.yml"
-  ##   when: not install_from_packages
+  - name: Build from sources, PSP and TDE
+    include_tasks:
+      file: "build_from_source.yml"
+    when: not install_from_packages
 
   # =================================================
   # Install from packages, both Postgres/PSP and pg_tde
   # =================================================
 
-  ## - name: Install on RHEL
-  ##   include_tasks:
-  ##     file: "install_from_packages_rhel.yml"
-  ##   when: install_from_packages and ansible_os_family == 'RedHat'
-  ##
-  ## - name: Install on Debian
-  ##   include_tasks:
-  ##     file: "install_from_packages_deb.yml"
-  ##   when: install_from_packages and ansible_os_family == 'Debian'
+  - name: Install on RHEL
+    include_tasks:
+      file: "install_from_packages_rhel.yml"
+    when: install_from_packages and ansible_os_family == 'RedHat'
+
+  - name: Install on Debian
+    include_tasks:
+      file: "install_from_packages_deb.yml"
+    when: install_from_packages and ansible_os_family == 'Debian'
 
   # =============================
   # Clone Percona-qa sources
   # =============================
 
-  ## - name: Clone Percona-qa sources
-  ##   git:
-  ##     repo: "{{ percona_qa_repo }}"
-  ##     version: "{{ percona_qa_branch }}"
-  ##     dest: /tmp/percona-qa
-  ##   become: true          # Required for become_user to work
-  ##   become_user: postgres
-  ##   register: clone_results
-  ##
-  ## - name: Debug git results
-  ##   debug:
-  ##     msg: "Cloned version: {{ clone_results.after | default('N/A') }}"
-  # <<< TEMP: DOCKER-ONLY VALIDATION
+  - name: Clone Percona-qa sources
+    git:
+      repo: "{{ percona_qa_repo }}"
+      version: "{{ percona_qa_branch }}"
+      dest: /tmp/percona-qa
+    become: true          # Required for become_user to work
+    become_user: postgres
+    register: clone_results
+
+  - name: Debug git results
+    debug:
+      msg: "Cloned version: {{ clone_results.after | default('N/A') }}"
 
   # =============================
   # Remove testcases to be skipped
@@ -350,136 +301,130 @@
   # =============================
   # Run Percona-qa sources tests
   # =============================
-  # >>> TEMP: DOCKER-ONLY VALIDATION — test run + artifact packaging + fail gate
-  # all disabled. Docker verification above is the only pass/fail signal for now.
-  ## - name: Run check tde tests
-  ##   become: true
-  ##   become_user: postgres
-  ##   shell: >-
-  ##     ./test_runner.sh
-  ##     --server_build_path {{ pg_install_dir }}
-  ##     {% if skip_testcase_enabled and skip_testcase_list | length > 0 %}--skip_test {{ skip_testcase_list }}{% endif %}
-  ##     --io_method {{ io_method }}
-  ##   args:
-  ##     executable: /bin/bash
-  ##     chdir: "/tmp/percona-qa/postgresql/automation/wrapper"
-  ##   environment:
-  ##     # Prepending custom paths to the existing PATH
-  ##     PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:/usr/local/go/bin:{{ ansible_env.PATH | default('/usr/local/bin:/usr/bin:/bin') }}"
-  ##     LD_LIBRARY_PATH: "{{ pg_lib_dir }}"
-  ##     PG_TEST_PORT_DIR: "/tmp/pg_tde_port"
-  ##     INSTALL_DIR: "{{ pg_install_dir }}"
-  ##     PGCTLTIMEOUT: "120"
-  ##     PG_TEST_TIMEOUT_DEFAULT: "300"
-  ##   ignore_errors: true
-  ##   register: regression
-  ##
-  ## - name: Extract failed log paths
-  ##   set_fact:
-  ##     failed_log_paths: "{{ regression.stdout | regex_findall('❌ FAIL:.*\\n\\s+Log:\\s+(.*)') }}"
-  ##
-  ## - name: Read last 50 lines of failed logs
-  ##   shell: "tail -n 50 {{ item }}"
-  ##   loop: "{{ failed_log_paths }}"
-  ##   register: failed_log_outputs
-  ##   become: true
-  ##   become_user: postgres
-  ##   ignore_errors: true
-  ##   when: failed_log_paths | length > 0
-  ##
-  ## - name: Display failed test logs
-  ##   debug:
-  ##     msg:
-  ##       - "--------------------------------------------------"
-  ##       - "TEST LOG: {{ item.item }} ❌ FAIL"
-  ##       - "--------------------------------------------------"
-  ##       - "{{ item.stdout_lines }}"
-  ##   loop: "{{ failed_log_outputs.results }}"
-  ##   # Only run if there are actual results in the list
-  ##   when: failed_log_outputs.results | default([]) | length > 0
-  ##
-  ## - name: Show stderr if test fails
-  ##   debug:
-  ##     var: regression.stderr_lines
-  ##   when:
-  ##     - failed_log_outputs.results | default([]) | length > 0
-  ##
-  ## - name: Save test runner output to file
-  ##   copy:
-  ##     content: "{{ regression.stdout | default('') }}\n--- STDERR ---\n{{ regression.stderr | default('') }}"
-  ##     dest: /tmp/tde-test-runner-output.log
-  ##   become: true
-  ##   when: regression is defined
-  # <<< TEMP: DOCKER-ONLY VALIDATION
+  - name: Run check tde tests
+    become: true
+    become_user: postgres
+    shell: >-
+      ./test_runner.sh
+      --server_build_path {{ pg_install_dir }}
+      {% if skip_testcase_enabled and skip_testcase_list | length > 0 %}--skip_test {{ skip_testcase_list }}{% endif %}
+      --io_method {{ io_method }}
+    args:
+      executable: /bin/bash
+      chdir: "/tmp/percona-qa/postgresql/automation/wrapper"
+    environment:
+      # Prepending custom paths to the existing PATH
+      PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:/usr/local/go/bin:{{ ansible_env.PATH | default('/usr/local/bin:/usr/bin:/bin') }}"
+      LD_LIBRARY_PATH: "{{ pg_lib_dir }}"
+      PG_TEST_PORT_DIR: "/tmp/pg_tde_port"
+      INSTALL_DIR: "{{ pg_install_dir }}"
+      PGCTLTIMEOUT: "120"
+      PG_TEST_TIMEOUT_DEFAULT: "300"
+    ignore_errors: true
+    register: regression
 
-  # >>> TEMP: DOCKER-ONLY VALIDATION — test-artifact packaging/fetch and the
-  # test fail-gate are disabled. Docker diagnostics are fetched above instead.
-  ## - name: Package tde auxiliary test artifacts
-  ##   shell: |
-  ##     set -uo pipefail
-  ##     ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
-  ##     ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
-  ##     rm -rf "$ARTIFACT_DIR"
-  ##     mkdir -p "$ARTIFACT_DIR/logs"
-  ##     mkdir -p "$ARTIFACT_DIR/failed_tests"
-  ##
-  ##     # -------------------------------------------------------
-  ##     # Top-level: test runner summary and build logs
-  ##     # -------------------------------------------------------
-  ##     cp /tmp/tde-test-runner-output.log "$ARTIFACT_DIR/" 2>/dev/null || true
-  ##     cp /tmp/pgtest/initdb.log           "$ARTIFACT_DIR/" 2>/dev/null || true
-  ##     cp /tmp/psp-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
-  ##     cp /tmp/tde-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
-  ##     cp /tmp/tde-install.log             "$ARTIFACT_DIR/" 2>/dev/null || true
-  ##     # KMS / Vault service logs
-  ##     cp /tmp/cosmian_kms.log             "$ARTIFACT_DIR/" 2>/dev/null || true
-  ##     cp /tmp/cosmian-server-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
-  ##     docker logs cosmian-server > "$ARTIFACT_DIR/cosmian-server-container.log" 2>&1 || true
-  ##     # vault.log sits at test_logs/ top level (not in a per-test subdir)
-  ##     cp /tmp/pgtest/test_logs/vault.log  "$ARTIFACT_DIR/" 2>/dev/null || true
-  ##     # bao_server.log is written inside the openbao build dir under RUN_DIR
-  ##     find /tmp/pgtest -maxdepth 2 -name "bao_server.log" -exec cp {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
-  ##     # KMIP runs as a Docker container — grab its logs
-  ##     docker logs kmip > "$ARTIFACT_DIR/kmip-container.log" 2>&1 || true
-  ##
-  ##     # -------------------------------------------------------
-  ##     # logs/: per-test subdirectories created by test_runner
-  ##     # Each contains test stdout, server logs, and config files
-  ##     # -------------------------------------------------------
-  ##     find /tmp/pgtest/test_logs -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
-  ##       -exec cp -r {} "$ARTIFACT_DIR/logs/" \; || true
-  ##     # System PostgreSQL service log: RHEL (/var/lib/pgsql)
-  ##     find /var/lib/pgsql -name "*.log" -type f 2>/dev/null \
-  ##       -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
-  ##     # System PostgreSQL service log: Debian (/var/log/postgresql)
-  ##     find /var/log/postgresql -name "*.log" -type f 2>/dev/null \
-  ##       -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
-  ##     # PostgreSQL server log when built from source (/opt/pgsql/data)
-  ##     find /opt/pgsql/data -name "*.log" -type f 2>/dev/null \
-  ##       -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
-  ##
-  ##     # -------------------------------------------------------
-  ##     # failed_tests/: PGDATA snapshots saved by test_runner
-  ##     # -------------------------------------------------------
-  ##     find /tmp/pgtest/failed_tests -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while read d; do
-  ##       cp -r "$d" "$ARTIFACT_DIR/failed_tests/" 2>/dev/null || true
-  ##     done
-  ##
-  ##     tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
-  ##   args:
-  ##     executable: /bin/bash
-  ##   become: true
-  ##   ignore_errors: true
-  ##
-  ## - name: Fetch tde auxiliary test artifacts to controller
-  ##   fetch:
-  ##     src: "/tmp/{{ artifact_filename }}"
-  ##     dest: "{{ playbook_dir }}/../artifacts/"
-  ##     fail_on_missing: false
-  ##
-  ## - name: Fail the playbook if tde tests failed
-  ##   fail:
-  ##     msg: "TDE auxiliary tests failed"
-  ##   when:
-  ##     - failed_log_outputs.results | default([]) | length > 0
-  # <<< TEMP: DOCKER-ONLY VALIDATION
+  - name: Extract failed log paths
+    set_fact:
+      failed_log_paths: "{{ regression.stdout | regex_findall('❌ FAIL:.*\\n\\s+Log:\\s+(.*)') }}"
+
+  - name: Read last 50 lines of failed logs
+    shell: "tail -n 50 {{ item }}"
+    loop: "{{ failed_log_paths }}"
+    register: failed_log_outputs
+    become: true
+    become_user: postgres
+    ignore_errors: true
+    when: failed_log_paths | length > 0
+
+  - name: Display failed test logs
+    debug:
+      msg:
+        - "--------------------------------------------------"
+        - "TEST LOG: {{ item.item }} ❌ FAIL"
+        - "--------------------------------------------------"
+        - "{{ item.stdout_lines }}"
+    loop: "{{ failed_log_outputs.results }}"
+    # Only run if there are actual results in the list
+    when: failed_log_outputs.results | default([]) | length > 0
+
+  - name: Show stderr if test fails
+    debug:
+      var: regression.stderr_lines
+    when:
+      - failed_log_outputs.results | default([]) | length > 0
+
+  - name: Save test runner output to file
+    copy:
+      content: "{{ regression.stdout | default('') }}\n--- STDERR ---\n{{ regression.stderr | default('') }}"
+      dest: /tmp/tde-test-runner-output.log
+    become: true
+    when: regression is defined
+
+  - name: Package tde auxiliary test artifacts
+    shell: |
+      set -uo pipefail
+      ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
+      ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
+      rm -rf "$ARTIFACT_DIR"
+      mkdir -p "$ARTIFACT_DIR/logs"
+      mkdir -p "$ARTIFACT_DIR/failed_tests"
+
+      # -------------------------------------------------------
+      # Top-level: test runner summary and build logs
+      # -------------------------------------------------------
+      cp /tmp/tde-test-runner-output.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pgtest/initdb.log           "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/psp-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-install.log             "$ARTIFACT_DIR/" 2>/dev/null || true
+      # KMS / Vault service logs
+      cp /tmp/cosmian_kms.log             "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/cosmian-server-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+      docker logs cosmian-server > "$ARTIFACT_DIR/cosmian-server-container.log" 2>&1 || true
+      # vault.log sits at test_logs/ top level (not in a per-test subdir)
+      cp /tmp/pgtest/test_logs/vault.log  "$ARTIFACT_DIR/" 2>/dev/null || true
+      # bao_server.log is written inside the openbao build dir under RUN_DIR
+      find /tmp/pgtest -maxdepth 2 -name "bao_server.log" -exec cp {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      # KMIP runs as a Docker container — grab its logs
+      docker logs kmip > "$ARTIFACT_DIR/kmip-container.log" 2>&1 || true
+
+      # -------------------------------------------------------
+      # logs/: per-test subdirectories created by test_runner
+      # Each contains test stdout, server logs, and config files
+      # -------------------------------------------------------
+      find /tmp/pgtest/test_logs -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
+        -exec cp -r {} "$ARTIFACT_DIR/logs/" \; || true
+      # System PostgreSQL service log: RHEL (/var/lib/pgsql)
+      find /var/lib/pgsql -name "*.log" -type f 2>/dev/null \
+        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+      # System PostgreSQL service log: Debian (/var/log/postgresql)
+      find /var/log/postgresql -name "*.log" -type f 2>/dev/null \
+        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+      # PostgreSQL server log when built from source (/opt/pgsql/data)
+      find /opt/pgsql/data -name "*.log" -type f 2>/dev/null \
+        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+
+      # -------------------------------------------------------
+      # failed_tests/: PGDATA snapshots saved by test_runner
+      # -------------------------------------------------------
+      find /tmp/pgtest/failed_tests -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while read d; do
+        cp -r "$d" "$ARTIFACT_DIR/failed_tests/" 2>/dev/null || true
+      done
+
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
+    args:
+      executable: /bin/bash
+    become: true
+    ignore_errors: true
+
+  - name: Fetch tde auxiliary test artifacts to controller
+    fetch:
+      src: "/tmp/{{ artifact_filename }}"
+      dest: "{{ playbook_dir }}/../artifacts/"
+      fail_on_missing: false
+
+  - name: Fail the playbook if tde tests failed
+    fail:
+      msg: "TDE auxiliary tests failed"
+    when:
+      - failed_log_outputs.results | default([]) | length > 0
