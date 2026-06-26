@@ -8,7 +8,7 @@ platforms:
     region: ${region}
     image: ${ami_debian12_arm64}
     vpc_subnet_id: ${vpc_subnet_id_aws2}
-    instance_type: t4g.2xlarge
+    instance_type: m7g.2xlarge
     ssh_user: admin
     root_device_name: /dev/xvda
     instance_tags:
