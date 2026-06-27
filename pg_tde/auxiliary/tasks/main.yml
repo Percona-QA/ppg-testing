@@ -366,50 +366,76 @@
       ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
       ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
-      mkdir -p "$ARTIFACT_DIR/logs"
-      mkdir -p "$ARTIFACT_DIR/failed_tests"
+      mkdir -p "$ARTIFACT_DIR"
 
-      # -------------------------------------------------------
-      # Top-level: test runner summary and build logs
-      # -------------------------------------------------------
+      # The test runner summary is always included (tiny, ~14 KB).
       cp /tmp/tde-test-runner-output.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/pgtest/initdb.log           "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/psp-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/tde-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/tde-install.log             "$ARTIFACT_DIR/" 2>/dev/null || true
-      # KMS / Vault service logs
-      cp /tmp/cosmian_kms.log             "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/cosmian-server-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
-      docker logs cosmian-server > "$ARTIFACT_DIR/cosmian-server-container.log" 2>&1 || true
-      # vault.log sits at test_logs/ top level (not in a per-test subdir)
-      cp /tmp/pgtest/test_logs/vault.log  "$ARTIFACT_DIR/" 2>/dev/null || true
-      # bao_server.log is written inside the openbao build dir under RUN_DIR
-      find /tmp/pgtest -maxdepth 2 -name "bao_server.log" -exec cp {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
-      # KMIP runs as a Docker container — grab its logs
-      docker logs kmip > "$ARTIFACT_DIR/kmip-container.log" 2>&1 || true
 
-      # -------------------------------------------------------
-      # logs/: per-test subdirectories created by test_runner
-      # Each contains test stdout, server logs, and config files
-      # -------------------------------------------------------
-      find /tmp/pgtest/test_logs -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
-        -exec cp -r {} "$ARTIFACT_DIR/logs/" \; || true
-      # System PostgreSQL service log: RHEL (/var/lib/pgsql)
-      find /var/lib/pgsql -name "*.log" -type f 2>/dev/null \
-        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
-      # System PostgreSQL service log: Debian (/var/log/postgresql)
-      find /var/log/postgresql -name "*.log" -type f 2>/dev/null \
-        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
-      # PostgreSQL server log when built from source (/opt/pgsql/data)
-      find /opt/pgsql/data -name "*.log" -type f 2>/dev/null \
-        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+      # Did any test fail? failed_tests/ has a snapshot per failure, and the
+      # runner summary prints "❌ FAIL:" lines.
+      if find /tmp/pgtest/failed_tests -mindepth 1 -maxdepth 1 -type d 2>/dev/null | grep -q . \
+         || grep -q "❌ FAIL:" /tmp/tde-test-runner-output.log 2>/dev/null; then
+        TESTS_FAILED=1
+      else
+        TESTS_FAILED=0
+      fi
 
-      # -------------------------------------------------------
-      # failed_tests/: PGDATA snapshots saved by test_runner
-      # -------------------------------------------------------
-      find /tmp/pgtest/failed_tests -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while read d; do
-        cp -r "$d" "$ARTIFACT_DIR/failed_tests/" 2>/dev/null || true
-      done
+      if [ "$TESTS_FAILED" -eq 0 ]; then
+        # All tests passed — ship the runner summary plus the server (PSP) and
+        # TDE build/install logs only. Keeps the Jenkins artifact upload small
+        # while preserving build provenance; full per-test/server logs add no
+        # value when everything passed.
+        echo "All tests passed — artifact contains test runner summary + build logs only."
+        cp /tmp/psp-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+        cp /tmp/tde-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+        cp /tmp/tde-install.log  "$ARTIFACT_DIR/" 2>/dev/null || true
+      else
+        # Failure — collect the full debug bundle.
+        mkdir -p "$ARTIFACT_DIR/logs"
+        mkdir -p "$ARTIFACT_DIR/failed_tests"
+
+        # -----------------------------------------------------
+        # Top-level: build logs
+        # -----------------------------------------------------
+        cp /tmp/pgtest/initdb.log           "$ARTIFACT_DIR/" 2>/dev/null || true
+        cp /tmp/psp-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
+        cp /tmp/tde-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
+        cp /tmp/tde-install.log             "$ARTIFACT_DIR/" 2>/dev/null || true
+        # Vault server log sits at test_logs/ top level (not in a per-test subdir).
+        # Note: percona-qa now snapshots per-test KMS logs into each logs/<test>/
+        # dir; this end-of-run copy keeps the last-run vault.log as a fallback.
+        cp /tmp/pgtest/test_logs/vault.log  "$ARTIFACT_DIR/" 2>/dev/null || true
+        # bao_server.log is written inside the openbao build dir under RUN_DIR
+        find /tmp/pgtest -maxdepth 2 -name "bao_server.log" -exec cp {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+        # Background rotation/load helper logs written to RUN_DIR top level
+        # (rotate_wal/rotate_table/rotate_master_key/run_load/sysbench/workload/...)
+        find /tmp/pgtest -maxdepth 1 -name "*.log" -exec cp {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+        cp /tmp/sysbench_run.log            "$ARTIFACT_DIR/" 2>/dev/null || true
+        # KMIP runs as a Docker container — grab its logs
+        docker logs kmip > "$ARTIFACT_DIR/kmip-container.log" 2>&1 || true
+
+        # -----------------------------------------------------
+        # logs/: per-test subdirectories created by test_runner
+        # -----------------------------------------------------
+        find /tmp/pgtest/test_logs -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
+          -exec cp -r {} "$ARTIFACT_DIR/logs/" \; || true
+        # System PostgreSQL service log: RHEL (/var/lib/pgsql)
+        find /var/lib/pgsql -name "*.log" -type f 2>/dev/null \
+          -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+        # System PostgreSQL service log: Debian (/var/log/postgresql)
+        find /var/log/postgresql -name "*.log" -type f 2>/dev/null \
+          -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+        # PostgreSQL server log when built from source (/opt/pgsql/data)
+        find /opt/pgsql/data -name "*.log" -type f 2>/dev/null \
+          -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+
+        # -----------------------------------------------------
+        # failed_tests/: PGDATA snapshots saved by test_runner
+        # -----------------------------------------------------
+        find /tmp/pgtest/failed_tests -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while read d; do
+          cp -r "$d" "$ARTIFACT_DIR/failed_tests/" 2>/dev/null || true
+        done
+      fi
 
       tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
