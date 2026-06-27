@@ -9,6 +9,7 @@ platforms:
     image: ${ami_ubuntu22_x86_64}
     vpc_subnet_id: ${vpc_subnet_id_aws2}
     instance_type: m7a.2xlarge
+    volume_size: 100
     ssh_user: ubuntu
     root_device_name: /dev/sda1
     instance_tags:

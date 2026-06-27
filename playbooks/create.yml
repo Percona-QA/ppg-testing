@@ -113,7 +113,7 @@
           - device_name: "{{ item.root_device_name }}"
             ebs:
               volume_type: gp3
-              volume_size: 30
+              volume_size: "{{ item.volume_size | default(30) }}"
               delete_on_termination: true
       #with_items: "{{ molecule_yml.platforms }}"
       register: server

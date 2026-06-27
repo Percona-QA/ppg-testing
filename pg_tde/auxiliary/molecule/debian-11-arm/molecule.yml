@@ -9,6 +9,7 @@ platforms:
     image: ${ami_debian11_arm64}
     vpc_subnet_id: ${vpc_subnet_id_aws2}
     instance_type: m7g.2xlarge
+    volume_size: 100
     ssh_user: admin
     root_device_name: /dev/xvda
     instance_tags:
