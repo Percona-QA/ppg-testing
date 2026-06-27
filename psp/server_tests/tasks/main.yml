@@ -236,10 +236,10 @@
       - (major_version | int) >= 18
       - io_method in ['io_uring']
     ignore_errors: true
-    register: psp_configure_output
+    register: psp_configure_uring_output
 
-  - debug: var=psp_configure_output.stdout_lines
-    when: psp_configure_output is defined
+  - debug: var=psp_configure_uring_output.stdout_lines
+    when: psp_configure_uring_output is defined
 
   - name: Configure Postgres/PSP from sources
     ansible.builtin.shell: |
@@ -257,6 +257,13 @@
 
   - debug: var=psp_configure_output.stdout_lines
     when: psp_configure_output is defined
+
+  - name: Merge configure result — use liburing result when io_uring path ran
+    set_fact:
+      psp_configure_output: "{{ psp_configure_uring_output }}"
+    when:
+      - psp_configure_uring_output is defined
+      - not (psp_configure_uring_output.skipped | default(false))
 
   - name: Run make install-world with parallel jobs
     ansible.builtin.shell: |
