@@ -323,6 +323,34 @@
     ignore_errors: true
     register: regression
 
+  # Disk-usage report printed to the Jenkins console (survives a later host death
+  # at "Save test runner output"). Some hosts (debian13-x86, uresolute-x86) fill
+  # the volume during the run for an as-yet-unknown reason; this shows what ate it.
+  - name: Capture disk usage after test run
+    become: true
+    ansible.builtin.shell: |
+      set +e
+      echo "===== df -h ====="
+      df -h
+      echo "===== du -sh /tmp/pgtest top-level ====="
+      du -sh /tmp/pgtest 2>/dev/null
+      echo "===== du -sh /tmp/pgtest/* ====="
+      du -sh /tmp/pgtest/* 2>/dev/null | sort -rh | head -20
+      echo "===== du -sh /tmp/pgtest/test_logs/* (per-test logs) ====="
+      du -sh /tmp/pgtest/test_logs/* 2>/dev/null | sort -rh | head -20
+      echo "===== largest files under /tmp/pgtest ====="
+      find /tmp/pgtest -type f -size +100M -exec du -h {} \; 2>/dev/null | sort -rh | head -20
+      echo "===== core dumps ====="
+      find / -maxdepth 4 -name "core*" -type f 2>/dev/null -exec du -h {} \; | head -20
+      ls -1 /proc/sys/kernel/core_pattern 2>/dev/null && cat /proc/sys/kernel/core_pattern 2>/dev/null
+    register: disk_report
+    changed_when: false
+    ignore_errors: true
+
+  - name: Show disk usage report
+    ansible.builtin.debug:
+      var: disk_report.stdout_lines
+
   - name: Extract failed log paths
     set_fact:
       failed_log_paths: "{{ regression.stdout | regex_findall('❌ FAIL:.*\\n\\s+Log:\\s+(.*)') }}"
