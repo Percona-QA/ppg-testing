@@ -86,10 +86,35 @@
         or
         (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'RedHat' and ansible_facts['distribution_major_version'] | int == 8)
 
+  # On Debian 13 / Ubuntu 26 systemd mounts /tmp as a RAM-backed tmpfs (~16 GB,
+  # half of RAM). The test framework runs in /tmp/pgtest and the suite needs
+  # more than that on those distros, so /tmp fills (ENOSPC) and the host dies
+  # before packaging — even though the 100 GB root disk is ~85% free. Redirect
+  # /tmp onto the root disk (bind mount) where it is tmpfs, before the build or
+  # tests write anything there. Only acts where /tmp is actually tmpfs.
+  - name: Move /tmp off tmpfs onto the root disk where applicable
+    become: true
+    ansible.builtin.shell: |
+      set -e
+      if findmnt -no FSTYPE /tmp 2>/dev/null | grep -qx tmpfs; then
+        mkdir -p /var/tmp/disktmp
+        chmod 1777 /var/tmp/disktmp
+        mount --bind /var/tmp/disktmp /tmp
+        echo "REDIRECTED /tmp -> /var/tmp/disktmp (was tmpfs)"
+      else
+        echo "/tmp is not tmpfs; no change"
+      fi
+    register: tmp_redirect
+    changed_when: "'REDIRECTED' in tmp_redirect.stdout"
+
+  - name: Show /tmp redirect result
+    ansible.builtin.debug:
+      var: tmp_redirect.stdout
+
   - name: Configure repository
     ansible.builtin.include_tasks: ../../../../tasks/enable_repo.yml
 
-  - name: Include Redhat tasks file 
+  - name: Include Redhat tasks file
     include_tasks: 
       file: "redhat_tasks.yml"
     when: ansible_os_family == 'RedHat'
