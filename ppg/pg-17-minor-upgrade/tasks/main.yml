@@ -177,6 +177,31 @@
     update_cache: yes
   when: ansible_os_family == "RedHat"
 
+- name: Install pg_tde packages RHEL
+  yum:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+    - percona-pg_tde17
+    - percona-pg_tde17-devel
+    - percona-pg_tde17-debugsource
+    - percona-pg_tde17-debuginfo
+  when: ansible_os_family == "RedHat"
+
+- name: Install pg_tde packages Debian
+  apt:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+    - percona-pg-tde17
+    - percona-pg-tde17-client
+    - percona-pg-tde17-dbgsym
+  when: ansible_os_family == "Debian"
+
 # - name: Install postgresql-server-dev-all RHEL
 #   yum:
 #     name: "{{ packages }}"

@@ -102,6 +102,31 @@
   when:
     - ansible_os_family == "Debian"
 
+- name: Install pg_tde packages RHEL
+  yum:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+    - percona-pg_tde18
+    - percona-pg_tde18-devel
+    - percona-pg_tde18-debugsource
+    - percona-pg_tde18-debuginfo
+  when: ansible_os_family == "RedHat"
+
+- name: Install pg_tde packages Debian
+  apt:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+    - percona-pg-tde18
+    - percona-pg-tde18-client
+    - percona-pg-tde18-dbgsym
+  when: ansible_os_family == "Debian"
+
 #Remove conflicting package to make installation move on
 - name: Remove conflicting percona-postgresql-common-dev
   ansible.builtin.package:
