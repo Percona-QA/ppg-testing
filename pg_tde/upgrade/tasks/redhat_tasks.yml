@@ -84,7 +84,7 @@
     when: ansible_distribution_major_version == "8"
 
   - name: Install Development Tools group
-    command: yum -y groupinstall "Development tools"
+    command: yum -y groupinstall "Development tools" --nobest
     become: true
 
   # pg_tde source builds on RHEL/Rocky/OL 9 source gcc-toolset-14 (newer LTO

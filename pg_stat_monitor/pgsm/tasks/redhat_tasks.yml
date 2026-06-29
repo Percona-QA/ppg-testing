@@ -42,7 +42,7 @@
 
   - name: Install Development tools
     become: true
-    command: yum -y groupinstall "Development tools"
+    command: yum -y groupinstall "Development tools" --nobest
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
