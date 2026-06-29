@@ -142,7 +142,11 @@
 
     - name: Update RedHat-family systems to latest
       become: true
-      ansible.builtin.shell: dnf update -y
+      # --nobest: tolerate transient RHUI repo skew where a package and its
+      # version-locked subpackage (e.g. glibc vs glibc-gconv-extra) are
+      # published out of sync. Falls back to the largest consistent version
+      # set instead of failing on a "best" candidate that has no partner.
+      ansible.builtin.shell: dnf update -y --nobest
       when: ansible_os_family == "RedHat"
 
     - name: Enable Powertools on Rocky 8
