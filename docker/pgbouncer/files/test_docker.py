@@ -261,6 +261,13 @@ def test_pgbouncer_binary_version():
     if PGBOUNCER_VERSION:
         assert PGBOUNCER_VERSION in output_text, output_text
 
+@pytest.mark.order(0)
+def test_pgbouncer_tar_utility_present():
+    """Verify the tar utility is present in the pgBouncer image."""
+    container = client.containers.get(PGBOUNCER_CONTAINER_NAME)
+    exit_code, output = container.exec_run(["sh", "-c", "command -v tar"])
+    assert exit_code == 0, f"tar utility not found in pgbouncer image: {output.decode()}"
+
 @pytest.mark.order(1)
 def test_connection():
     """Step 1: Can we even talk to PgBouncer?"""

@@ -285,6 +285,13 @@ def test_pgbackrest_binary_version():
     if PGBACKREST_VERSION:
         assert PGBACKREST_VERSION in output_text, output_text
 
+@pytest.mark.order(0)
+def test_pgbackrest_tar_utility_present():
+    """Verify the tar utility is present in the pgBackRest image."""
+    container = client.containers.get(PGBACKREST_CONTAINER_NAME)
+    exit_code, output = container.exec_run(["sh", "-c", "command -v tar"])
+    assert exit_code == 0, f"tar utility not found in pgbackrest image: {output.decode()}"
+
 @pytest.mark.order(1)
 def test_stanza_creation():
     """Verify pgbackrest can initialize the stanza."""
