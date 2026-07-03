@@ -110,6 +110,54 @@ def _check_licenses_at_licenses(image_ref):
         ) from e
 
 
+def _expected_ubi_major_version(tag):
+    """Derive expected RHEL/UBI major version from an image tag.
+
+    Rules:
+      - tag contains 'ubi8'  -> expect RHEL/UBI 8
+      - tag contains 'ubi10' -> expect RHEL/UBI 10
+      - no 'ubi' in tag      -> default to RHEL/UBI 9
+    """
+    tag = (tag or "").lower()
+    if 'ubi8' in tag:
+        return '8'
+    if 'ubi10' in tag:
+        return '10'
+    return '9'
+
+
+def _check_base_image_is_rhel(image_ref, tag_hint):
+    """Verify the image's base OS major version matches the UBI version implied by tag_hint,
+    and that the base OS is genuinely RHEL rather than a look-alike (e.g. Oracle Linux), which
+    can report the exact same VERSION_ID and would otherwise pass the version check silently.
+    """
+    expected = _expected_ubi_major_version(tag_hint)
+    try:
+        output = client.containers.run(
+            image_ref, command=["sh", "-c", "cat /etc/os-release"], remove=True, detach=False
+        )
+    except docker.errors.ContainerError as e:
+        raise AssertionError(f"Could not read /etc/os-release from {image_ref}: {e}") from e
+    os_release = output.decode()
+    version_id = None
+    os_id = None
+    for line in os_release.splitlines():
+        if line.startswith('VERSION_ID='):
+            version_id = line.split('=', 1)[1].strip().strip('"').split('.')[0]
+        elif line.startswith('ID='):
+            os_id = line.split('=', 1)[1].strip().strip('"')
+    assert version_id is not None, f"Could not find VERSION_ID in /etc/os-release for {image_ref}"
+    assert version_id == expected, (
+        f"Base image OS mismatch: {image_ref} (tag hint '{tag_hint}') expects RHEL/UBI "
+        f"{expected}, but /etc/os-release reports VERSION_ID major={version_id}"
+    )
+    assert os_id == "rhel", (
+        f"Base image {image_ref} is not genuine RHEL/UBI: /etc/os-release reports ID='{os_id}'. "
+        f"Look-alike distros (e.g. Oracle Linux reports ID='ol') can mirror RHEL's VERSION_ID "
+        f"exactly and would pass the version check above while not actually being RHEL/UBI."
+    )
+
+
 def run_pgbackrest(command):
     container = client.containers.get(PGBACKREST_CONTAINER_NAME)
     exit_code, output = container.exec_run(f"pgbackrest {command}")
@@ -267,6 +315,28 @@ def test_ppg_pgbackrest_image_licenses_at_licenses():
 
 
 @pytest.mark.order(0)
+def test_ppg_postgres_image_is_genuine_rhel():
+    """Verify the PostgreSQL image's base OS is genuinely RHEL/UBI, not a look-alike (e.g. Oracle Linux)."""
+    image_ref = os.getenv("PG_IMAGE")
+    if not image_ref:
+        pytest.skip("PG_IMAGE not set (required for base image check)")
+    _check_base_image_is_rhel(image_ref, IMG_TAG)
+
+
+@pytest.mark.order(0)
+def test_ppg_pgbackrest_image_is_genuine_rhel():
+    """Verify the pgBackRest image's base OS is genuinely RHEL/UBI, not a look-alike (e.g. Oracle Linux).
+
+    Uses the paired PostgreSQL image's tag (PG_IMAGE_TAG) to derive the expected RHEL/UBI major,
+    since the pgBackRest image tag itself (PGBACKREST_IMAGE_TAG) does not encode a UBI suffix.
+    """
+    image_ref = os.getenv("PGBACKREST_IMAGE")
+    if not image_ref:
+        pytest.skip("PGBACKREST_IMAGE not set (required for base image check)")
+    _check_base_image_is_rhel(image_ref, IMG_TAG)
+
+
+@pytest.mark.order(0)
 def test_pgbackrest_binary_present():
     """Verify pgBackRest binary exists in the pgbackrest container."""
     container = client.containers.get(PGBACKREST_CONTAINER_NAME)
@@ -284,6 +354,13 @@ def test_pgbackrest_binary_version():
     assert "pgBackRest" in output_text
     if PGBACKREST_VERSION:
         assert PGBACKREST_VERSION in output_text, output_text
+
+@pytest.mark.order(0)
+def test_pgbackrest_tar_utility_present():
+    """Verify the tar utility is present in the pgBackRest image."""
+    container = client.containers.get(PGBACKREST_CONTAINER_NAME)
+    exit_code, output = container.exec_run(["sh", "-c", "command -v tar"])
+    assert exit_code == 0, f"tar utility not found in pgbackrest image: {output.decode()}"
 
 @pytest.mark.order(1)
 def test_stanza_creation():

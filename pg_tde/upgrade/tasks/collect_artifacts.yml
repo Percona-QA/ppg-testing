@@ -1,0 +1,102 @@
+---
+# Collect pg_upgrade, build, and service logs into a single tarball and fetch
+# it back to the Ansible controller for CI artifact archiving.
+
+- name: Package upgrade test artifacts
+  shell:
+    cmd: |
+      set -uo pipefail
+      ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
+      ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
+      rm -rf "$ARTIFACT_DIR"
+      mkdir -p "$ARTIFACT_DIR"
+
+      # Scenario parameters — written first so they survive even total failures
+      cat > "$ARTIFACT_DIR/scenario-params.txt" <<PARAMS
+      UPGRADE_TYPE=$UPGRADE_TYPE
+      INSTALL_FROM_PACKAGES=$INSTALL_FROM_PACKAGES
+      FROM_REPO=$FROM_REPO
+      TO_REPO=$TO_REPO
+      FROM_TDE_BRANCH=$FROM_TDE_BRANCH
+      TO_TDE_BRANCH=$TO_TDE_BRANCH
+      TDE_UPGRADE=$TDE_UPGRADE
+      TDE_REPO=$TDE_REPO
+      FROM_PKG_RELEASE=$FROM_PKG_RELEASE
+      TO_PKG_RELEASE=$TO_PKG_RELEASE
+      FROM_TDE_PKG_VERSION=$FROM_TDE_PKG_VERSION
+      TO_TDE_PKG_VERSION=$TO_TDE_PKG_VERSION
+      FROM_PERCONA_SERVER_VERSION=$FROM_PERCONA_SERVER_VERSION
+      TO_PERCONA_SERVER_VERSION=$TO_PERCONA_SERVER_VERSION
+      PARAMS
+
+      # pg_upgrade logs
+      cp /tmp/pg_upgrade.log           "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_upgrade_internal.log  "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_upgrade_server.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_upgrade_utility.log   "$ARTIFACT_DIR/" 2>/dev/null || true
+
+      # pg_upgrade_output.d — created in CWD of pg_tde_upgrade, which is /tmp
+      cp -r /tmp/pg_upgrade_output.d "$ARTIFACT_DIR/" 2>/dev/null || true
+
+      # pg_tde build / install logs (FROM and TO)
+      cp /tmp/tde-from-build.log       "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-from-install.log     "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-from-rebuild.log     "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-from-reinstall.log   "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-to-build.log         "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-to-install.log       "$ARTIFACT_DIR/" 2>/dev/null || true
+
+      # pg_tde version info (extension + SQL/default version, FROM and TO)
+      cp /tmp/tde-from-version.log     "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-to-version.log       "$ARTIFACT_DIR/" 2>/dev/null || true
+
+      # server version info (SELECT version() + package NEVR, FROM and TO)
+      cp /tmp/server-from-version.log  "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/server-to-version.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+
+      # PostgreSQL service logs (RHEL — covers both FROM and TO data dirs)
+      find /var/lib/pgsql -name "*.log" -type f 2>/dev/null \
+        -exec cp {} "$ARTIFACT_DIR/" \; || true
+
+      # PostgreSQL service logs (Debian/Ubuntu — covers FROM and TO clusters)
+      find /var/log/postgresql -name "*.log" -type f 2>/dev/null \
+        -exec cp {} "$ARTIFACT_DIR/" \; || true
+
+      # Debian/Ubuntu cluster status at collection time
+      pg_lsclusters 2>/dev/null > "$ARTIFACT_DIR/pg_lsclusters.txt" || true
+
+      # systemd journal for PostgreSQL services
+      # RHEL unit names: postgresql-17, postgresql-18, ...
+      # Debian/Ubuntu unit names: postgresql@17-main, postgresql@18-main, ...
+      journalctl -u "$UNIT_RHEL" -u "$UNIT_DEB" --no-pager 2>/dev/null \
+        > "$ARTIFACT_DIR/journalctl-postgresql.log" || true
+
+      tar -czf "/tmp/$ARTIFACT_FILE" -C /tmp "$ARTIFACT_BASENAME"
+    executable: /bin/bash
+  environment:
+    ARTIFACT_FILE: "{{ artifact_filename }}"
+    UNIT_RHEL: "postgresql-*"
+    UNIT_DEB: "postgresql@*"
+    UPGRADE_TYPE:          "{{ upgrade_type }}"
+    INSTALL_FROM_PACKAGES: "{{ install_from_packages }}"
+    FROM_REPO:             "{{ from_repo }}"
+    TO_REPO:               "{{ to_repo }}"
+    FROM_TDE_BRANCH:       "{{ from_tde_branch }}"
+    TO_TDE_BRANCH:         "{{ to_tde_branch }}"
+    TDE_UPGRADE:           "{{ tde_upgrade }}"
+    TDE_REPO:              "{{ tde_repo }}"
+    FROM_PKG_RELEASE:      "{{ from_pkg_release }}"
+    TO_PKG_RELEASE:        "{{ to_pkg_release }}"
+    FROM_TDE_PKG_VERSION:  "{{ from_tde_pkg_version }}"
+    TO_TDE_PKG_VERSION:    "{{ to_tde_pkg_version }}"
+    FROM_PERCONA_SERVER_VERSION: "{{ from_percona_server_version }}"
+    TO_PERCONA_SERVER_VERSION:   "{{ to_percona_server_version }}"
+  become: true
+  ignore_errors: true
+
+- name: Fetch upgrade test artifacts to controller
+  fetch:
+    src: "/tmp/{{ artifact_filename }}"
+    dest: "{{ playbook_dir }}/../artifacts/"
+    flat: true
+    fail_on_missing: false

@@ -1,0 +1,153 @@
+---
+# OS prerequisites for the upgrade role on Debian/Ubuntu.
+# Installs compilers, build tools, and sets up the postgres user.
+# KMS servers (OpenBao, Cosmian) are NOT installed — upgrade tests use a
+# file-based TDE key provider and have no dependency on external KMS services.
+
+  - name: Install build and utility packages (Debian/Ubuntu)
+    apt:
+      name:
+        - wget
+        - curl
+        - git
+        - vim
+        - unzip
+        - jq
+        - lsof
+        - make
+        - gcc
+        - autoconf
+        - clang
+        - llvm
+        - llvm-dev
+        - pkg-config
+        - pkgconf
+        - meson
+        - ninja-build
+        - zlib1g-dev
+        - libssl-dev
+        - libreadline6-dev
+        - libpam0g-dev
+        - libkrb5-dev
+        - libldap2-dev
+        - libsystemd-dev
+        - libxml2-dev
+        - libxml2-utils
+        - libxslt-dev
+        - libxslt1-dev
+        - libicu-dev
+        - libzstd-dev
+        - liblz4-dev
+        - libcurl4-openssl-dev
+        - libselinux1-dev
+        - libjson-c-dev
+        - uuid-dev
+        - liburing-dev
+        - libnuma-dev
+        - libperl-dev
+        - python3-dev
+        - perl
+        - mawk
+        - zstd
+      state: latest
+      update_cache: true
+
+  - name: Ensure correct lz4 package is installed (Debian/Ubuntu)
+    apt:
+      name: >-
+        {% if ansible_distribution == 'Debian' and (ansible_distribution_major_version | int) < 13 %}
+        liblz4-tool
+        {% elif ansible_distribution == 'Ubuntu' and (ansible_distribution_major_version | int) <= 24 %}
+        liblz4-tool
+        {% else %}
+        lz4
+        {% endif %}
+      state: present
+      update_cache: true
+
+  - name: Install llvm-toolchain for Debian 11 (Bullseye)
+    when: ansible_distribution == "Debian" and ansible_distribution_major_version | int == 11
+    block:
+      - name: Add LLVM APT repository for Debian 11
+        copy:
+          dest: /etc/apt/sources.list.d/llvm.list
+          content: |
+            deb http://apt.llvm.org/bullseye/ llvm-toolchain-bullseye-14 main
+          owner: root
+          group: root
+          mode: "0644"
+
+      - name: Add LLVM GPG key
+        shell: wget -qO - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
+        args:
+          executable: /bin/bash
+        register: add_key
+        changed_when: "'OK' in add_key.stdout"
+
+      - name: Update apt cache after LLVM repo add
+        apt:
+          update_cache: true
+
+      - name: Install LLVM 14 packages for Debian 11
+        apt:
+          name:
+            - clang-14
+            - lld-14
+            - llvm-14
+            - llvm-14-dev
+          state: present
+
+  - name: Ensure postgres group exists
+    ansible.builtin.group:
+      name: postgres
+      state: present
+      gid: 1040
+    become: true
+
+  - name: Ensure postgres user exists with correct groups
+    ansible.builtin.user:
+      name: postgres
+      shell: /bin/bash
+      uid: 1040
+      group: postgres
+      groups: sudo
+      append: true
+    become: true
+
+  - name: Allow postgres user passwordless sudo
+    ansible.builtin.lineinfile:
+      path: /etc/sudoers.d/allow-postgres-sudo
+      line: "postgres ALL=(ALL) NOPASSWD: ALL"
+      validate: '/usr/sbin/visudo -cf %s'
+      create: true
+      owner: root
+      group: root
+      mode: '0440'
+    become: true
+
+  - name: Create /opt/pgsql directory
+    ansible.builtin.file:
+      path: /opt/pgsql
+      state: directory
+      owner: postgres
+      group: admin
+      mode: '0775'
+
+  - name: Set stack ulimit for postgres user
+    community.general.pam_limits:
+      domain: postgres
+      limit_type: "-"
+      limit_item: stack
+      value: 102400
+    become: true
+
+  - name: Allow postgres user unlimited core dumps
+    community.general.pam_limits:
+      domain: postgres
+      limit_item: core
+      limit_type: "{{ item }}"
+      value: unlimited
+    loop:
+      - soft
+      - hard
+    become: true

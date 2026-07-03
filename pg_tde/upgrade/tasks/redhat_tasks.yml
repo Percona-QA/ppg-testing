@@ -1,0 +1,188 @@
+---
+# OS prerequisites for the upgrade role on RHEL/Rocky/OL.
+# Installs compilers, build tools, and sets up the postgres user.
+# KMS servers (OpenBao, Cosmian) are NOT installed — upgrade tests use a
+# file-based TDE key provider and have no dependency on external KMS services.
+
+  # On EL10 the distro AppStream ships postgresql<major>-server as a plain
+  # versioned package (modularity was removed, so it cannot be gated with
+  # `dnf module disable`). The cloud images come with it pre-installed, and any
+  # `state: latest` / `dnf update` transaction upgrades it — its
+  # /usr/lib/systemd/system/postgresql.service then file-conflicts with the
+  # pre-installed percona-postgresql-common and aborts. Remove the distro
+  # packages and exclude them so later transactions never pull them back in.
+  # This must run before the first broad yum task below (e.g. liburing).
+  - name: Exclude distro PostgreSQL server packages from dnf (EL10)
+    ansible.builtin.lineinfile:
+      path: /etc/dnf/dnf.conf
+      line: "exclude=postgresql-server postgresql*-server"
+      insertafter: '^\[main\]'
+    become: true
+    when: ansible_distribution_major_version == "10"
+
+  - name: Remove pre-installed distro PostgreSQL server packages (EL10)
+    dnf:
+      name:
+        - postgresql-server
+        - "postgresql*-server"
+      state: absent
+      autoremove: true
+    become: true
+    ignore_errors: true
+    when: ansible_distribution_major_version == "10"
+
+  - name: Set up EPEL repository
+    yum:
+      name: epel-release
+      update_cache: true
+      state: present
+
+  - name: Clean dnf cache (RHEL 8)
+    command: dnf clean all -y
+    become: true
+    when: ansible_distribution_major_version == "8"
+
+  - name: Ensure the postgres group exists
+    ansible.builtin.group:
+      name: postgres
+      state: present
+      gid: 1040
+    become: true
+
+  - name: Ensure the postgres user exists with correct groups
+    ansible.builtin.user:
+      name: postgres
+      shell: /bin/bash
+      uid: 1040
+      group: postgres
+      groups: wheel
+      append: true
+    become: true
+
+  - name: Allow postgres user passwordless sudo
+    ansible.builtin.lineinfile:
+      path: /etc/sudoers.d/allow-postgres-sudo
+      line: "postgres ALL=(ALL) NOPASSWD: ALL"
+      validate: '/usr/sbin/visudo -cf %s'
+      create: true
+      owner: root
+      group: root
+      mode: '0440'
+    become: true
+
+  - name: Create /opt/pgsql directory
+    ansible.builtin.file:
+      path: /opt/pgsql
+      state: directory
+      owner: postgres
+      group: wheel
+      mode: '0775'
+
+  - name: Enable llvm-toolset dnf module (RHEL 8)
+    command: dnf module enable llvm-toolset -y
+    become: true
+    when: ansible_distribution_major_version == "8"
+
+  - name: Install Development Tools group
+    command: yum -y groupinstall "Development tools" --nobest
+    become: true
+
+  # pg_tde source builds on RHEL/Rocky/OL 9 source gcc-toolset-14 (newer LTO
+  # toolchain matching the target PostgreSQL build). It is pre-baked into some
+  # x86 images but not the ARM ones, so install it explicitly. Mirrors the
+  # working pg_tde/tde role (redhat_depends.yml).
+  - name: Install gcc-toolset-14 for source builds (RHEL/Rocky/OL 9)
+    dnf:
+      name: gcc-toolset-14
+      state: present
+    become: true
+    when: ansible_distribution_major_version == "9"
+
+  - name: Install build and utility packages
+    yum:
+      name:
+        - clang
+        - clang-devel
+        - llvm
+        - llvm-toolset
+        - llvm-devel
+        - gcc
+        - make
+        - autoconf
+        - git
+        - wget
+        - curl
+        - vim
+        - unzip
+        - jq
+        - lsof
+        - zlib-devel
+        - readline-devel
+        - openssl-devel
+        - libcurl-devel
+        - libxml2-devel
+        - libxslt-devel
+        - libicu-devel
+        - libzstd
+        - libzstd-devel
+        - lz4
+        - lz4-devel
+        - krb5-devel
+        - pam-devel
+        - openldap-devel
+        - libuuid-devel
+        - systemd-devel
+        - python3
+        - python3-devel
+        - json-c-devel
+        - numactl-libs
+        - numactl-devel
+        - meson
+        - ninja-build
+        - perl
+      state: latest
+      update_cache: true
+    # Rocky AppStream/BaseOS mirrors occasionally lag: a -devel package
+    # (e.g. libxml2-devel, systemd-devel) lands before the exact-version
+    # runtime lib it requires is synced, producing a transient depsolve error.
+    # Retry with a fresh metadata cache to ride out the mirror sync.
+    register: rhel_build_pkgs
+    until: rhel_build_pkgs is succeeded
+    retries: 3
+    delay: 30
+
+  - name: Install liburing (required for io_uring builds)
+    yum:
+      name:
+        - liburing
+        - liburing-devel
+      state: latest
+      update_cache: true
+
+  - name: Set stack ulimit for postgres user
+    community.general.pam_limits:
+      domain: postgres
+      limit_type: "-"
+      limit_item: stack
+      value: 102400
+    become: true
+
+  - name: Allow postgres user unlimited core dumps
+    community.general.pam_limits:
+      domain: postgres
+      limit_item: core
+      limit_type: "{{ item }}"
+      value: unlimited
+    loop:
+      - soft
+      - hard
+    become: true
+
+  - name: Set memlock limit for postgres (RHEL 8 ARM)
+    community.general.pam_limits:
+      domain: postgres
+      limit_type: '-'
+      limit_item: memlock
+      value: 128
+      comment: 128 KB memory lock for postgres
+    when: ansible_distribution_major_version == "8" and ansible_architecture == 'aarch64'

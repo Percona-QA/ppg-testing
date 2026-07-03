@@ -65,18 +65,18 @@ pgvector = {
     "16.13": {"version": "0.8.2", "extension_version": "0.8.2"},
     "17.9": {"version": "0.8.2", "extension_version": "0.8.2"},
     "18.3": {"version": "0.8.2", "extension_version": "0.8.2"},
-    "16.14": {"version": "0.8.2", "extension_version": "0.8.2"},
-    "17.10": {"version": "0.8.2", "extension_version": "0.8.2"},
-    "18.4": {"version": "0.8.2", "extension_version": "0.8.2"},
+    "16.14": {"version": "0.8.3", "extension_version": "0.8.3"},
+    "17.10": {"version": "0.8.3", "extension_version": "0.8.3"},
+    "18.4": {"version": "0.8.3", "extension_version": "0.8.3"},
 }
 
 postgis = {
     "16.13": {"version": "3.5.5", "major_version": "3.5", "extension_version": "3.5.5"},
     "17.9": {"version": "3.5.5", "major_version": "3.5", "extension_version": "3.5.5"},
     "18.3": {"version": "3.5.5", "major_version": "3.5", "extension_version": "3.5.5"},
-    "16.14": {"version": "3.5.6", "major_version": "3.5", "extension_version": "3.5.6"},
-    "17.10": {"version": "3.5.6", "major_version": "3.5", "extension_version": "3.5.6"},
-    "18.4": {"version": "3.5.6", "major_version": "3.5", "extension_version": "3.5.6"},
+    "16.14": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
+    "17.10": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
+    "18.4": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
 }
 
 
@@ -185,9 +185,9 @@ timescaledb = {
     "16.13": {"version": "2.26.0"},
     "17.9": {"version": "2.26.0"},
     "18.3": {"version": "2.26.0"},
-    "16.14": {"version": "2.27.2"},
-    "17.10": {"version": "2.27.2"},
-    "18.4": {"version": "2.27.2"},
+    "16.14": {"version": "2.28.2"},
+    "17.10": {"version": "2.28.2"},
+    "18.4": {"version": "2.28.2"},
 }
 
 h3 = {
@@ -289,9 +289,9 @@ anonymizer = {
     "16.13": {"version": "3.0.13"},
     "17.9": {"version": "3.0.13"},
     "18.3": {"version": "3.0.13"},
-    "16.14": {"version": "3.1.0"},
-    "17.10": {"version": "3.1.0"},
-    "18.4": {"version": "3.1.0"},
+    "16.14": {"version": "3.1.3"},
+    "17.10": {"version": "3.1.3"},
+    "18.4": {"version": "3.1.3"},
 }
 
 # Base extension list — common across all supported major versions.

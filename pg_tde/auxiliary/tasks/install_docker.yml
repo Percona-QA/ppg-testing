@@ -1,10 +1,18 @@
 
+- name: Update yum cache before Docker setup
+  become: true
+  command: yum -y update
+  when: ansible_os_family == "RedHat"
+
 - name: Ensure required dependencies are installed
   ansible.builtin.yum:
     name:
       - yum-utils
       - device-mapper-persistent-data
       - lvm2
+      # Docker CE shells out to the iptables binary at daemon startup; RHEL 10
+      # minimal images may not ship it. iptables-nft is the nftables-backed shim.
+      - iptables-nft
     state: present
   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
@@ -15,22 +23,71 @@
   become: true
   when: ansible_os_family == "RedHat"
 
-- name: Install kernel-modules-extra on RHEL 10
-  dnf:
-    name: "kernel-modules-extra"
-    state: present
+# Docker's bridge network needs the br_netfilter and xt_addrtype kernel
+# modules, shipped in kernel-modules-extra matched to the *running* kernel.
+# prepare.yml runs `dnf update`, which installs a newer kernel; without a
+# reboot the box still runs the old kernel and those modules are missing on
+# disk, so dockerd fails to register the bridge driver. We install the latest
+# kernel-modules-extra and reboot into the matching kernel.
+# OL 10 (UEK) already has these modules built in and has no kernel-modules-extra
+# package, so the install is best-effort there and the reboot is scoped out.
+- name: Install kernel-modules-extra (latest) on EL10
+  become: true
+  ansible.builtin.dnf:
+    name: kernel-modules-extra
+    state: latest
   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+  ignore_errors: true
+
+- name: Check whether a newer kernel is pending (RHEL/Rocky 10)
+  become: true
+  ansible.builtin.command: needs-restarting -r
+  register: needs_reboot
+  changed_when: false
+  failed_when: false
+  when:
+    - ansible_distribution in ['RedHat', 'Rocky']
+    - ansible_distribution_major_version == "10"
+
+- name: Reboot into the updated kernel so its netfilter modules are present (RHEL/Rocky 10)
+  become: true
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+  when:
+    - ansible_distribution in ['RedHat', 'Rocky']
+    - ansible_distribution_major_version == "10"
+    - needs_reboot.rc is defined
+    - needs_reboot.rc != 0
 
 - name: Ensure br_netfilter module is loaded (RHEL 10 only)
+  become: true
   community.general.modprobe:
     name: br_netfilter
     state: present
   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
   ignore_errors: true
 
-- name: Add Docker CE repository RHEL 8,9
+- name: Enable bridge-nf sysctls on RHEL 10 (effective once br_netfilter is loaded)
+  become: true
+  ansible.builtin.sysctl:
+    name: "{{ item }}"
+    value: '1'
+    state: present
+    sysctl_set: yes
+  loop:
+    - net.bridge.bridge-nf-call-iptables
+    - net.bridge.bridge-nf-call-ip6tables
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+  ignore_errors: true
+
+- name: Add Docker CE repository
   become: true
   command: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+  when: ansible_os_family == "RedHat"
+
+- name: Update yum cache after adding Docker repo
+  become: true
+  command: yum -y update
   when: ansible_os_family == "RedHat"
 
 - name: Install Docker packages
@@ -50,6 +107,23 @@
     enabled: yes
   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
+- name: Set SELinux to permissive on RHEL 10 — Docker CE (centos repo) is not labelled for enforcing mode
+  become: true
+  ansible.builtin.shell: setenforce 0 || true
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+  ignore_errors: true
+
+- name: Configure Docker daemon for RHEL 10 (cgroupv2 systemd driver)
+  become: true
+  ansible.builtin.copy:
+    content: |
+      {
+        "exec-opts": ["native.cgroupdriver=systemd"]
+      }
+    dest: /etc/docker/daemon.json
+    mode: '0644'
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+
 - name: Start docker
   become: true
   service:
@@ -57,6 +131,34 @@
     state: started
     enabled: yes
   when: ansible_os_family == "RedHat"
+  register: docker_start_result
+  ignore_errors: true
+
+- name: Dump journalctl for docker if startup failed
+  become: true
+  ansible.builtin.shell: |
+    journalctl -xeu docker.service --no-pager | tail -60
+    echo "--- containerd status ---"
+    systemctl status containerd --no-pager || true
+    echo "--- sysctl bridge ---"
+    sysctl net.bridge.bridge-nf-call-iptables 2>/dev/null || echo "bridge sysctl not available"
+    echo "--- SELinux ---"
+    getenforce 2>/dev/null || echo "SELinux not present"
+    echo "--- br_netfilter ---"
+    lsmod | grep br_netfilter || echo "br_netfilter not loaded"
+  register: docker_diag
+  when: ansible_os_family == "RedHat" and docker_start_result is failed
+  ignore_errors: true
+
+- name: Show Docker diagnostic output
+  debug:
+    var: docker_diag.stdout_lines
+  when: ansible_os_family == "RedHat" and docker_start_result is failed
+
+- name: Fail if Docker did not start
+  ansible.builtin.fail:
+    msg: "Docker service failed to start. See diagnostic output above."
+  when: ansible_os_family == "RedHat" and docker_start_result is failed
 
 - name: Install docker.io Deb
   become: true

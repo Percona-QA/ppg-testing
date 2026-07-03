@@ -76,10 +76,6 @@
       pg_install_dir: "/opt/pgsql"
     when: not install_from_packages
 
-  - name: Verify Fact Extraction
-    debug:
-      msg: "Version: {{ major_version }}, Arch: {{ go_arch }}, Skip? {{ skip_testcase_enabled }}"
-
   - name: End play on RHEL 8 and Rocky 8 for pg-18>= and io_uring, as uring not supported
     meta: end_play
     when:
@@ -90,10 +86,35 @@
         or
         (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'RedHat' and ansible_facts['distribution_major_version'] | int == 8)
 
+  # On Debian 13 / Ubuntu 26 systemd mounts /tmp as a RAM-backed tmpfs (~16 GB,
+  # half of RAM). The test framework runs in /tmp/pgtest and the suite needs
+  # more than that on those distros, so /tmp fills (ENOSPC) and the host dies
+  # before packaging — even though the 100 GB root disk is ~85% free. Redirect
+  # /tmp onto the root disk (bind mount) where it is tmpfs, before the build or
+  # tests write anything there. Only acts where /tmp is actually tmpfs.
+  - name: Move /tmp off tmpfs onto the root disk where applicable
+    become: true
+    ansible.builtin.shell: |
+      set -e
+      if findmnt -no FSTYPE /tmp 2>/dev/null | grep -qx tmpfs; then
+        mkdir -p /var/tmp/disktmp
+        chmod 1777 /var/tmp/disktmp
+        mount --bind /var/tmp/disktmp /tmp
+        echo "REDIRECTED /tmp -> /var/tmp/disktmp (was tmpfs)"
+      else
+        echo "/tmp is not tmpfs; no change"
+      fi
+    register: tmp_redirect
+    changed_when: "'REDIRECTED' in tmp_redirect.stdout"
+
+  - name: Show /tmp redirect result
+    ansible.builtin.debug:
+      var: tmp_redirect.stdout
+
   - name: Configure repository
     ansible.builtin.include_tasks: ../../../../tasks/enable_repo.yml
 
-  - name: Include Redhat tasks file 
+  - name: Include Redhat tasks file
     include_tasks: 
       file: "redhat_tasks.yml"
     when: ansible_os_family == 'RedHat'
@@ -103,35 +124,19 @@
       file: "debian_tasks.yml"
     when: ansible_os_family == 'Debian'
 
-  # Docker is only needed on old-glibc platforms (RHEL/Rocky/OL 8, Debian 11)
-  # where the native cosmian_kms binary requires glibc >= 2.33 but the platform
-  # ships 2.28 (RHEL 8) or 2.31 (Debian 11). On all other platforms cosmian_kms
-  # runs natively and Docker is not installed.
-  - name: Include Docker setup file (old-glibc platforms only)
+  # Docker is required on all platforms — percona-qa scripts use it for KMIP
+  # and other key provider services at test runtime.
+  - name: Include Docker setup file
     include_tasks:
       file: "install_docker.yml"
-    when: >
-      (ansible_os_family == 'Debian' and
-       ansible_distribution == 'Debian' and
-       ansible_distribution_major_version | int == 11)
-      or (ansible_os_family == 'RedHat' and
-          ansible_distribution_major_version | int == 8)
 
-  - name: Start cosmian_kms in Docker on old-glibc platforms
-    ansible.builtin.include_tasks: run_cosmian_docker.yml
-    when: >
-      (ansible_os_family == 'Debian' and
-       ansible_distribution == 'Debian' and
-       ansible_distribution_major_version | int == 11)
-      or (ansible_os_family == 'RedHat' and
-          ansible_distribution_major_version | int == 8)
-
-  - name: Get ulimit results
-    become_user: postgres
-    ansible.builtin.shell: ulimit -a
-    register: results
-
-  - debug: var=results.stdout_lines
+  - name: Verify Docker daemon is responsive
+    become: true
+    command: docker info
+    register: docker_info
+    retries: 3
+    delay: 5
+    until: docker_info.rc == 0
 
   - name: Ensure at least 4 GB swap is configured
     become: true
@@ -176,14 +181,6 @@
           state: present
         when: (swap_size_mb | int) < 3000
 
-  - name: Verify swap is active
-    ansible.builtin.command: free -h
-    register: swap_info
-    changed_when: false
-
-  - ansible.builtin.debug:
-      msg: "Swap configured successfully. Current memory: {{ swap_info.stdout_lines }}"
-
   - name: Set stack ulimit for a specific user
     become: true
     pam_limits:
@@ -191,20 +188,11 @@
       limit_type: "-"         # Applies to both soft and hard limits
       limit_item: stack
       value: 102400            # Desired stack size in KB
-    register: results
-
-  - debug: var=results.stdout_lines
 
   - name: Check if io_uring is disabled
     command: cat /proc/sys/kernel/io_uring_disabled
     register: uring_disabled
     ignore_errors: true
-    when:
-      - (major_version | int) >= 18
-      - io_method in ['io_uring']
-      - ansible_os_family == 'RedHat'
-
-  - debug: var=uring_disabled.stdout_lines
     when:
       - (major_version | int) >= 18
       - io_method in ['io_uring']
@@ -223,26 +211,6 @@
       - uring_disabled.stdout is defined
       - uring_disabled.stdout | int > 0
 
-  - name: Check kernel version
-    command: uname -r
-    register: kernel_version
-    changed_when: false
-    when:
-      - (major_version | int) >= 18
-      - io_method in ['io_uring']
-      - ansible_os_family == 'RedHat'
-
-  - debug:
-      msg: "Kernel version is {{ kernel_version.stdout }}"
-    when:
-      - (major_version | int) >= 18
-      - io_method in ['io_uring']
-      - ansible_os_family == 'RedHat'
-
-  - name: Print all facts
-    debug:
-      var: ansible_facts
-
   - name: Ensure postgres user has unlimited core dump limit
     become: true
     community.general.pam_limits:
@@ -253,13 +221,6 @@
     loop:
       - soft
       - hard
-
-  - name: Get ulimit results
-    become_user: postgres
-    ansible.builtin.shell: ulimit -a
-    register: results
-
-  - debug: var=results.stdout_lines
 
   - name: Install OS-specific prerequisites
     package:
@@ -313,7 +274,7 @@
   # =================================================
 
   - name: Build from sources, PSP and TDE
-    include_tasks: 
+    include_tasks:
       file: "build_from_source.yml"
     when: not install_from_packages
 
@@ -322,12 +283,12 @@
   # =================================================
 
   - name: Install on RHEL
-    include_tasks: 
+    include_tasks:
       file: "install_from_packages_rhel.yml"
     when: install_from_packages and ansible_os_family == 'RedHat'
 
   - name: Install on Debian
-    include_tasks: 
+    include_tasks:
       file: "install_from_packages_deb.yml"
     when: install_from_packages and ansible_os_family == 'Debian'
 
@@ -345,7 +306,7 @@
     register: clone_results
 
   - name: Debug git results
-    debug: 
+    debug:
       msg: "Cloned version: {{ clone_results.after | default('N/A') }}"
 
   # =============================
@@ -387,6 +348,34 @@
     ignore_errors: true
     register: regression
 
+  # Disk-usage report printed to the Jenkins console (survives a later host death
+  # at "Save test runner output"). Some hosts (debian13-x86, uresolute-x86) fill
+  # the volume during the run for an as-yet-unknown reason; this shows what ate it.
+  - name: Capture disk usage after test run
+    become: true
+    ansible.builtin.shell: |
+      set +e
+      echo "===== df -h ====="
+      df -h
+      echo "===== du -sh /tmp/pgtest top-level ====="
+      du -sh /tmp/pgtest 2>/dev/null
+      echo "===== du -sh /tmp/pgtest/* ====="
+      du -sh /tmp/pgtest/* 2>/dev/null | sort -rh | head -20
+      echo "===== du -sh /tmp/pgtest/test_logs/* (per-test logs) ====="
+      du -sh /tmp/pgtest/test_logs/* 2>/dev/null | sort -rh | head -20
+      echo "===== largest files under /tmp/pgtest ====="
+      find /tmp/pgtest -type f -size +100M -exec du -h {} \; 2>/dev/null | sort -rh | head -20
+      echo "===== core dumps ====="
+      find / -maxdepth 4 -name "core*" -type f 2>/dev/null -exec du -h {} \; | head -20
+      ls -1 /proc/sys/kernel/core_pattern 2>/dev/null && cat /proc/sys/kernel/core_pattern 2>/dev/null
+    register: disk_report
+    changed_when: false
+    ignore_errors: true
+
+  - name: Show disk usage report
+    ansible.builtin.debug:
+      var: disk_report.stdout_lines
+
   - name: Extract failed log paths
     set_fact:
       failed_log_paths: "{{ regression.stdout | regex_findall('❌ FAIL:.*\\n\\s+Log:\\s+(.*)') }}"
@@ -402,7 +391,7 @@
 
   - name: Display failed test logs
     debug:
-      msg: 
+      msg:
         - "--------------------------------------------------"
         - "TEST LOG: {{ item.item }} ❌ FAIL"
         - "--------------------------------------------------"
@@ -414,7 +403,7 @@
   - name: Show stderr if test fails
     debug:
       var: regression.stderr_lines
-    when: 
+    when:
       - failed_log_outputs.results | default([]) | length > 0
 
   - name: Save test runner output to file
@@ -430,45 +419,76 @@
       ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
       ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
       rm -rf "$ARTIFACT_DIR"
-      mkdir -p "$ARTIFACT_DIR/logs"
-      mkdir -p "$ARTIFACT_DIR/failed_tests"
+      mkdir -p "$ARTIFACT_DIR"
 
-      # -------------------------------------------------------
-      # Top-level: test runner summary and build logs
-      # -------------------------------------------------------
+      # The test runner summary is always included (tiny, ~14 KB).
       cp /tmp/tde-test-runner-output.log "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/pgtest/initdb.log           "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/psp-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/tde-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/tde-install.log             "$ARTIFACT_DIR/" 2>/dev/null || true
-      # KMS / Vault service logs
-      cp /tmp/cosmian_kms.log             "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/pgtest/bao-server.log       "$ARTIFACT_DIR/" 2>/dev/null || true
-      cp /tmp/cosmian-server-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
-      docker logs cosmian-server > "$ARTIFACT_DIR/cosmian-server-container.log" 2>&1 || true
 
-      # -------------------------------------------------------
-      # logs/: per-test subdirectories created by test_runner
-      # Each contains test stdout, server logs, and config files
-      # -------------------------------------------------------
-      find /tmp/pgtest/test_logs -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
-        -exec cp -r {} "$ARTIFACT_DIR/logs/" \; || true
-      # System PostgreSQL service log: RHEL (/var/lib/pgsql)
-      find /var/lib/pgsql -name "*.log" -type f 2>/dev/null \
-        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
-      # System PostgreSQL service log: Debian (/var/log/postgresql)
-      find /var/log/postgresql -name "*.log" -type f 2>/dev/null \
-        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
-      # PostgreSQL server log when built from source (/opt/pgsql/data)
-      find /opt/pgsql/data -name "*.log" -type f 2>/dev/null \
-        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+      # Did any test fail? failed_tests/ has a snapshot per failure, and the
+      # runner summary prints "❌ FAIL:" lines.
+      if find /tmp/pgtest/failed_tests -mindepth 1 -maxdepth 1 -type d 2>/dev/null | grep -q . \
+         || grep -q "❌ FAIL:" /tmp/tde-test-runner-output.log 2>/dev/null; then
+        TESTS_FAILED=1
+      else
+        TESTS_FAILED=0
+      fi
 
-      # -------------------------------------------------------
-      # failed_tests/: PGDATA snapshots saved by test_runner
-      # -------------------------------------------------------
-      find /tmp/pgtest/failed_tests -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while read d; do
-        cp -r "$d" "$ARTIFACT_DIR/failed_tests/" 2>/dev/null || true
-      done
+      if [ "$TESTS_FAILED" -eq 0 ]; then
+        # All tests passed — ship the runner summary plus the server (PSP) and
+        # TDE build/install logs only. Keeps the Jenkins artifact upload small
+        # while preserving build provenance; full per-test/server logs add no
+        # value when everything passed.
+        echo "All tests passed — artifact contains test runner summary + build logs only."
+        cp /tmp/psp-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+        cp /tmp/tde-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+        cp /tmp/tde-install.log  "$ARTIFACT_DIR/" 2>/dev/null || true
+      else
+        # Failure — collect the full debug bundle.
+        mkdir -p "$ARTIFACT_DIR/logs"
+        mkdir -p "$ARTIFACT_DIR/failed_tests"
+
+        # -----------------------------------------------------
+        # Top-level: build logs
+        # -----------------------------------------------------
+        cp /tmp/pgtest/initdb.log           "$ARTIFACT_DIR/" 2>/dev/null || true
+        cp /tmp/psp-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
+        cp /tmp/tde-build.log               "$ARTIFACT_DIR/" 2>/dev/null || true
+        cp /tmp/tde-install.log             "$ARTIFACT_DIR/" 2>/dev/null || true
+        # Vault server log sits at test_logs/ top level (not in a per-test subdir).
+        # Note: percona-qa now snapshots per-test KMS logs into each logs/<test>/
+        # dir; this end-of-run copy keeps the last-run vault.log as a fallback.
+        cp /tmp/pgtest/test_logs/vault.log  "$ARTIFACT_DIR/" 2>/dev/null || true
+        # bao_server.log is written inside the openbao build dir under RUN_DIR
+        find /tmp/pgtest -maxdepth 2 -name "bao_server.log" -exec cp {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+        # Background rotation/load helper logs written to RUN_DIR top level
+        # (rotate_wal/rotate_table/rotate_master_key/run_load/sysbench/workload/...)
+        find /tmp/pgtest -maxdepth 1 -name "*.log" -exec cp {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+        cp /tmp/sysbench_run.log            "$ARTIFACT_DIR/" 2>/dev/null || true
+        # KMIP runs as a Docker container — grab its logs
+        docker logs kmip > "$ARTIFACT_DIR/kmip-container.log" 2>&1 || true
+
+        # -----------------------------------------------------
+        # logs/: per-test subdirectories created by test_runner
+        # -----------------------------------------------------
+        find /tmp/pgtest/test_logs -mindepth 1 -maxdepth 1 -type d 2>/dev/null \
+          -exec cp -r {} "$ARTIFACT_DIR/logs/" \; || true
+        # System PostgreSQL service log: RHEL (/var/lib/pgsql)
+        find /var/lib/pgsql -name "*.log" -type f 2>/dev/null \
+          -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+        # System PostgreSQL service log: Debian (/var/log/postgresql)
+        find /var/log/postgresql -name "*.log" -type f 2>/dev/null \
+          -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+        # PostgreSQL server log when built from source (/opt/pgsql/data)
+        find /opt/pgsql/data -name "*.log" -type f 2>/dev/null \
+          -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+
+        # -----------------------------------------------------
+        # failed_tests/: PGDATA snapshots saved by test_runner
+        # -----------------------------------------------------
+        find /tmp/pgtest/failed_tests -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while read d; do
+          cp -r "$d" "$ARTIFACT_DIR/failed_tests/" 2>/dev/null || true
+        done
+      fi
 
       tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:

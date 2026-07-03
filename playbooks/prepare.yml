@@ -5,27 +5,64 @@
   become_method: sudo
   gather_facts: true
   tasks:
+    # Rocky's default baseos/appstream/crb repos resolve mirrors through the
+    # mirrorlist service, which is unreliable on Rocky 10 (esp. aarch64) and
+    # fails with "No URLs in mirrorlist". Pin them to the canonical CDN baseurl
+    # (dl.rockylinux.org) before any dnf cache refresh so we never depend on it.
+    - name: Pin Rocky repos to dl.rockylinux.org baseurl (mirrorlist is unreliable on Rocky 10)
+      become: true
+      ansible.builtin.shell: |
+        sed -i \
+          -e 's|^mirrorlist=|#mirrorlist=|g' \
+          -e 's|^#\s*baseurl=https\?://dl.rockylinux.org|baseurl=https://dl.rockylinux.org|g' \
+          /etc/yum.repos.d/rocky*.repo
+        dnf clean all
+        dnf makecache
+      args:
+        executable: /bin/bash
+      register: rocky_repo_pin
+      retries: 5
+      delay: 10
+      until: rocky_repo_pin is succeeded
+      when: ansible_distribution == "Rocky"
+
     - name: setup ca-certificates release
       yum:
         name: ca-certificates
         update_cache: yes
         state: present
       when: ansible_os_family == "RedHat"
+      register: ca_certs_setup
+      retries: 5
+      delay: 10
+      until: ca_certs_setup is succeeded
 
     - name: Enable epel-release on Rhel8 systems using Fedora epel rpm
       become: true
       command: dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
       when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+      register: epel8
+      retries: 5
+      delay: 10
+      until: epel8 is succeeded
 
     - name: Enable epel-release on Rhel9 systems using Fedora epel rpm
       become: true
       command: dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
       when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9"
+      register: epel9
+      retries: 5
+      delay: 10
+      until: epel9 is succeeded
 
     - name: Enable epel-release on Rhel10 systems using Fedora epel rpm
       become: true
       command: dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
       when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+      register: epel10
+      retries: 5
+      delay: 10
+      until: epel10 is succeeded
 
     - name: Disable subscription message on RHEL OS
       become: true
@@ -38,6 +75,10 @@
         update_cache: yes
         state: present
       when: ansible_os_family == "RedHat" and ansible_distribution != "RedHat"
+      register: epel_setup
+      retries: 5
+      delay: 10
+      until: epel_setup is succeeded
 
     - name: Update /etc/apt/sources.list on Debian 11
       become: true
@@ -101,7 +142,11 @@
 
     - name: Update RedHat-family systems to latest
       become: true
-      ansible.builtin.shell: dnf update -y
+      # --nobest: tolerate transient RHUI repo skew where a package and its
+      # version-locked subpackage (e.g. glibc vs glibc-gconv-extra) are
+      # published out of sync. Falls back to the largest consistent version
+      # set instead of failing on a "best" candidate that has no partner.
+      ansible.builtin.shell: dnf update -y --nobest
       when: ansible_os_family == "RedHat"
 
     - name: Enable Powertools on Rocky 8
@@ -128,10 +173,17 @@
 
     - name: Enable ol9_codeready_builder on Oracle Linux 9
       become: true
-      shell: | 
+      shell: |
         dnf install -y dnf-plugins-core
         dnf config-manager --set-enabled ol9_codeready_builder
       when: ansible_distribution == "OracleLinux" and ansible_distribution_major_version == "9"
+
+    - name: Enable ol10_codeready_builder on Oracle Linux 10
+      become: true
+      shell: |
+        dnf install -y dnf-plugins-core
+        dnf config-manager --set-enabled ol10_codeready_builder
+      when: ansible_distribution == "OracleLinux" and ansible_distribution_major_version == "10"
 
     - name: Enable codeready-builder for RHEL 8
       become: true

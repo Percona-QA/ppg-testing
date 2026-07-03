@@ -1,0 +1,224 @@
+---
+# Build and install pg_tde from source against a specific PostgreSQL installation.
+# Caller must pass:
+#   tde_branch_to_build  - git branch/tag to check out
+#   tde_src_dest         - where to clone pg_tde (e.g. /tmp/pg_tde_from)
+#   tde_build_dest       - meson build directory (e.g. /tmp/pg_tde_from-build)
+#   pg_config_path       - full path to pg_config binary
+#   pg_bin_dir           - PostgreSQL bin directory (for PATH)
+#   pg_lib_dir           - PostgreSQL lib directory (for LD_LIBRARY_PATH)
+#   tde_build_log        - path to capture build output
+#   tde_install_log      - path to capture install output
+# tde_repo is expected to be set as a play-level fact by main.yml.
+
+  - name: Remove existing pg_tde source directory {{ tde_src_dest }}
+    file:
+      path: "{{ tde_src_dest }}"
+      state: absent
+    become: true
+
+  - name: Clone pg_tde (branch {{ tde_branch_to_build }}) to {{ tde_src_dest }}
+    git:
+      repo: "{{ tde_repo }}"
+      version: "{{ tde_branch_to_build }}"
+      dest: "{{ tde_src_dest }}"
+      force: true
+    become: true
+    become_user: postgres
+    register: tde_clone_result
+
+  - name: Initialize pg_tde submodules
+    command: git submodule update --init --recursive
+    args:
+      chdir: "{{ tde_src_dest }}"
+      executable: /bin/bash
+    become: true
+    become_user: postgres
+
+  # PostgreSQL's JIT bitcode is compiled with CLANG (=/usr/bin/clang) and the
+  # bitcode index is built with $(LLVM_BINPATH)/llvm-lto, where LLVM_BINPATH is
+  # baked into the target PG's Makefile.global (e.g. /usr/lib64/llvm20/bin for
+  # PG 18). The distro's default llvm/clang drifts forward (e.g. EL9 now ships
+  # llvm 21), but the PG package was built with a specific major (20), so that
+  # path is missing and `make install` fails at the llvm-lto step.
+  #
+  # Preferred fix: install the llvm/clang toolchain at PG's major (downgrading
+  # the distro default when needed) so clang, llvm-lto and PG's runtime
+  # llvm-libs are all the same version — consistent bitcode.
+  # Fallback (mirrors pg_stat_monitor): if that exact major is not available in
+  # the repos, symlink whatever llvm-lto exists into the path PG expects, so the
+  # build still completes. This is done before the build so .bc are compiled
+  # with the matching clang where possible.
+  - name: Ensure llvm toolchain matches target PostgreSQL for JIT bitcode (RHEL)
+    shell: |
+      set -uo pipefail
+      MG="{{ pg_lib_dir }}/pgxs/src/Makefile.global"
+      [ -f "$MG" ] || { echo "Makefile.global not found at $MG; skipping"; exit 0; }
+
+      LLVM_BIN=$(awk -F= '/^LLVM_BINPATH/{gsub(/ /,"",$2); print $2; exit}' "$MG")
+      if [ -z "$LLVM_BIN" ]; then
+        echo "with_llvm not enabled (no LLVM_BINPATH); nothing to do"; exit 0
+      fi
+      if [ -x "$LLVM_BIN/llvm-lto" ]; then
+        echo "llvm-lto already present at $LLVM_BIN/llvm-lto"; exit 0
+      fi
+
+      VER=$(echo "$LLVM_BIN" | sed -n 's;.*/llvm\([0-9]\+\).*;\1;p')
+      echo "PG built with llvm major: ${VER:-unknown} (LLVM_BINPATH=$LLVM_BIN)"
+
+      # Preferred: install the matching major (the provider is the unversioned
+      # `llvm` package at that version, e.g. llvm-20.*, not a `llvm20` package).
+      if [ -n "$VER" ]; then
+        dnf install -y --allowerasing "llvm-${VER}*" "llvm-devel-${VER}*" "clang-${VER}*" || true
+      fi
+      if [ -x "$LLVM_BIN/llvm-lto" ]; then
+        echo "Installed matching llvm ${VER}"; exit 0
+      fi
+
+      # Fallback: symlink an existing llvm-lto into the expected path.
+      LTO=$(command -v llvm-lto 2>/dev/null || find /usr/bin /usr/lib64 /opt/rh -name llvm-lto 2>/dev/null | head -1)
+      if [ -z "$LTO" ]; then
+        echo "ERROR: llvm-lto not found and llvm-${VER} unavailable" >&2
+        exit 1
+      fi
+      echo "WARN: llvm-${VER} unavailable; symlinking $LTO -> $LLVM_BIN/llvm-lto"
+      mkdir -p "$LLVM_BIN"
+      ln -sf "$LTO" "$LLVM_BIN/llvm-lto"
+    args:
+      executable: /bin/bash
+    become: true
+    register: tde_llvm_setup
+    when: ansible_os_family == "RedHat"
+
+  - name: Show llvm toolchain setup result (RHEL)
+    debug:
+      var: tde_llvm_setup.stdout_lines
+    when: ansible_os_family == "RedHat"
+
+  # Build-system selection is driven by what the cloned tree actually ships,
+  # NOT the branch/tag name (which is unreliable — e.g. "release-2.2" parses to
+  # version 2.2 but is meson-only with no Makefile).
+  #   - a top-level Makefile present -> PGXS make
+  #   - no Makefile                  -> meson
+  # This covers every case: 2.1.x ships only a Makefile (make); 2.2.0 ships both
+  # (make); release-2.2 and main are meson-only (meson).
+  - name: Check for a PGXS Makefile in the pg_tde source tree
+    stat:
+      path: "{{ tde_src_dest }}/Makefile"
+    become: true
+    register: tde_makefile_stat
+
+  - name: Choose pg_tde build system (PGXS make if Makefile present, else meson)
+    set_fact:
+      tde_use_meson: "{{ not tde_makefile_stat.stat.exists }}"
+
+  - name: Log selected pg_tde build system
+    debug:
+      msg: "pg_tde branch={{ tde_branch_to_build }} Makefile_present={{ tde_makefile_stat.stat.exists }} -> {{ 'meson' if (tde_use_meson | bool) else 'PGXS make' }}"
+
+  # -------------------------------------------------------------------------
+  # meson build path (pg_tde 2.2.0+ / main)
+  # -------------------------------------------------------------------------
+  # Build (setup + compile) as postgres into the postgres-owned build dir.
+  - name: Build pg_tde via meson against {{ pg_config_path }}
+    become: true
+    become_user: postgres
+    shell: |
+      {% if ansible_os_family == 'RedHat' and ansible_distribution_major_version == '9' %}
+      source /opt/rh/gcc-toolset-14/enable
+      {% endif %}
+      set -o pipefail
+      rm -rf "{{ tde_build_dest }}"
+      meson setup --buildtype=release \
+        -Dpg_config={{ pg_config_path }} \
+        -Dwerror=false \
+        "{{ tde_build_dest }}" 2>&1 | tee {{ tde_build_log }}
+      meson compile -C "{{ tde_build_dest }}" 2>&1 | tee -a {{ tde_build_log }}
+    args:
+      chdir: "{{ tde_src_dest }}"
+      executable: /bin/bash
+    environment:
+      PATH: "{{ pg_bin_dir }}:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "{{ pg_lib_dir }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
+    register: tde_meson_result
+    ignore_errors: true
+    when: tde_use_meson | bool
+
+  - name: Show pg_tde meson build output
+    debug:
+      var: tde_meson_result.stdout_lines
+    when: tde_use_meson | bool
+
+  # meson install must run as root: it writes pg_tde.so, the control file and
+  # SQL scripts into PostgreSQL's lib/share dirs (root-owned). Running install
+  # as postgres makes meson attempt a privilege escalation that fails with
+  # "Error executing command as another user: Not authorized" (rc 127).
+  - name: Install pg_tde via meson (root)
+    become: true
+    shell: |
+      set -o pipefail
+      meson install -C "{{ tde_build_dest }}" 2>&1 | tee {{ tde_install_log }}
+    args:
+      chdir: "{{ tde_src_dest }}"
+      executable: /bin/bash
+    environment:
+      PATH: "{{ pg_bin_dir }}:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "{{ pg_lib_dir }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
+    register: tde_meson_install_result
+    ignore_errors: true
+    when:
+      - tde_use_meson | bool
+      - tde_meson_result.rc | default(1) == 0
+
+  - name: Show pg_tde meson install output
+    debug:
+      var: tde_meson_install_result.stdout_lines
+    when: tde_use_meson | bool
+
+  # -------------------------------------------------------------------------
+  # PGXS build path (pg_tde 2.1.x and older — Makefile only)
+  # -------------------------------------------------------------------------
+  - name: Build and install pg_tde via PGXS against {{ pg_config_path }}
+    become: true
+    shell: |
+      {% if ansible_os_family == 'RedHat' and ansible_distribution_major_version == '9' %}
+      source /opt/rh/gcc-toolset-14/enable
+      {% endif %}
+      set -o pipefail
+      make USE_PGXS=1 PG_CONFIG={{ pg_config_path }} -j"$(nproc)" 2>&1 | tee {{ tde_build_log }}
+      make USE_PGXS=1 PG_CONFIG={{ pg_config_path }} install 2>&1 | tee {{ tde_install_log }}
+    args:
+      chdir: "{{ tde_src_dest }}"
+      executable: /bin/bash
+    environment:
+      PATH: "{{ pg_bin_dir }}:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: "{{ pg_lib_dir }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
+      # The pg_tde frontend tools link -lpgfeutils/-lpgcommon/-lpgport, which on
+      # Debian live in pkglibdir (pg_lib_dir), not pg_config --libdir. LIBRARY_PATH
+      # adds that dir to the linker's search path at build time.
+      LIBRARY_PATH: "{{ pg_lib_dir }}:{{ ansible_env.LIBRARY_PATH | default('') }}"
+    register: tde_pgxs_result
+    ignore_errors: true
+    when: not (tde_use_meson | bool)
+
+  - name: Show pg_tde PGXS build output
+    debug:
+      var: tde_pgxs_result.stdout_lines
+    when: not (tde_use_meson | bool)
+
+  # -------------------------------------------------------------------------
+  # Fail if whichever build path ran did not succeed
+  # -------------------------------------------------------------------------
+  - name: Fail if pg_tde meson build or install failed
+    fail:
+      msg: "pg_tde meson build/install failed (branch={{ tde_branch_to_build }}, pg_config={{ pg_config_path }}). See {{ tde_build_log }} / {{ tde_install_log }}"
+    when:
+      - tde_use_meson | bool
+      - (tde_meson_result.rc | default(1) != 0) or (tde_meson_install_result.rc | default(1) != 0)
+
+  - name: Fail if pg_tde PGXS build failed
+    fail:
+      msg: "pg_tde PGXS build failed (branch={{ tde_branch_to_build }}, pg_config={{ pg_config_path }}). See {{ tde_build_log }} / {{ tde_install_log }}"
+    when:
+      - not (tde_use_meson | bool)
+      - tde_pgxs_result.rc | default(1) != 0

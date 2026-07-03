@@ -1,0 +1,13 @@
+---
+# Add pg_tde to shared_preload_libraries in postgresql.conf.
+# Does NOT restart the service — caller handles that.
+# Caller must pass:
+#   pg_conf - full path to postgresql.conf
+
+  - name: Add pg_tde to shared_preload_libraries in {{ pg_conf }}
+    lineinfile:
+      path: "{{ pg_conf }}"
+      regexp: "^#?shared_preload_libraries"
+      line: "shared_preload_libraries = 'pg_tde'"
+      state: present
+    become: true

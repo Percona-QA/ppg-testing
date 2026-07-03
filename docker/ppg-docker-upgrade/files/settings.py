@@ -95,11 +95,11 @@ pgvector = {
     "16.13": {"version": "0.8.2", "extension_version": "0.8.2"},
     "17.9": {"version": "0.8.2", "extension_version": "0.8.2"},
     "18.3": {"version": "0.8.2", "extension_version": "0.8.2"},
-    "14.23": {"version": "0.8.2", "extension_version": "0.8.2"},
-    "15.18": {"version": "0.8.2", "extension_version": "0.8.2"},
-    "16.14": {"version": "0.8.2", "extension_version": "0.8.2"},
-    "17.10": {"version": "0.8.2", "extension_version": "0.8.2"},
-    "18.4": {"version": "0.8.2", "extension_version": "0.8.2"},
+    "14.23": {"version": "0.8.3", "extension_version": "0.8.3"},
+    "15.18": {"version": "0.8.3", "extension_version": "0.8.3"},
+    "16.14": {"version": "0.8.3", "extension_version": "0.8.3"},
+    "17.10": {"version": "0.8.3", "extension_version": "0.8.3"},
+    "18.4": {"version": "0.8.3", "extension_version": "0.8.3"},
 }
 
 pg_cron = {
@@ -119,11 +119,11 @@ postgis = {
     "16.13": {"version": "3.5.5", "major_version": "3.5", "extension_version": "3.5.5"},
     "17.9": {"version": "3.5.5", "major_version": "3.5", "extension_version": "3.5.5"},
     "18.3": {"version": "3.5.5", "major_version": "3.5", "extension_version": "3.5.5"},
-    "14.23": {"version": "3.5.6", "major_version": "3.5", "extension_version": "3.5.6"},
-    "15.18": {"version": "3.5.6", "major_version": "3.5", "extension_version": "3.5.6"},
-    "16.14": {"version": "3.5.6", "major_version": "3.5", "extension_version": "3.5.6"},
-    "17.10": {"version": "3.5.6", "major_version": "3.5", "extension_version": "3.5.6"},
-    "18.4": {"version": "3.5.6", "major_version": "3.5", "extension_version": "3.5.6"},
+    "14.23": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
+    "15.18": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
+    "16.14": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
+    "17.10": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
+    "18.4": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
 }
 
 
@@ -248,8 +248,8 @@ pg_oidc_validator = {
 pg_tde = {
     "17.9":  {"version": "2.1.2","extension_version": "pg_tde 2.1.2","ext_sql_version": "2.1"},
     "18.3":  {"version": "2.1.2","extension_version": "pg_tde 2.1.2","ext_sql_version": "2.1"},
-    "17.10": {"version": "2.2.0","extension_version": "pg_tde 2.2.0","ext_sql_version": "2.2"},
-    "18.4": {"version": "2.2.0","extension_version": "pg_tde 2.2.0","ext_sql_version": "2.2"},
+    "17.10": {"version": "2.2.1","extension_version": "pg_tde 2.2.1","ext_sql_version": "2.2"},
+    "18.4": {"version": "2.2.1","extension_version": "pg_tde 2.2.1","ext_sql_version": "2.2"},
 }
 
 # Base extension list — common across all supported major versions.
@@ -777,7 +777,7 @@ ppg_versions = {
     },
     "17.10": {
         "version": "17.10",
-        "percona-version": "17.10.1",
+        "percona-version": "17.10.2",
         "percona-postgresql-common": "290",
         "percona-postgresql-client-common": "290",
         "libpq_version": "170010",
@@ -826,7 +826,7 @@ ppg_versions = {
     },
     "18.4": {
         "version": "18.4",
-        "percona-version": "18.4.1",
+        "percona-version": "18.4.2",
         "percona-postgresql-common": "290",
         "percona-postgresql-client-common": "290",
         "libpq_version": "180004",

@@ -1,0 +1,76 @@
+---
+# Capture pg_tde version information for debugging/verification and write it to
+# a log file (collected into the artifact tarball) as well as the console.
+#
+# Two distinct versions are recorded:
+#   - extension_version : the version actually installed in the database
+#                         (pg_extension.extversion) — i.e. the SQL/catalog
+#                         version after CREATE/ALTER EXTENSION.
+#   - sql_default_version: the default_version advertised by the installed
+#                          pg_tde control file (pg_available_extensions) — i.e.
+#                          what the on-disk SQL scripts would upgrade to.
+#   - shared library marker from the pg_tde extension, when available.
+#
+# Caller must pass:
+#   pg_major      - PostgreSQL major version (e.g. "18"), for the package NEVR query
+#   pg_bin_dir    - PostgreSQL bin directory
+#   pg_socket_dir - directory for the Unix socket (PGHOST)
+#   version_log   - path to write the captured version info (e.g. /tmp/tde-from-version.log)
+#   version_label - human label for this capture (e.g. "FROM", "TO")
+# Caller may pass:
+#   expected_tde_version - pg_tde version to assert (e.g. "2.2.1"). When set, the
+#                          play fails if pg_tde_version() does not report it.
+
+  - name: Capture pg_tde version info ({{ version_label }})
+    become: true
+    become_user: postgres
+    shell: |
+      set -o pipefail
+      {
+        echo "=== pg_tde version [{{ version_label }}] ==="
+        echo "captured_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo
+        echo "-- installed extension version (pg_extension.extversion):"
+        psql -d postgres -c \
+          "SELECT extname, extversion FROM pg_extension WHERE extname = 'pg_tde';"
+        echo "-- available/default SQL version (pg_available_extensions):"
+        psql -d postgres -c \
+          "SELECT name, default_version, installed_version, comment FROM pg_available_extensions WHERE name = 'pg_tde';"
+        echo "-- pg_tde package version (shared library build, PG_TDE_VERSION_STRING):"
+        psql -d postgres -c \
+          "SELECT pg_tde_version();" 2>/dev/null || echo "(pg_tde_version() not available in this build)"
+        echo "-- loaded shared library version (pg_get_loaded_modules):"
+        psql -d postgres -c \
+          "SELECT module_name, version, file_name FROM pg_get_loaded_modules() WHERE file_name IN ('pg_tde.so', 'pg_tde.dylib');" 2>/dev/null || true
+        echo "-- installed pg_tde package (NEVR on disk; compare with loaded version above):"
+        if command -v rpm >/dev/null 2>&1; then
+          rpm -q "percona-pg_tde{{ pg_major }}" 2>&1 || true
+        else
+          dpkg-query -W -f='percona-pg-tde{{ pg_major }} ${Version}\n' "percona-pg-tde{{ pg_major }}" 2>&1 || true
+        fi
+      } 2>&1 | tee {{ version_log }}
+    args:
+      executable: /bin/bash
+    environment:
+      PGHOST: "{{ pg_socket_dir }}"
+      PGPORT: "5432"
+      PATH:   "{{ pg_bin_dir }}:{{ ansible_env.PATH }}"
+    register: tde_version_result
+    ignore_errors: true
+
+  - name: Show pg_tde version info ({{ version_label }})
+    debug:
+      var: tde_version_result.stdout_lines
+
+  # Optional gate: when an expected pg_tde version is given, assert pg_tde_version()
+  # reports it. Match "pg_tde <ver>" followed by whitespace or end-of-line (psql
+  # does not pad the trailing column, so there is no trailing space). Dots are
+  # escaped so 2.2.1 does not match 2.2.10.
+  - name: Verify pg_tde version matches expected ({{ version_label }})
+    fail:
+      msg: >-
+        Expected pg_tde version '{{ expected_tde_version }}' on the {{ version_label }}
+        cluster, but pg_tde_version() did not report it. See {{ version_log }}.
+    when:
+      - expected_tde_version | default('') | length > 0
+      - (tde_version_result.stdout | default('')) is not search('pg_tde ' ~ (expected_tde_version | replace('.', '\\.')) ~ '(\\s|$)')

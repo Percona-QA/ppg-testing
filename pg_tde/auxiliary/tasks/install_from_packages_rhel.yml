@@ -99,14 +99,6 @@
       state: present
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
-  - name: Ensure br_netfilter module is loaded
-    become: true
-    community.general.modprobe:
-      name: br_netfilter
-      state: present
-    when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
-    ignore_errors: true
-
   - name: CLANG Version
     command: clang --version
     ignore_errors: true

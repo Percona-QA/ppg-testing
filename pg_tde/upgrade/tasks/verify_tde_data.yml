@@ -1,0 +1,38 @@
+---
+# Verify that the TDE-encrypted test data seeded by seed_tde_data.yml is intact
+# and readable.  Fails the play if the row count or a spot-check value is wrong.
+#
+# Caller must pass:
+#   pg_bin_dir    - PostgreSQL bin directory
+#   pg_socket_dir - directory for the Unix socket (PGHOST)
+#   check_label   - human label for this check (e.g. "pre-upgrade", "post-upgrade")
+
+  - name: Verify TDE data integrity ({{ check_label }})
+    become: true
+    become_user: postgres
+    shell: |
+      set -e
+      COUNT=$(psql -d postgres -t -A -c \
+        "SELECT count(*) FROM tde_upgrade_check;")
+      if [ "$COUNT" != "100" ]; then
+        echo "FAIL [{{ check_label }}]: expected 100 rows, got $COUNT"
+        exit 1
+      fi
+      SAMPLE=$(psql -d postgres -t -A -c \
+        "SELECT payload FROM tde_upgrade_check WHERE id = 42;")
+      if [ "$SAMPLE" != "upgrade_data_42" ]; then
+        echo "FAIL [{{ check_label }}]: expected 'upgrade_data_42', got '$SAMPLE'"
+        exit 1
+      fi
+      echo "PASS [{{ check_label }}]: $COUNT rows present, spot-check id=42 ok"
+    args:
+      executable: /bin/bash
+    environment:
+      PGHOST: "{{ pg_socket_dir }}"
+      PGPORT: "5432"
+      PATH:   "{{ pg_bin_dir }}:{{ ansible_env.PATH }}"
+    register: verify_result
+
+  - name: Show verification result ({{ check_label }})
+    debug:
+      var: verify_result.stdout_lines

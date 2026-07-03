@@ -1,0 +1,63 @@
+---
+# Install Percona pg_tde packages for a given PostgreSQL major version.
+# Caller must pass:
+#   pg_major - e.g. "16"
+# Caller may pass:
+#   tde_pkg_version - pg_tde package version to pin (e.g. "2.2.0"). Empty
+#                     (default) installs the latest pg_tde in the channel.
+
+  # RHEL accepts an NEVR glob (percona-pg_tde18-2.2.0*); the *-N.elN.arch tail is
+  # matched by the glob. Empty version installs the latest.
+  - name: Install pg_tde packages for PG {{ pg_major }} (RHEL)
+    yum:
+      name:
+        - "percona-pg_tde{{ pg_major }}{{ ('-' ~ tde_pkg_version ~ '*') if (tde_pkg_version | default('') | length > 0) else '' }}"
+      state: "{{ 'present' if (tde_pkg_version | default('') | length > 0) else 'latest' }}"
+      allow_downgrade: true
+      update_cache: true
+    when: ansible_os_family == "RedHat"
+
+  # apt cannot glob versions: resolve the exact version string for the requested
+  # pg_tde version, then pin. Empty version installs the latest.
+  - name: Resolve pinned pg_tde version (Debian)
+    shell: |
+      set -o pipefail
+      apt-get update >/dev/null 2>&1 || true
+      # madison: "pkg | <version> | repo". Strip epoch + debrev to get the upstream
+      # version and match it exactly against the requested pg_tde version.
+      # NB: do not 'exit' from awk on first match — under 'set -o pipefail' that
+      # closes the pipe while madison is still writing (SIGPIPE -> rc 141). Read
+      # the whole stream and print only the first match via a flag.
+      apt-cache madison "percona-pg-tde{{ pg_major }}" \
+        | awk -F'|' -v want="{{ tde_pkg_version }}" \
+            '!done {gsub(/ /,"",$2); v=$2; up=v; sub(/^[0-9]+:/,"",up); sub(/-.*/,"",up); if (up==want) {print v; done=1}}'
+    args:
+      executable: /bin/bash
+    register: deb_tde_pin_ver
+    changed_when: false
+    when:
+      - ansible_os_family == "Debian"
+      - tde_pkg_version | default('') | length > 0
+
+  - name: Show resolved pg_tde version (Debian)
+    debug:
+      msg: "pg_tde pin request='{{ tde_pkg_version }}' resolved to '{{ deb_tde_pin_ver.stdout | default('') | trim }}'"
+    when:
+      - ansible_os_family == "Debian"
+      - tde_pkg_version | default('') | length > 0
+
+  - name: Fail if pinned pg_tde version not found in channel (Debian)
+    fail:
+      msg: "No percona-pg-tde{{ pg_major }} version matching {{ tde_pkg_version }} in the enabled repo"
+    when:
+      - ansible_os_family == "Debian"
+      - tde_pkg_version | default('') | length > 0
+      - (deb_tde_pin_ver.stdout | default('') | trim) | length == 0
+
+  - name: Install pg_tde packages for PG {{ pg_major }} (Debian/Ubuntu)
+    apt:
+      name: "percona-pg-tde{{ pg_major }}{{ ('=' ~ (deb_tde_pin_ver.stdout | trim)) if ((tde_pkg_version | default('') | length > 0) and ((deb_tde_pin_ver.stdout | default('') | trim) | length > 0)) else '' }}"
+      state: "{{ 'present' if (tde_pkg_version | default('') | length > 0) else 'latest' }}"
+      allow_downgrade: true
+      update_cache: true
+    when: ansible_os_family == "Debian"

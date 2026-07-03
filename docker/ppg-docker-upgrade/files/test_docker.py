@@ -207,7 +207,9 @@ def _expected_ubi_major_version():
 
 
 def test_base_image_matches_ubi_tag(host):
-    """Verify the container base OS major version matches the UBI version in the image tag.
+    """Verify the container base OS major version matches the UBI version in the image tag,
+    and that the base OS is genuinely RHEL rather than a look-alike (e.g. Oracle Linux),
+    which can report the exact same VERSION_ID and would otherwise pass this check silently.
 
     - ubi8  tag -> RHEL/UBI 8
     - ubi10 tag -> RHEL/UBI 10
@@ -216,14 +218,22 @@ def test_base_image_matches_ubi_tag(host):
     expected = _expected_ubi_major_version()
     os_release = host.file('/etc/os-release').content_string
     version_id = None
+    os_id = None
     for line in os_release.splitlines():
         if line.startswith('VERSION_ID='):
             version_id = line.split('=', 1)[1].strip().strip('"').split('.')[0]
-            break
+        elif line.startswith('ID='):
+            os_id = line.split('=', 1)[1].strip().strip('"')
     assert version_id is not None, "Could not find VERSION_ID in /etc/os-release"
     assert version_id == expected, (
         f"Base image OS mismatch: tag '{IMG_TAG}' expects RHEL/UBI {expected}, "
         f"but container /etc/os-release reports VERSION_ID major={version_id}"
+    )
+    assert os_id == "rhel", (
+        f"Base image is not genuine RHEL/UBI: /etc/os-release reports ID='{os_id}'. "
+        f"Look-alike distros (e.g. Oracle Linux reports ID='ol') can mirror RHEL's "
+        f"VERSION_ID exactly and would pass the version check above while not actually "
+        f"being RHEL/UBI. Tag '{IMG_TAG}' must be built on a genuine RHEL/UBI {expected} base."
     )
 
 

@@ -1,0 +1,47 @@
+---
+# Create pg_tde extension, set up a file-based key provider, create an encrypted
+# table, and insert 100 rows of test data.  The data is later verified by
+# verify_tde_data.yml both before and after the upgrade.
+#
+# Caller must pass:
+#   pg_bin_dir    - PostgreSQL bin directory
+#   pg_socket_dir - directory for the Unix socket (PGHOST)
+
+  - name: Create pg_tde extension and seed upgrade test data
+    become: true
+    become_user: postgres
+    shell: |
+      set -e
+      psql -v ON_ERROR_STOP=1 -d postgres <<'EOSQL'
+      CREATE EXTENSION IF NOT EXISTS pg_tde;
+      SELECT pg_tde_add_database_key_provider_file(
+        'upgrade-file-provider',
+        '/tmp/pg_tde_upgrade_keyring.per'
+      );
+      SELECT pg_tde_create_key_using_database_key_provider(
+        'upgrade-principal-key',
+        'upgrade-file-provider'
+      );
+      SELECT pg_tde_set_key_using_database_key_provider(
+        'upgrade-principal-key',
+        'upgrade-file-provider'
+      );
+      CREATE TABLE IF NOT EXISTS tde_upgrade_check (
+        id      INTEGER PRIMARY KEY,
+        payload TEXT    NOT NULL
+      ) USING tde_heap;
+      INSERT INTO tde_upgrade_check
+        SELECT i, 'upgrade_data_' || i::TEXT
+        FROM   generate_series(1, 100) i;
+      EOSQL
+    args:
+      executable: /bin/bash
+    environment:
+      PGHOST: "{{ pg_socket_dir }}"
+      PGPORT: "5432"
+      PATH:   "{{ pg_bin_dir }}:{{ ansible_env.PATH }}"
+    register: seed_result
+
+  - name: Show seed output
+    debug:
+      var: seed_result.stdout_lines
