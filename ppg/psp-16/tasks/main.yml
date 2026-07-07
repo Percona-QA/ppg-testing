@@ -1,0 +1,74 @@
+---
+# PSP 16 (Percona Server for PostgreSQL 16, psp-16 repo) install test.
+#
+# PSP 16 is a superset of ppg-16.x: the same package set plus pg_tde. With
+# pg_tde not enabled it runs as vanilla PostgreSQL, so this role reuses the
+# ppg-16 shared install tasks verbatim and only adds the pg_tde package on
+# top. Functional TDE coverage lives in pg_tde/tde and pg_tde/upgrade — not
+# here.
+#
+# VERSION is expected in the form psp-16.14. The psp-16 repo has no per-minor
+# variants (tasks/enable_repo.yml trims the minor before percona-release).
+
+- name: Setting facts so that they will be persisted in the fact cache
+  ansible.builtin.set_fact:
+    pg_version_to_install: "{{ lookup('env', 'VERSION') | replace('psp-','') }}"
+
+- name: End play on Ubuntu 26 and versions older than 16.14
+  meta: end_host
+  when: ansible_distribution == "Ubuntu" and
+    ansible_distribution_major_version == "26" and
+    pg_version_to_install | string is version('16.14', '<', strict=True)
+
+- name: Configure repository
+  include_tasks: ../../../../tasks/enable_repo.yml
+
+- name: install Percona Server for PostgreSQL 16 packages
+  include_tasks: ../../../../tasks/install_ppg16.yml
+
+- name: Initialize Postgres RHEL
+  command: /usr/pgsql-16/bin/postgresql-16-setup initdb
+  environment:
+    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  when: ansible_os_family == "RedHat"
+
+- name: Start Postgres RHEL
+  service:
+    name: postgresql-16
+    state: started
+    enabled: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Install PPG tools
+  include_tasks: ../../../../tasks/install_ppg16_tools.yml
+
+- name: Install pg_tde packages (PSP-only component)
+  include_tasks: ../../../../tasks/install_psp16_tde.yml
+
+# =========Telemetry testcases
+- name: Verify telemetry installation
+  include_tasks: ../../../../tasks/verify_telemetry.yml
+
+- name: Install GCC Deb
+  apt:
+    name: gcc
+  when: ansible_os_family == "Debian"
+
+- name: Install GCC RHEL
+  yum:
+    name: gcc
+  when: ansible_os_family == "RedHat"
+
+- name: Create temporary directory for compilation
+  command: mkdir /tmp/libpq_command_temp_dir
+
+- name: Copy libpq source file
+  copy:
+    src: ../../common/files/lib_version.c
+    dest: /tmp/libpq_command_temp_dir
+
+- name: Delete dpkg-query for RHEL
+  yum:
+    name: dpkg
+    state: absent
+  when: ansible_os_family == "RedHat"

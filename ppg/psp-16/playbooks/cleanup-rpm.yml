@@ -1,0 +1,65 @@
+---
+- name: Cleanup
+  hosts: all
+  become: true
+  become_method: sudo
+  tasks:
+    - name: remove Postgresql rpm packages
+      yum:
+        name: "{{ packages }}"
+        state: absent
+      vars:
+        packages:
+          - percona-postgresql16
+          - percona-postgresql-client-common
+          - percona-postgresql-common
+          - percona-postgresql-server-dev-all
+          - percona-postgresql16
+          - percona-postgresql16-contrib
+          - percona-postgresql16-debuginfo
+          - percona-postgresql16-devel
+          - percona-postgresql16-docs
+          - percona-postgresql16-libs
+          - percona-postgresql16-llvmjit
+          - percona-postgresql16-plperl
+          - percona-postgresql16-plpython
+          - percona-postgresql16-pltcl
+          - percona-postgresql16-server
+          - percona-postgresql16-test
+          - percona-postgresql16-debuginfo
+          - percona-postgresql16-debugsource
+          - percona-postgresql16-devel-debuginfo
+          - percona-postgresql16-libs-debuginfo
+          - percona-postgresql16-plperl-debuginfo
+          - percona-postgresql16-plpython3-debuginfo
+          - percona-postgresql16-pltcl-debuginfo
+          - percona-postgresql16-server-debuginfo
+          - percona-pgbadger
+          - percona-pgbouncer
+          - percona-pgaudit16_set_user
+          - percona-wal2json16
+      when: ansible_os_family == "RedHat"
+
+    - name: remove pgaudit rpm packages
+      yum:
+        name: percona-pgaudit
+        state: absent
+      when: ansible_os_family == "RedHat"
+
+    - name: remove pg_repack rpm packages
+      yum:
+        name: percona-pg_repack16
+        state: absent
+      when: ansible_os_family == "RedHat"
+
+    - name: remove pgbackrest rpm packages
+      yum:
+        name: percona-pgbackrest
+        state: absent
+      when: ansible_os_family == "RedHat"
+
+    - name: remove patroni rpm packages
+      yum:
+        name: percona-patroni
+        state: absent
+      when: ansible_os_family == "RedHat"

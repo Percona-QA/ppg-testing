@@ -1,7 +1,8 @@
 import os
+import re
+
 import pytest
 from packaging import version
-
 
 UBUNTU26_MIN_VERSIONS = {
     14: version.parse("14.23"),
@@ -23,7 +24,7 @@ def _ubuntu26_skip_reason():
     major series the test must be skipped because the Ansible tasks already issued
     a ``meta: end_host`` and the package was never installed.
     """
-    ver_str = os.getenv("VERSION", "").replace("ppg-", "")
+    ver_str = re.sub(r"^(ppg|psp)-", "", os.getenv("VERSION", ""))
     if not ver_str:
         return None
 

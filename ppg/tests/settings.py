@@ -15,7 +15,9 @@ from .versions.pg_gather import pg_gather
 from .versions.etcd import etcd
 from .versions.pgvector import pgvector
 
-MAJOR_VER = os.getenv("VERSION").split(".")[0].split("ppg-")[1]
+# VERSION is "<product>-<major>.<minor>" where product is ppg or psp
+# (e.g. ppg-16.14, psp-16.14) — take the major regardless of product.
+MAJOR_VER = os.getenv("VERSION").split(".")[0].split("-")[1]
 # if "11" in os.getenv("VERSION"):
 #     MAJOR_VER = "11"
 # if "13" in os.getenv("VERSION"):
@@ -25,7 +27,7 @@ MAJOR_VER = os.getenv("VERSION").split(".")[0].split("ppg-")[1]
 def get_settings(distro_type):
     ppg_versions = get_ppg_versions(distro_type)
 
-    return {
+    settings = {
         "ppg-11.22": {
             "version": "11.22",
             "deb_pkg_ver": ppg_versions["ppg-11.22"]["deb_pkg_ver"],
@@ -4276,3 +4278,15 @@ def get_settings(distro_type):
             "PG_CRON_sql_version": "1.6",
         },
     }
+
+    # PSP 16 (psp-16 repo) ships the ppg-16.14 package set plus pg_tde.
+    # Derive its entry from ppg-16.14 so version bumps there flow through
+    # automatically; only the PSP-specific pg_tde keys are added on top.
+    settings["psp-16.14"] = {
+        **settings["ppg-16.14"],
+        "PG_TDE_version": "pg_tde 2.2.1",
+        "PG_TDE_package_version": "2.2.1",
+        "PG_TDE_sql_version": "2.2",
+    }
+
+    return settings

@@ -1,0 +1,29 @@
+---
+- name: Setting facts so that they will be persisted in the fact cache
+  ansible.builtin.set_fact:
+    pg_version_to_install: "{{ lookup('env', 'VERSION') | replace('psp-','') }}"
+
+- name: End play on Ubuntu 26 and versions older than 16.14
+  meta: end_host
+  when: ansible_distribution == "Ubuntu" and
+    ansible_distribution_major_version == "26" and
+    pg_version_to_install | string is version('16.14', '<', strict=True)
+
+- name: Configure repository
+  include_tasks: ../../../../tasks/enable_repo.yml
+
+- name: install Percona Platform for PostgreSQL 16 packages
+  include_tasks: ../../../../tasks/install_ppg_meta_server.yml
+
+- name: Initialize Postgres RHEL
+  command: /usr/pgsql-16/bin/postgresql-16-setup initdb
+  environment:
+    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  when: ansible_os_family == "RedHat"
+
+- name: Start Postgres RHEL
+  service:
+    name: postgresql-16
+    state: started
+    enabled: yes
+  when: ansible_os_family == "RedHat"

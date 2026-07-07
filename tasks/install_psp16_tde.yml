@@ -1,0 +1,31 @@
+---
+# Install the pg_tde packages — the one component PSP 16 ships on top of the
+# ppg-16.x package set. Installation only: encryption is deliberately NOT
+# enabled here (no shared_preload_libraries change). The psp-16* roles test
+# PSP as a vanilla PostgreSQL server; functional TDE coverage lives in
+# pg_tde/tde and pg_tde/upgrade.
+
+  - name: Install pg_tde packages RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pg_tde16
+        - percona-pg_tde16-devel
+        - percona-pg_tde16-debugsource
+        - percona-pg_tde16-debuginfo
+    when: ansible_os_family == "RedHat"
+
+  - name: Install pg_tde packages Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pg-tde16
+        - percona-pg-tde16-client
+        - percona-pg-tde16-dbgsym
+    when: ansible_os_family == "Debian"
