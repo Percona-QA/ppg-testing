@@ -4,8 +4,8 @@
   # ===========================================================
   - name: Set base facts
     set_fact:
-      from_full_version:     "{{ lookup('env', 'FROM_VERSION') | regex_replace('^ppg-', '') }}"
-      to_full_version:       "{{ lookup('env', 'TO_VERSION')   | regex_replace('^ppg-', '') }}"
+      from_full_version:     "{{ lookup('env', 'FROM_VERSION') | regex_replace('^(?:ppg|psp)-', '') }}"
+      to_full_version:       "{{ lookup('env', 'TO_VERSION')   | regex_replace('^(?:ppg|psp)-', '') }}"
       from_version_str:      "{{ lookup('env', 'FROM_VERSION') }}"
       to_version_str:        "{{ lookup('env', 'TO_VERSION')   }}"
       upgrade_type:          "{{ lookup('env', 'UPGRADE_TYPE') | default('server_minor') | lower }}"

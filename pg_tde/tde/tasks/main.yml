@@ -5,8 +5,8 @@
     tde_branch: "{{ lookup('env','TDE_BRANCH') }}"
     telemetry_env:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
-    major_version: "{{ lookup('env','VERSION') | regex_replace('ppg-(\\d+).*','\\1') }}"
-    pg_version_to_install: "{{ lookup('env','VERSION') | regex_replace('ppg-','') }}"
+    major_version: "{{ lookup('env','VERSION') | regex_replace('^(?:ppg|psp)-(\\d+).*','\\1') }}"
+    pg_version_to_install: "{{ lookup('env','VERSION') | regex_replace('^(?:ppg|psp)-','') }}"
     postgres_group: "{{ 'wheel' if ansible_os_family == 'RedHat' else 'admin' }}"
     io_method: "{{ lookup('env', 'IO_METHOD') }}"
     artifact_filename: "tde-{{ lookup('env','VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.tar.gz"
