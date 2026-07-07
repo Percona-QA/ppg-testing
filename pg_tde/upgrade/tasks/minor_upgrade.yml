@@ -19,7 +19,7 @@
 
   # Switch the Percona repo to the TO minor version so package updates pull the right build
   - name: Enable Percona repo for TO version
-    command: percona-release enable-only {{ to_version_str }} {{ to_repo }}
+    command: percona-release enable-only {{ to_repo_version }} {{ to_repo }}
 
   # Update the server packages via the shared (pin-aware) install tasks. TO_PKG_RELEASE
   # pins a specific Percona build increment (e.g. 18.4-2); empty = latest in the channel.

@@ -20,7 +20,9 @@
     command: percona-release enable-only {{ version }} {{ repo }}
     vars:
       repo: "{{ lookup('env', 'REPO') }}"
-      version: "{{ lookup('env', 'VERSION') }}"
+      # psp only ships one repo per major version (psp-16), no psp-16.xx minor
+      # repos exist, unlike ppg (ppg-16.14 etc.) — trim the minor for psp only.
+      version: "{{ lookup('env', 'VERSION').split('.')[0] if lookup('env', 'VERSION').startswith('psp-') else lookup('env', 'VERSION') }}"
     when: not major_repo
 
   - name: setup repo with percona-release {{ version }}
