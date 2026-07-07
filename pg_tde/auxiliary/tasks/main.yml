@@ -2,7 +2,7 @@
   - name: Set Base Facts
     set_fact:
       major_version: "{{ lookup('env','VERSION') | regex_replace('ppg-(\\d+).*','\\1') }}"
-      install_from_packages: "{{ lookup('env', 'INSTALL_FROM_PACKAGES')}}"
+      install_from_packages: "{{ lookup('env', 'INSTALL_FROM_PACKAGES') | default('false') | bool }}"
       full_version: "{{ lookup('env','VERSION') | regex_replace('ppg-','') }}"
 
       # Convert "true"/"false" strings to actual Booleans
@@ -113,6 +113,7 @@
 
   - name: Configure repository
     ansible.builtin.include_tasks: ../../../../tasks/enable_repo.yml
+    when: install_from_packages
 
   - name: Include Redhat tasks file
     include_tasks: 
