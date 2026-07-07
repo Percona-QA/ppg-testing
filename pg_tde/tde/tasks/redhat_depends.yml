@@ -377,7 +377,7 @@
 
   - name: Install Percona PostgreSQL development packages
     ansible.builtin.dnf:
-      name: "{{ 'percona-postgresql-server-dev-all' if (pg_version_to_install is version('17.4', '<=')) else 'percona-postgresql-common-dev' }}"
+      name: "{{ 'percona-postgresql-server-dev-all' if (pg_version_to_install is version('17.0', '>=') and pg_version_to_install is version('17.4', '<=')) else 'percona-postgresql-common-dev' }}"
       state: present
       update_cache: yes
     when: ansible_os_family == "RedHat"

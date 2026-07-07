@@ -8,6 +8,10 @@
       to_full_version:       "{{ lookup('env', 'TO_VERSION')   | regex_replace('^(?:ppg|psp)-', '') }}"
       from_version_str:      "{{ lookup('env', 'FROM_VERSION') }}"
       to_version_str:        "{{ lookup('env', 'TO_VERSION')   }}"
+      # psp only ships one repo per major version (psp-16), no psp-16.xx minor
+      # repos exist, unlike ppg (ppg-16.14 etc.) — trim the minor for psp only.
+      from_repo_version:     "{{ lookup('env', 'FROM_VERSION').split('.')[0] if lookup('env', 'FROM_VERSION').startswith('psp-') else lookup('env', 'FROM_VERSION') }}"
+      to_repo_version:       "{{ lookup('env', 'TO_VERSION').split('.')[0] if lookup('env', 'TO_VERSION').startswith('psp-') else lookup('env', 'TO_VERSION') }}"
       upgrade_type:          "{{ lookup('env', 'UPGRADE_TYPE') | default('server_minor') | lower }}"
       tde_upgrade:           "{{ lookup('env', 'TDE_UPGRADE')  | default('false') | bool }}"
       install_from_packages: "{{ lookup('env', 'INSTALL_FROM_PACKAGES') | default('true') | bool }}"
@@ -164,7 +168,7 @@
         when: ansible_os_family == "Debian"
 
       - name: Enable Percona repo for FROM version
-        command: percona-release enable-only {{ from_version_str }} {{ from_repo }}
+        command: percona-release enable-only {{ from_repo_version }} {{ from_repo }}
 
       # ===========================================================
       # Install PostgreSQL FROM version packages
