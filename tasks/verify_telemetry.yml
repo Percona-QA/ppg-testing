@@ -1,7 +1,7 @@
 ---
 - name: Setting facts so that they will be persisted in the fact cache
   ansible.builtin.set_fact:
-    pg_version_to_install: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
+    pg_version_to_install: "{{ lookup('env', 'VERSION') | regex_replace('^(?:ppg|psp)-','') }}"
 
 - name: Extract major version
   ansible.builtin.set_fact:

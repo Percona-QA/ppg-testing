@@ -1,7 +1,8 @@
 import os
+import re
+
 import pytest
 from packaging import version
-
 
 UBUNTU26_MIN_VERSIONS = {
     14: version.parse("14.23"),
@@ -21,7 +22,7 @@ def skip_unsupported_ubuntu(host):
     if not host.system_info.release.startswith("26"):
         return
 
-    ver_str = os.getenv("VERSION", "").replace("ppg-", "")
+    ver_str = re.sub(r"^(ppg|psp)-", "", os.getenv("VERSION", ""))
     if not ver_str:
         return
 
