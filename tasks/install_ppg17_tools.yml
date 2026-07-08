@@ -151,15 +151,17 @@
     when: ansible_os_family == "RedHat"
 
   - name: Restart Postgres RHEL
-    service:
-      name: postgresql-17
-      state: restarted
+    include_tasks: start_postgres_with_diagnostics.yml
+    vars:
+      svc_name: postgresql-17
+      svc_state: restarted
     when: ansible_os_family == "RedHat"
 
   - name: Restart Postgres Debian
-    command: sudo systemctl restart postgresql
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    include_tasks: start_postgres_with_diagnostics.yml
+    vars:
+      svc_name: postgresql
+      svc_state: restarted
     when: ansible_os_family == "Debian"
 
   - name: Install pgrepack Debian
@@ -558,16 +560,17 @@
     when: ansible_os_family == "Debian"
 
   - name: Restart Postgres RHEL
-    service:
-      name: postgresql-17
-      state: restarted
+    include_tasks: start_postgres_with_diagnostics.yml
+    vars:
+      svc_name: postgresql-17
+      svc_state: restarted
     when: ansible_os_family == "RedHat"
-    register: out
 
   - name: Restart Postgres Debian
-    command: sudo systemctl restart postgresql
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    include_tasks: start_postgres_with_diagnostics.yml
+    vars:
+      svc_name: postgresql
+      svc_state: restarted
     when: ansible_os_family == "Debian"
 
   - name: Install etcd packages RHEL
@@ -583,10 +586,10 @@
     when: ansible_os_family == "RedHat"
 
   - name: Restart etcd RHEL
-    service:
-      name: etcd
-      state: restarted
-      enabled: yes
+    include_tasks: start_ha_service_with_diagnostics.yml
+    vars:
+      svc_name: etcd
+      svc_state: restarted
     when: ansible_os_family == "RedHat"
 
   - name: Install patroni related packages Debian
@@ -653,14 +656,13 @@
   #     enabled: yes
 
   - name: Enable and start patroni with wait
-    ansible.builtin.systemd:
-      name: patroni
-      state: started
-      enabled: yes
-      daemon_reload: yes
-    async: 180
-    poll: 5
-    become: true
+    include_tasks: start_ha_service_with_diagnostics.yml
+    vars:
+      svc_name: patroni
+      svc_state: started
+      svc_daemon_reload: true
+      svc_async: 180
+      svc_poll: 5
 
   # - name: Install patroni related dependency on Debian 13
   #   apt:
@@ -812,28 +814,28 @@
     when: ansible_os_family == "RedHat"
 
   - name: Start etcd
-    service:
-      name: etcd
-      state: started
-      enabled: yes
+    include_tasks: start_ha_service_with_diagnostics.yml
+    vars:
+      svc_name: etcd
+      svc_state: started
 
   - name: Start patroni0
-    service:
-      name: patroni0
-      state: started
-      enabled: yes
+    include_tasks: start_ha_service_with_diagnostics.yml
+    vars:
+      svc_name: patroni0
+      svc_state: started
 
   - name: Start patroni1
-    service:
-      name: patroni1
-      state: started
-      enabled: yes
+    include_tasks: start_ha_service_with_diagnostics.yml
+    vars:
+      svc_name: patroni1
+      svc_state: started
 
   - name: Start patroni2
-    service:
-      name: patroni2
-      state: started
-      enabled: yes
+    include_tasks: start_ha_service_with_diagnostics.yml
+    vars:
+      svc_name: patroni2
+      svc_state: started
 
   - name: Copy haproxy.cfg
     copy:
@@ -844,20 +846,22 @@
       mode: 0644
 
   - name: Start haproxy
-    shell: haproxy -f  /etc/haproxy/haproxy.cfg -D
+    include_tasks: start_haproxy_with_diagnostics.yml
+    vars:
+      haproxy_cfg: /etc/haproxy/haproxy.cfg
 
   - name: Start pgpool service
-    service:
-      name: pgpool
-      state: started
-      enabled: yes
+    include_tasks: start_ha_service_with_diagnostics.yml
+    vars:
+      svc_name: pgpool
+      svc_state: started
     when: ansible_os_family == "RedHat"
 
   - name: Start pgpool service
-    service:
-      name: percona-pgpool2
-      state: started
-      enabled: yes
+    include_tasks: start_ha_service_with_diagnostics.yml
+    vars:
+      svc_name: percona-pgpool2
+      svc_state: started
     when: ansible_os_family == "Debian"
 
   - name: Add user postgres to sudoers

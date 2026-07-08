@@ -1,0 +1,23 @@
+---
+# Print journalctl output for a systemd unit. Safe to call unconditionally —
+# if the unit doesn't exist or has no journal entries, journalctl just
+# returns nothing rather than erroring, so this never breaks the play.
+#
+# Caller must set:
+#   journal_unit - systemd unit name, e.g. "postgresql-16" or "patroni0"
+
+- name: Fetch journalctl for {{ journal_unit }}
+  ansible.builtin.command: journalctl -xeu {{ journal_unit }} --no-pager -n 200
+  register: __journal_result
+  changed_when: false
+  failed_when: false
+  become: true
+  ignore_errors: true
+
+- name: Show journalctl for {{ journal_unit }}
+  ansible.builtin.debug:
+    msg: >-
+      journalctl -u {{ journal_unit }}:
+      {{ __journal_result.stdout
+         | default('(unavailable: ' ~ (__journal_result.msg | default('unknown error')) ~ ')') }}
+  when: __journal_result is defined

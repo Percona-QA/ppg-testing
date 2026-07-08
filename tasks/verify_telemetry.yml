@@ -213,16 +213,17 @@
     msg: "The percona-telemetry-agent configuration file has been updated."
 
 - name: Start "{{ postgresql_service_name }}"
-  ansible.builtin.systemd:
-    name: "{{ postgresql_service_name }}"
-    state: started
-  become: true
+  ansible.builtin.include_tasks: start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: "{{ postgresql_service_name }}"
+    svc_state: started
 
 - name: Start telemetry-agent service
-  ansible.builtin.systemd:
-    name: percona-telemetry-agent
-    state: started
-  become: true
+  ansible.builtin.include_tasks: start_ha_service_with_diagnostics.yml
+  vars:
+    svc_name: percona-telemetry-agent
+    svc_state: started
+    log_search_dir: "{{ '/var/lib/pgsql' if ansible_os_family == 'RedHat' else '/var/log/postgresql' }}"
 
 - name: Check if telemetry-agent service is running
   ansible.builtin.systemd:

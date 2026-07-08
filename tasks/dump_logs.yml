@@ -1,0 +1,40 @@
+---
+# Print the contents of log files: everything under a directory (recursive
+# *.log search — picks up every cluster/major-version log in one call, no
+# need to know exact filenames) and/or an explicit list of file paths.
+# Safe to call unconditionally — missing files/directories are skipped.
+#
+# Caller may set (at least one):
+#   log_search_dir - directory to recursively search for *.log files
+#   log_files      - explicit list of file paths to dump
+
+- name: Find log files under {{ log_search_dir | default('(none)') }}
+  ansible.builtin.find:
+    paths: "{{ log_search_dir }}"
+    patterns: "*.log"
+    recurse: true
+  register: __found_logs
+  become: true
+  when: log_search_dir is defined
+  failed_when: false
+  ignore_errors: true
+
+- name: Tail log files
+  ansible.builtin.command: tail -n 200 {{ item }}
+  register: __log_tail
+  changed_when: false
+  failed_when: false
+  become: true
+  ignore_errors: true
+  loop: >-
+    {{ (__found_logs.files | default([]) | map(attribute='path') | list)
+       + (log_files | default([])) }}
+
+- name: Show log file contents
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.item }}:
+      {{ item.stdout | default('(unavailable: ' ~ (item.msg | default('unknown error')) ~ ')') }}
+  loop: "{{ __log_tail.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
