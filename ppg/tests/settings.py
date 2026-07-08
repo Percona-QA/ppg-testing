@@ -2384,11 +2384,13 @@ def get_settings(distro_type):
     settings["psp-16.14"] = {
         **settings["ppg-16.14"],
         # psp-16 points to a different repo line than ppg-16.14.
-        # Allow PSP-specific Debian respins while keeping the shared base list.
+        # Apply PSP-specific Debian/Ubuntu respins across all supported DEB distros
+        # while keeping the shared base list from ppg-16.14.
         "deb_pkg_ver": _merge_expected_deb_versions(
             settings["ppg-16.14"]["deb_pkg_ver"],
             {
-                "bookworm": ["2:16.14-2", "1:290-2", "290-2"],
+                distro: ["2:16.14-2", "1:290-1", "290-1"]
+                for distro in ["bullseye", "jammy", "bookworm", "noble", "trixie", "resolute"]
             },
         ),
         "PG_TDE_version": "pg_tde 2.2.1",
