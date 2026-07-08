@@ -33,12 +33,12 @@
   when: __ha_result is failed
   block:
     - name: Dump journalctl for {{ svc_name }}
-      ansible.builtin.include_tasks: dump_journalctl.yml
+      ansible.builtin.include_tasks: "{{ role_path }}/../../tasks/dump_journalctl.yml"
       vars:
         journal_unit: "{{ svc_name }}"
 
     - name: Dump logs for {{ svc_name }}
-      ansible.builtin.include_tasks: dump_logs.yml
+      ansible.builtin.include_tasks: "{{ role_path }}/../../tasks/dump_logs.yml"
       when: (log_search_dir is defined) or (log_files is defined)
 
 - name: Fail if {{ svc_name }} did not reach the expected state
