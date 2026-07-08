@@ -20,6 +20,22 @@ from .versions.pgvector import pgvector
 MAJOR_VER = os.getenv("VERSION").split(".")[0].split("-")[1]
 
 
+def _merge_expected_deb_versions(base_versions, distro_overrides):
+    """Return expected deb versions with per-distro override additions.
+
+    Keep the shared base list (ppg) and append repo-specific respins for
+    scenarios that intentionally point to a different repository family
+    (e.g. psp-16 vs ppg-16.14).
+    """
+    merged = list(base_versions)
+    for distro, package_versions in distro_overrides.items():
+        for package_version in package_versions:
+            candidate = f"{package_version}.{distro}"
+            if candidate not in merged:
+                merged.append(candidate)
+    return merged
+
+
 def get_settings(distro_type):
     ppg_versions = get_ppg_versions(distro_type)
 
@@ -2367,6 +2383,14 @@ def get_settings(distro_type):
     # automatically; only the PSP-specific pg_tde keys are added on top.
     settings["psp-16.14"] = {
         **settings["ppg-16.14"],
+        # psp-16 points to a different repo line than ppg-16.14.
+        # Allow PSP-specific Debian respins while keeping the shared base list.
+        "deb_pkg_ver": _merge_expected_deb_versions(
+            settings["ppg-16.14"]["deb_pkg_ver"],
+            {
+                "bookworm": ["2:16.14-2", "1:290-2", "290-2"],
+            },
+        ),
         "PG_TDE_version": "pg_tde 2.2.1",
         "PG_TDE_package_version": "2.2.1",
         "PG_TDE_sql_version": "2.2",
