@@ -213,13 +213,13 @@
     msg: "The percona-telemetry-agent configuration file has been updated."
 
 - name: Start "{{ postgresql_service_name }}"
-  ansible.builtin.include_tasks: start_postgres_with_diagnostics.yml
+  ansible.builtin.include_tasks: "{{ role_path }}/../../tasks/start_postgres_with_diagnostics.yml"
   vars:
     svc_name: "{{ postgresql_service_name }}"
     svc_state: started
 
 - name: Start telemetry-agent service
-  ansible.builtin.include_tasks: start_ha_service_with_diagnostics.yml
+  ansible.builtin.include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
   vars:
     svc_name: percona-telemetry-agent
     svc_state: started
