@@ -1,0 +1,49 @@
+---
+# Start/restart an HA-stack systemd service (patroni, patroniN, etcd, pgpool,
+# ...); on failure print journalctl for the unit, then fail the play
+# explicitly (register + ignore_errors would otherwise swallow it).
+#
+# Caller must set:
+#   svc_name  - systemd unit name, e.g. "etcd", "patroni0", "pgpool"
+#   svc_state - started or restarted
+# Caller may set:
+#   svc_enabled       - default true
+#   svc_daemon_reload - default false (patroni's initial start needs true,
+#                       since its unit file may only just have been installed)
+#   svc_async/svc_poll - default 0/0 (synchronous); patroni's initial start
+#                        uses a longer async wait since DCS bootstrap can
+#                        take a while
+#   log_search_dir    - optional; when set, also dump *.log files under it on
+#                       failure (e.g. the postgres log dir for a service whose
+#                       failure is tied to the database being down)
+#   log_files         - optional explicit list of log paths to dump on failure
+
+- name: Start/restart {{ svc_name }}
+  ansible.builtin.systemd:
+    name: "{{ svc_name }}"
+    state: "{{ svc_state }}"
+    enabled: "{{ svc_enabled | default(true) }}"
+    daemon_reload: "{{ svc_daemon_reload | default(false) }}"
+  async: "{{ svc_async | default(0) }}"
+  poll: "{{ svc_poll | default(0) }}"
+  register: __ha_result
+  ignore_errors: true
+
+- name: Diagnose {{ svc_name }} failure
+  when: __ha_result is failed
+  block:
+    - name: Dump journalctl for {{ svc_name }}
+      ansible.builtin.include_tasks: dump_journalctl.yml
+      vars:
+        journal_unit: "{{ svc_name }}"
+
+    - name: Dump logs for {{ svc_name }}
+      ansible.builtin.include_tasks: dump_logs.yml
+      when: (log_search_dir is defined) or (log_files is defined)
+
+- name: Fail if {{ svc_name }} did not reach the expected state
+  ansible.builtin.fail:
+    msg: >-
+      {{ svc_name }} failed to reach state={{ svc_state }}:
+      {{ __ha_result.msg | default('see diagnostics above') }}
+  when: __ha_result is failed

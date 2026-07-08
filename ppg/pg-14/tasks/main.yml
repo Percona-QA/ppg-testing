@@ -28,10 +28,10 @@
   when: ansible_os_family == "RedHat"
 
 - name: Start Postgres RHEL
-  service:
-    name: postgresql-14
-    state: started
-    enabled: yes
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql-14
+    svc_state: started
   when: ansible_os_family == "RedHat"
 
 - name: Install PPG tools

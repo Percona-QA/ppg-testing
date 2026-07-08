@@ -53,17 +53,17 @@
   include_tasks: ../../../../tasks/install_ppg17_tools.yml
 
 - name: Start Postgres RHEL
-  service:
-    name: postgresql-17
-    state: started
-    enabled: true
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql-17
+    svc_state: started
   when: ansible_os_family == "RedHat"
 
 - name: Start postgresql service for Debian based
-  service:
-    name: postgresql
-    state: started
-    enabled: true
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: started
   when: ansible_os_family == "Debian"
 
 - name: Disable old repository
@@ -321,10 +321,10 @@
   when: ansible_os_family == "RedHat"
 
 - name: Restart postgresql service for RHEL based
-  service:
-    name: postgresql-18
-    state: restarted
-    enabled: true
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql-18
+    svc_state: restarted
   when: ansible_os_family == "RedHat"
 
 - name: Drop pg_dropcluster for version 17
@@ -356,10 +356,10 @@
   register: results
 
 - name: Restart postgresql service for Debian based
-  service:
-    name: postgresql@18-main.service
-    state: restarted
-    enabled: true
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql@18-main.service
+    svc_state: restarted
   when: ansible_os_family == "Debian"
 
 - name: Display ppg version

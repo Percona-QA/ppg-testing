@@ -1,0 +1,27 @@
+---
+# Start haproxy. Not a systemd unit in this repo's setup — launched directly
+# via `haproxy -f <cfg> -D` (self-daemonizing), so "did it fail" means the
+# launcher command exited non-zero, not a systemd state check — hence its
+# own file rather than a branch inside start_ha_service_with_diagnostics.yml.
+#
+# Caller must set:
+#   haproxy_cfg - path to haproxy.cfg, e.g. /etc/haproxy/haproxy.cfg
+
+- name: Start haproxy
+  ansible.builtin.shell: haproxy -f {{ haproxy_cfg }} -D
+  register: __haproxy_result
+  changed_when: true
+  ignore_errors: true
+
+- name: Show haproxy launch output on failure
+  ansible.builtin.debug:
+    msg: >-
+      haproxy failed to start (rc={{ __haproxy_result.rc }}):
+      stdout: {{ __haproxy_result.stdout }}
+      stderr: {{ __haproxy_result.stderr }}
+  when: __haproxy_result is failed
+
+- name: Fail if haproxy did not start
+  ansible.builtin.fail:
+    msg: "haproxy failed to start (rc={{ __haproxy_result.rc }})"
+  when: __haproxy_result is failed

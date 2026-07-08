@@ -32,17 +32,17 @@
   include_tasks: ../../../../tasks/install_ppg18_tools.yml
 
 - name: Start Postgres RHEL
-  service:
-    name: postgresql-18
-    state: started
-    enabled: true
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql-18
+    svc_state: started
   when: ansible_os_family == "RedHat"
 
 - name: Start postgresql service for Debian based
-  service:
-    name: postgresql
-    state: started
-    enabled: true
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: started
   when: ansible_os_family == "Debian"
 
 - name: Disable old repository
@@ -220,17 +220,17 @@
     minutes: 1
 
 - name: Start postgresql service for RHEL based
-  service:
-    name: postgresql-18
-    state: started
-    enabled: true
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql-18
+    svc_state: started
   when: ansible_os_family == "RedHat"
 
 - name: Start postgresql service for Debian based
-  service:
-    name: postgresql
-    state: started
-    enabled: true
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: started
   when: ansible_os_family == "Debian"
 
 - name: Display ppg version
