@@ -1,9 +1,8 @@
 ---
 # Install the pg_tde packages — the one component PSP 16 ships on top of the
-# ppg-16.x package set. Installation only: encryption is deliberately NOT
-# enabled here (no shared_preload_libraries change). The psp-16* roles test
-# PSP as a vanilla PostgreSQL server; functional TDE coverage lives in
-# pg_tde/tde and pg_tde/upgrade.
+# ppg-16.x package set. Keep cluster behavior vanilla (no key providers or TDE
+# configuration), but preload pg_tde so CREATE EXTENSION works in PSP tests.
+# Functional encryption coverage lives in pg_tde/tde and pg_tde/upgrade.
 
   - name: Install pg_tde packages RHEL
     yum:
@@ -28,4 +27,30 @@
         - percona-pg-tde16
         - percona-pg-tde16-client
         - percona-pg-tde16-dbgsym
+    when: ansible_os_family == "Debian"
+
+  - name: Configure shared_preload_libraries for PSP16 with pg_tde
+    vars:
+      final_extensions: ['percona_pg_telemetry', 'pg_stat_monitor', 'pgaudit', 'set_user', 'pg_tde', 'pg_cron']
+      pg_conf_path: "{{ '/etc/postgresql/16/main/postgresql.conf' if ansible_os_family == 'Debian' else '/var/lib/pgsql/16/data/postgresql.conf' }}"
+    ansible.builtin.lineinfile:
+      path: "{{ pg_conf_path }}"
+      regexp: '^#?shared_preload_libraries\s*='
+      line: "shared_preload_libraries = '{{ final_extensions | join(', ') }}'"
+      state: present
+    become: true
+    when: ansible_os_family in ["Debian", "RedHat"]
+
+  - name: Restart Postgres RHEL after pg_tde preload update
+    include_tasks: "{{ role_path }}/../../tasks/start_postgres_with_diagnostics.yml"
+    vars:
+      svc_name: postgresql-16
+      svc_state: restarted
+    when: ansible_os_family == "RedHat"
+
+  - name: Restart Postgres Debian after pg_tde preload update
+    include_tasks: "{{ role_path }}/../../tasks/start_postgres_with_diagnostics.yml"
+    vars:
+      svc_name: postgresql
+      svc_state: restarted
     when: ansible_os_family == "Debian"
