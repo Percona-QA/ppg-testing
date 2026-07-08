@@ -151,14 +151,14 @@
     when: ansible_os_family == "RedHat"
 
   - name: Restart Postgres RHEL
-    include_tasks: start_postgres_with_diagnostics.yml
+    include_tasks: "{{ role_path }}/../../tasks/start_postgres_with_diagnostics.yml"
     vars:
       svc_name: postgresql-16
       svc_state: restarted
     when: ansible_os_family == "RedHat"
 
   - name: Restart Postgres Debian
-    include_tasks: start_postgres_with_diagnostics.yml
+    include_tasks: "{{ role_path }}/../../tasks/start_postgres_with_diagnostics.yml"
     vars:
       svc_name: postgresql
       svc_state: restarted
@@ -540,14 +540,14 @@
     when: ansible_os_family == "Debian"
 
   - name: Restart Postgres RHEL
-    include_tasks: start_postgres_with_diagnostics.yml
+    include_tasks: "{{ role_path }}/../../tasks/start_postgres_with_diagnostics.yml"
     vars:
       svc_name: postgresql-16
       svc_state: restarted
     when: ansible_os_family == "RedHat"
 
   - name: Restart Postgres Debian
-    include_tasks: start_postgres_with_diagnostics.yml
+    include_tasks: "{{ role_path }}/../../tasks/start_postgres_with_diagnostics.yml"
     vars:
       svc_name: postgresql
       svc_state: restarted
@@ -566,7 +566,7 @@
     when: ansible_os_family == "RedHat"
 
   - name: Restart etcd RHEL
-    include_tasks: start_ha_service_with_diagnostics.yml
+    include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
     vars:
       svc_name: etcd
       svc_state: restarted
@@ -685,7 +685,7 @@
   #     enabled: yes
 
   - name: Enable and start patroni with wait
-    include_tasks: start_ha_service_with_diagnostics.yml
+    include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
     vars:
       svc_name: patroni
       svc_state: started
@@ -818,25 +818,25 @@
     when: ansible_os_family == "RedHat"
 
   - name: Start etcd
-    include_tasks: start_ha_service_with_diagnostics.yml
+    include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
     vars:
       svc_name: etcd
       svc_state: started
 
   - name: Start patroni0
-    include_tasks: start_ha_service_with_diagnostics.yml
+    include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
     vars:
       svc_name: patroni0
       svc_state: started
 
   - name: Start patroni1
-    include_tasks: start_ha_service_with_diagnostics.yml
+    include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
     vars:
       svc_name: patroni1
       svc_state: started
 
   - name: Start patroni2
-    include_tasks: start_ha_service_with_diagnostics.yml
+    include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
     vars:
       svc_name: patroni2
       svc_state: started
@@ -850,19 +850,19 @@
       mode: 0644
 
   - name: Start haproxy
-    include_tasks: start_haproxy_with_diagnostics.yml
+    include_tasks: "{{ role_path }}/../../tasks/start_haproxy_with_diagnostics.yml"
     vars:
       haproxy_cfg: /etc/haproxy/haproxy.cfg
 
   - name: Start pgpool service
-    include_tasks: start_ha_service_with_diagnostics.yml
+    include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
     vars:
       svc_name: pgpool
       svc_state: started
     when: ansible_os_family == "RedHat"
 
   - name: Start pgpool service
-    include_tasks: start_ha_service_with_diagnostics.yml
+    include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
     vars:
       svc_name: percona-pgpool2
       svc_state: started
