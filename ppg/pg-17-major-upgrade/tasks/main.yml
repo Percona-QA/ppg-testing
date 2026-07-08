@@ -1,5 +1,11 @@
 ---
-# Tasks for test major upgrade for PPG 17 packages
+# Tasks for test major upgrade for PPG 17 packages.
+#
+# FROM_VERSION also accepts psp-16.14 (scenario: PSP-16 -> PPG-17) — the FROM
+# side just gets pg_tde installed on top of the identical ppg-16 package set
+# (psp-16 ships the same postgresql16 packages, from a different repo
+# channel); the pg_upgrade/port-swap/restart mechanics below are unchanged
+# either way since the TO side is always plain ppg-17.
 
 - name: Configure repository
   include_tasks: ../../../tasks/install_percona_release.yml
@@ -13,8 +19,11 @@
 
 - name: Setting facts so that they will be persisted in the fact cache
   ansible.builtin.set_fact:
-    pg_version_to_install: "{{ lookup('env', 'FROM_VERSION') | replace('ppg-','') }}"
-    upgrade_to_pg_version: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
+    pg_version_to_install: "{{ lookup('env', 'FROM_VERSION') | regex_replace('^(?:ppg|psp)-', '') }}"
+    upgrade_to_pg_version: "{{ lookup('env', 'VERSION') | regex_replace('^(?:ppg|psp)-', '') }}"
+    # psp only ships one repo per major version (psp-16), no psp-16.xx minor
+    # repos exist, unlike ppg (ppg-16.14 etc.) — trim the minor for psp only.
+    from_repo_version: "{{ lookup('env', 'FROM_VERSION').split('.')[0] if lookup('env', 'FROM_VERSION').startswith('psp-') else lookup('env', 'FROM_VERSION') }}"
 
 - name: End play on Ubuntu 26 and versions older than 16.14
   meta: end_host
@@ -42,10 +51,9 @@
    pg_version_to_install | string is version('16.9', '<=', strict=True)
 
 - name: Setup initial (old) repository
-  command: percona-release enable {{ pg_version }} {{ repo }}
+  command: percona-release enable {{ from_repo_version }} {{ repo }}
   vars:
     repo: "{{ lookup('env', 'FROM_REPO') }}"
-    pg_version: "{{ lookup('env', 'FROM_VERSION') }}"
 
 - name: install Percona Platform for PostgreSQL 16 packages
   include_tasks: ../../../../tasks/install_ppg16.yml
@@ -58,6 +66,35 @@
 
 - name: Install PPG tools
   include_tasks: ../../../../tasks/install_ppg16_tools.yml
+
+- name: Install pg_tde packages RHEL (PSP-16 FROM version only)
+  yum:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+      - percona-pg_tde16
+      - percona-pg_tde16-devel
+      - percona-pg_tde16-debugsource
+      - percona-pg_tde16-debuginfo
+  when:
+    - ansible_os_family == "RedHat"
+    - lookup('env', 'FROM_VERSION').startswith('psp-')
+
+- name: Install pg_tde packages Debian (PSP-16 FROM version only)
+  apt:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+      - percona-pg-tde16
+      - percona-pg-tde16-client
+      - percona-pg-tde16-dbgsym
+  when:
+    - ansible_os_family == "Debian"
+    - lookup('env', 'FROM_VERSION').startswith('psp-')
 
 - name: Start Postgres RHEL
   include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
@@ -74,10 +111,9 @@
   when: ansible_os_family == "Debian"
 
 - name: Disable old repository
-  command: percona-release disable {{ pg_version }} {{ repo }}
+  command: percona-release disable {{ from_repo_version }} {{ repo }}
   vars:
     repo: "{{ lookup('env', 'FROM_REPO') }}"
-    pg_version: "{{ lookup('env', 'FROM_VERSION') }}"
 
 - name: Setup new repository
   command: percona-release enable-only {{ pg_version }} {{ repo }}

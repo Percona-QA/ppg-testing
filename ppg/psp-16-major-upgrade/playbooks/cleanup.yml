@@ -1,0 +1,127 @@
+---
+- name: Fix broken
+  hosts: all
+  become: true
+  become_method: sudo
+  tasks:
+    - name: Fix Postgresql-15 deb packages
+      apt:
+        name: "{{ packages }}"
+        state: fixed
+        update_cache: true
+      vars:
+        packages:
+          - percona-postgresql-15
+          - percona-postgresql-15-dbgsym
+          - percona-postgresql-client-15
+          - percona-postgresql-doc-15
+          - percona-postgresql-plperl-15
+          - percona-postgresql-plpython3-15
+          - percona-postgresql-pltcl-15
+          - percona-postgresql-server-dev-15
+          - percona-postgresql-client-15-dbgsym
+          - percona-postgresql-plperl-15-dbgsym
+          - percona-postgresql-plpython3-15-dbgsym
+          - percona-postgresql-pltcl-15-dbgsym
+          - percona-pg-stat-monitor15
+          - percona-pgaudit15-set-user
+          - percona-postgresql-15-wal2json
+      ignore_errors: true
+      when: ansible_os_family == "Debian"
+
+- name: Cleanup
+  hosts: all
+  become: true
+  become_method: sudo
+  tasks:
+    - name: remove Postgresql deb packages
+      apt:
+        name: "{{ packages }}"
+        state: absent
+        update_cache: true
+      vars:
+        packages:
+          - percona-postgresql-15
+          - percona-postgresql-15-dbgsym
+          - percona-postgresql-client-15
+          - percona-postgresql-doc-15
+          - percona-postgresql-plperl-15
+          - percona-postgresql-plpython3-15
+          - percona-postgresql-pltcl-15
+          - percona-postgresql-server-dev-15
+          - percona-postgresql-client-15-dbgsym
+          - percona-postgresql-plperl-15-dbgsym
+          - percona-postgresql-plpython3-15-dbgsym
+          - percona-postgresql-pltcl-15-dbgsym
+          - percona-pg-stat-monitor15
+          - percona-pgaudit15-set-user
+          - percona-postgresql-15-wal2json
+      ignore_errors: true
+      when: ansible_os_family == "Debian"
+
+    # - name: Remove Percona Platform for PostgreSQL deb packages
+    #   apt:
+    #     name: "{{ packages }}"
+    #     state: absent
+    #   vars:
+    #     packages:
+    #     - percona-postgresql-plpython-15
+    #     - percona-postgresql-plpython-15-dbgsym
+    #     - percona-postgresql-server-dev-15-dbgsym
+    #   when:
+    #     - ansible_os_family == "Debian"
+    #     - lookup('env', 'PG_VERSION') == "ppg-15.5"
+
+    - name: remove Postgresql rpm packages
+      yum:
+        name: "{{ packages }}"
+        state: absent
+      vars:
+        packages:
+          - percona-postgresql15
+          - percona-postgresql15
+          - percona-postgresql15-contrib
+          - percona-postgresql15-debuginfo
+          - percona-postgresql15-devel
+          - percona-postgresql15-docs
+          - percona-postgresql15-libs
+          - percona-postgresql15-llvmjit
+          - percona-postgresql15-plperl
+          - percona-postgresql15-plpython
+          - percona-postgresql15-pltcl
+          - percona-postgresql15-server
+          - percona-postgresql15-test
+          - percona-postgresql15-debuginfo
+          - percona-postgresql15-debugsource
+          - percona-postgresql15-devel-debuginfo
+          - percona-postgresql15-libs-debuginfo
+          - percona-postgresql15-plperl-debuginfo
+          - percona-postgresql15-plpython-debuginfo
+          - percona-postgresql15-plpython3-debuginfo
+          - percona-postgresql15-pltcl-debuginfo
+          - percona-postgresql15-server-debuginfo
+      ignore_errors: true
+      when: ansible_os_family == "RedHat"
+
+    # - name: remove pgaudit deb packages
+    #   apt:
+    #     name: percona-postgresql-15-pgaudit
+    #     state: absent
+    #   when: ansible_os_family == "Debian"
+
+    # - name: remove pg_repack deb packages
+    #   apt:
+    #     name: "{{ packages }}"
+    #     state: absent
+    #   vars:
+    #     packages:
+    #       - percona-postgresql-15-repack
+    #       - percona-postgresql-15-repack-dbgsym
+    #   when: ansible_os_family == "Debian"
+
+    - name: remove pg_repack rpm packages
+      yum:
+        name: percona-pg_repack15
+        state: absent
+      ignore_errors: true
+      when: ansible_os_family == "RedHat"

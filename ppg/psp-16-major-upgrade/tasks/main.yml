@@ -1,0 +1,441 @@
+---
+# Major upgrade test: PPG-15 -> PSP-16.
+#
+# Same PostgreSQL major-version bump (15 -> 16) as pg-16-major-upgrade, plus
+# the one PSP delta: install pg_tde and fold it into shared_preload_libraries
+# alongside pg_stat_monitor before the final restart. Package names are
+# unchanged from ppg-16 — psp-16 ships the same postgresql16 packages, just
+# from a different repo channel (to_repo_version below trims the minor for
+# that repo since psp-16 has no per-minor variant, unlike ppg-16.14).
+
+- name: Configure repository
+  include_tasks: ../../../tasks/install_percona_release.yml
+
+- name: setup epel release
+  yum:
+    name: epel-release
+    update_cache: yes
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Setting facts so that they will be persisted in the fact cache
+  ansible.builtin.set_fact:
+    pg_version_to_install: "{{ lookup('env', 'FROM_VERSION') | regex_replace('^(?:ppg|psp)-', '') }}"
+    upgrade_to_pg_version: "{{ lookup('env', 'VERSION') | regex_replace('^(?:ppg|psp)-', '') }}"
+    # psp only ships one repo per major version (psp-16), no psp-16.xx minor
+    # repos exist, unlike ppg (ppg-16.14 etc.) — trim the minor for psp only.
+    to_repo_version: "{{ lookup('env', 'VERSION').split('.')[0] if lookup('env', 'VERSION').startswith('psp-') else lookup('env', 'VERSION') }}"
+
+- name: End play on Ubuntu 26 and versions older than 15.18
+  meta: end_host
+  when: ansible_distribution == "Ubuntu" and
+    ansible_distribution_major_version == "26" and
+    pg_version_to_install | string is version('15.18', '<', strict=True)
+
+- name: End play on rocky linux 9
+  meta: end_play
+  when: ansible_os_family == "RedHat" and
+   ansible_distribution_major_version == "9" and
+   pg_version_to_install | string is version('15.2', '<=', strict=True)
+
+- name: End play on Debian 12
+  meta: end_play
+  when: ansible_os_family == "Debian" and
+   ansible_distribution_major_version == "12" and
+   pg_version_to_install | string is version('15.3', '<=', strict=True)
+
+- name: End play on Debian 13
+  meta: end_play
+  when: ansible_distribution == "Debian" and
+   ansible_distribution_major_version == "13" and
+   pg_version_to_install | string is version('15.14', '<=', strict=True)
+
+- name: End play on Ubuntu 24
+  meta: end_play
+  when: ansible_distribution == "Ubuntu" and
+   ansible_distribution_major_version == "24" and
+   pg_version_to_install | string is version('15.6', '<=', strict=True)
+
+- name: Setup initial (old) repository
+  command: percona-release enable {{ pg_version }} {{ repo }}
+  vars:
+    repo: "{{ lookup('env', 'FROM_REPO') }}"
+    pg_version: "{{ lookup('env', 'FROM_VERSION') }}"
+
+- name: install Percona Platform for PostgreSQL 15 packages
+  include_tasks: ../../../../tasks/install_ppg15.yml
+
+- name: Initialize Postgres RHEL
+  command: /usr/pgsql-15/bin/postgresql-15-setup initdb
+  environment:
+    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  when: ansible_os_family == "RedHat"
+
+- name: Install PPG tools
+  include_tasks: ../../../../tasks/install_ppg15_tools.yml
+
+- name: Start Postgres RHEL
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql-15
+    svc_state: started
+  when: ansible_os_family == "RedHat"
+
+- name: Start postgresql service for Debian based
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: started
+  when: ansible_os_family == "Debian"
+
+- name: Disable old repository
+  command: percona-release disable {{ pg_version }} {{ repo }}
+  vars:
+    repo: "{{ lookup('env', 'FROM_REPO') }}"
+    pg_version: "{{ lookup('env', 'FROM_VERSION') }}"
+
+- name: Setup new repository
+  command: percona-release enable-only {{ to_repo_version }} {{ repo }}
+  vars:
+    repo: "{{ lookup('env', 'TO_REPO') }}"
+
+- name: install Percona Platform for PostgreSQL deb packages
+  apt:
+    name: "{{ packages }}"
+    update_cache: yes
+    state: latest
+  vars:
+    packages:
+      - percona-postgresql
+      - percona-postgresql-16
+      - percona-postgresql-all
+      - percona-postgresql-client
+      - percona-postgresql-client-16
+      - percona-postgresql-common
+      - percona-postgresql-contrib
+      - percona-postgresql-doc
+      - percona-postgresql-doc-16
+      - percona-postgresql-plperl-16
+      - percona-postgresql-plpython3-16
+      - percona-postgresql-pltcl-16
+      - percona-postgresql-server-dev-16
+      - percona-postgresql-common-dev
+      - percona-postgresql-16-dbgsym
+      - percona-postgresql-client-16-dbgsym
+      - percona-postgresql-plperl-16-dbgsym
+      - percona-postgresql-plpython3-16-dbgsym
+      - percona-postgresql-pltcl-16-dbgsym
+      - postgresql-client-common
+      - postgresql-common
+  when: ansible_os_family == "Debian"
+  environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+# - name: install Percona Platform for PostgreSQL deb packages
+#   apt:
+#     name: "{{ packages }}"
+#     update_cache: yes
+#     state: latest
+#   vars:
+#     packages:
+#     - percona-postgresql-plpython3-16
+#     - percona-postgresql-plpython3-16-dbgsym
+#   when:
+#     - ansible_os_family == "Debian"
+
+# - name: Disable llvm-toolset dnf module for RHEL8
+#   become: true
+#   command: dnf module disable llvm-toolset -y
+#   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
+
+#Remove conflicting package to make installation move on
+- name: Remove conflicting percona-postgresql-common-dev
+  ansible.builtin.package:
+    name: percona-postgresql-common-dev
+    state: absent
+  when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('15.13', '>=', strict=True))
+
+- name: install Percona Platform for PostgreSQL rpm packages for RHEL
+  yum:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+        - percona-postgresql-client-common
+        - percona-postgresql-common
+        - percona-postgresql16
+        - percona-postgresql16-contrib
+        - percona-postgresql16-debuginfo
+        - percona-postgresql16-devel
+        - percona-postgresql16-docs
+        - percona-postgresql16-libs
+        - percona-postgresql16-llvmjit
+        - percona-postgresql16-plpython3
+        - percona-postgresql16-plperl
+        - percona-postgresql16-pltcl
+        - percona-postgresql16-server
+        - percona-postgresql16-test
+        - percona-postgresql16-contrib-debuginfo
+        - percona-postgresql16-debuginfo
+        - percona-postgresql16-debugsource
+        - percona-postgresql16-devel-debuginfo
+        - percona-postgresql16-libs-debuginfo
+        - percona-postgresql16-plperl-debuginfo
+        - percona-postgresql16-pltcl-debuginfo
+        - percona-postgresql16-plpython3-debuginfo
+        - percona-postgresql16-server-debuginfo
+  when: ansible_os_family == "RedHat"
+  environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+- name: Determine required PostgreSQL dev package for RHEL
+  set_fact:
+    pg_dev_package: >-
+      {{ 'percona-postgresql-server-dev-all'
+         if (upgrade_to_pg_version | string is version('16.8', '<=', strict=True))
+         else 'percona-postgresql-common-dev' }}
+  when: ansible_os_family == "RedHat"
+
+- name: Install PostgreSQL dev package on RHEL
+  yum:
+    name: "{{ pg_dev_package }}"
+    state: latest
+    update_cache: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Install pg-stat-monitor RHEL
+  yum:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+      - percona-pg_stat_monitor16
+  when: ansible_os_family == "RedHat"
+
+- name: Install pg-stat-monitor debian
+  apt:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+      - percona-pg-stat-monitor16
+  when: ansible_os_family == "Debian"
+
+- name: Install pg_tde packages RHEL
+  yum:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+      - percona-pg_tde16
+      - percona-pg_tde16-devel
+      - percona-pg_tde16-debugsource
+      - percona-pg_tde16-debuginfo
+  when: ansible_os_family == "RedHat"
+
+- name: Install pg_tde packages Debian
+  apt:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+      - percona-pg-tde16
+      - percona-pg-tde16-client
+      - percona-pg-tde16-dbgsym
+  when: ansible_os_family == "Debian"
+
+- name: Initialize Postgres RHEL
+  command: /usr/pgsql-16/bin/postgresql-16-setup initdb
+  environment:
+    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  when: ansible_os_family == "RedHat"
+
+- name: Stop postgresql service for RHEL based
+  service:
+    name: postgresql-15
+    state: stopped
+  when: ansible_os_family == "RedHat"
+
+- name: Stop postgresql service for Debian based
+  service:
+    name: postgresql
+    state: stopped
+  when: ansible_os_family == "Debian"
+
+- name: Execute pg_createcluster for version 16
+  command: /usr/bin/pg_createcluster 16 main --port=5433
+  become: true
+  become_method: sudo
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+
+- pause:
+    minutes: 1
+
+- name: Execute pg_upgrade RHEL
+  command: /usr/pgsql-16/bin/pg_upgrade --old-bindir /usr/pgsql-15/bin --new-bindir /usr/pgsql-16/bin --old-datadir /var/lib/pgsql/15/data --new-datadir /var/lib/pgsql/16/data
+  become: true
+  become_user: postgres
+  args:
+    chdir: /tmp
+  when: ansible_os_family == "RedHat"
+
+- name: Execute pg_upgrade Deb
+  command: /usr/lib/postgresql/16/bin/pg_upgrade --old-datadir=/var/lib/postgresql/15/main --new-datadir=/var/lib/postgresql/16/main --old-bindir=/usr/lib/postgresql/15/bin --new-bindir=/usr/lib/postgresql/16/bin --old-options '-c config_file=/etc/postgresql/15/main/postgresql.conf' --new-options '-c config_file=/etc/postgresql/16/main/postgresql.conf'
+  become: true
+  become_method: sudo
+  become_user: postgres
+  args:
+    chdir: /tmp
+  when: ansible_os_family == "Debian"
+
+- name: Change postgresql 15 port in config Debian
+  lineinfile:
+    path: /etc/postgresql/15/main/postgresql.conf
+    search_string: 'port'
+    line: port = 5433
+  when: ansible_os_family == "Debian"
+
+- name: Change postgresql 15 port in config RHEL
+  lineinfile:
+    path: /var/lib/pgsql/15/data/postgresql.conf
+    search_string: 'port'
+    line: port = 5433
+  when: ansible_os_family == "RedHat"
+
+- name: Change postgresql 16 port in config Debian
+  lineinfile:
+    path: /etc/postgresql/16/main/postgresql.conf
+    search_string: 'port'
+    line: port = 5432
+  when: ansible_os_family == "Debian"
+
+- name: Change postgresql 16 port in config RHEL
+  lineinfile:
+    path: /var/lib/pgsql/16/data/postgresql.conf
+    search_string: 'port'
+    line: port = 5432
+  when: ansible_os_family == "RedHat"
+
+- name: Add extensions to postgresql.conf for Debian
+  lineinfile:
+    path: /etc/postgresql/16/main/postgresql.conf
+    line: shared_preload_libraries = 'percona_pg_telemetry, pg_stat_monitor, pgaudit, set_user, pg_tde, pg_cron'
+  when: ansible_os_family == "Debian"
+
+- name: Add extensions to postgresql.conf for RHEL
+  lineinfile:
+    path: /var/lib/pgsql/16/data/postgresql.conf
+    line: shared_preload_libraries = 'percona_pg_telemetry, pg_stat_monitor, pgaudit, set_user, pg_tde, pg_cron'
+  when: ansible_os_family == "RedHat"
+
+- name: Restart postgresql service for RHEL based
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql-16
+    svc_state: restarted
+  when: ansible_os_family == "RedHat"
+
+- name: list /var/run/postgresql
+  command: ls -la /var/run/postgresql
+  become: true
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: list pg_lsclsuters
+  command: pg_lsclusters
+  become: true
+  become_method: sudo
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: Drop pg_dropcluster for version 15
+  command: /usr/bin/pg_dropcluster 15 main
+  become: true
+  become_method: sudo
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: list pg_lsclsuters
+  command: pg_lsclusters
+  become: true
+  become_method: sudo
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: Delete /var/run/postgresql lock and pid file
+  command: rm -fr /var/run/postgresql/*
+  become: true
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: list /var/run/postgresql
+  command: ls -la /var/run/postgresql/
+  become: true
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+- name: Restart postgresql service for Debian based
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql@16-main.service
+    svc_state: started
+  when: ansible_os_family == "Debian"
+
+- name: list pg_lsclsuters
+  command: pg_lsclusters
+  become: true
+  become_method: sudo
+  become_user: postgres
+  when: ansible_os_family == "Debian"
+  register: results
+
+- debug:
+    var: results.stdout_lines
+
+# - name: show running process for postgres
+#   command: ps -ef | grep -i postgres
+#   become: true
+#   when: ansible_os_family == "Debian"
+#   register: results
+
+# - debug:
+#     var: results.stdout_lines
+
+- pause:
+    minutes: 1
+
+- name: Display ppg version
+  ignore_errors: true
+  become_user: postgres
+  shell: psql -c "select version();"
+  register: results
+
+- debug:
+    var: results.stdout_lines

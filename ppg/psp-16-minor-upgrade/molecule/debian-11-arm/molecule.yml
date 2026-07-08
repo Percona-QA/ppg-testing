@@ -1,0 +1,41 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: ${driver}
+platforms:
+  - name: debian11-arm-${BUILD_NUMBER}-${JOB_NAME}
+    region: ${region}
+    image: ${ami_debian11_arm64}
+    vpc_subnet_id: ${vpc_subnet_id_aws1}
+    instance_type: t4g.small
+    ssh_user: admin
+    root_device_name: /dev/xvda
+    instance_tags:
+      iit-billing-tag: jenkins-pg-worker
+provisioner:
+  name: ansible
+  log: True
+  playbooks:
+    create: ../../../../playbooks/create.yml
+    destroy: ../../../../playbooks/destroy.yml
+    prepare: ../../../../playbooks/prepare.yml
+    converge: ../../playbooks/playbook.yml
+verifier:
+  name: testinfra
+  directory: ../../../tests/tests_psp
+  options:
+    verbose: true
+    s: true
+    m: upgrade
+    junitxml: report.xml
+scenario:
+  destroy_sequence:
+    - destroy
+  test_sequence:
+    - destroy
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy
