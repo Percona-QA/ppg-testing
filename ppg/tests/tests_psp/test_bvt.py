@@ -3,6 +3,7 @@
 # pytest collects imported test_* functions; fixtures come along with the import.
 import os
 
+import pytest
 import testinfra.utils.ansible_runner
 
 from .. import settings
@@ -17,6 +18,7 @@ pg_versions = settings.get_settings(os.environ['MOLECULE_SCENARIO_NAME'])[os.get
 # PG <= 16, but PSP builds brand the client as Percona Server for PostgreSQL.
 # TODO: tighten to the exact "... {percona-version}" form once the first run
 # confirms the full banner string PSP 16 ships.
+@pytest.mark.upgrade
 def test_postgres_client_string(host):
     banner = host.check_output('psql -V')
     assert f"psql (PostgreSQL) {pg_versions['version']}" in banner, banner
