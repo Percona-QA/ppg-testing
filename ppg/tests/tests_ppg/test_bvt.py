@@ -1,3 +1,4 @@
+import hashlib
 import os
 import pytest
 
@@ -245,6 +246,75 @@ def test_restart_postgresql(restart_postgresql):
 
 def test_insert_data(insert_data):
     assert insert_data == "100000", insert_data
+
+
+# The fixture and four tests below verify that data survives an upgrade --
+# as opposed to every other test in this module, which only checks the
+# post-upgrade state in isolation. Their counterpart is
+# tasks/seed_data_integrity.yml, included by each *-upgrade role while
+# FROM_VERSION is still running, before the package swap/pg_upgrade: it
+# creates ppg_upgrade_data_check (500 rows, id serial + md5(i::text)
+# payload) and runs `pgbench -i -s 1`. Any change to that seed data's shape
+# or row count must be mirrored here.
+@pytest.fixture()
+def data_integrity_baseline(host):
+    # Plain install roles have no `-m` filter and collect these
+    # @pytest.mark.upgrade tests too, but never seed anything -- skip rather
+    # than fail so this stays meaningful only on scenarios that actually
+    # exercised an upgrade.
+    with host.sudo("postgres"):
+        table = host.check_output(
+            "psql -tAc \"SELECT to_regclass('ppg_upgrade_data_check')\"")
+    if not table.strip():
+        pytest.skip("No pre-upgrade data-integrity baseline was seeded for this scenario")
+
+
+@pytest.mark.upgrade
+def test_data_integrity_pgbench_row_count_preserved(data_integrity_baseline, host):
+    # Gated on data_integrity_baseline (not its own to_regclass check) because
+    # test_insert_data's fixture also creates pgbench_accounts -- on plain
+    # install roles (no `-m` filter, both tests collected) that would make an
+    # independent existence check here a false signal unrelated to whether
+    # this scenario actually seeded a pre-upgrade baseline.
+    with host.sudo("postgres"):
+        count = host.check_output("psql -tAc 'SELECT count(*) FROM pgbench_accounts;'")
+    assert count.strip() == "100000", count
+
+
+@pytest.mark.upgrade
+def test_data_integrity_row_count_preserved(data_integrity_baseline, host):
+    # 500 == the row count seed_data_integrity.yml inserts; catches rows
+    # silently dropped or duplicated across the upgrade.
+    with host.sudo("postgres"):
+        count = host.check_output("psql -tAc 'SELECT count(*) FROM ppg_upgrade_data_check;'")
+    assert count.strip() == "500", count
+
+
+@pytest.mark.upgrade
+def test_data_integrity_checksum_preserved(data_integrity_baseline, host):
+    # Recomputes the expected checksum from the same generation rule
+    # seed_data_integrity.yml uses (md5(i::text) for i in 1..500, comma-
+    # joined in id order) rather than hardcoding a hash, so there's one
+    # source of truth for the dataset shape. Catches corruption row-count
+    # alone would miss: truncated/garbled payload values, wrong row order.
+    expected = hashlib.md5(
+        ",".join(hashlib.md5(str(i).encode()).hexdigest() for i in range(1, 501)).encode()
+    ).hexdigest()
+    with host.sudo("postgres"):
+        actual = host.check_output(
+            "psql -tAc \"SELECT md5(string_agg(payload, ',' ORDER BY id)) FROM ppg_upgrade_data_check;\"")
+    assert actual.strip() == expected, actual
+
+
+@pytest.mark.upgrade
+def test_data_integrity_sequence_continues(data_integrity_baseline, host):
+    # Guards against a sequence silently resetting to 1 instead of carrying
+    # its position over through pg_upgrade/package swap, which would cause
+    # duplicate-key errors on the app's next insert after a real upgrade.
+    with host.sudo("postgres"):
+        nextval = host.check_output(
+            "psql -tAc \"SELECT nextval('ppg_upgrade_data_check_id_seq');\"")
+    assert int(nextval.strip()) > 500, nextval
 
 
 @pytest.mark.upgrade

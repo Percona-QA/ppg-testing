@@ -1,0 +1,40 @@
+---
+# Seed a deterministic dataset on the FROM_VERSION server, before it is
+# upgraded, so tests_ppg/test_bvt.py can verify afterwards that the upgrade
+# actually preserved the data rather than just installing packages
+# successfully.
+#
+# Caller must have already set the pg_version_to_install fact (major.minor
+# of FROM_VERSION, e.g. "16.14") and started the old server.
+
+- name: Determine pgbench binary path for FROM_VERSION
+  ansible.builtin.set_fact:
+    __seed_pgbench_bin: >-
+      {{ '/usr/pgsql-' + (pg_version_to_install.split('.')[0]) + '/bin/pgbench'
+         if ansible_os_family == 'RedHat' else 'pgbench' }}
+
+- name: Seed pgbench baseline data before upgrade
+  become_user: postgres
+  ansible.builtin.command: "{{ __seed_pgbench_bin }} -i -s 1"
+  register: __seed_pgbench_result
+
+- name: Seed deterministic checksum table before upgrade
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - psql
+      - -v
+      - ON_ERROR_STOP=1
+      - -c
+      - "CREATE TABLE ppg_upgrade_data_check (id serial PRIMARY KEY, payload text NOT NULL)"
+      - -c
+      - >-
+        INSERT INTO ppg_upgrade_data_check (payload)
+        SELECT md5(i::text) FROM generate_series(1, 500) AS i
+  register: __seed_checksum_result
+
+- name: Report data-integrity seeding results
+  ansible.builtin.debug:
+    msg:
+      - "{{ __seed_pgbench_result.stdout_lines }}"
+      - "{{ __seed_checksum_result.stdout_lines }}"

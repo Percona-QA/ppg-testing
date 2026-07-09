@@ -110,6 +110,9 @@
     svc_state: started
   when: ansible_os_family == "Debian"
 
+- name: Seed data-integrity baseline before upgrade
+  include_tasks: ../../../../tasks/seed_data_integrity.yml
+
 - name: Disable old repository
   command: percona-release disable {{ from_repo_version }} {{ repo }}
   vars:
