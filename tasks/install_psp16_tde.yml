@@ -29,9 +29,71 @@
         - percona-pg-tde16-dbgsym
     when: ansible_os_family == "Debian"
 
+  - name: Resolve PSP16 target version for conditional components
+    ansible.builtin.set_fact:
+      psp16_target_version: >-
+        {{
+          upgrade_to_pg_version
+          if (upgrade_to_pg_version is defined)
+          else (
+            pg_version_to_install
+            if (pg_version_to_install is defined)
+            else (lookup('env', 'VERSION') | regex_replace('^(?:ppg|psp)-', ''))
+          )
+        }}
+
+  - name: Ensure preload-backed extension packages are present on RHEL
+    yum:
+      name:
+        - percona-pg-telemetry16
+        - percona-pg_stat_monitor16
+        - percona-pgaudit16
+        - percona-pgaudit16_set_user
+      state: latest
+      update_cache: yes
+    when: ansible_os_family == "RedHat"
+
+  - name: Ensure preload-backed extension packages are present on Debian
+    apt:
+      name:
+        - percona-pg-telemetry16
+        - percona-pg-stat-monitor16
+        - percona-postgresql-16-pgaudit
+        - percona-pgaudit16-set-user
+      state: latest
+      update_cache: yes
+    when: ansible_os_family == "Debian"
+
+  - name: Install pg_cron packages RHEL (when supported)
+    yum:
+      name:
+        - percona-pg_cron_16
+      state: latest
+      update_cache: yes
+    when:
+      - ansible_os_family == "RedHat"
+      - psp16_target_version | string is version('16.13', '>', strict=True)
+
+  - name: Install pg_cron packages Debian (when supported)
+    apt:
+      name:
+        - percona-postgresql-16-cron
+      state: latest
+      update_cache: yes
+    when:
+      - ansible_os_family == "Debian"
+      - psp16_target_version | string is version('16.13', '>', strict=True)
+
   - name: Configure shared_preload_libraries for PSP16 with pg_tde
     vars:
-      final_extensions: ['percona_pg_telemetry', 'pg_stat_monitor', 'pgaudit', 'set_user', 'pg_tde', 'pg_cron']
+      base_extensions: ['percona_pg_telemetry', 'pg_stat_monitor', 'pgaudit', 'set_user', 'pg_tde']
+      final_extensions: >-
+        {{
+          base_extensions
+          + (['pg_cron'] if (
+              psp16_target_version | string is version('16.13', '>', strict=True)
+            ) else [])
+        }}
       pg_conf_path: "{{ '/etc/postgresql/16/main/postgresql.conf' if ansible_os_family == 'Debian' else '/var/lib/pgsql/16/data/postgresql.conf' }}"
     ansible.builtin.lineinfile:
       path: "{{ pg_conf_path }}"
