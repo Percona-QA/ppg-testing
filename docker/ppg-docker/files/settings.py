@@ -392,6 +392,8 @@ pg_tde = {
     "18.3": {"version": "2.1.2","extension_version": "pg_tde 2.1.2","ext_sql_version": "2.1"},
     "17.10": {"version": "2.2.1","extension_version": "pg_tde 2.2.1","ext_sql_version": "2.2"},
     "18.4": {"version": "2.2.1","extension_version": "pg_tde 2.2.1","ext_sql_version": "2.2"},
+    # PSP-16 docker images ship the same pg_tde build as the psp-16.14 packages.
+    "16.14": {"version": "2.2.1","extension_version": "pg_tde 2.2.1","ext_sql_version": "2.2"},
 }
 
 pgbackrest = {
@@ -1032,6 +1034,10 @@ ppg_versions = {
     },
     "16.14": {
         "version": "16.14",
+        # PLACEHOLDER — verify against the actual `psql -V` banner on first run
+        # against the 16-psp* images and correct if needed (only read when the
+        # image tag contains "psp"; plain ppg-16.14 docker runs never use it).
+        "percona-version": "16.14.1",
         "percona-postgresql-common": "290",
         "percona-postgresql-client-common": "290",
         "libpq_version": "160014",
@@ -1047,6 +1053,9 @@ ppg_versions = {
         "percona-pgbackrest": pgbackrest["16.14"],
         "percona-pgvector_16": pgvector["16.14"],
         "percona-pgvector_16-llvmjit": pgvector["16.14"],
+        # Only present/expected on psp-16 (16-psp* tags) — plain ppg-16.14 docker
+        # runs never read this key, since test_docker.py gates it behind IS_PSP.
+        "percona-pg_tde16": pg_tde["16.14"],
         "python3-etcd": python3_etcd["16.14"],
         "python3-ydiff": python3_ydiff["16.14"],
         "percona-postgis35_16": postgis["16.14"],
@@ -1054,7 +1063,10 @@ ppg_versions = {
         "percona-postgis35_16-gui": postgis["16.14"],
         "percona-postgis35_16-llvmjit": postgis["16.14"],
         "percona-postgis35_16-utils": postgis["16.14"],
-        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "16"),
+        # PG17PLUS is misnamed here but its content (base + percona-pg_tde{}) is
+        # exactly what a psp-16 image needs too; plain ppg-16.14 runs simply
+        # never hit a "psp" tag so IS_PSP-gated pg_tde checks stay skipped.
+        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE_PG17PLUS, "16"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "16"),
         "extensions": DOCKER_LIST_EXTENSIONS_PG16,
         "binaries": [
