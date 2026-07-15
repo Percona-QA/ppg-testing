@@ -15,6 +15,11 @@ MAJOR_MINOR_VER = os.getenv("VERSION")
 DOCKER_REPO = os.getenv("DOCKER_REPOSITORY")
 IMG_TAG = os.getenv("TAG")
 IS_WITH_POSTGIS = os.getenv("WITH_POSTGIS", "false").lower() == "true"
+# Major 17/18 have historically only ever been tested here as PSP+TDE images
+# (kept as-is for backward compatibility); major 16 now has both plain ppg
+# and psp-16 docker images sharing the same version number, so the image tag
+# itself is the only reliable signal for that case.
+IS_PSP = int(MAJOR_VER) >= 17 or 'psp' in IMG_TAG.lower()
 PG_BIN_DIR = f"/usr/pgsql-{MAJOR_VER}/bin"
 PG_DATA_DIR = "/data/db"
 if IS_WITH_POSTGIS:
@@ -108,7 +113,7 @@ def host(request):
     if needs_libs:
         # These specific flags prevent pg_stat_monitor from over-allocating on boot
         preload_libs = "pg_stat_monitor,pgaudit,set_user"
-        if int(MAJOR_VER) >= 17:
+        if IS_PSP:
             preload_libs = f"pg_tde,{preload_libs}"
         pg_cron_min = PG_CRON_MIN_VERSIONS.get(int(MAJOR_VER))
         pg_cron_available = pg_cron_min and version.parse(MAJOR_MINOR_VER) >= pg_cron_min
@@ -179,7 +184,7 @@ def test_shared_preload_libraries_is_empty(cursor, request):
 def test_psql_string(host):
     # 'host' now binds to the container
     psql_output = host.check_output("psql -V")
-    if int(MAJOR_VER) in [17, 18]:
+    if IS_PSP:
         assert f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Server for PostgreSQL {pg_docker_versions['percona-version']}" in host.check_output('psql -V')
     else:
         assert f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Distribution" in host.check_output('psql -V')
@@ -412,8 +417,8 @@ def test_plpgsql_extension(host):
 @pytest.mark.parametrize("package", DOCKER_RPM_PACKAGES)
 def test_rpm_package_is_installed(host, package):
     # 1. Centralized Skip Logic
-    if int(MAJOR_VER) < 17 and "pg_tde" in package:
-        pytest.skip(f"pg_tde not supported on PostgreSQL {MAJOR_VER}")
+    if not IS_PSP and "pg_tde" in package:
+        pytest.skip(f"pg_tde not supported on PostgreSQL {MAJOR_VER} (not a PSP image)")
 
     if not IS_WITH_POSTGIS and "postgis" in package:
         pytest.skip(f"Docker build is without PostGIS so skipping {package}.")
@@ -1295,9 +1300,9 @@ def test_tde_binaries_present(host, binary):
     Verify all PG-18/17 TDE binaries exist in the correct PostgreSQL 18 bin directory
     depending on OS type (Debian/Ubuntu vs RHEL/CentOS/Rocky).
     """
-    # pg_tde only exists on PG-17 and above.
-    if int(MAJOR_VER) < 17:
-        pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
+    # pg_tde only exists on PG-17+ (any tag) or PSP-16 (psp-tagged 16.x).
+    if not IS_PSP:
+        pytest.skip(f"pg_tde not supported on {MAJOR_VER} (not a PSP image).")
 
     # pg_tde_upgrade was introduced in 17.10 / 18.4.
     if binary == "pg_tde_upgrade":
@@ -1323,8 +1328,8 @@ def test_tde_binaries_present(host, binary):
 
 @pytest.mark.needs_preload
 def test_pg_tde_extension(host):
-    if int(MAJOR_VER) < 17:
-        pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
+    if not IS_PSP:
+        pytest.skip(f"pg_tde not supported on {MAJOR_VER} (not a PSP image).")
 
     # 1. Execute the create command
     cmd = "psql -c 'CREATE EXTENSION IF NOT EXISTS pg_tde CASCADE;'"
