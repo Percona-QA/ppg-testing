@@ -1047,6 +1047,7 @@
       cp /tmp/pg_tde-build/regression.diffs "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/pg_tde-build/regression.out   "$ARTIFACT_DIR/" 2>/dev/null || true
       cp -r /tmp/pg_tde-build/meson-logs "$ARTIFACT_DIR/meson-logs" 2>/dev/null || true
+      cp /tmp/tde-install.log "$ARTIFACT_DIR/" 2>/dev/null || true
       # Strip /tmp/pg_tde-build/ prefix so logs land at testrun/<test>/log/*.log
       find /tmp/pg_tde-build/testrun -name "*.log" -type f 2>/dev/null | while read f; do
         rel="${f#/tmp/pg_tde-build/}"
@@ -1086,6 +1087,7 @@
       cp /tmp/postgres/config.log "$ARTIFACT_DIR/" 2>/dev/null || true
       # pg_tde and tool build/runtime logs
       cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-install.log "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/cosmian-server-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
       docker logs cosmian-server > "$ARTIFACT_DIR/cosmian-server-container.log" 2>&1 || true
       cp /tmp/installcheck-world-regression.log "$ARTIFACT_DIR/" 2>/dev/null || true
