@@ -1037,7 +1037,7 @@ ppg_versions = {
         # PLACEHOLDER — verify against the actual `psql -V` banner on first run
         # against the 16-psp* images and correct if needed (only read when the
         # image tag contains "psp"; plain ppg-16.14 docker runs never use it).
-        "percona-version": "16.14.1",
+        "percona-version": "16.14.2",
         "percona-postgresql-common": "290",
         "percona-postgresql-client-common": "290",
         "libpq_version": "160014",
