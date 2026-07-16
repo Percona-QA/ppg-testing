@@ -254,6 +254,13 @@
         - gcc-c++
         - git
         - perl
+        # liblwgeom's WKT parser (lwin_wkt_parse.c) is generated from a
+        # grammar file at build time - configure only warns "checking for
+        # bison... no" / "checking for flex... no" (doesn't hard-fail there),
+        # but `make` then fails later with "No yacc found, cannot build
+        # parser" once it actually needs to generate the parser.
+        - bison
+        - flex
         - geos-devel
         - proj-devel
         - gdal-devel

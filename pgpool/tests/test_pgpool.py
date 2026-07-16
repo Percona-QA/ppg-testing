@@ -74,16 +74,34 @@ def _node_line_matches(output, port, role):
     return re.search(r"{}[^\n]*\|[^\n]*{}".format(port, role), output) is not None
 
 
-def _pool_nodes_select_cnt(host, port):
+def _pool_nodes_rows(host):
+    """
+    Parses `show pool_nodes` output into dicts keyed by the ACTUAL header
+    names reported by this pgpool version, rather than an assumed fixed
+    column index - a prior version of this helper assumed select_cnt was at
+    a fixed index and broke because this pgpool version's column layout
+    doesn't match what generic docs/recollection suggested.
+    """
     result = _psql_via_pgpool(host, "show pool_nodes")
     assert result.rc == 0, result.stderr
-    for line in result.stdout.splitlines():
-        parts = [p.strip() for p in line.split("|")]
-        # columns: node_id, hostname, port, status, pg_status, lb_weight, role, select_cnt, ...
-        if len(parts) < 8:
+    lines = [l for l in result.stdout.splitlines() if "|" in l]
+    if not lines:
+        return []
+    header = [h.strip() for h in lines[0].split("|")]
+    rows = []
+    for line in lines[1:]:
+        if re.match(r"^[\s\-+]+$", line):
             continue
-        if parts[2] == str(port):
-            return int(parts[7])
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) == len(header):
+            rows.append(dict(zip(header, parts)))
+    return rows
+
+
+def _pool_nodes_select_cnt(host, port):
+    for row in _pool_nodes_rows(host):
+        if row.get("port") == str(port):
+            return int(row["select_cnt"])
     return None
 
 
@@ -211,9 +229,14 @@ def test_pgpool_failback(host):
     with host.sudo("postgres"):
         host.run("echo 'port = 5432' >> /tmp/data1/postgresql.conf")
 
+    # Use an absolute log path: testinfra's host.sudo() just wraps `sudo -u
+    # postgres sh -c '...'` over the SSH session's own cwd (not necessarily
+    # writable by postgres), unlike the ansible become_user tasks elsewhere
+    # in this repo that used relative log paths successfully - different
+    # execution mechanism, different cwd behavior.
     with host.sudo("postgres"):
         start_result = host.run(
-            "{}/pg_ctl -D /tmp/data1 -l logfile-data1-rejoin start".format(PG_BIN)
+            "{}/pg_ctl -D /tmp/data1 -l /tmp/logfile-data1-rejoin start".format(PG_BIN)
         )
     assert start_result.rc == 0, start_result.stderr
 
