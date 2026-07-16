@@ -69,6 +69,18 @@
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
+  - name: Install percona-pgbouncer Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pgbouncer
+        - percona-pgbouncer-dbgsym
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
   - name: Add user postgres to sudoers
     user:
       name: postgres
@@ -145,6 +157,28 @@
   - name: Show stdout of pytest regression tests
     debug:
       var: results.stdout_lines
+
+  # The functional suite above runs against a from-source build (make install
+  # is intentionally skipped so it doesn't clobber the packaged binary). This
+  # check independently confirms the actual percona-pgbouncer package
+  # installed above is present and runnable. Full parity (pointing the pytest
+  # suite's fixtures at the packaged binary instead of the source build) needs
+  # inspection of pgbouncer's own test-harness internals and is tracked as a
+  # follow-up, not attempted here.
+  - name: Verify packaged percona-pgbouncer binary runs
+    command: pgbouncer --version
+    register: pgbouncer_version
+    changed_when: false
+
+  - name: Assert packaged pgbouncer binary reported a version
+    assert:
+      that:
+        - pgbouncer_version.rc == 0
+        - pgbouncer_version.stdout | trim | length > 0
+      fail_msg: "Packaged percona-pgbouncer binary did not report a version"
+
+  - debug:
+      var: pgbouncer_version.stdout_lines
 
   # - name: Install pip requirements
   #   shell: pip3 install -r requirements.txt

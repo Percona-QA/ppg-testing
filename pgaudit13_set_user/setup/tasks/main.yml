@@ -65,6 +65,12 @@
     state: started
     enabled: yes
 
+- name: Install percona-pgaudit{{ major_version }}_set_user RHEL
+  yum:
+    name: percona-pgaudit{{ major_version }}_set_user
+    state: latest
+    update_cache: yes
+
 - name: Clone set_user sources
   git:
     repo: "{{ repo }}"
@@ -75,18 +81,15 @@
     version: "{{ lookup('env', 'COMPONENT_VERSION') }}"
   become_user: postgres
 
-- name: Build set_user from sources
+- name: Build set_user from sources (compile-only sanity check, packaged binary installed above is what installcheck runs against)
   make:
     chdir: "/tmp/set_user"
     params:
       USE_PGXS: 1
 
-- name: Install set_user from sources
-  make:
-    target: install
-    chdir: "/tmp/set_user"
-    params:
-      USE_PGXS: 1
+# Deliberately not running `make install` here: the packaged set_user
+# installed above is the artifact we want installcheck to validate, not a
+# from-source build that would silently overwrite it.
 
 - name: Add extensions to postgresql.conf for RHEL
   lineinfile:

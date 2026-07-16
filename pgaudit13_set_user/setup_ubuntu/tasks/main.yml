@@ -75,18 +75,18 @@
   environment:
     PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-# - name: Install set_user Debian
-#   apt:
-#     name: "{{ packages }}"
-#     state: latest
-#     update_cache: yes
-#   vars:
-#     major_version: "{{ major_version }}"
-#     packages:
-#       - percona-postgresql-{{ major_version }}-set_user
-#       - percona-postgresql-{{ major_version }}-set_user-dbgsym
-#   environment:
-#     PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+- name: Install percona-pgaudit{{ major_version }}-set-user Debian
+  apt:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    major_version: "{{ major_version }}"
+    packages:
+      - percona-pgaudit{{ major_version }}-set-user
+      - percona-pgaudit{{ major_version }}-set-user-dbgsym
+  environment:
+    PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
 - name: Clone set_user sources
   git:
@@ -111,21 +111,16 @@
     name: postgresql
     state: stopped
 
-- name: Build set_user from sources
+- name: Build set_user from sources (compile-only sanity check, packaged binary installed above is what installcheck runs against)
   become_user: postgres
   make:
     chdir: "/tmp/set_user"
     params:
       USE_PGXS: 1
-  become_user: postgres
 
-- name: Install set_user from sources
-  become: true
-  make:
-    target: install
-    chdir: "/tmp/set_user"
-    params:
-      USE_PGXS: 1
+# Deliberately not running `make install` here: the packaged set_user
+# installed above is the artifact we want installcheck to validate, not a
+# from-source build that would silently overwrite it.
 
 - name: Add extensions to postgresql.conf for Debian
   become_user: postgres

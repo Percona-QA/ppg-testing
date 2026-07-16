@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import pytest
 import testinfra.utils.ansible_runner
 
@@ -193,3 +194,72 @@ def test_cluster_status(patroni_cluster_data):
         pytest.fail(fail_message)
 
     print("✅ All node states are either 'running' (primary) or 'streaming' (replicas).")
+
+
+# Patroni's Member name (the `name:` field in each node's postgresql*.yml) is
+# not the same as the systemd unit that runs it - map one to the other so we
+# know which service to stop to fail over a given member.
+MEMBER_TO_SERVICE = {
+    "postgresql0": "patroni",
+    "postgresql1": "patroni1",
+    "postgresql2": "patroni2",
+}
+
+
+def _patronictl_list(host):
+    with host.sudo("postgres"):
+        result = host.run(
+            "patronictl -c /var/lib/pgsql/patroni_test/postgresql1.yml list -f json"
+        )
+        assert result.rc == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+def test_patroni_failover(host, patroni_cluster_data):
+    """
+    Stops the current Patroni leader's service to simulate a crash, confirms
+    a different member is elected Leader within a bounded timeout, then
+    restarts the stopped service and confirms it rejoins as a healthy
+    replica. This is the core behavior Patroni exists to provide, and was
+    previously never exercised - every other test in this file only checks
+    a static snapshot of an already-healthy cluster.
+    """
+    leader = next(n for n in patroni_cluster_data if n.get("Role") == "Leader")
+    leader_member = leader["Member"]
+    leader_service = MEMBER_TO_SERVICE[leader_member]
+
+    print(f"\nStopping current leader '{leader_member}' (service {leader_service}) to trigger failover")
+    stop_result = host.run(f"systemctl stop {leader_service}")
+    assert stop_result.rc == 0, stop_result.stderr
+
+    try:
+        new_leader_member = None
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            cluster = _patronictl_list(host)
+            leaders = [n for n in cluster if n.get("Role") == "Leader"]
+            if len(leaders) == 1 and leaders[0]["Member"] != leader_member:
+                new_leader_member = leaders[0]["Member"]
+                break
+            time.sleep(5)
+
+        assert new_leader_member is not None, (
+            f"No new leader was elected within 60s after stopping '{leader_member}'"
+        )
+        print(f"✅ New leader elected: {new_leader_member}")
+    finally:
+        print(f"Restarting {leader_service} so the old leader rejoins as a replica")
+        restart_result = host.run(f"systemctl start {leader_service}")
+        assert restart_result.rc == 0, restart_result.stderr
+
+        deadline = time.time() + 60
+        rejoined = False
+        while time.time() < deadline:
+            cluster = _patronictl_list(host)
+            if len(cluster) == 3 and all(
+                n.get("State") in ("running", "streaming") for n in cluster
+            ):
+                rejoined = True
+                break
+            time.sleep(5)
+        assert rejoined, f"'{leader_member}' did not rejoin as a healthy member within 60s"

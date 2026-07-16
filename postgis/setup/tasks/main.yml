@@ -163,3 +163,115 @@
 
   - debug:
       var: results.stdout_lines
+
+  - name: Assert PostGIS_Full_Version returned output
+    assert:
+      that:
+        - results.rc == 0
+        - results.stdout | trim | length > 0
+      fail_msg: "PostGIS_Full_Version() returned no output"
+
+  # =============================
+  # Functional regression checks
+  #
+  # Everything above only proves the extensions load (CREATE EXTENSION
+  # succeeding). None of it proves the spatial functions actually compute
+  # correct results. The checks below exercise one core function per
+  # installed extension against a known expected answer.
+  # =============================
+
+  - name: ST_Distance on a 3-4-5 triangle (postgis core)
+    become_user: postgres
+    command: >
+      psql -tAc "SELECT ST_Distance(ST_GeomFromText('POINT(0 0)'), ST_GeomFromText('POINT(3 4)'));"
+    register: st_distance_result
+
+  - name: Assert ST_Distance computed the correct value
+    assert:
+      that:
+        - st_distance_result.stdout | trim | float == 5.0
+      fail_msg: "ST_Distance((0,0),(3,4)) expected 5, got: {{ st_distance_result.stdout }}"
+
+  - name: ST_Contains for a point inside a square (postgis core)
+    become_user: postgres
+    command: >
+      psql -tAc "SELECT ST_Contains(ST_GeomFromText('POLYGON((0 0,0 10,10 10,10 0,0 0))'), ST_GeomFromText('POINT(5 5)'));"
+    register: st_contains_result
+
+  - name: Assert ST_Contains reported true
+    assert:
+      that:
+        - st_contains_result.stdout | trim == 't'
+      fail_msg: "ST_Contains expected true for a point inside the polygon, got: {{ st_contains_result.stdout }}"
+
+  - name: ST_IsValid on a well-formed polygon (postgis core)
+    become_user: postgres
+    command: >
+      psql -tAc "SELECT ST_IsValid(ST_GeomFromText('POLYGON((0 0,0 10,10 10,10 0,0 0))'));"
+    register: st_isvalid_result
+
+  - name: Assert ST_IsValid reported true
+    assert:
+      that:
+        - st_isvalid_result.stdout | trim == 't'
+      fail_msg: "ST_IsValid expected true for a well-formed polygon, got: {{ st_isvalid_result.stdout }}"
+
+  - name: ST_Width on a freshly created raster (postgis_raster)
+    become_user: postgres
+    command: >
+      psql -tAc "SELECT ST_Width(ST_MakeEmptyRaster(10, 20, 0, 0, 1));"
+    register: st_width_result
+
+  - name: Assert postgis_raster reported the correct raster width
+    assert:
+      that:
+        - st_width_result.stdout | trim | int == 10
+      fail_msg: "ST_Width(ST_MakeEmptyRaster(10, 20, ...)) expected 10, got: {{ st_width_result.stdout }}"
+
+  - name: levenshtein distance between two known strings (fuzzystrmatch)
+    become_user: postgres
+    command: >
+      psql -tAc "SELECT levenshtein('GUMBO', 'GAMBOL');"
+    register: levenshtein_result
+
+  - name: Assert levenshtein computed the correct edit distance
+    assert:
+      that:
+        - levenshtein_result.stdout | trim | int == 2
+      fail_msg: "levenshtein('GUMBO','GAMBOL') expected 2, got: {{ levenshtein_result.stdout }}"
+
+  - name: parse_address on a known US address (address_standardizer)
+    become_user: postgres
+    command: >
+      psql -tAc "SELECT house_num FROM parse_address('1 Devonshire Place PH301, Boston, MA 02109');"
+    register: parse_address_result
+
+  - name: Assert parse_address extracted the house number
+    assert:
+      that:
+        - parse_address_result.stdout | trim == '1'
+      fail_msg: "parse_address house_num expected '1', got: {{ parse_address_result.stdout }}"
+
+  - name: CreateTopology returns a new topology id (postgis_topology)
+    become_user: postgres
+    command: >
+      psql -tAc "SELECT topology.CreateTopology('ppg_test_topo', 4326);"
+    register: create_topology_result
+
+  - name: Assert CreateTopology returned a numeric topology id
+    assert:
+      that:
+        - create_topology_result.stdout | trim | int > 0
+      fail_msg: "topology.CreateTopology did not return a numeric topology id: {{ create_topology_result.stdout }}"
+
+  - name: normalize_address runs against the tiger_geocoder lookup tables (postgis_tiger_geocoder)
+    become_user: postgres
+    command: >
+      psql -tAc "SELECT (na).address FROM normalize_address('1 Devonshire Place, Boston, MA 02109') AS na;"
+    register: normalize_address_result
+
+  - name: Assert normalize_address returned a parsed street number
+    assert:
+      that:
+        - normalize_address_result.stdout | trim | length > 0
+      fail_msg: "normalize_address returned no output: {{ normalize_address_result.stdout }}"

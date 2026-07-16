@@ -75,18 +75,18 @@
   environment:
     PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-# - name: Install pgaudit Debian
-#   apt:
-#     name: "{{ packages }}"
-#     state: latest
-#     update_cache: yes
-#   vars:
-#     major_version: "{{ major_version }}"
-#     packages:
-#       - percona-postgresql-{{ major_version }}-pgaudit
-#       - percona-postgresql-{{ major_version }}-pgaudit-dbgsym
-#   environment:
-#     PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+- name: Install pgaudit Debian
+  apt:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    major_version: "{{ major_version }}"
+    packages:
+      - percona-postgresql-{{ major_version }}-pgaudit
+      - percona-postgresql-{{ major_version }}-pgaudit-dbgsym
+  environment:
+    PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
 - name: Clone pgaudit sources
   git:
@@ -115,19 +115,16 @@
     name: postgresql
     state: stopped
 
-- name: Build pgaudit from sources
+- name: Build pgaudit from sources (compile-only sanity check, package build below is what installcheck runs against)
   make:
     chdir: "/tmp/pgaudit"
     params:
       USE_PGXS: 1
   become_user: postgres
 
-- name: Install pgaudit from sources
-  make:
-    target: install
-    chdir: "/tmp/pgaudit"
-    params:
-      USE_PGXS: 1
+# Deliberately not running `make install` here: the packaged pgaudit installed
+# above is the artifact we want installcheck to validate, not a from-source
+# build that would silently overwrite it.
 
 # - name: Add extensions to postgresql.conf for Debian
 #   lineinfile:

@@ -70,6 +70,18 @@
   environment:
     PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
+- name: Install wal2json Debian
+  apt:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+      - percona-postgresql-{{ major_version }}-wal2json
+      - percona-postgresql-{{ major_version }}-wal2json-dbgsym
+  environment:
+    PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
 - name: Clone wal2json sources
   git:
     repo: "{{ repo }}"
@@ -88,20 +100,16 @@
       line: 'postgres ALL=(ALL) NOPASSWD: ALL'
       validate: 'visudo -cf %s'
 
-- name: Build wal2json from sources
+- name: Build wal2json from sources (compile-only sanity check, packaged binary installed above is what installcheck runs against)
   make:
     chdir: "/tmp/wal2json"
     params:
       USE_PGXS: 1
   become_user: postgres
 
-- name: Install wal2json from sources
-  become: true
-  make:
-    target: install
-    chdir: "/tmp/wal2json"
-    params:
-      USE_PGXS: 1
+# Deliberately not running `make install` here: the packaged wal2json
+# installed above is the artifact we want installcheck to validate, not a
+# from-source build that would silently overwrite it.
 
 - name: Set wal level
   lineinfile:

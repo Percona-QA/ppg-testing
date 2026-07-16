@@ -34,31 +34,14 @@
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-  - name: initDB Postgres instance 1
+  - name: initDB Postgres instance 1 (primary)
     become_user: postgres
     command: /usr/pgsql-{{ major_version }}/bin/initdb -D /tmp/data1
-
-  - name: initDB Postgres instance 2
-    become_user: postgres
-    command: /usr/pgsql-{{ major_version }}/bin/initdb -D /tmp/data2
-
-  - name: Change port of Postgres instance 2
-    lineinfile:
-      path: /tmp/data2/postgresql.conf
-      line: port = 5433
 
   - name: Copy pg_hba.conf Server 1
     copy:
       src: pg_hba.conf
       dest: /tmp/data1/pg_hba.conf
-      owner: postgres
-      group: postgres
-      mode: 0600
-
-  - name: Copy pg_hba.conf Server 2
-    copy:
-      src: pg_hba.conf
-      dest: /tmp/data2/pg_hba.conf
       owner: postgres
       group: postgres
       mode: 0600
@@ -97,13 +80,9 @@
   - debug:
       var: results.stdout_lines
 
-  - name: Start server 1
+  - name: Start server 1 (primary)
     become_user: postgres
     command: /usr/pgsql-{{ major_version }}/bin/pg_ctl -D /tmp/data1 -l logfile-data1 start
-
-  - name: Start server 2
-    become_user: postgres
-    command: /usr/pgsql-{{ major_version }}/bin/pg_ctl -D /tmp/data2 -l logfile-data2 start
 
   - name: Create User monitor
     become_user: postgres
@@ -126,29 +105,61 @@
     command: psql -c "create database monitor;"
     register: results
 
-  - name: Create User monitor
+  - debug:
+      var: results.stdout_lines
+
+  - name: Grant appuser access to monitor database
     become_user: postgres
-    command: psql -p 5433 -c "CREATE USER monitor WITH ENCRYPTED PASSWORD 'Monitor@321';"
+    command: psql -c "GRANT ALL PRIVILEGES ON DATABASE monitor TO appuser;"
     register: results
 
   - debug:
       var: results.stdout_lines
 
-  - name: Create User appuser
+  # NOTE: instance 2 used to be a second, independently-initdb'd cluster with
+  # its own separately-created users/db. That is not a streaming standby at
+  # all (different system identifier, no replication), even though
+  # pgpool.conf is configured for backend_clustering_mode =
+  # 'streaming_replication'. It made any real failover test meaningless,
+  # since there was never a real primary/standby relationship to fail over.
+  # Building instance 2 as an actual pg_basebackup -R standby of instance 1
+  # fixes that and is what makes the failover test below meaningful.
+  - name: Remove any stale standby data directory
+    file:
+      path: /tmp/data2
+      state: absent
+
+  - name: Take base backup from primary to build the streaming standby (instance 2)
     become_user: postgres
-    command: psql -p 5433 -c "CREATE USER appuser WITH  ENCRYPTED PASSWORD 'Appuser@321';"
-    register: results
+    command: >
+      /usr/pgsql-{{ major_version }}/bin/pg_basebackup
+      -h 127.0.0.1 -p 5432 -U postgres
+      -D /tmp/data2 -Fp -Xs -R
 
-  - debug:
-      var: results.stdout_lines
+  - name: Change port of standby instance (data2)
+    lineinfile:
+      path: /tmp/data2/postgresql.conf
+      line: port = 5433
 
-  - name: Create database monitor
+  - name: Start server 2 (standby)
     become_user: postgres
-    command: psql -p 5433 -c "create database monitor;"
-    register: results
+    command: /usr/pgsql-{{ major_version }}/bin/pg_ctl -D /tmp/data2 -l logfile-data2 start
 
-  - debug:
-      var: results.stdout_lines
+  - name: Wait for standby to enter streaming recovery
+    become_user: postgres
+    command: psql -p 5433 -tAc "select pg_is_in_recovery()"
+    register: standby_recovery_check
+    until: standby_recovery_check.stdout | trim == 't'
+    retries: 12
+    delay: 5
+
+  - name: Verify primary sees the streaming standby
+    become_user: postgres
+    command: psql -tAc "select count(*) from pg_stat_replication"
+    register: primary_replication_check
+    until: primary_replication_check.stdout | trim | int >= 1
+    retries: 12
+    delay: 5
 
   - name: Display ppg version
     become_user: postgres
@@ -171,11 +182,16 @@
   - name: select datname from pg_database
     become_user: postgres
     command: psql -h 127.0.0.1 -U appuser -p 9999 postgres  -c "select datname from pg_database"
-    ignore_errors: true
     register: results
 
   - debug:
       var: results.stdout_lines
+
+  - name: Assert query through pgpool succeeded
+    assert:
+      that:
+        - results.rc == 0
+      fail_msg: "Querying through pgpool (port 9999) failed: {{ results.stderr }}"
 
   - name: show pool_nodes
     become_user: postgres
@@ -185,6 +201,14 @@
   - debug:
       var: results.stdout_lines
 
+  - name: Assert pgpool sees both backends up with correct roles before failover
+    assert:
+      that:
+        - "'down' not in results.stdout"
+        - "'primary' in results.stdout"
+        - "'standby' in results.stdout"
+      fail_msg: "pgpool did not report a healthy primary+standby topology before failover: {{ results.stdout }}"
+
   - name: show pool_version
     become_user: postgres
     command: psql -h 127.0.0.1 -Uappuser -p 9999 postgres  -c "show pool_version"
@@ -192,3 +216,69 @@
 
   - debug:
       var: results.stdout_lines
+
+  - name: Assert pool_version reported a version
+    assert:
+      that:
+        - results.rc == 0
+        - results.stdout | trim | length > 0
+      fail_msg: "show pool_version returned no output"
+
+  # =============================
+  # Failover test: kill the primary, promote the standby, and confirm
+  # pgpool re-routes reads/writes to the newly promoted node. This is the
+  # core value proposition of pgpool (streaming_replication clustering mode)
+  # and was previously never exercised.
+  # =============================
+
+  - name: Stop the primary to simulate a failure
+    become_user: postgres
+    command: /usr/pgsql-{{ major_version }}/bin/pg_ctl -D /tmp/data1 -m fast stop
+
+  - name: Promote the standby (instance 2) to primary
+    become_user: postgres
+    command: /usr/pgsql-{{ major_version }}/bin/pg_ctl promote -D /tmp/data2
+
+  - name: Wait for promotion to complete
+    become_user: postgres
+    command: psql -p 5433 -tAc "select pg_is_in_recovery()"
+    register: promoted_check
+    until: promoted_check.stdout | trim == 'f'
+    retries: 12
+    delay: 5
+
+  - name: Wait for pgpool to detect the failed primary and the promoted standby
+    become_user: postgres
+    command: psql -h 127.0.0.1 -Uappuser -p 9999 postgres -c "show pool_nodes"
+    register: pool_nodes_after_failover
+    until: >
+      ('primary' in pool_nodes_after_failover.stdout) and
+      (pool_nodes_after_failover.stdout is search('5433[^\n]*\|[^\n]*primary'))
+    retries: 12
+    delay: 5
+
+  - debug:
+      var: pool_nodes_after_failover.stdout_lines
+
+  - name: Assert pgpool promoted node1 (port 5433) to primary after failover
+    assert:
+      that:
+        - pool_nodes_after_failover.stdout is search('5433[^\n]*\|[^\n]*primary')
+      fail_msg: "pgpool did not report the promoted standby (port 5433) as primary after failover: {{ pool_nodes_after_failover.stdout }}"
+
+  - name: Confirm writes succeed through pgpool after failover
+    become_user: postgres
+    command: psql -h 127.0.0.1 -Uappuser -p 9999 monitor -c "CREATE TABLE IF NOT EXISTS failover_check(id int); INSERT INTO failover_check VALUES (1);"
+    register: post_failover_write
+    until: post_failover_write.rc == 0
+    retries: 6
+    delay: 5
+
+  - debug:
+      var: post_failover_write.stdout_lines
+
+  - name: Assert write through pgpool succeeded after failover
+    assert:
+      that:
+        - post_failover_write.rc == 0
+      fail_msg: "Write through pgpool failed after failover promotion: {{ post_failover_write.stderr }}"
