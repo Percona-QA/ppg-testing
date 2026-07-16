@@ -260,7 +260,19 @@
         - json-c-devel
         - protobuf-c-devel
         - libxml2-devel
-        - "{{ postgis_rhel_package_name_prefix }}-devel"
+        # Note: percona-postgis35_{{ major_version }}-devel is NOT listed here even
+        # though it's a real package - it ships headers for *consumers* of postgis's
+        # C API (liblwgeom.h etc.), not anything postgis's own build needs. It's
+        # already installed above by the "install Percona Platform for PostGis rpm
+        # packages" task regardless.
+        #
+        # percona-postgresql{{ major_version }}-devel ships pgxs.mk
+        # (/usr/pgsql-{{ major_version }}/lib/pgxs/src/makefiles/pgxs.mk) - without
+        # it, postgis's `./configure` finds pg_config fine (that's in a different
+        # package) but fails with "the PGXS Makefile ... cannot be found", since
+        # this role never needed to build anything against the PGXS build system
+        # before now.
+        - "percona-postgresql{{ major_version }}-devel"
 
   - name: Install SFCGAL-devel (best-effort - not guaranteed to exist in every EPEL release)
     yum:
