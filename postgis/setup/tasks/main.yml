@@ -286,6 +286,23 @@
         SFCGAL-devel install {{ 'succeeded' if sfcgal_devel_install is success else
         'FAILED - postgis configure will skip SFCGAL support and its regress tests' }}
 
+  # pg_tde hit the exact same problem building from source on RHEL9:
+  # CFLAGS inherited from `pg_config --cflags` include
+  # -Wmissing-variable-declarations, which needs gcc 12+, and RHEL9's stock
+  # gcc is 11.x. Confirmed here too: postgis's ./configure test-compiles a
+  # small program linking against -lpq using those inherited CFLAGS (to
+  # check for PQserverVersion), that test-compile fails with "cc1: error:
+  # unrecognized command-line option '-Wmissing-variable-declarations'", and
+  # configure then reports the misleading "configure: error: could not find
+  # libpq" - the library was found fine, the compile test just never ran.
+  # Same fix as pgaudit13_set_user/setup: install gcc-toolset-14 and source
+  # its enable script before configure/build/installcheck.
+  - name: Install gcc-toolset-14 for CFLAGS/LTO compatibility on RHEL 9
+    dnf:
+      name: gcc-toolset-14
+      state: present
+    when: ansible_distribution_major_version == "9"
+
   - name: Record the actual build-time library versions we're about to compile against
     shell: |
       echo "geos-config:     $(geos-config --version 2>&1 || echo 'not found')"
@@ -330,6 +347,9 @@
 
   - name: Configure postgis against the already-installed GEOS/PROJ/GDAL/SFCGAL/json-c libraries
     shell: |
+      {% if ansible_distribution_major_version == "9" %}
+      source /opt/rh/gcc-toolset-14/enable
+      {% endif %}
       set -o pipefail
       ./configure 2>&1 | tee /tmp/postgis-configure.log
     args:
@@ -362,6 +382,9 @@
 
   - name: Build postgis from source (compile-only - the installed package above is what installcheck validates)
     shell: |
+      {% if ansible_distribution_major_version == "9" %}
+      source /opt/rh/gcc-toolset-14/enable
+      {% endif %}
       set -o pipefail
       make -j "$(nproc)" 2>&1 | tee /tmp/postgis-build.log
     args:
@@ -383,6 +406,9 @@
 
   - name: Run the PostGIS regression suite against the installed package
     shell: |
+      {% if ansible_distribution_major_version == "9" %}
+      source /opt/rh/gcc-toolset-14/enable
+      {% endif %}
       set -o pipefail
       make installcheck 2>&1 | tee /tmp/postgis-installcheck.log
     args:
