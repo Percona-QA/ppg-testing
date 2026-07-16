@@ -164,114 +164,239 @@
   - debug:
       var: results.stdout_lines
 
-  - name: Assert PostGIS_Full_Version returned output
-    assert:
-      that:
-        - results.rc == 0
-        - results.stdout | trim | length > 0
-      fail_msg: "PostGIS_Full_Version() returned no output"
+  # Functional/regression assertions (library-linkage checks, ST_Distance,
+  # ST_Contains, raster, topology, address_standardizer, tiger_geocoder, etc.)
+  # live in postgis/tests/test_postgis.py and run via the testinfra verify
+  # step, not here. Keeping only install/setup steps in this task file avoids
+  # duplicating assertion logic in both YAML and Python.
 
   # =============================
-  # Functional regression checks
+  # PostGIS's own upstream regression suite, run via `make installcheck`
+  # against the already-installed Percona package (same principle as
+  # pg_audit/pg_repack/wal2json/pgvector: build from source only to get the
+  # regress harness's helper binaries, never `make install`, so installcheck
+  # validates the shipped package's SQL/library files, not a from-source
+  # build).
   #
-  # Everything above only proves the extensions load (CREATE EXTENSION
-  # succeeding). None of it proves the spatial functions actually compute
-  # correct results. The checks below exercise one core function per
-  # installed extension against a known expected answer.
+  # Unlike those simple PGXS extensions, PostGIS is an autotools project with
+  # a much bigger dependency chain (GEOS/PROJ/GDAL/SFCGAL/json-c/protobuf-c
+  # dev headers) and this is the first time this repo has tried to build it
+  # from source. First-run unknowns worth watching for:
+  #   - EPEL's GEOS/PROJ/GDAL/SFCGAL/json-c packages are independently
+  #     versioned and NOT guaranteed to match what percona-postgis35 was
+  #     actually built/linked against. A version mismatch here means the
+  #     from-source build could compile/link against different library
+  #     behavior than the shipped binary, quietly defeating the point of
+  #     "test what ships". The diagnostic tasks below exist specifically to
+  #     surface that mismatch instead of silently building against whatever
+  #     EPEL happens to provide: they print what repos actually carry these
+  #     packages (so a real Percona-provided match, if one exists, can be
+  #     preferred over EPEL in a follow-up), and print the ground-truth
+  #     versions the shipped binary reports (via PostGIS_Full_Version(),
+  #     already captured above) next to the build-time tool versions so any
+  #     drift is immediately visible in the CI log.
+  #   - SFCGAL-devel may not exist in EPEL for every RHEL major version, so
+  #     it's installed best-effort (ignore_errors) - if missing, configure
+  #     should just auto-detect its absence and skip SFCGAL-linked tests
+  #     rather than hard-failing everything else.
+  #   - The exact configure flags are intentionally left to autodetection
+  #     (pg_config/geos-config/gdal-config/pkg-config on PATH) rather than
+  #     hand-specifying --with-* paths, to reduce the number of guesses.
+  #   - config.log is dumped on a configure failure since that's the only
+  #     place autotools records *why* a library wasn't detected.
   # =============================
 
-  - name: ST_Distance on a 3-4-5 triangle (postgis core)
+  - name: Record the shipped package's actual linked library versions (ground truth for comparison below)
     become_user: postgres
-    command: >
-      psql -tAc "SELECT ST_Distance(ST_GeomFromText('POINT(0 0)'), ST_GeomFromText('POINT(3 4)'));"
-    register: st_distance_result
+    command: psql -tAc "SELECT PostGIS_Full_Version();"
+    register: shipped_postgis_full_version
 
-  - name: Assert ST_Distance computed the correct value
-    assert:
-      that:
-        - st_distance_result.stdout | trim | float == 5.0
-      fail_msg: "ST_Distance((0,0),(3,4)) expected 5, got: {{ st_distance_result.stdout }}"
+  - debug:
+      msg: "Shipped percona-postgis35_{{ major_version }} reports: {{ shipped_postgis_full_version.stdout }}"
 
-  - name: ST_Contains for a point inside a square (postgis core)
+  - name: Check which repos (Percona vs EPEL vs base/CRB) already provide matching GEOS/PROJ/GDAL/SFCGAL/json-c/protobuf-c packages
+    command: "dnf list available --showduplicates geos geos-devel proj proj-devel gdal gdal-devel json-c json-c-devel protobuf-c protobuf-c-devel SFCGAL SFCGAL-devel"
+    register: available_geo_libs
+    ignore_errors: true
+    changed_when: false
+
+  - debug:
+      msg: >-
+        Available GEOS/PROJ/GDAL/SFCGAL/json-c/protobuf-c packages BEFORE enabling EPEL
+        (i.e. whatever the Percona repo + base/CRB already carry) - if percona-postgis35
+        depends on percona-provided versions of these, they should show up here and be
+        preferred over EPEL for an exact match:
+        {{ available_geo_libs.stdout_lines | default(['(dnf list failed - see rc/stderr)']) }}
+
+  - name: Install EPEL release (fallback source for GEOS/PROJ/GDAL/json-c/protobuf-c/SFCGAL -devel packages if Percona's repo doesn't carry them)
+    command: "dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_distribution_major_version }}.noarch.rpm"
+    args:
+      creates: /etc/yum.repos.d/epel.repo
+    register: epel_install
+    ignore_errors: true
+
+  - debug:
+      var: epel_install
+
+  - name: Install PostGIS build dependencies (core - expected to be reliably available)
+    yum:
+      name: "{{ packages }}"
+      state: present
+      update_cache: yes
+    vars:
+      packages:
+        - autoconf
+        - automake
+        - libtool
+        - pkgconfig
+        - make
+        - gcc
+        - gcc-c++
+        - git
+        - perl
+        - geos-devel
+        - proj-devel
+        - gdal-devel
+        - json-c-devel
+        - protobuf-c-devel
+        - libxml2-devel
+        - "{{ postgis_rhel_package_name_prefix }}-devel"
+
+  - name: Install SFCGAL-devel (best-effort - not guaranteed to exist in every EPEL release)
+    yum:
+      name: SFCGAL-devel
+      state: present
+    register: sfcgal_devel_install
+    ignore_errors: true
+
+  - debug:
+      msg: >-
+        SFCGAL-devel install {{ 'succeeded' if sfcgal_devel_install is success else
+        'FAILED - postgis configure will skip SFCGAL support and its regress tests' }}
+
+  - name: Record the actual build-time library versions we're about to compile against
+    shell: |
+      echo "geos-config:     $(geos-config --version 2>&1 || echo 'not found')"
+      echo "gdal-config:     $(gdal-config --version 2>&1 || echo 'not found')"
+      echo "proj (pkg-config): $(pkg-config --modversion proj 2>&1 || echo 'not found')"
+      echo "json-c (pkg-config): $(pkg-config --modversion json-c 2>&1 || echo 'not found')"
+      echo "protobuf-c (pkg-config): $(pkg-config --modversion libprotobuf-c 2>&1 || echo 'not found')"
+      echo "sfcgal-config:   $(sfcgal-config --version 2>&1 || echo 'not found')"
+    args:
+      executable: /bin/bash
+    register: build_time_lib_versions
+    changed_when: false
+    ignore_errors: true
+
+  - debug:
+      msg: >-
+        Build-time library versions (what we're about to compile postgis against):
+        {{ build_time_lib_versions.stdout_lines }}
+        --- compare this against the shipped package's ground truth reported above:
+        {{ shipped_postgis_full_version.stdout }}
+        --- a mismatch here (e.g. shipped GEOS="3.9.x" but geos-config reports 3.12.x) means
+        this from-source build will not be representative of the actual shipped binary,
+        even if it compiles and installcheck passes.
+
+  - name: Clone postgis sources matching the packaged version
+    git:
+      repo: "{{ repo }}"
+      version: "{{ version }}"
+      dest: /tmp/postgis
+    vars:
+      repo: "{{ lookup('env', 'COMPONENT_REPO') }}"
+      version: "{{ lookup('env', 'COMPONENT_VERSION') }}"
     become_user: postgres
-    command: >
-      psql -tAc "SELECT ST_Contains(ST_GeomFromText('POLYGON((0 0,0 10,10 10,10 0,0 0))'), ST_GeomFromText('POINT(5 5)'));"
-    register: st_contains_result
 
-  - name: Assert ST_Contains reported true
-    assert:
-      that:
-        - st_contains_result.stdout | trim == 't'
-      fail_msg: "ST_Contains expected true for a point inside the polygon, got: {{ st_contains_result.stdout }}"
-
-  - name: ST_IsValid on a well-formed polygon (postgis core)
+  - name: Autogen postgis
+    shell: ./autogen.sh
+    args:
+      chdir: /tmp/postgis
     become_user: postgres
-    command: >
-      psql -tAc "SELECT ST_IsValid(ST_GeomFromText('POLYGON((0 0,0 10,10 10,10 0,0 0))'));"
-    register: st_isvalid_result
+    environment:
+      PATH: "/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
 
-  - name: Assert ST_IsValid reported true
-    assert:
-      that:
-        - st_isvalid_result.stdout | trim == 't'
-      fail_msg: "ST_IsValid expected true for a well-formed polygon, got: {{ st_isvalid_result.stdout }}"
-
-  - name: ST_Width on a freshly created raster (postgis_raster)
+  - name: Configure postgis against the already-installed GEOS/PROJ/GDAL/SFCGAL/json-c libraries
+    shell: |
+      set -o pipefail
+      ./configure 2>&1 | tee /tmp/postgis-configure.log
+    args:
+      chdir: /tmp/postgis
+      executable: /bin/bash
     become_user: postgres
-    command: >
-      psql -tAc "SELECT ST_Width(ST_MakeEmptyRaster(10, 20, 0, 0, 1));"
-    register: st_width_result
+    environment:
+      PATH: "/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
+    register: postgis_configure
+    ignore_errors: true
 
-  - name: Assert postgis_raster reported the correct raster width
-    assert:
-      that:
-        - st_width_result.stdout | trim | int == 10
-      fail_msg: "ST_Width(ST_MakeEmptyRaster(10, 20, ...)) expected 10, got: {{ st_width_result.stdout }}"
+  - debug:
+      var: postgis_configure.stdout_lines
 
-  - name: levenshtein distance between two known strings (fuzzystrmatch)
+  - name: Show config.log if configure failed (autotools records *why* a library wasn't detected here)
+    shell: cat /tmp/postgis/config.log
+    register: postgis_config_log
+    when: postgis_configure is defined and postgis_configure.rc != 0
+    ignore_errors: true
     become_user: postgres
-    command: >
-      psql -tAc "SELECT levenshtein('GUMBO', 'GAMBOL');"
-    register: levenshtein_result
 
-  - name: Assert levenshtein computed the correct edit distance
-    assert:
-      that:
-        - levenshtein_result.stdout | trim | int == 2
-      fail_msg: "levenshtein('GUMBO','GAMBOL') expected 2, got: {{ levenshtein_result.stdout }}"
+  - debug:
+      var: postgis_config_log.stdout_lines
+    when: postgis_configure is defined and postgis_configure.rc != 0 and postgis_config_log is defined
 
-  - name: parse_address on a known US address (address_standardizer)
+  - name: Fail the playbook if postgis configure failed
+    fail:
+      msg: "postgis ./configure failed with return code {{ postgis_configure.rc }} - see config.log above"
+    when: postgis_configure is defined and postgis_configure.rc != 0
+
+  - name: Build postgis from source (compile-only - the installed package above is what installcheck validates)
+    shell: |
+      set -o pipefail
+      make -j "$(nproc)" 2>&1 | tee /tmp/postgis-build.log
+    args:
+      chdir: /tmp/postgis
+      executable: /bin/bash
     become_user: postgres
-    command: >
-      psql -tAc "SELECT house_num FROM parse_address('1 Devonshire Place PH301, Boston, MA 02109');"
-    register: parse_address_result
+    environment:
+      PATH: "/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
+    register: postgis_build
+    ignore_errors: true
 
-  - name: Assert parse_address extracted the house number
-    assert:
-      that:
-        - parse_address_result.stdout | trim == '1'
-      fail_msg: "parse_address house_num expected '1', got: {{ parse_address_result.stdout }}"
+  - debug:
+      var: postgis_build.stdout_lines
 
-  - name: CreateTopology returns a new topology id (postgis_topology)
+  - name: Fail the playbook if the postgis build failed
+    fail:
+      msg: "postgis `make` failed with return code {{ postgis_build.rc }} - see build log above"
+    when: postgis_build is defined and postgis_build.rc != 0
+
+  - name: Run the PostGIS regression suite against the installed package
+    shell: |
+      set -o pipefail
+      make installcheck 2>&1 | tee /tmp/postgis-installcheck.log
+    args:
+      chdir: /tmp/postgis
+      executable: /bin/bash
     become_user: postgres
-    command: >
-      psql -tAc "SELECT topology.CreateTopology('ppg_test_topo', 4326);"
-    register: create_topology_result
+    environment:
+      PATH: "/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
+    register: postgis_installcheck
+    ignore_errors: true
 
-  - name: Assert CreateTopology returned a numeric topology id
-    assert:
-      that:
-        - create_topology_result.stdout | trim | int > 0
-      fail_msg: "topology.CreateTopology did not return a numeric topology id: {{ create_topology_result.stdout }}"
+  - debug:
+      var: postgis_installcheck.stdout_lines
 
-  - name: normalize_address runs against the tiger_geocoder lookup tables (postgis_tiger_geocoder)
+  - name: Find regression diff files if the suite failed
+    shell: find /tmp/postgis -name "*.diffs" -exec sh -c 'echo "=== {} ==="; cat "{}"' \;
+    register: postgis_diffs
+    when: postgis_installcheck is defined and postgis_installcheck.rc != 0
+    ignore_errors: true
     become_user: postgres
-    command: >
-      psql -tAc "SELECT (na).address FROM normalize_address('1 Devonshire Place, Boston, MA 02109') AS na;"
-    register: normalize_address_result
 
-  - name: Assert normalize_address returned a parsed street number
-    assert:
-      that:
-        - normalize_address_result.stdout | trim | length > 0
-      fail_msg: "normalize_address returned no output: {{ normalize_address_result.stdout }}"
+  - debug:
+      var: postgis_diffs.stdout_lines
+    when: postgis_installcheck is defined and postgis_installcheck.rc != 0 and postgis_diffs is defined
+
+  - name: Fail the playbook if the postgis regression suite failed
+    fail:
+      msg: "PostGIS installcheck failed with return code {{ postgis_installcheck.rc }} - see regression diffs above"
+    when: postgis_installcheck is defined and postgis_installcheck.rc != 0

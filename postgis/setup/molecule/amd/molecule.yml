@@ -22,7 +22,11 @@ provisioner:
     prepare: ../../../../playbooks/prepare.yml
     converge: ../../playbooks/playbook.yml
 verifier:
-  name: ansible
+  name: testinfra
+  directory: ../../../tests/
+  options:
+    verbose: true
+    s: true
 scenario:
   destroy_sequence:
     - destroy
@@ -33,4 +37,6 @@ scenario:
     - create
     - prepare
     - converge
+    - verify
+    - cleanup
     - destroy

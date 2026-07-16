@@ -229,7 +229,8 @@ def test_patroni_failover(host, patroni_cluster_data):
     leader_service = MEMBER_TO_SERVICE[leader_member]
 
     print(f"\nStopping current leader '{leader_member}' (service {leader_service}) to trigger failover")
-    stop_result = host.run(f"systemctl stop {leader_service}")
+    with host.sudo():
+        stop_result = host.run(f"systemctl stop {leader_service}")
     assert stop_result.rc == 0, stop_result.stderr
 
     try:
@@ -249,7 +250,8 @@ def test_patroni_failover(host, patroni_cluster_data):
         print(f"✅ New leader elected: {new_leader_member}")
     finally:
         print(f"Restarting {leader_service} so the old leader rejoins as a replica")
-        restart_result = host.run(f"systemctl start {leader_service}")
+        with host.sudo():
+            restart_result = host.run(f"systemctl start {leader_service}")
         assert restart_result.rc == 0, restart_result.stderr
 
         deadline = time.time() + 60
