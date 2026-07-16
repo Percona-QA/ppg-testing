@@ -430,8 +430,17 @@
   - debug:
       var: postgis_installcheck.stdout_lines
 
-  - name: Find regression diff files if the suite failed
-    shell: find /tmp/postgis -name "*.diffs" -exec sh -c 'echo "=== {} ==="; cat "{}"' \;
+  - name: Find regression diff/error files if the suite failed
+    # A prior run failed 14 raster loader tests ("running raster2pgsql:
+    # /tmp/pgis_reg/loader.err") but this task only searched /tmp/postgis
+    # for *.diffs - the regress harness's own working directory
+    # (/tmp/pgis_reg) is a completely different path, and .err files (the
+    # loader's own stderr capture) were never looked for at all, so we
+    # never actually saw why raster2pgsql failed. Search both known
+    # directories and both file patterns now.
+    shell: >
+      find /tmp/postgis /tmp/pgis_reg \( -name "*.diffs" -o -name "*.err" \)
+      -exec sh -c 'echo "=== {} ==="; cat "{}"' \; 2>/dev/null
     register: postgis_diffs
     when: postgis_installcheck is defined and postgis_installcheck.rc != 0
     ignore_errors: true
