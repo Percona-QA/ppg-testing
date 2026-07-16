@@ -450,6 +450,36 @@
       var: postgis_diffs.stdout_lines
     when: postgis_installcheck is defined and postgis_installcheck.rc != 0 and postgis_diffs is defined
 
+  # The loader.err content only ever shows postgis's own generic wrapper
+  # message ("Unable to read raster file: ...") - the underlying GDAL error
+  # (why it couldn't be read: missing driver? GDAL_DATA? something else?)
+  # isn't captured anywhere by the regress harness. Verified against the
+  # actual harness source (regress/runtest.mk, run_test.pl) that this is not
+  # a working-directory/relative-path bug on our end: check-regress already
+  # runs from /tmp/postgis (matching what TESTS paths are made relative to),
+  # and run_test.pl itself prepends the freshly-built raster2pgsql's own
+  # directory to PATH before invoking it. So this diagnostic bypasses the
+  # harness entirely and calls gdalinfo + the freshly-built raster2pgsql
+  # directly against the same real test file, to see GDAL's actual error.
+  - name: Diagnose raster2pgsql's ability to read a real test raster directly (bypassing the regress harness)
+    shell: |
+      echo "=== gdalinfo --version ==="
+      gdalinfo --version 2>&1 || echo "gdalinfo not found or failed"
+      echo "=== gdalinfo on the failing test raster ==="
+      gdalinfo /tmp/postgis/raster/test/regress/loader/testraster2.tif 2>&1 || echo "gdalinfo failed to read the file, rc=$?"
+      echo "=== freshly-built raster2pgsql on the same file ==="
+      /tmp/postgis/raster/loader/raster2pgsql /tmp/postgis/raster/test/regress/loader/testraster2.tif diag_raster_check 2>&1 || echo "raster2pgsql failed, rc=$?"
+    args:
+      executable: /bin/bash
+    register: postgis_raster_diag
+    when: postgis_installcheck is defined and postgis_installcheck.rc != 0
+    ignore_errors: true
+    become_user: postgres
+
+  - debug:
+      var: postgis_raster_diag.stdout_lines
+    when: postgis_installcheck is defined and postgis_installcheck.rc != 0 and postgis_raster_diag is defined
+
   - name: Fail the playbook if the postgis regression suite failed
     fail:
       msg: "PostGIS installcheck failed with return code {{ postgis_installcheck.rc }} - see regression diffs above"
