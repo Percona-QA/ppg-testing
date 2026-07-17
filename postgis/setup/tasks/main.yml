@@ -486,6 +486,35 @@
     ignore_errors: true
     become_user: postgres
 
+  # Confirmed GTiff driver is genuinely missing from gdalinfo --formats, not
+  # just a harness/plumbing issue - but that alone doesn't say whether GDAL
+  # was built without TIFF support entirely (unusual - GTiff is normally a
+  # baseline/core driver even in plugin-based GDAL builds) or whether it
+  # exists as a separate, unloaded plugin package. Gathering concrete
+  # package/file evidence rather than guessing a specific package name to
+  # add next.
+  - name: Gather evidence on what the installed gdal package actually provides
+    shell: |
+      echo "=== rpm -qi gdal ==="
+      rpm -qi gdal 2>&1
+      echo "=== rpm -ql gdal (filtered for tiff/plugin/driver) ==="
+      rpm -ql gdal 2>&1 | grep -i -E "tiff|plugin|driver" || echo "no matching files in gdal package"
+      echo "=== gdalplugins directory (GDAL 3.x often loads optional drivers from here) ==="
+      find / -maxdepth 6 -iname "*gdalplugins*" -o -iname "*gdal_GTIFF*" -o -iname "*gdal_GTiff*" 2>/dev/null
+      echo "=== other gdal-related packages available from enabled repos ==="
+      dnf list available 'gdal*' 2>&1
+      echo "=== other gdal-related packages already installed ==="
+      dnf list installed 'gdal*' 2>&1
+    args:
+      executable: /bin/bash
+    register: postgis_gdal_evidence
+    when: postgis_installcheck is defined and postgis_installcheck.rc != 0
+    ignore_errors: true
+
+  - debug:
+      var: postgis_gdal_evidence.stdout_lines
+    when: postgis_installcheck is defined and postgis_installcheck.rc != 0 and postgis_gdal_evidence is defined
+
   - debug:
       var: postgis_raster_diag.stdout_lines
     when: postgis_installcheck is defined and postgis_installcheck.rc != 0 and postgis_raster_diag is defined
