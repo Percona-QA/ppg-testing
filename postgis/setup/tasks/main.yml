@@ -183,11 +183,24 @@
       regexp: '^(CFLAGS\s*=.*) -flto=auto -ffat-lto-objects(.*)$'
       replace: '\1\2'
 
-  - name: Disable with_llvm in Makefile.global (llvm-lto segfaults doing bitcode staged-install here; not needed for SQL-level installcheck)
-    ansible.builtin.replace:
-      path: /usr/pgsql-{{ major_version }}/lib/pgxs/src/Makefile.global
-      regexp: '^with_llvm(\s*=\s*)yes\s*$'
-      replace: 'with_llvm\1no'
+  # TEMPORARILY DISABLED for a real-CI experiment: confirm whether the
+  # llvm-lto segfault (see comment above) is a genuine RHEL9 issue or an
+  # artifact of local Docker verification running under x86_64-on-arm64
+  # emulation (every local repro used --platform linux/amd64 on an arm64
+  # host). Neither pg_tde's nor pg_stat_monitor's LLVM_BINPATH handling
+  # (grep for llvm-lto in this repo) has ever needed to disable with_llvm -
+  # they only ensure llvm-lto exists, never that it doesn't crash - and
+  # Percona's own postgis packaging briefly pinned llvm-20 for postgis then
+  # reverted it a week later (postgres-packaging@d39983a4), reverting to the
+  # same generic/default llvm (21) this real CI run also uses. If this run
+  # segfaults here too, restore this task (with_llvm=no) - it's proven
+  # necessary on real hardware, not just emulation. If it passes, the
+  # earlier Docker crash was emulation-specific and this task can stay removed.
+  # - name: Disable with_llvm in Makefile.global (llvm-lto segfaults doing bitcode staged-install here; not needed for SQL-level installcheck)
+  #   ansible.builtin.replace:
+  #     path: /usr/pgsql-{{ major_version }}/lib/pgxs/src/Makefile.global
+  #     regexp: '^with_llvm(\s*=\s*)yes\s*$'
+  #     replace: 'with_llvm\1no'
 
   - name: Record the actual build-time library versions we're about to compile against
     shell: |
