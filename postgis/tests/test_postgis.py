@@ -142,17 +142,28 @@ def test_sfcgal_3d_solid_operations(host):
     sfcgal_version = _psql(host, "SELECT postgis_sfcgal_version();")
     assert sfcgal_version, "postgis_sfcgal_version() returned no output"
 
-    # Extrude a flat 4x4 square by height 3 into a 4x4x3 box.
-    # Surface area of a box = 2*(l*w + l*h + w*h) = 2*(16 + 12 + 12) = 80.
+    # Extrude a flat 4x4 square by height 3 into a 4x4x3 box, volume = l*w*h = 48.
     # Using a rectangular prism (no curves) keeps this exact across SFCGAL
     # versions - no floating-point tessellation noise to account for.
-    surface_area = _psql(
+    #
+    # ST_Volume, not ST_3DArea: a live CI run caught that ST_3DArea returns 0
+    # here against Percona's shipped SFCGAL 2.2.0 (percona-postgis35 requires
+    # SFCGAL >= 2.1.0). Confirmed via direct reproduction that ST_Extrude's
+    # output is a genuine closed solid (ST_IsSolid = true) - SFCGAL 2.x's
+    # sfcgal_geometry_area_3d() returns 0 for a Solid-flagged geometry (its
+    # "area" isn't well-defined the way it was for the pre-2.x PolyhedralSurface
+    # ST_Extrude used to return), while sfcgal_geometry_volume() handles a
+    # Solid correctly. ST_3DArea of the identical WKT re-parsed as a plain
+    # (non-solid-flagged) PolyhedralSurface literal does still return 80,
+    # confirming this is a Solid-vs-surface API distinction in SFCGAL 2.x, not
+    # a broken build.
+    volume = _psql(
         host,
-        "SELECT ST_3DArea(ST_Extrude(ST_MakePolygon(ST_MakeLine(ARRAY["
+        "SELECT ST_Volume(ST_Extrude(ST_MakePolygon(ST_MakeLine(ARRAY["
         "ST_MakePoint(0,0), ST_MakePoint(4,0), ST_MakePoint(4,4),"
         "ST_MakePoint(0,4), ST_MakePoint(0,0)])), 0, 0, 3));",
     )
-    assert float(surface_area) == pytest.approx(80.0), surface_area
+    assert float(volume) == pytest.approx(48.0), volume
 
 
 # ---------------------------------------------------------------------------

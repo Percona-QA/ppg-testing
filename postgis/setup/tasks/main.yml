@@ -11,13 +11,6 @@
   - name: Configure repository
     include_tasks: ../../../../tasks/enable_repo.yml
 
-  # Neither EPEL nor an explicit CRB enable is needed here: CRB is already
-  # enabled unconditionally for every RHEL9 scenario by
-  # playbooks/prepare.yml (the shared molecule "prepare" phase, which runs
-  # before this role's converge), and the GDAL/GEOS/PROJ/SFCGAL packages
-  # needed below come from Percona's own repo (enabled just above) instead
-  # of EPEL - see the longer comment further down for why.
-
   - name: install Percona Platform for PostgreSQL rpm packages
     yum:
       name: "{{ packages }}"
@@ -31,6 +24,8 @@
       - percona-postgresql{{ major_version }}-contrib
       - percona-postgresql{{ major_version }}-libs
       - percona-postgresql{{ major_version }}-server
+      - percona-postgresql{{ major_version }}-devel
+
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
@@ -64,146 +59,32 @@
       state: started
       enabled: yes
 
-  - name: Select available extensions
+  - name: CREATE EXTENSION postgis/postgis_raster/postgis_sfcgal/fuzzystrmatch/address_standardizer(_data_us)/postgis_tiger_geocoder/postgis_topology
     become_user: postgres
-    command: psql -c "SELECT name, default_version,installed_version FROM pg_available_extensions WHERE name LIKE 'postgis%' or name LIKE 'address%';"
-    register: results
+    command: psql -c "CREATE EXTENSION {{ item }};"
+    loop:
+      - postgis
+      - postgis_raster
+      - postgis_sfcgal
+      - fuzzystrmatch
+      - address_standardizer
+      - address_standardizer_data_us
+      - postgis_tiger_geocoder
+      - postgis_topology
 
-  - debug:
-      var: results.stdout_lines
-
-  - name: CREATE EXTENSION postgis
+  # postgis_raster ships with GDAL output drivers disabled by default
+  # (postgis.gdal_enabled_drivers boots to "DISABLE_ALL" - a security
+  # hardening default.
+  - name: Enable GDAL raster output drivers (disabled by default for security)
     become_user: postgres
-    command: psql -c "CREATE EXTENSION postgis;"
-    register: results
+    command: psql -c "ALTER DATABASE postgres SET \"postgis.gdal_enabled_drivers\" = 'ENABLE_ALL';"
 
-  - debug:
-      var: results.stdout_lines
-
-  - name: CREATE EXTENSION postgis_raster
-    become_user: postgres
-    command: psql -c "CREATE EXTENSION postgis_raster;"
-    register: results
-
-  - debug:
-      var: results.stdout_lines
-
-  - name: CREATE EXTENSION postgis_sfcgal
-    become_user: postgres
-    command: psql -c "CREATE EXTENSION postgis_sfcgal;"
-    register: results
-
-  - debug:
-      var: results.stdout_lines
-
-  - name: CREATE EXTENSION fuzzystrmatch
-    become_user: postgres
-    command: psql -c "CREATE EXTENSION fuzzystrmatch; "
-    register: results
-
-  - debug:
-      var: results.stdout_lines
-
-  - name: CREATE EXTENSION address_standardizer
-    become_user: postgres
-    command: psql -c "CREATE EXTENSION address_standardizer;"
-    register: results
-
-  - debug:
-      var: results.stdout_lines
-
-  - name: CREATE EXTENSION address_standardizer_data_us
-    become_user: postgres
-    command: psql -c "CREATE EXTENSION address_standardizer_data_us;"
-    register: results
-
-  - debug:
-      var: results.stdout_lines
-
-  - name: CREATE EXTENSION postgis_tiger_geocoder
-    become_user: postgres
-    command: psql -c "CREATE EXTENSION postgis_tiger_geocoder;"
-    register: results
-
-  - debug:
-      var: results.stdout_lines
-
-  - name: CREATE EXTENSION postgis_topology
-    become_user: postgres
-    command: psql -c "CREATE EXTENSION postgis_topology;"
-    register: results
-
-  - debug:
-      var: results.stdout_lines
-
-  - name: Display ppg version
-    become_user: postgres
-    shell: psql -c "select version()"
-    register: results
-
-  - debug:
-        var: results.stdout_lines
-
-  - name: Select available extensions
-    become_user: postgres
-    command: psql -c "SELECT name, default_version,installed_version FROM pg_available_extensions WHERE name LIKE 'postgis%' or name LIKE 'address%';"
-    register: results
-
-  - debug:
-      var: results.stdout_lines
-
-  - name: Select available extensions
-    become_user: postgres
-    command: psql -c "SELECT PostGIS_Full_Version();"
-    register: results
-
-  - debug:
-      var: results.stdout_lines
-
-  # Functional/regression assertions (library-linkage checks, ST_Distance,
-  # ST_Contains, raster, topology, address_standardizer, tiger_geocoder, etc.)
-  # live in postgis/tests/test_postgis.py and run via the testinfra verify
-  # step, not here. Keeping only install/setup steps in this task file avoids
-  # duplicating assertion logic in both YAML and Python.
-
-  # =============================
   # PostGIS's own upstream regression suite, run via `make installcheck`
   # against the already-installed Percona package (same principle as
   # pg_audit/pg_repack/wal2json/pgvector: build from source only to get the
   # regress harness's helper binaries, never `make install`, so installcheck
   # validates the shipped package's SQL/library files, not a from-source
   # build).
-  #
-  # GEOS/PROJ/GDAL/SFCGAL/json-c/protobuf-c come from Percona's own repo
-  # (already enabled via enable_repo.yml above) and CRB (already enabled for
-  # every RHEL9 scenario by playbooks/prepare.yml, unconditionally, before
-  # this role's converge ever runs) - not EPEL. This was arrived at only
-  # after reproducing the problem directly in a local Rocky Linux 9 +
-  # EPEL + CRB Docker container (matching this AMI) rather than continuing
-  # to guess against real CI:
-  #   - RHEL9/Rocky9's own base `gdal`/`gdal-devel` (AppStream) is a
-  #     deliberately minimal build with almost no raster format drivers
-  #     (only VRT/MEM) - installing it, or EPEL's `gdal-devel`, gets you
-  #     enough to link `libgdal.so` but NOT working TIFF support.
-  #   - `dnf repoquery --requires percona-postgis35_18` against the real
-  #     Percona repo shows it actually depends on `gdal311-libs >= 3.11.0`,
-  #     `geos311 >= 3.11.2`, and `proj95 >= 9.5.1` - not the versions a
-  #     naming coincidence would suggest (e.g. NOT gdal35/geos313/proj96).
-  #     Percona ships these under versioned package names (gdal311, geos311,
-  #     proj95) specifically so multiple GDAL/GEOS/PROJ versions can coexist
-  #     without conflicting - confirmed gdal311's gdalinfo has full GTiff/COG
-  #     support.
-  #   - Those versioned Percona packages install to their OWN prefix
-  #     (/usr/gdal311, /usr/geos311, /usr/proj95), not standard system paths -
-  #     confirmed via `rpm -ql`, so PATH/PKG_CONFIG_PATH need to include them
-  #     explicitly for ./configure's autodetection to find them at all.
-  #   - SFCGAL and json-c-devel/protobuf-c-devel DO use standard system paths
-  #     (SFCGAL is available from both Percona's repo and EPEL with
-  #     compatible sonames; json-c-devel/protobuf-c-devel are CRB-only,
-  #     already enabled globally, not from EPEL as previously assumed).
-  #   - config.log is dumped on a configure failure since that's the only
-  #     place autotools records *why* a library wasn't detected.
-  # =============================
 
   - name: Record the shipped package's actual linked library versions (ground truth for comparison below)
     become_user: postgres
@@ -229,11 +110,6 @@
         - gcc-c++
         - git
         - perl
-        # liblwgeom's WKT parser (lwin_wkt_parse.c) is generated from a
-        # grammar file at build time - configure only warns "checking for
-        # bison... no" / "checking for flex... no" (doesn't hard-fail there),
-        # but `make` then fails later with "No yacc found, cannot build
-        # parser" once it actually needs to generate the parser.
         - bison
         - flex
         # Version-matched to percona-postgis35_18's real declared
@@ -250,46 +126,11 @@
         - json-c-devel
         - protobuf-c-devel
         - libxml2-devel
-        # proj95's own .pc file declares `Requires.private: sqlite3
-        # libtiff-4 libcurl` - without these three (plain RHEL9 AppStream
-        # packages, no EPEL/CRB/Percona repo needed), pkg-config fails to
-        # resolve proj's private requires and ./configure falls back to
-        # "configure: error: could not find proj.h", even with
-        # PKG_CONFIG_PATH pointing straight at proj95's own pkgconfig dir.
-        # Confirmed directly: installing these three made `pkg-config
-        # --cflags --libs proj` succeed with no other change.
         - sqlite-devel
         - libcurl-devel
         - libtiff-devel
-        # PCRE2 detection (unlike SFCGAL's PATH-only sfcgal-config search)
-        # goes through pkg-config (PKG_CHECK_MODULES([PCRE2],
-        # [libpcre2-8])) - installing this plain AppStream package is what
-        # turns on "Address Standardizer support: enabled" in the configure
-        # summary and lets address_standardizer build at all.
         - pcre2-devel
-        # Note: percona-postgis35_{{ major_version }}-devel is NOT listed here even
-        # though it's a real package - it ships headers for *consumers* of postgis's
-        # C API (liblwgeom.h etc.), not anything postgis's own build needs. It's
-        # already installed above by the "install Percona Platform for PostGis rpm
-        # packages" task regardless.
-        #
-        # percona-postgresql{{ major_version }}-devel ships pgxs.mk
-        # (/usr/pgsql-{{ major_version }}/lib/pgxs/src/makefiles/pgxs.mk) - without
-        # it, postgis's `./configure` finds pg_config fine (that's in a different
-        # package) but fails with "the PGXS Makefile ... cannot be found", since
-        # this role never needed to build anything against the PGXS build system
-        # before now.
-        - "percona-postgresql{{ major_version }}-devel"
 
-  # pg_tde hit the exact same problem building from source on RHEL9:
-  # CFLAGS inherited from `pg_config --cflags` include
-  # -Wmissing-variable-declarations, which needs gcc 12+, and RHEL9's stock
-  # gcc is 11.x. Confirmed here too: postgis's ./configure test-compiles a
-  # small program linking against -lpq using those inherited CFLAGS (to
-  # check for PQserverVersion), that test-compile fails with "cc1: error:
-  # unrecognized command-line option '-Wmissing-variable-declarations'", and
-  # configure then reports the misleading "configure: error: could not find
-  # libpq" - the library was found fine, the compile test just never ran.
   # Same fix as pgaudit13_set_user/setup: install gcc-toolset-14 and source
   # its enable script before configure/build/installcheck.
   - name: Install gcc-toolset-14 for CFLAGS/LTO compatibility on RHEL 9
