@@ -112,7 +112,7 @@
         - perl
         - bison
         - flex
-        # Version-matched to percona-postgis35_18's real declared
+        # Version-matched to percona-postgis35_XX's real declared
         # dependencies (gdal311-libs >= 3.11.0, geos311 >= 3.11.2,
         # proj95 >= 9.5.1) - from Percona's own repo, not EPEL/base RHEL.
         - gdal311
@@ -138,67 +138,6 @@
       name: gcc-toolset-14
       state: present
     when: ansible_distribution_major_version == "9"
-
-  # percona-postgresql{{ major_version }}-devel ships a static
-  # Makefile.global (baked in at the time Percona built postgres itself)
-  # that every PGXS extension build, including this from-source postgis
-  # build, inherits verbatim - re-running pg_config at postgis-build-time
-  # does NOT re-derive these flags, they come straight from this file.
-  #
-  # CFLAGS includes GCC's own LTO flags (-flto=auto -ffat-lto-objects).
-  # postgis's raster driver links C objects built by gcc-toolset-14's gcc
-  # against C++ objects (Wagyu/FlatGeobuf) built with LLVM bitcode
-  # (-flto=thin -emit-llvm) - mixing the two LTO formats in one link step
-  # crashes the linker with "lto1: internal compiler error: in
-  # return_token, at opts-common.cc:2177". Confirmed this is a genuine
-  # consequence of this role's simplified `./configure` (no --enable-lto)
-  # + plain `make` invocation, not an environment artifact: switching to
-  # Percona's own official build recipe (--enable-lto, --with-projdir, the
-  # staged make invocation from postgis/rpm/percona-postgis35.spec) made
-  # the crash disappear WITHOUT touching CFLAGS at all, under the same
-  # test conditions. Stripping just these two flags here (not the whole
-  # CFLAGS, which would also wipe out needed -I include paths) is the
-  # simpler fix given this role deliberately doesn't replicate the full
-  # official recipe.
-  #
-  # (A second Makefile.global setting, with_llvm, was also patched to "no"
-  # at one point after a local Docker repro showed `llvm-lto -thinlto
-  # -thinlto-action=thinlink` segfaulting during installcheck's bitcode
-  # staged-install step. A real-CI experiment (removing just that patch)
-  # confirmed installcheck passes fine on real hardware with with_llvm
-  # left enabled - the segfault only ever reproduced under local Docker
-  # verification, which runs x86_64-on-arm64 under emulation on this Mac.
-  # So that patch was emulation-specific, not a real RHEL9 issue, and has
-  # been removed rather than kept as unnecessary weight.)
-  #
-  # This edit only affects this role's own from-source regression-testing
-  # build environment - it does not touch the already-installed, already-
-  # verified percona-postgis35_{{ major_version }} package under test.
-  - name: Back up the stock Makefile.global before patching it
-    ansible.builtin.copy:
-      src: /usr/pgsql-{{ major_version }}/lib/pgxs/src/Makefile.global
-      dest: /usr/pgsql-{{ major_version }}/lib/pgxs/src/Makefile.global.orig
-      remote_src: true
-      force: false
-
-  # TEMPORARILY DISABLED for a second real-CI experiment (same spirit as the
-  # with_llvm one above, which turned out to be a pure Docker-emulation
-  # artifact): the "recipe-dependent, not emulation-dependent" conclusion
-  # for this crash was only ever tested by varying the recipe while holding
-  # emulation constant (both the failing and passing runs were under the
-  # same --platform linux/amd64 Docker on this arm64 Mac) - never by
-  # testing this role's actual simplified recipe on real, non-emulated
-  # hardware. lto1 (GCC's own LTO codegen pass) is the same class of tool
-  # as llvm-lto (complex, codegen-heavy) - exactly the kind emulation tends
-  # to destabilize - so the same doubt applies here. If this run crashes
-  # with "lto1: internal compiler error" too, restore this task - it's
-  # proven necessary on real hardware. If make succeeds, this crash was
-  # also emulation-specific and this task can stay removed.
-  # - name: Strip GCC LTO flags from Makefile.global's CFLAGS (incompatible with LLVM-bitcode objects linked into the same .so)
-  #   ansible.builtin.replace:
-  #     path: /usr/pgsql-{{ major_version }}/lib/pgxs/src/Makefile.global
-  #     regexp: '^(CFLAGS\s*=.*) -flto=auto -ffat-lto-objects(.*)$'
-  #     replace: '\1\2'
 
   - name: Record the actual build-time library versions we're about to compile against
     shell: |
@@ -246,11 +185,8 @@
       PATH: "/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
 
   # gdal311/geos311/proj95 install to their own prefixes (/usr/gdal311,
-  # /usr/geos311, /usr/proj95), not standard system paths - PATH/
+  # /usr/geos311, /usr/proj95), not standard system paths - PATH
   # PKG_CONFIG_PATH need these explicitly for ./configure's autodetection
-  # to find gdal-config/geos-config/pkg-config files at all (SFCGAL and
-  # json-c/protobuf-c use standard system paths already on the default
-  # search path, no addition needed for those).
   - name: Configure postgis against the already-installed GEOS/PROJ/GDAL/SFCGAL/json-c libraries
     shell: |
       {% if ansible_distribution_major_version == "9" %}
@@ -311,6 +247,12 @@
       msg: "postgis `make` failed with return code {{ postgis_build.rc }} - see build log above"
     when: postgis_build is defined and postgis_build.rc != 0
 
+  # PostGIS's test suite runs via `make installcheck`
+  # against the already-installed Percona package (same principle as
+  # pg_audit/pg_repack/wal2json/pgvector: build from source only to get the
+  # regress harness's helper binaries, never `make install`, so installcheck
+  # validates the shipped package's SQL/library files, not a from-source
+  # build).
   - name: Run the PostGIS regression suite against the installed package
     shell: |
       {% if ansible_distribution_major_version == "9" %}
@@ -330,14 +272,8 @@
   - debug:
       var: postgis_installcheck.stdout_lines
 
+  # Kept as a safety and diagnosis net for reference in case of a failure
   - name: Find regression diff/error files if the suite failed
-    # A prior run failed 14 raster loader tests ("running raster2pgsql:
-    # /tmp/pgis_reg/loader.err") but this task only searched /tmp/postgis
-    # for *.diffs - the regress harness's own working directory
-    # (/tmp/pgis_reg) is a completely different path, and .err files (the
-    # loader's own stderr capture) were never looked for at all, so we
-    # never actually saw why raster2pgsql failed. Search both known
-    # directories and both file patterns now.
     shell: >
       find /tmp/postgis /tmp/pgis_reg \( -name "*.diffs" -o -name "*.err" \)
       -exec sh -c 'echo "=== {} ==="; cat "{}"' \; 2>/dev/null
@@ -350,11 +286,7 @@
       var: postgis_diffs.stdout_lines
     when: postgis_installcheck is defined and postgis_installcheck.rc != 0 and postgis_diffs is defined
 
-  # Kept as an ongoing safety net (not because this is still an open
-  # question - reproduced and root-caused directly in a local Rocky 9 Docker
-  # container matching this AMI: gdal311 has full GTiff/COG support and is
-  # what's now installed above). If this ever fires again in CI, it means
-  # something about the environment has drifted from what was verified.
+  # Kept as a safety and diagnosis net for reference in case of a failure
   - name: Diagnose raster2pgsql's ability to read a real test raster directly (bypassing the regress harness)
     shell: |
       export PATH="/usr/gdal311/bin:/usr/geos311/bin:$PATH"
