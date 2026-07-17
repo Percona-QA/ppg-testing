@@ -139,6 +139,57 @@
       state: present
     when: ansible_distribution_major_version == "9"
 
+  # PostgreSQL's JIT bitcode index is built with $(LLVM_BINPATH)/llvm-lto.
+  # Try to install the exact matching llvm major first (keeps clang/llvm-lto
+  # runtime llvm-libs internally consistent), and if that specific major
+  # isn't available in the repos, fall back to symlinking whatever
+  # llvm-lto binary IS present into the path PG's Makefile.global expects,
+  # so the build still completes.
+  - name: Ensure llvm toolchain matches target PostgreSQL for JIT bitcode (RHEL)
+    shell: |
+      set -uo pipefail
+      MG="/usr/pgsql-{{ major_version }}/lib/pgxs/src/Makefile.global"
+      [ -f "$MG" ] || { echo "Makefile.global not found at $MG; skipping"; exit 0; }
+
+      LLVM_BIN=$(awk -F= '/^LLVM_BINPATH/{gsub(/ /,"",$2); print $2; exit}' "$MG")
+      if [ -z "$LLVM_BIN" ]; then
+        echo "with_llvm not enabled (no LLVM_BINPATH); nothing to do"; exit 0
+      fi
+      if [ -x "$LLVM_BIN/llvm-lto" ]; then
+        echo "llvm-lto already present at $LLVM_BIN/llvm-lto"; exit 0
+      fi
+
+      VER=$(echo "$LLVM_BIN" | sed -n 's;.*/llvm\([0-9]\+\).*;\1;p')
+      echo "PG built with llvm major: ${VER:-unknown} (LLVM_BINPATH=$LLVM_BIN)"
+
+      # Preferred: install the matching major (the provider is the unversioned
+      # `llvm` package at that version, e.g. llvm-20.*, not a `llvm20` package).
+      if [ -n "$VER" ]; then
+        dnf install -y --allowerasing "llvm-${VER}*" "llvm-devel-${VER}*" "clang-${VER}*" || true
+      fi
+      if [ -x "$LLVM_BIN/llvm-lto" ]; then
+        echo "Installed matching llvm ${VER}"; exit 0
+      fi
+
+      # Fallback: symlink an existing llvm-lto into the expected path.
+      LTO=$(command -v llvm-lto 2>/dev/null || find /usr/bin /usr/lib64 /opt/rh -name llvm-lto 2>/dev/null | head -1)
+      if [ -z "$LTO" ]; then
+        echo "ERROR: llvm-lto not found and llvm-${VER} unavailable" >&2
+        exit 1
+      fi
+      echo "WARN: llvm-${VER} unavailable; symlinking $LTO -> $LLVM_BIN/llvm-lto"
+      mkdir -p "$LLVM_BIN"
+      ln -sf "$LTO" "$LLVM_BIN/llvm-lto"
+    args:
+      executable: /bin/bash
+    become: true
+    register: postgis_llvm_setup
+    when: ansible_os_family == "RedHat"
+
+  - debug:
+      var: postgis_llvm_setup.stdout_lines
+    when: ansible_os_family == "RedHat"
+
   - name: Record the actual build-time library versions we're about to compile against
     shell: |
       export PATH="/usr/gdal311/bin:/usr/geos311/bin:$PATH"
