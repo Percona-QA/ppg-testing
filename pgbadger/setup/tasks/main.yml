@@ -77,11 +77,8 @@
     chdir: "/tmp/pgbadger"
   become_user: postgres
 
-- name: Install pgbadger from sources
-  make:
-    target: install
-    chdir: "/tmp/pgbadger"
-  become: true
+# Deliberately no `make install`. Removed so the
+# packaged binary stays intact and testable.
 
 - name: Restart Postgres RHEL
   service:

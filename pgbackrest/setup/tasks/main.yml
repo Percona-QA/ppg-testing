@@ -138,11 +138,15 @@
   ignore_errors: true
   register: output
 
+  # Explicitly listing every test/define.yaml module except `performance`
 - name: Run pgbackrest regression
   become_user: postgres
   command: pgbackrest/test/test.pl --psql-bin=/usr/lib/postgresql/{{ major_version }}/bin \
     --no-valgrind --log-level-test-file=off --no-coverage-report \
-    --module=command --module=storage --vm-out --vm=none --no-coverage --test-path /tmp
+    --module=common --module=protocol --module=config --module=storage \
+    --module=postgres --module=build --module=test --module=info \
+    --module=db --module=command --module=doc --module=integration \
+    --vm-out --vm=none --no-coverage --test-path /tmp
   args:
     chdir: "/tmp"
   ignore_errors: true

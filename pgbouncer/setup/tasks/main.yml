@@ -132,16 +132,11 @@
       PATH: "/usr/lib/postgresql/{{ major_version }}/bin:{{ ansible_env.PATH }}"
     become_user: postgres
 
-  # - name: Make install pgbouncer
-  #   shell: make install
-  #   args:
-  #     chdir: /tmp/pgbouncer
-  #   environment:
-  #     PATH: "/usr/lib/postgresql/{{ major_version }}/bin:{{ ansible_env.PATH }}"
-  #   become: true
-
+  # pgbouncer's own test suite (test/utils.py) already supports pointing at
+  # an arbitrary binary via the BOUNCER_EXE env var: `BOUNCER_EXE =
+  # os.environ.get("BOUNCER_EXE", TEST_DIR / "../pgbouncer")`
   - name: pytest run
-    shell: | 
+    shell: |
       python3 -m venv validation
       source validation/bin/activate
       pip install --upgrade pip
@@ -151,6 +146,7 @@
       chdir: /tmp/pgbouncer
     environment:
       PATH: "/tmp/pgbouncer/validation/bin:/usr/lib/postgresql/{{ major_version }}/bin:{{ ansible_env.PATH }}"
+      BOUNCER_EXE: /usr/sbin/pgbouncer
     become_user: postgres
     register: results
 
@@ -158,13 +154,6 @@
     debug:
       var: results.stdout_lines
 
-  # The functional suite above runs against a from-source build (make install
-  # is intentionally skipped so it doesn't clobber the packaged binary). This
-  # check independently confirms the actual percona-pgbouncer package
-  # installed above is present and runnable. Full parity (pointing the pytest
-  # suite's fixtures at the packaged binary instead of the source build) needs
-  # inspection of pgbouncer's own test-harness internals and is tracked as a
-  # follow-up, not attempted here.
   - name: Verify packaged percona-pgbouncer binary runs
     command: pgbouncer --version
     register: pgbouncer_version
@@ -179,23 +168,3 @@
 
   - debug:
       var: pgbouncer_version.stdout_lines
-
-  # - name: Install pip requirements
-  #   shell: pip3 install -r requirements.txt
-  #   args:
-  #     chdir: /tmp/pgbouncer
-  #   environment:
-  #     PATH: "/usr/lib/postgresql/{{ major_version }}/bin:{{ ansible_env.PATH }}"
-  #   become: true
-
-  # - name: Run pgbouncer tests
-  #   shell: pytest
-  #   args:
-  #     chdir: /tmp/pgbouncer
-  #   environment:
-  #     PATH: "/usr/lib/postgresql/{{ major_version }}/bin:{{ ansible_env.PATH }}:/var/lib/postgresql/.local/bin"
-  #   become_user: postgres
-  #   register: results
-
-  # - debug:
-  #     var: results.stdout
