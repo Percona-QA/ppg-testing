@@ -263,6 +263,14 @@
         - flex
         - geos-devel
         - proj-devel
+        # gdal-devel alone was not enough: `gdalinfo` (from the base `gdal`
+        # package) was reported "command not found", meaning gdal-devel's
+        # RPM dependencies did NOT pull in the full runtime package here -
+        # likely missing driver/data files that raster2pgsql needs to
+        # actually read raster formats at runtime, not just link against
+        # libgdal.so at build time (which gdal-devel alone did provide,
+        # since raster2pgsql built and linked successfully).
+        - gdal
         - gdal-devel
         - json-c-devel
         - protobuf-c-devel
@@ -465,6 +473,8 @@
     shell: |
       echo "=== gdalinfo --version ==="
       gdalinfo --version 2>&1 || echo "gdalinfo not found or failed"
+      echo "=== gdalinfo --formats (checking for GTiff driver specifically) ==="
+      gdalinfo --formats 2>&1 | grep -i tif || echo "no tif/GTiff driver listed (or gdalinfo unavailable)"
       echo "=== gdalinfo on the failing test raster ==="
       gdalinfo /tmp/postgis/raster/test/regress/loader/testraster2.tif 2>&1 || echo "gdalinfo failed to read the file, rc=$?"
       echo "=== freshly-built raster2pgsql on the same file ==="
