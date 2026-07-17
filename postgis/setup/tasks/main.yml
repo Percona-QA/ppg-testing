@@ -144,31 +144,35 @@
   # that every PGXS extension build, including this from-source postgis
   # build, inherits verbatim - re-running pg_config at postgis-build-time
   # does NOT re-derive these flags, they come straight from this file.
-  # Two settings in it are incompatible with building postgis from source
-  # here and need a direct, surgical patch (confirmed via a local Rocky 9
-  # Docker reproduction matching this AMI - both crashes below were 100%
-  # reproducible before the patch and gone after):
   #
-  #   1. CFLAGS includes GCC's own LTO flags (-flto=auto
-  #      -ffat-lto-objects). postgis's raster driver links C objects
-  #      built by gcc-toolset-14's gcc against C++ objects (Wagyu/
-  #      FlatGeobuf) built with LLVM bitcode (-flto=thin -emit-llvm) -
-  #      mixing the two LTO formats in one link step crashes the linker
-  #      with "lto1: internal compiler error: in return_token, at
-  #      opts-common.cc:2177". Stripping just these two flags (not the
-  #      whole CFLAGS, which would also wipe out needed -I include paths)
-  #      is enough to fix the link.
-  #   2. with_llvm = yes forces PGXS's staged-install step (used by `make
-  #      installcheck`) to also index LLVM bitcode (.bc) files for
-  #      Postgres's JIT feature, via `llvm-lto -thinlto
-  #      -thinlto-action=thinlink`. That binary segfaults in this
-  #      environment (likely a version mismatch between gcc-toolset-14's
-  #      bundled clang and the system's own llvm-lto). We only need SQL-
-  #      level regression correctness here, not JIT bitcode installation,
-  #      so disabling it is safe.
+  # CFLAGS includes GCC's own LTO flags (-flto=auto -ffat-lto-objects).
+  # postgis's raster driver links C objects built by gcc-toolset-14's gcc
+  # against C++ objects (Wagyu/FlatGeobuf) built with LLVM bitcode
+  # (-flto=thin -emit-llvm) - mixing the two LTO formats in one link step
+  # crashes the linker with "lto1: internal compiler error: in
+  # return_token, at opts-common.cc:2177". Confirmed this is a genuine
+  # consequence of this role's simplified `./configure` (no --enable-lto)
+  # + plain `make` invocation, not an environment artifact: switching to
+  # Percona's own official build recipe (--enable-lto, --with-projdir, the
+  # staged make invocation from postgis/rpm/percona-postgis35.spec) made
+  # the crash disappear WITHOUT touching CFLAGS at all, under the same
+  # test conditions. Stripping just these two flags here (not the whole
+  # CFLAGS, which would also wipe out needed -I include paths) is the
+  # simpler fix given this role deliberately doesn't replicate the full
+  # official recipe.
   #
-  # Both edits only affect this role's own from-source regression-testing
-  # build environment - they do not touch the already-installed, already-
+  # (A second Makefile.global setting, with_llvm, was also patched to "no"
+  # at one point after a local Docker repro showed `llvm-lto -thinlto
+  # -thinlto-action=thinlink` segfaulting during installcheck's bitcode
+  # staged-install step. A real-CI experiment (removing just that patch)
+  # confirmed installcheck passes fine on real hardware with with_llvm
+  # left enabled - the segfault only ever reproduced under local Docker
+  # verification, which runs x86_64-on-arm64 under emulation on this Mac.
+  # So that patch was emulation-specific, not a real RHEL9 issue, and has
+  # been removed rather than kept as unnecessary weight.)
+  #
+  # This edit only affects this role's own from-source regression-testing
+  # build environment - it does not touch the already-installed, already-
   # verified percona-postgis35_{{ major_version }} package under test.
   - name: Back up the stock Makefile.global before patching it
     ansible.builtin.copy:
@@ -177,30 +181,24 @@
       remote_src: true
       force: false
 
-  - name: Strip GCC LTO flags from Makefile.global's CFLAGS (incompatible with LLVM-bitcode objects linked into the same .so)
-    ansible.builtin.replace:
-      path: /usr/pgsql-{{ major_version }}/lib/pgxs/src/Makefile.global
-      regexp: '^(CFLAGS\s*=.*) -flto=auto -ffat-lto-objects(.*)$'
-      replace: '\1\2'
-
-  # TEMPORARILY DISABLED for a real-CI experiment: confirm whether the
-  # llvm-lto segfault (see comment above) is a genuine RHEL9 issue or an
-  # artifact of local Docker verification running under x86_64-on-arm64
-  # emulation (every local repro used --platform linux/amd64 on an arm64
-  # host). Neither pg_tde's nor pg_stat_monitor's LLVM_BINPATH handling
-  # (grep for llvm-lto in this repo) has ever needed to disable with_llvm -
-  # they only ensure llvm-lto exists, never that it doesn't crash - and
-  # Percona's own postgis packaging briefly pinned llvm-20 for postgis then
-  # reverted it a week later (postgres-packaging@d39983a4), reverting to the
-  # same generic/default llvm (21) this real CI run also uses. If this run
-  # segfaults here too, restore this task (with_llvm=no) - it's proven
-  # necessary on real hardware, not just emulation. If it passes, the
-  # earlier Docker crash was emulation-specific and this task can stay removed.
-  # - name: Disable with_llvm in Makefile.global (llvm-lto segfaults doing bitcode staged-install here; not needed for SQL-level installcheck)
+  # TEMPORARILY DISABLED for a second real-CI experiment (same spirit as the
+  # with_llvm one above, which turned out to be a pure Docker-emulation
+  # artifact): the "recipe-dependent, not emulation-dependent" conclusion
+  # for this crash was only ever tested by varying the recipe while holding
+  # emulation constant (both the failing and passing runs were under the
+  # same --platform linux/amd64 Docker on this arm64 Mac) - never by
+  # testing this role's actual simplified recipe on real, non-emulated
+  # hardware. lto1 (GCC's own LTO codegen pass) is the same class of tool
+  # as llvm-lto (complex, codegen-heavy) - exactly the kind emulation tends
+  # to destabilize - so the same doubt applies here. If this run crashes
+  # with "lto1: internal compiler error" too, restore this task - it's
+  # proven necessary on real hardware. If make succeeds, this crash was
+  # also emulation-specific and this task can stay removed.
+  # - name: Strip GCC LTO flags from Makefile.global's CFLAGS (incompatible with LLVM-bitcode objects linked into the same .so)
   #   ansible.builtin.replace:
   #     path: /usr/pgsql-{{ major_version }}/lib/pgxs/src/Makefile.global
-  #     regexp: '^with_llvm(\s*=\s*)yes\s*$'
-  #     replace: 'with_llvm\1no'
+  #     regexp: '^(CFLAGS\s*=.*) -flto=auto -ffat-lto-objects(.*)$'
+  #     replace: '\1\2'
 
   - name: Record the actual build-time library versions we're about to compile against
     shell: |
