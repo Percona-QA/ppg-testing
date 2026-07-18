@@ -116,6 +116,16 @@
     group: postgres
     mode: "0755"
 
+# move_home above relocates /var/lib/postgresql (postgres's original home,
+# which is also the parent of every cluster's data directory, create a symlink
+# to the moved home directory.
+- name: Symlink /var/lib/postgresql back to the moved home directory
+  become: true
+  ansible.builtin.file:
+    src: /home/postgres
+    dest: /var/lib/postgresql
+    state: link
+
 - name: Find process holding port 80
   ansible.builtin.shell: |
     # Find the PID using netstat or ss
