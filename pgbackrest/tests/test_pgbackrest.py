@@ -13,13 +13,9 @@ STANZA = "test"
 
 # These tests exercise the real percona-pgbackrest package (installed by
 # pgbackrest/setup/tasks/main.yml, which also writes pgbackrest.conf and
-# enables archive_mode/archive_command) - the from-source test.pl regression
-# suite run earlier in that same playbook only ever exercises its own
-# from-source build, never this package. Test order matters here: each test
+# enables archive_mode/archive_command). Test order matters here: each test
 # builds on state left by the previous one (stanza -> full backup ->
-# incremental backup -> restore), matching how pgpool/tests/test_pgpool.py
-# chains test_pgpool_failover -> test_pgpool_failback.
-
+# incremental backup -> restore).
 
 def _pgbackrest(host, args):
     with host.sudo("postgres"):
@@ -38,6 +34,24 @@ def _wait_for_postgres_ready(host, timeout=60):
         if result.rc == 0:
             return True
         time.sleep(2)
+    return False
+
+
+def _wait_for_postgres_stopped(host, timeout=30):
+    """
+    "systemctl stop postgresql" can return before the specific postgresql instance's
+    background workers (e.g. PG17+'s WAL summarizer, the archiver) have
+    actually released pg_wal and data directories, producing
+    "rm: cannot remove 'pg_wal': Directory not empty" (seen on a real PG18
+    CI run). Poll until no live (non-zombie) postgres process remains.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        with host.sudo():
+            check = host.run("ps -C postgres -o stat= | grep -v '^Z' | grep -q .")
+        if check.rc != 0:
+            return True
+        time.sleep(1)
     return False
 
 
@@ -89,6 +103,11 @@ def test_pgbackrest_restore_recovers_data(host):
     with host.sudo():
         stop_result = host.run("systemctl stop postgresql")
     assert stop_result.rc == 0, stop_result.stderr
+
+    assert _wait_for_postgres_stopped(host, timeout=30), (
+        "Postgres process(es) still running against {} 30s after "
+        "systemctl stop postgresql".format(PGDATA)
+    )
 
     with host.sudo():
         wipe_result = host.run("rm -rf {}/*".format(PGDATA))
