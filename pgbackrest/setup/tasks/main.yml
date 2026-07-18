@@ -169,3 +169,70 @@
   when:
     - regression is defined
     - regression.rc != 0
+
+# The regression suite above builds pgbackrest from source and only ever
+# exercises that from-source build - percona-pgbackrest, the package
+# customers actually install, was never installed or run at all. This
+# functional smoke test installs the real package and puts it to work
+# (stanza-create + a real full backup against the live cluster + info),
+# verified end-to-end in a local Docker container before adding it here.
+- name: Install real percona-pgbackrest package
+  apt:
+    name: percona-pgbackrest
+    state: latest
+    update_cache: yes
+  environment:
+    PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+- name: Start Postgres for the packaged pgbackrest functional test
+  service:
+    name: postgresql
+    state: started
+
+- name: Create pgbackrest repo directory
+  file:
+    path: /var/lib/pgbackrest
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0750"
+
+- name: Create /etc/pgbackrest directory
+  file:
+    path: /etc/pgbackrest
+    state: directory
+
+- name: Write pgbackrest.conf for the packaged-binary functional test
+  copy:
+    dest: /etc/pgbackrest/pgbackrest.conf
+    owner: postgres
+    group: postgres
+    content: |
+      [global]
+      repo1-path=/var/lib/pgbackrest
+      repo1-retention-full=2
+
+      [test]
+      pg1-path=/var/lib/postgresql/{{ major_version }}/main
+      pg1-port=5432
+
+- name: Enable archive_mode for the packaged pgbackrest functional test
+  lineinfile:
+    path: /etc/postgresql/{{ major_version }}/main/postgresql.conf
+    line: archive_mode = on
+
+- name: Set archive_command to the packaged pgbackrest binary
+  lineinfile:
+    path: /etc/postgresql/{{ major_version }}/main/postgresql.conf
+    line: "archive_command = 'pgbackrest --stanza=test archive-push %p'"
+
+- name: Restart Postgres to pick up archive_mode
+  service:
+    name: postgresql
+    state: restarted
+
+# stanza-create / backup / incremental backup / restore and all their
+# assertions live in pgbackrest/tests/test_pgbackrest.py (testinfra verify
+# step) instead of here - matching the postgis/pgpool pattern of keeping
+# setup/tasks/main.yml to install+configure only, with all functional
+# actions and assertions in one place in pytest.

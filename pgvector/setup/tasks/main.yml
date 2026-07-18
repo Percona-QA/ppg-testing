@@ -184,6 +184,7 @@
       params:
         USE_PGXS: 1
     become_user: postgres
+    ignore_errors: true
     register: installcheck
 
   - debug: var=installcheck.stdout_lines
@@ -195,6 +196,73 @@
       params:
         USE_PGXS: 1
     become_user: postgres
+    ignore_errors: true
     register: prove_installcheck
 
   - debug: var=prove_installcheck.stdout_lines
+
+  - name: Show regression.diffs if installcheck or prove_installcheck failed
+    shell: cat /tmp/pgvector/regression.diffs
+    register: diffs_output
+    when: >
+      (installcheck is defined and installcheck.rc != 0) or
+      (prove_installcheck is defined and prove_installcheck.rc != 0)
+    ignore_errors: true
+
+  - debug:
+      msg: "{{ diffs_output.stdout_lines }}"
+    when:
+      - diffs_output is defined
+      - diffs_output.stdout is defined
+      - diffs_output.stdout | length > 0
+
+  - name: Set pgvector artifact filename
+    set_fact:
+      artifact_filename: "pgvector-{{ lookup('env','VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.tar.gz"
+    when: >
+      (installcheck is defined and installcheck.rc != 0) or
+      (prove_installcheck is defined and prove_installcheck.rc != 0)
+
+  - name: Package and fetch pgvector failure artifacts to controller
+    shell: |
+      set -uo pipefail
+      ARTIFACT_BASENAME="{{ artifact_filename | default('') | replace('.tar.gz', '') }}"
+      ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
+      rm -rf "$ARTIFACT_DIR"
+      mkdir -p "$ARTIFACT_DIR"
+      find /tmp/pgvector -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      find /tmp/pgvector -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      find /tmp/pgvector -type d -name "tmp_check" -exec cp -r {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      find /var/log/postgresql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+      tar -czf "/tmp/{{ artifact_filename | default('pgvector-artifacts.tar.gz') }}" -C /tmp "$ARTIFACT_BASENAME"
+    args:
+      executable: /bin/bash
+    when: >
+      (installcheck is defined and installcheck.rc != 0) or
+      (prove_installcheck is defined and prove_installcheck.rc != 0)
+    ignore_errors: true
+    become: true
+
+  - name: Fetch pgvector failure artifacts to controller
+    fetch:
+      src: "/tmp/{{ artifact_filename }}"
+      dest: "{{ playbook_dir }}/../artifacts/"
+      fail_on_missing: false
+    when: >
+      (installcheck is defined and installcheck.rc != 0) or
+      (prove_installcheck is defined and prove_installcheck.rc != 0)
+    become: true
+
+  - name: Fail the playbook if installcheck failed
+    fail:
+      msg: "pgvector installcheck failed with return code {{ installcheck.rc }}"
+    when:
+      - installcheck is defined
+      - installcheck.rc != 0
+
+  - name: Fail the playbook if prove_installcheck failed
+    fail:
+      msg: "pgvector prove_installcheck failed with return code {{ prove_installcheck.rc }}"
+    when:
+      - prove_installcheck is defined
+      - prove_installcheck.rc != 0
