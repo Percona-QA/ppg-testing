@@ -159,23 +159,20 @@
   shell: cat /tmp/set_user/regression.diffs
   register: diffs_output
   when:
-    - installcheck is defined
-    - installcheck.rc != 0
+    - installcheck is failed
   ignore_errors: true
 
 - debug:
     msg: "{{ diffs_output.stdout_lines }}"
   when:
-    - installcheck is defined
-    - installcheck.rc != 0
+    - installcheck is failed
     - diffs_output is defined
 
 - name: Set pgaudit13_set_user artifact filename
   set_fact:
     artifact_filename: "pgaudit13_set_user-{{ lookup('env','VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.tar.gz"
   when:
-    - installcheck is defined
-    - installcheck.rc != 0
+    - installcheck is failed
 
 - name: Package and fetch pgaudit13_set_user failure artifacts to controller
   shell: |
@@ -191,8 +188,7 @@
   args:
     executable: /bin/bash
   when:
-    - installcheck is defined
-    - installcheck.rc != 0
+    - installcheck is failed
   ignore_errors: true
   become: true
 
@@ -202,13 +198,11 @@
     dest: "{{ playbook_dir }}/../artifacts/"
     fail_on_missing: false
   when:
-    - installcheck is defined
-    - installcheck.rc != 0
+    - installcheck is failed
   become: true
 
 - name: Fail the playbook if installcheck failed
   fail:
-    msg: "set_user installcheck failed with return code {{ installcheck.rc }}"
+    msg: "set_user installcheck failed with return code {{ installcheck.rc | default('unknown - see debug output above') }}"
   when:
-    - installcheck is defined
-    - installcheck.rc != 0
+    - installcheck is failed

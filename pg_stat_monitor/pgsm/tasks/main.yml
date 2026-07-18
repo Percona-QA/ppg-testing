@@ -69,15 +69,13 @@
     debug:
       var: installcheck.stderr_lines
     when:
-      - installcheck is defined
-      - installcheck.rc != 0
+      - installcheck is failed
 
   - name: Show regression.diffs if tests failed
     shell: cat /tmp/pg_stat_monitor/regression.diffs
     register: diffs_output
     when:
-      - installcheck is defined
-      - installcheck.rc != 0
+      - installcheck is failed
     ignore_errors: true
     become: true
 
@@ -85,8 +83,7 @@
     debug:
       msg: "{{ diffs_output.stdout_lines }}"
     when:
-      - installcheck is defined
-      - installcheck.rc != 0
+      - installcheck is failed
       - diffs_output is defined
 
   - name: Debug - find regression files and results dirs before packaging
@@ -135,7 +132,7 @@
       tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
     args:
       executable: /bin/bash
-    when: installcheck is defined and installcheck.rc != 0
+    when: installcheck is failed
     ignore_errors: true
     become: true
 
@@ -144,12 +141,11 @@
       src: "/tmp/{{ artifact_filename }}"
       dest: "{{ playbook_dir }}/../artifacts/"
       fail_on_missing: false
-    when: installcheck is defined and installcheck.rc != 0
+    when: installcheck is failed
     become: true
 
   - name: Fail if pg_stat_monitor installcheck failed
     fail:
-      msg: "pg_stat_monitor installcheck failed with return code {{ installcheck.rc }}"
+      msg: "pg_stat_monitor installcheck failed with return code {{ installcheck.rc | default('unknown - see debug output above') }}"
     when:
-      - installcheck is defined
-      - installcheck.rc != 0
+      - installcheck is failed

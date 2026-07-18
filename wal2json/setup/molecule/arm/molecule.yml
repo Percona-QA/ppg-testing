@@ -4,7 +4,7 @@ dependency:
 driver:
   name: ${driver}
 platforms:
-  - name: pgaudit-U22-arm-${BUILD_NUMBER}
+  - name: wal2json-U22-arm-${BUILD_NUMBER}
     region: ${region}
     image: ${ami_ubuntu22_arm64}
     vpc_subnet_id: ${vpc_subnet_id_aws2}
