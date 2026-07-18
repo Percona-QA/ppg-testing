@@ -4,7 +4,7 @@ dependency:
 driver:
   name: ${driver}
 platforms:
-  - name: rocky8-${BUILD_NUMBER}-${JOB_NAME}
+  - name: rocky8-arm-${BUILD_NUMBER}-${JOB_NAME}
     region: ${region}
     image: ${ami_rocky8_arm64}
     vpc_subnet_id: ${vpc_subnet_id_aws1}

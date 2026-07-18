@@ -4,7 +4,7 @@ dependency:
 driver:
   name: ${driver}
 platforms:
-  - name: unoble-${BUILD_NUMBER}-${JOB_NAME}
+  - name: unoble-arm-${BUILD_NUMBER}-${JOB_NAME}
     region: ${region}
     image: ${ami_ubuntu24_arm64}
     vpc_subnet_id: ${vpc_subnet_id_aws1}
