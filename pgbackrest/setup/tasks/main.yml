@@ -90,9 +90,10 @@
     append: yes
 
 - name: Stop Postgres
-  service:
-    name: postgresql
-    state: stopped
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: stopped
 - name: Ensure Apache is stopped and port 80 is free
   ansible.builtin.service:
     name: apache2
@@ -200,9 +201,10 @@
     PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
 - name: Start Postgres for the packaged pgbackrest functional test
-  service:
-    name: postgresql
-    state: started
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: started
 
 - name: Create pgbackrest repo directory
   file:
@@ -242,9 +244,10 @@
     line: "archive_command = 'pgbackrest --stanza=test archive-push %p'"
 
 - name: Restart Postgres to pick up archive_mode
-  service:
-    name: postgresql
-    state: restarted
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: restarted
 
 # stanza-create / backup / incremental backup / restore and all their
 # assertions live in pgbackrest/tests/test_pgbackrest.py (testinfra verify

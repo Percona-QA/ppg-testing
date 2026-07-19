@@ -82,7 +82,21 @@
 
   - name: Start server 1 (primary)
     become_user: postgres
-    command: /usr/pgsql-{{ major_version }}/bin/pg_ctl -D /tmp/data1 -l logfile-data1 start
+    command: /usr/pgsql-{{ major_version }}/bin/pg_ctl -D /tmp/data1 -l /tmp/data1/logfile-data1 start
+    register: pg_start1_result
+    ignore_errors: true
+
+  - name: Dump postgres server log if server 1 failed to start
+    include_tasks: ../../../../tasks/dump_logs.yml
+    vars:
+      log_files:
+        - /tmp/data1/logfile-data1
+    when: pg_start1_result is failed
+
+  - name: Fail if server 1 failed to start
+    fail:
+      msg: "pg_ctl start (data1) failed (rc={{ pg_start1_result.rc | default('unknown') }}): {{ pg_start1_result.stderr | default('') }}"
+    when: pg_start1_result is failed
 
   - name: Create User monitor
     become_user: postgres
@@ -158,7 +172,21 @@
 
   - name: Start server 2 (standby)
     become_user: postgres
-    command: /usr/pgsql-{{ major_version }}/bin/pg_ctl -D /tmp/data2 -l logfile-data2 start
+    command: /usr/pgsql-{{ major_version }}/bin/pg_ctl -D /tmp/data2 -l /tmp/data2/logfile-data2 start
+    register: pg_start2_result
+    ignore_errors: true
+
+  - name: Dump postgres server log if server 2 failed to start
+    include_tasks: ../../../../tasks/dump_logs.yml
+    vars:
+      log_files:
+        - /tmp/data2/logfile-data2
+    when: pg_start2_result is failed
+
+  - name: Fail if server 2 failed to start
+    fail:
+      msg: "pg_ctl start (data2) failed (rc={{ pg_start2_result.rc | default('unknown') }}): {{ pg_start2_result.stderr | default('') }}"
+    when: pg_start2_result is failed
 
   - name: Wait for standby to enter streaming recovery
     become_user: postgres
@@ -211,10 +239,10 @@
       mode: 0600
 
   - name: Start pgpool service
-    service:
-      name: pgpool
-      state: started
-      enabled: yes
+    include_tasks: ../../../../tasks/start_ha_service_with_diagnostics.yml
+    vars:
+      svc_name: pgpool
+      svc_state: started
 
   - name: Pause for 1 minutes
     ansible.builtin.pause:

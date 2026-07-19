@@ -81,7 +81,7 @@
 # packaged binary stays intact and testable.
 
 - name: Restart Postgres RHEL
-  service:
-    name: postgresql
-    state: restarted
-  register: out
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: restarted

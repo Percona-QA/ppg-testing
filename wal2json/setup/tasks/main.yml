@@ -127,9 +127,10 @@
     line: max_replication_slots = 10
 
 - name: Restart postgresql service
-  service:
-    name: postgresql
-    state: restarted
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: restarted
 
 - name: Test wal2json
   make:

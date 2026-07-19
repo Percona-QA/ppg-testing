@@ -54,10 +54,10 @@
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
   - name: Start Postgres RHEL
-    service:
-      name: postgresql-{{ major_version }}
-      state: started
-      enabled: yes
+    include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+    vars:
+      svc_name: postgresql-{{ major_version }}
+      svc_state: started
 
   - name: CREATE EXTENSION postgis/postgis_raster/postgis_sfcgal/fuzzystrmatch/address_standardizer(_data_us)/postgis_tiger_geocoder/postgis_topology
     become_user: postgres

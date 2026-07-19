@@ -164,15 +164,16 @@
       line: shared_preload_libraries = 'pg_stat_monitor'
 
   - name: Stop postgresql service for Debian based
-    service:
-      name: postgresql
-      state: stopped
+    include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+    vars:
+      svc_name: postgresql
+      svc_state: stopped
 
   - name: Start postgresql service for Debian based
-    service:
-      name: postgresql
-      state: started
-      enabled: true
+    include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+    vars:
+      svc_name: postgresql
+      svc_state: started
 
   - debug:
       var: results.stdout

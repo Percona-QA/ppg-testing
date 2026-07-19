@@ -117,9 +117,10 @@
       validate: 'visudo -cf %s'
 
 - name: Stop postgresql service for Debian based
-  service:
-    name: postgresql
-    state: stopped
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: stopped
 
 - name: Build pg_repack from sources (compile-only sanity check, packaged binary installed above is what installcheck runs against)
   make:
@@ -146,7 +147,21 @@
 
 - name: Start Server
   become_user: postgres
-  command: "{{ PGBIN }}/pg_ctl -w start -D {{ PGDATA }}"
+  command: "{{ PGBIN }}/pg_ctl -w -l {{ PGDATA }}/server.log start -D {{ PGDATA }}"
+  register: pg_start_result
+  ignore_errors: true
+
+- name: Dump postgres server log if Start Server failed
+  include_tasks: ../../../../tasks/dump_logs.yml
+  vars:
+    log_files:
+      - "{{ PGDATA }}/server.log"
+  when: pg_start_result is failed
+
+- name: Fail if Start Server failed
+  fail:
+    msg: "pg_ctl start failed (rc={{ pg_start_result.rc | default('unknown') }}): {{ pg_start_result.stderr | default('') }}"
+  when: pg_start_result is failed
 
 - name: Create tablesspace and folders
   script: create_tablespaces.sh
