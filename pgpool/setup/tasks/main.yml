@@ -239,7 +239,7 @@
       mode: 0600
 
   - name: Start pgpool service
-    include_tasks: ../../../../tasks/start_ha_service_with_diagnostics.yml
+    include_tasks: ../../../../tasks/start_service_with_diagnostics.yml
     vars:
       svc_name: pgpool
       svc_state: started

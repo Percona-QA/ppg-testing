@@ -219,7 +219,7 @@
     svc_state: started
 
 - name: Start telemetry-agent service
-  ansible.builtin.include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
+  ansible.builtin.include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
   vars:
     svc_name: percona-telemetry-agent
     svc_state: started

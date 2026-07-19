@@ -101,7 +101,7 @@
   shell: sed -i 's/16/{{ major_version }}/' /etc/patroni/postgresql.yml
 
 - name: Enable and start patroni with wait
-  include_tasks: ../../../../tasks/start_ha_service_with_diagnostics.yml
+  include_tasks: ../../../../tasks/start_service_with_diagnostics.yml
   vars:
     svc_name: patroni
     svc_state: started
@@ -257,27 +257,27 @@
     mode: 0644
 
 - name: Start etcd
-  include_tasks: ../../../../tasks/start_ha_service_with_diagnostics.yml
+  include_tasks: ../../../../tasks/start_service_with_diagnostics.yml
   vars:
     svc_name: etcd
     svc_state: started
 
 - name: Start patroni
-  include_tasks: ../../../../tasks/start_ha_service_with_diagnostics.yml
+  include_tasks: ../../../../tasks/start_service_with_diagnostics.yml
   vars:
     svc_name: patroni
     svc_state: started
     log_search_dir: /var/lib/pgsql
 
 - name: Start patroni1
-  include_tasks: ../../../../tasks/start_ha_service_with_diagnostics.yml
+  include_tasks: ../../../../tasks/start_service_with_diagnostics.yml
   vars:
     svc_name: patroni1
     svc_state: started
     log_search_dir: /var/lib/pgsql
 
 - name: Start patroni2
-  include_tasks: ../../../../tasks/start_ha_service_with_diagnostics.yml
+  include_tasks: ../../../../tasks/start_service_with_diagnostics.yml
   vars:
     svc_name: patroni2
     svc_state: started
