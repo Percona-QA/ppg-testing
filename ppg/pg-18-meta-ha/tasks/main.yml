@@ -2,6 +2,7 @@
 - name: Setting facts so that they will be persisted in the fact cache
   ansible.builtin.set_fact:
     pg_version_to_install: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
+    io_method: "{{ lookup('env', 'IO_METHOD') | default('worker') }}"
 
 - name: End play on Ubuntu 26 and versions older than 18.4
   meta: end_host
@@ -15,10 +16,43 @@
 - name: install Percona Platform for PostgreSQL 18 packages
   include_tasks: ../../../../tasks/install_ppg_meta_ha.yml
 
+- name: Comment out any existing io_method line (Debian, PG18+)
+  ansible.builtin.replace:
+    path: /etc/postgresql/18/main/postgresql.conf
+    regexp: '^(?!#)(.*io_method.*)$'
+    replace: '# \1'
+  when: ansible_os_family == "Debian"
+
+- name: Set io_method in postgresql.conf (Debian, PG18+)
+  ansible.builtin.lineinfile:
+    path: /etc/postgresql/18/main/postgresql.conf
+    line: "io_method = {{ io_method }}"
+  when: ansible_os_family == "Debian"
+
+- name: Restart postgresql service for Debian based (apply io_method)
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: restarted
+  when: ansible_os_family == "Debian"
+
 - name: Initialize Postgres RHEL
   command: /usr/pgsql-18/bin/postgresql-18-setup initdb
   environment:
     PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  when: ansible_os_family == "RedHat"
+
+- name: Comment out any existing io_method line (RHEL, PG18+)
+  ansible.builtin.replace:
+    path: /var/lib/pgsql/18/data/postgresql.conf
+    regexp: '^(?!#)(.*io_method.*)$'
+    replace: '# \1'
+  when: ansible_os_family == "RedHat"
+
+- name: Set io_method in postgresql.conf (RHEL, PG18+)
+  ansible.builtin.lineinfile:
+    path: /var/lib/pgsql/18/data/postgresql.conf
+    line: "io_method = {{ io_method }}"
   when: ansible_os_family == "RedHat"
 
 - name: Start Postgres RHEL
