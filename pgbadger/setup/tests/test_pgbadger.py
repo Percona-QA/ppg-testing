@@ -16,3 +16,11 @@ def test_pgbadger(host):
             raise AssertionError
 
 
+def test_packaged_pgbadger_binary_runs(host):
+    # This is the only check that the real
+    # percona-pgbadger package (installed by setup/tasks/main.yml) is
+    # actually intact and runnable.
+    result = host.run("pgbadger --version")
+    assert result.rc == 0, result.stderr
+    assert result.stdout.strip(), "pgbadger --version returned no output"
+

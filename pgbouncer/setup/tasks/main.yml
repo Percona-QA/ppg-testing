@@ -69,6 +69,18 @@
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
+  - name: Install percona-pgbouncer Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-pgbouncer
+        - percona-pgbouncer-dbgsym
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
   - name: Add user postgres to sudoers
     user:
       name: postgres
@@ -120,16 +132,11 @@
       PATH: "/usr/lib/postgresql/{{ major_version }}/bin:{{ ansible_env.PATH }}"
     become_user: postgres
 
-  # - name: Make install pgbouncer
-  #   shell: make install
-  #   args:
-  #     chdir: /tmp/pgbouncer
-  #   environment:
-  #     PATH: "/usr/lib/postgresql/{{ major_version }}/bin:{{ ansible_env.PATH }}"
-  #   become: true
-
+  # pgbouncer's own test suite (test/utils.py) already supports pointing at
+  # an arbitrary binary via the BOUNCER_EXE env var: `BOUNCER_EXE =
+  # os.environ.get("BOUNCER_EXE", TEST_DIR / "../pgbouncer")`
   - name: pytest run
-    shell: | 
+    shell: |
       python3 -m venv validation
       source validation/bin/activate
       pip install --upgrade pip
@@ -139,6 +146,7 @@
       chdir: /tmp/pgbouncer
     environment:
       PATH: "/tmp/pgbouncer/validation/bin:/usr/lib/postgresql/{{ major_version }}/bin:{{ ansible_env.PATH }}"
+      BOUNCER_EXE: /usr/sbin/pgbouncer
     become_user: postgres
     register: results
 
@@ -146,22 +154,17 @@
     debug:
       var: results.stdout_lines
 
-  # - name: Install pip requirements
-  #   shell: pip3 install -r requirements.txt
-  #   args:
-  #     chdir: /tmp/pgbouncer
-  #   environment:
-  #     PATH: "/usr/lib/postgresql/{{ major_version }}/bin:{{ ansible_env.PATH }}"
-  #   become: true
+  - name: Verify packaged percona-pgbouncer binary runs
+    command: pgbouncer --version
+    register: pgbouncer_version
+    changed_when: false
 
-  # - name: Run pgbouncer tests
-  #   shell: pytest
-  #   args:
-  #     chdir: /tmp/pgbouncer
-  #   environment:
-  #     PATH: "/usr/lib/postgresql/{{ major_version }}/bin:{{ ansible_env.PATH }}:/var/lib/postgresql/.local/bin"
-  #   become_user: postgres
-  #   register: results
+  - name: Assert packaged pgbouncer binary reported a version
+    assert:
+      that:
+        - pgbouncer_version.rc == 0
+        - pgbouncer_version.stdout | trim | length > 0
+      fail_msg: "Packaged percona-pgbouncer binary did not report a version"
 
-  # - debug:
-  #     var: results.stdout
+  - debug:
+      var: pgbouncer_version.stdout_lines

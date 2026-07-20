@@ -70,6 +70,18 @@
   environment:
     PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
+- name: Install wal2json Debian
+  apt:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+      - percona-postgresql-{{ major_version }}-wal2json
+      - percona-postgresql-{{ major_version }}-wal2json-dbgsym
+  environment:
+    PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
 - name: Clone wal2json sources
   git:
     repo: "{{ repo }}"
@@ -88,20 +100,16 @@
       line: 'postgres ALL=(ALL) NOPASSWD: ALL'
       validate: 'visudo -cf %s'
 
-- name: Build wal2json from sources
+- name: Build wal2json from sources (compile-only sanity check, packaged binary installed above is what installcheck runs against)
   make:
     chdir: "/tmp/wal2json"
     params:
       USE_PGXS: 1
   become_user: postgres
 
-- name: Install wal2json from sources
-  become: true
-  make:
-    target: install
-    chdir: "/tmp/wal2json"
-    params:
-      USE_PGXS: 1
+# Deliberately not running `make install` here: the packaged wal2json
+# installed above is the artifact we want installcheck to validate, not a
+# from-source build that would silently overwrite it.
 
 - name: Set wal level
   lineinfile:
@@ -119,9 +127,10 @@
     line: max_replication_slots = 10
 
 - name: Restart postgresql service
-  service:
-    name: postgresql
-    state: restarted
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: restarted
 
 - name: Test wal2json
   make:
@@ -130,6 +139,59 @@
     params:
       USE_PGXS: 1
   become_user: postgres
+  ignore_errors: true
   register: installcheck
 
 - debug: var=installcheck.stdout_lines
+
+- name: Show regression.diffs if installcheck failed
+  shell: cat /tmp/wal2json/regression.diffs
+  register: diffs_output
+  when:
+    - installcheck is failed
+  ignore_errors: true
+
+- debug:
+    msg: "{{ diffs_output.stdout_lines }}"
+  when:
+    - installcheck is failed
+    - diffs_output is defined
+
+- name: Set wal2json artifact filename
+  set_fact:
+    artifact_filename: "wal2json-{{ lookup('env','VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.tar.gz"
+  when:
+    - installcheck is failed
+
+- name: Package and fetch wal2json failure artifacts to controller
+  shell: |
+    set -uo pipefail
+    ARTIFACT_BASENAME="{{ artifact_filename | default('') | replace('.tar.gz', '') }}"
+    ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
+    rm -rf "$ARTIFACT_DIR"
+    mkdir -p "$ARTIFACT_DIR"
+    find /tmp/wal2json -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+    find /tmp/wal2json -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+    find /var/log/postgresql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+    tar -czf "/tmp/{{ artifact_filename | default('wal2json-artifacts.tar.gz') }}" -C /tmp "$ARTIFACT_BASENAME"
+  args:
+    executable: /bin/bash
+  when:
+    - installcheck is failed
+  ignore_errors: true
+  become: true
+
+- name: Fetch wal2json failure artifacts to controller
+  fetch:
+    src: "/tmp/{{ artifact_filename }}"
+    dest: "{{ playbook_dir }}/../artifacts/"
+    fail_on_missing: false
+  when:
+    - installcheck is failed
+  become: true
+
+- name: Fail the playbook if installcheck failed
+  fail:
+    msg: "wal2json installcheck failed with return code {{ installcheck.rc | default('unknown - see debug output above') }}"
+  when:
+    - installcheck is failed

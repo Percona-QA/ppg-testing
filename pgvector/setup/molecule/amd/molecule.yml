@@ -4,7 +4,7 @@ dependency:
 driver:
   name: ${driver}
 platforms:
-  - name: pgvector-unoble-${BUILD_NUMBER}
+  - name: pgvector-unoble-amd-${BUILD_NUMBER}
     region: ${region}
     image: ${ami_ubuntu24_x86_64}
     vpc_subnet_id: ${vpc_subnet_id_aws2}

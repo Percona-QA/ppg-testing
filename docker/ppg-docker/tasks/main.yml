@@ -88,18 +88,17 @@
   when: ansible_os_family == "RedHat"
 
 - name: Ensure containerd service is started
-  ansible.builtin.service:
-    name: containerd
-    state: started
-    enabled: yes
+  include_tasks: ../../../../tasks/start_service_with_diagnostics.yml
+  vars:
+    svc_name: containerd
+    svc_state: started
   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
 - name: Start docker
-  become: true
-  service:
-    name: docker
-    state: started
-    enabled: yes
+  include_tasks: ../../../../tasks/start_service_with_diagnostics.yml
+  vars:
+    svc_name: docker
+    svc_state: started
   when: ansible_os_family == "RedHat"
 
 - name: Install docker.io Deb
@@ -233,6 +232,12 @@
 - name: Show stderr if Docker tests fails
   debug:
     var: results.stderr_lines
+  when:
+    - results is defined
+    - results.rc != 0
+
+- name: Dump docker container logs if Docker tests failed
+  include_tasks: ../../../../tasks/dump_docker_logs.yml
   when:
     - results is defined
     - results.rc != 0

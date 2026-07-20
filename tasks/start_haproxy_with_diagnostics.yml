@@ -2,7 +2,7 @@
 # Start haproxy. Not a systemd unit in this repo's setup — launched directly
 # via `haproxy -f <cfg> -D` (self-daemonizing), so "did it fail" means the
 # launcher command exited non-zero, not a systemd state check — hence its
-# own file rather than a branch inside start_ha_service_with_diagnostics.yml.
+# own file rather than a branch inside start_service_with_diagnostics.yml.
 #
 # Caller must set:
 #   haproxy_cfg - path to haproxy.cfg, e.g. /etc/haproxy/haproxy.cfg

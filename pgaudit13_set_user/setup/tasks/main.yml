@@ -60,10 +60,29 @@
     PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 - name: Start Postgres RHEL
-  service:
-    name: postgresql-{{ major_version }}
-    state: started
-    enabled: yes
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql-{{ major_version }}
+    svc_state: started
+
+- name: Install percona-pgaudit{{ major_version }}_set_user RHEL
+  yum:
+    name: percona-pgaudit{{ major_version }}_set_user
+    state: latest
+    update_cache: yes
+
+# pg_tde (pg_tde/tde/tasks/redhat_depends.yml) hit the exact same problem
+# building from source on RHEL9: CFLAGS inherited from `pg_config --cflags`
+# include -Wmissing-variable-declarations, which needs gcc 12+ and RHEL9's
+# stock gcc is 11.x. Their fix - install gcc-toolset-14 and source its
+# enable script before building - is what's applied here too, rather than
+# stripping the flag (which they tried first and abandoned, per the
+# commented-out sed approach in pg_tde/tde/tasks/main.yml).
+- name: Install gcc-toolset-14 for CFLAGS/LTO compatibility on RHEL 9
+  dnf:
+    name: gcc-toolset-14
+    state: present
+  when: ansible_distribution_major_version == "9"
 
 - name: Clone set_user sources
   git:
@@ -75,18 +94,33 @@
     version: "{{ lookup('env', 'COMPONENT_VERSION') }}"
   become_user: postgres
 
-- name: Build set_user from sources
-  make:
+# Non-fatal: this is a nice-to-have "does it still compile" check, not the
+# real test (installcheck against the packaged binary below is). Compiler
+# flags inherited from `pg_config --cflags` reflect whatever toolchain built
+# the official package (e.g. a newer gcc-toolset than the AMI's stock gcc),
+# so an unrelated flag-compatibility failure here shouldn't block the
+# pipeline before it even reaches the test that actually matters.
+- name: Build set_user from sources (compile-only sanity check, packaged binary installed above is what installcheck runs against)
+  shell: |
+    {% if ansible_distribution_major_version == "9" %}
+    source /opt/rh/gcc-toolset-14/enable
+    {% endif %}
+    set -o pipefail
+    make USE_PGXS=1
+  args:
     chdir: "/tmp/set_user"
-    params:
-      USE_PGXS: 1
+    executable: /bin/bash
+  register: set_user_build
+  ignore_errors: true
 
-- name: Install set_user from sources
-  make:
-    target: install
-    chdir: "/tmp/set_user"
-    params:
-      USE_PGXS: 1
+- debug:
+    msg: >-
+      set_user compile-only sanity build {{ 'succeeded' if set_user_build is success else
+      'FAILED (informational only, does not block installcheck below): ' + (set_user_build.msg | default('')) }}
+
+# Deliberately not running `make install` here: the packaged set_user
+# installed above is the artifact we want installcheck to validate, not a
+# from-source build that would silently overwrite it.
 
 - name: Add extensions to postgresql.conf for RHEL
   lineinfile:
@@ -94,24 +128,81 @@
     line: shared_preload_libraries = 'set_user'
 
 - name: Restart Postgres RHEL
-  service:
-    name: postgresql-{{ major_version }}
-    state: stopped
-  register: out
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql-{{ major_version }}
+    svc_state: stopped
 
 - name: Start Postgres RHEL
-  service:
-    name: postgresql-{{ major_version }}
-    state: started
-    enabled: yes
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql-{{ major_version }}
+    svc_state: started
 
 - name: Test set_user
-  make:
-    target: installcheck
+  shell: |
+    {% if ansible_distribution_major_version == "9" %}
+    source /opt/rh/gcc-toolset-14/enable
+    {% endif %}
+    set -o pipefail
+    make installcheck USE_PGXS=1
+  args:
     chdir: "/tmp/set_user"
-    params:
-      USE_PGXS: 1
+    executable: /bin/bash
   become_user: postgres
+  ignore_errors: true
   register: installcheck
 
 - debug: var=installcheck.stdout_lines
+
+- name: Show regression.diffs if installcheck failed
+  shell: cat /tmp/set_user/regression.diffs
+  register: diffs_output
+  when:
+    - installcheck is failed
+  ignore_errors: true
+
+- debug:
+    msg: "{{ diffs_output.stdout_lines }}"
+  when:
+    - installcheck is failed
+    - diffs_output is defined
+
+- name: Set pgaudit13_set_user artifact filename
+  set_fact:
+    artifact_filename: "pgaudit13_set_user-{{ lookup('env','VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.tar.gz"
+  when:
+    - installcheck is failed
+
+- name: Package and fetch pgaudit13_set_user failure artifacts to controller
+  shell: |
+    set -uo pipefail
+    ARTIFACT_BASENAME="{{ artifact_filename | default('') | replace('.tar.gz', '') }}"
+    ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
+    rm -rf "$ARTIFACT_DIR"
+    mkdir -p "$ARTIFACT_DIR"
+    find /tmp/set_user -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+    find /tmp/set_user -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+    find /var/lib/pgsql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+    tar -czf "/tmp/{{ artifact_filename | default('pgaudit13_set_user-artifacts.tar.gz') }}" -C /tmp "$ARTIFACT_BASENAME"
+  args:
+    executable: /bin/bash
+  when:
+    - installcheck is failed
+  ignore_errors: true
+  become: true
+
+- name: Fetch pgaudit13_set_user failure artifacts to controller
+  fetch:
+    src: "/tmp/{{ artifact_filename }}"
+    dest: "{{ playbook_dir }}/../artifacts/"
+    fail_on_missing: false
+  when:
+    - installcheck is failed
+  become: true
+
+- name: Fail the playbook if installcheck failed
+  fail:
+    msg: "set_user installcheck failed with return code {{ installcheck.rc | default('unknown - see debug output above') }}"
+  when:
+    - installcheck is failed

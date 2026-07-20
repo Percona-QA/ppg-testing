@@ -158,6 +158,18 @@
   changed_when: false
   failed_when:
     - pg_health.stdout == "unhealthy" or pg_health.rc != 0
+  ignore_errors: true
+  tags: [prepare, always]
+
+- name: Dump docker container logs if PostgreSQL never became healthy
+  include_tasks: ../../../../tasks/dump_docker_logs.yml
+  when: pg_health is failed
+  tags: [prepare, always]
+
+- name: Fail if PostgreSQL container never became healthy
+  fail:
+    msg: "PostgreSQL container {{ postgres_container_name }} did not become healthy (last status: {{ pg_health.stdout | default('unknown') }}) - see docker logs above"
+  when: pg_health is failed
   tags: [prepare, always]
 
 # Test execution tasks
@@ -300,16 +312,26 @@
     PPG_LABEL_MAINTAINER: "{{ ppg_label_maintainer }}"
     PPG_LABEL_VENDOR: "{{ ppg_label_vendor }}"
   register: results
+  ignore_errors: true
   tags:
     - execute
     - always
-  
+
 - debug: var=results.stdout_lines
 
 - name: Show stderr if docker test fails
   debug:
     var: results.stderr_lines
-  when: 
+  when:
     - results is defined
     - results.rc != 0
+
+- name: Dump docker container logs if docker tests failed
+  include_tasks: ../../../../tasks/dump_docker_logs.yml
+  when: results is failed
+
+- name: Fail the playbook if docker tests failed
+  fail:
+    msg: "Docker tests failed with return code {{ results.rc | default('unknown') }}"
+  when: results is failed
 

@@ -1,0 +1,29 @@
+---
+# Print `docker logs` output for every container docker currently knows
+# about (running or exited) .
+
+- name: List all docker containers (running or stopped)
+  ansible.builtin.command: >-
+    docker ps -a --format '{{ '{{' }}.Names{{ '}}' }}'
+  register: __docker_container_names
+  become: true
+  changed_when: false
+  failed_when: false
+
+- name: Dump docker logs for each container
+  ansible.builtin.command: docker logs --tail 200 {{ item }}
+  register: __docker_logs
+  become: true
+  changed_when: false
+  failed_when: false
+  loop: "{{ __docker_container_names.stdout_lines | default([]) }}"
+
+- name: Show docker logs
+  ansible.builtin.debug:
+    msg: >-
+      docker logs {{ item.item }}:
+      stdout: {{ item.stdout | default('(none)') }}
+      stderr: {{ item.stderr | default('(none)') }}
+  loop: "{{ __docker_logs.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"

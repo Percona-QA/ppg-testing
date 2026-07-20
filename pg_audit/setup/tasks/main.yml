@@ -75,18 +75,18 @@
   environment:
     PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-# - name: Install pgaudit Debian
-#   apt:
-#     name: "{{ packages }}"
-#     state: latest
-#     update_cache: yes
-#   vars:
-#     major_version: "{{ major_version }}"
-#     packages:
-#       - percona-postgresql-{{ major_version }}-pgaudit
-#       - percona-postgresql-{{ major_version }}-pgaudit-dbgsym
-#   environment:
-#     PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+- name: Install pgaudit Debian
+  apt:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    major_version: "{{ major_version }}"
+    packages:
+      - percona-postgresql-{{ major_version }}-pgaudit
+      - percona-postgresql-{{ major_version }}-pgaudit-dbgsym
+  environment:
+    PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
 - name: Clone pgaudit sources
   git:
@@ -111,23 +111,21 @@
       validate: 'visudo -cf %s'
 
 - name: Stop postgresql service for Debian based
-  service:
-    name: postgresql
-    state: stopped
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: stopped
 
-- name: Build pgaudit from sources
+- name: Build pgaudit from sources (compile-only sanity check, package build below is what installcheck runs against)
   make:
     chdir: "/tmp/pgaudit"
     params:
       USE_PGXS: 1
   become_user: postgres
 
-- name: Install pgaudit from sources
-  make:
-    target: install
-    chdir: "/tmp/pgaudit"
-    params:
-      USE_PGXS: 1
+# Deliberately not running `make install` here: the packaged pgaudit installed
+# above is the artifact we want installcheck to validate, not a from-source
+# build that would silently overwrite it.
 
 # - name: Add extensions to postgresql.conf for Debian
 #   lineinfile:
@@ -146,7 +144,21 @@
 
 - name: Start Server
   become_user: postgres
-  command: "{{ PGBIN }}/pg_ctl -w start -D {{ PGDATA }}"
+  command: "{{ PGBIN }}/pg_ctl -w -l {{ PGDATA }}/server.log start -D {{ PGDATA }}"
+  register: pg_start_result
+  ignore_errors: true
+
+- name: Dump postgres server log if Start Server failed
+  include_tasks: ../../../../tasks/dump_logs.yml
+  vars:
+    log_files:
+      - "{{ PGDATA }}/server.log"
+  when: pg_start_result is failed
+
+- name: Fail if Start Server failed
+  fail:
+    msg: "pg_ctl start failed (rc={{ pg_start_result.rc | default('unknown') }}): {{ pg_start_result.stderr | default('') }}"
+  when: pg_start_result is failed
 
 - name: Test pgaudit
   make:
@@ -159,6 +171,59 @@
     PG_REGRESS_NO_CORES: "1"
     LC_ALL: C
     TZ: UTC
+  ignore_errors: true
   register: installcheck
 
 - debug: var=installcheck.stdout_lines
+
+- name: Show regression.diffs if installcheck failed
+  shell: cat /tmp/pgaudit/regression.diffs
+  register: diffs_output
+  when:
+    - installcheck is failed
+  ignore_errors: true
+
+- debug:
+    msg: "{{ diffs_output.stdout_lines }}"
+  when:
+    - installcheck is failed
+    - diffs_output is defined
+
+- name: Set pg_audit artifact filename
+  set_fact:
+    artifact_filename: "pg_audit-{{ lookup('env','VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.tar.gz"
+  when:
+    - installcheck is failed
+
+- name: Package and fetch pg_audit failure artifacts to controller
+  shell: |
+    set -uo pipefail
+    ARTIFACT_BASENAME="{{ artifact_filename | default('') | replace('.tar.gz', '') }}"
+    ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
+    rm -rf "$ARTIFACT_DIR"
+    mkdir -p "$ARTIFACT_DIR"
+    find /tmp/pgaudit -name "regression.diffs" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+    find /tmp/pgaudit -name "regression.out" -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+    find /var/log/postgresql -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
+    tar -czf "/tmp/{{ artifact_filename | default('pg_audit-artifacts.tar.gz') }}" -C /tmp "$ARTIFACT_BASENAME"
+  args:
+    executable: /bin/bash
+  when:
+    - installcheck is failed
+  ignore_errors: true
+  become: true
+
+- name: Fetch pg_audit failure artifacts to controller
+  fetch:
+    src: "/tmp/{{ artifact_filename }}"
+    dest: "{{ playbook_dir }}/../artifacts/"
+    fail_on_missing: false
+  when:
+    - installcheck is failed
+  become: true
+
+- name: Fail the playbook if installcheck failed
+  fail:
+    msg: "pgaudit installcheck failed with return code {{ installcheck.rc | default('unknown - see debug output above') }}"
+  when:
+    - installcheck is failed

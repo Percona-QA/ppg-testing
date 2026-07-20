@@ -318,25 +318,31 @@
 - debug:
     var: tde_build_output.stdout_lines
 
-- name: Install pg_tde
+# `meson install` would overwrite the packaged pg_tde.so/control/SQL files
+# in the system pkglibdir/sharedir. `meson compile` still gives
+# a real "build" signal without touching those system paths, so
+# the packaged binary (already installed by redhat_depends.yml/
+# debian_depends.yml) is what `meson test` actually exercises.
+- name: Compile pg_tde
   become: true
+  become_user: postgres
   ansible.builtin.shell: |
     {% if ansible_os_family == 'RedHat' and ansible_distribution_major_version == '9' %}
     source /opt/rh/gcc-toolset-14/enable
     {% endif %}
     set -o pipefail
-    meson install -C /tmp/pg_tde-build 2>&1 | tee /tmp/tde-install.log
+    meson compile -C /tmp/pg_tde-build 2>&1 | tee /tmp/tde-compile.log
   args:
     executable: /bin/bash
   environment:
     PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:/usr/bin:/usr/local/bin:{{ ansible_env.PATH }}"
   ignore_errors: true
   when: tde_build_output.rc | default(1) == 0
-  register: tde_install_output
+  register: tde_compile_output
 
 - debug:
-    var: tde_install_output.stdout_lines
-  when: tde_install_output is defined
+    var: tde_compile_output.stdout_lines
+  when: tde_compile_output is defined
 
 # Remove old io_method (if PG18+)
 - name: Comment out any io_method line (PG18+)
@@ -346,7 +352,7 @@
     replace: '# \1'
   when:
     - (major_version | int) >= 18
-    - tde_install_output.rc | default(1) == 0
+    - tde_compile_output.rc | default(1) == 0
 
 # Add or set io_method (PG18+)
 - name: Update io_method in postgresql.conf for PG18+
@@ -356,7 +362,7 @@
     line: "io_method = {{ io_method }}"
   when:
     - (major_version | int) >= 18
-    - tde_install_output.rc | default(1) == 0
+    - tde_compile_output.rc | default(1) == 0
 
 # =============================
 # pg_tde test setup
@@ -635,8 +641,8 @@
   register: regression
   when:
     - tde_build_output.rc | default(1) == 0
-    - tde_install_output is defined
-    - tde_install_output.rc | default(1) == 0
+    - tde_compile_output is defined
+    - tde_compile_output.rc | default(1) == 0
 
 - name: Show stdout of check-tde tests
   debug:
@@ -688,7 +694,7 @@
     find {{ pg_log_dir }} -name "*.log" -type f -exec cp --parents {} "$ARTIFACT_DIR/" \; 2>/dev/null || true
     # Build and install logs
     cp /tmp/tde-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
-    cp /tmp/tde-install.log "$ARTIFACT_DIR/" 2>/dev/null || true
+    cp /tmp/tde-compile.log "$ARTIFACT_DIR/" 2>/dev/null || true
     # Tool build/runtime logs
     cp /tmp/kmip-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
     cp /tmp/bao-server.log "$ARTIFACT_DIR/" 2>/dev/null || true
@@ -702,7 +708,7 @@
   become: true
   when: >
     (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
-    (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
+    (tde_compile_output is defined and tde_compile_output.rc | default(1) != 0) or
     (regression is defined and regression.rc | default(0) != 0)
   ignore_errors: true
 
@@ -713,7 +719,7 @@
     fail_on_missing: false
   when: >
     (tde_build_output is defined and tde_build_output.rc | default(1) != 0) or
-    (tde_install_output is defined and tde_install_output.rc | default(1) != 0) or
+    (tde_compile_output is defined and tde_compile_output.rc | default(1) != 0) or
     (regression is defined and regression.rc | default(0) != 0)
 
 # =============================
@@ -724,12 +730,12 @@
     msg: "pg_tde build failed on {{ inventory_hostname }} (rc={{ tde_build_output.rc | default(1) }}). See /tmp/tde-build.log"
   when: tde_build_output.rc | default(1) != 0
 
-- name: Fail if pg_tde install failed
+- name: Fail if pg_tde compile failed
   ansible.builtin.fail:
-    msg: "pg_tde install failed on {{ inventory_hostname }} (rc={{ tde_install_output.rc | default(1) }}). See /tmp/tde-install.log"
+    msg: "pg_tde compile failed on {{ inventory_hostname }} (rc={{ tde_compile_output.rc | default(1) }}). See /tmp/tde-compile.log"
   when:
-    - tde_install_output is defined
-    - tde_install_output.rc | default(1) != 0
+    - tde_compile_output is defined
+    - tde_compile_output.rc | default(1) != 0
 
 - name: Fail if tde regression tests failed
   ansible.builtin.fail:

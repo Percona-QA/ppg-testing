@@ -34,31 +34,14 @@
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-  - name: initDB Postgres instance 1
+  - name: initDB Postgres instance 1 (primary)
     become_user: postgres
     command: /usr/pgsql-{{ major_version }}/bin/initdb -D /tmp/data1
-
-  - name: initDB Postgres instance 2
-    become_user: postgres
-    command: /usr/pgsql-{{ major_version }}/bin/initdb -D /tmp/data2
-
-  - name: Change port of Postgres instance 2
-    lineinfile:
-      path: /tmp/data2/postgresql.conf
-      line: port = 5433
 
   - name: Copy pg_hba.conf Server 1
     copy:
       src: pg_hba.conf
       dest: /tmp/data1/pg_hba.conf
-      owner: postgres
-      group: postgres
-      mode: 0600
-
-  - name: Copy pg_hba.conf Server 2
-    copy:
-      src: pg_hba.conf
-      dest: /tmp/data2/pg_hba.conf
       owner: postgres
       group: postgres
       mode: 0600
@@ -97,13 +80,23 @@
   - debug:
       var: results.stdout_lines
 
-  - name: Start server 1
+  - name: Start server 1 (primary)
     become_user: postgres
-    command: /usr/pgsql-{{ major_version }}/bin/pg_ctl -D /tmp/data1 -l logfile-data1 start
+    command: /usr/pgsql-{{ major_version }}/bin/pg_ctl -D /tmp/data1 -l /tmp/data1/logfile-data1 start
+    register: pg_start1_result
+    ignore_errors: true
 
-  - name: Start server 2
-    become_user: postgres
-    command: /usr/pgsql-{{ major_version }}/bin/pg_ctl -D /tmp/data2 -l logfile-data2 start
+  - name: Dump postgres server log if server 1 failed to start
+    include_tasks: ../../../../tasks/dump_logs.yml
+    vars:
+      log_files:
+        - /tmp/data1/logfile-data1
+    when: pg_start1_result is failed
+
+  - name: Fail if server 1 failed to start
+    fail:
+      msg: "pg_ctl start (data1) failed (rc={{ pg_start1_result.rc | default('unknown') }}): {{ pg_start1_result.stderr | default('') }}"
+    when: pg_start1_result is failed
 
   - name: Create User monitor
     become_user: postgres
@@ -126,29 +119,90 @@
     command: psql -c "create database monitor;"
     register: results
 
-  - name: Create User monitor
+  - debug:
+      var: results.stdout_lines
+
+  - name: Grant appuser access to monitor database
     become_user: postgres
-    command: psql -p 5433 -c "CREATE USER monitor WITH ENCRYPTED PASSWORD 'Monitor@321';"
+    command: psql -c "GRANT ALL PRIVILEGES ON DATABASE monitor TO appuser;"
     register: results
 
   - debug:
       var: results.stdout_lines
 
-  - name: Create User appuser
+  # GRANT ... ON DATABASE only covers database-level privileges (CONNECT,
+  # TEMP, creating new schemas) - it does NOT touch the public schema's own
+  # ACL. Since PG15, CREATE on the public schema is no longer granted to
+  # PUBLIC by default, so appuser still can't CREATE TABLE in monitor's
+  # public schema without this. Must run against -d monitor specifically:
+  # schema privileges are per-database, and the grant above ran against the
+  # default connection database, not monitor's own public schema.
+  - name: Grant appuser CREATE on the public schema of monitor database (PG15+ default-privilege change)
     become_user: postgres
-    command: psql -p 5433 -c "CREATE USER appuser WITH  ENCRYPTED PASSWORD 'Appuser@321';"
+    command: psql -d monitor -c "GRANT ALL ON SCHEMA public TO appuser;"
     register: results
 
   - debug:
       var: results.stdout_lines
 
-  - name: Create database monitor
-    become_user: postgres
-    command: psql -p 5433 -c "create database monitor;"
-    register: results
+  # NOTE: instance 2 used to be a second, independently-initdb'd cluster with
+  # its own separately-created users/db. That is not a streaming standby at
+  # all (different system identifier, no replication), even though
+  # pgpool.conf is configured for backend_clustering_mode =
+  # 'streaming_replication'. It made any real failover test meaningless,
+  # since there was never a real primary/standby relationship to fail over.
+  # Building instance 2 as an actual pg_basebackup -R standby of instance 1
+  # fixes that and is what makes the failover test below meaningful.
+  - name: Remove any stale standby data directory
+    file:
+      path: /tmp/data2
+      state: absent
 
-  - debug:
-      var: results.stdout_lines
+  - name: Take base backup from primary to build the streaming standby (instance 2)
+    become_user: postgres
+    command: >
+      /usr/pgsql-{{ major_version }}/bin/pg_basebackup
+      -h 127.0.0.1 -p 5432 -U postgres
+      -D /tmp/data2 -Fp -Xs -R
+
+  - name: Change port of standby instance (data2)
+    lineinfile:
+      path: /tmp/data2/postgresql.conf
+      line: port = 5433
+
+  - name: Start server 2 (standby)
+    become_user: postgres
+    command: /usr/pgsql-{{ major_version }}/bin/pg_ctl -D /tmp/data2 -l /tmp/data2/logfile-data2 start
+    register: pg_start2_result
+    ignore_errors: true
+
+  - name: Dump postgres server log if server 2 failed to start
+    include_tasks: ../../../../tasks/dump_logs.yml
+    vars:
+      log_files:
+        - /tmp/data2/logfile-data2
+    when: pg_start2_result is failed
+
+  - name: Fail if server 2 failed to start
+    fail:
+      msg: "pg_ctl start (data2) failed (rc={{ pg_start2_result.rc | default('unknown') }}): {{ pg_start2_result.stderr | default('') }}"
+    when: pg_start2_result is failed
+
+  - name: Wait for standby to enter streaming recovery
+    become_user: postgres
+    command: psql -p 5433 -tAc "select pg_is_in_recovery()"
+    register: standby_recovery_check
+    until: standby_recovery_check.stdout | trim == 't'
+    retries: 12
+    delay: 5
+
+  - name: Verify primary sees the streaming standby
+    become_user: postgres
+    command: psql -tAc "select count(*) from pg_stat_replication"
+    register: primary_replication_check
+    until: primary_replication_check.stdout | trim | int >= 1
+    retries: 12
+    delay: 5
 
   - name: Display ppg version
     become_user: postgres
@@ -158,37 +212,44 @@
   - debug:
         var: results.stdout_lines
 
+  # PCP (Pgpool Control Protocol) is pgpool's administrative interface,
+  # separate from the SQL-proxy port (9999) - used by the pcp_* admin-command
+  # smoke test and the failback test's pcp_attach_node fallback in
+  # pgpool/tests/test_pgpool.py. Must be written before pgpool starts, since
+  # pcp.conf is read at startup (a later change would need a reload/restart).
+  - name: Generate pcp password hash for pcpuser
+    become_user: postgres
+    command: pg_md5 PcpUser@321
+    register: pcp_password_hash
+
+  - name: Write pcp.conf with pcpuser credentials
+    copy:
+      content: "pcpuser:{{ pcp_password_hash.stdout | trim }}\n"
+      dest: /etc/pgpool-II/pcp.conf
+      owner: postgres
+      group: postgres
+      mode: 0600
+
+  - name: Create .pcppass for passwordless pcp command invocation
+    copy:
+      content: "localhost:9898:pcpuser:PcpUser@321\n"
+      dest: /var/lib/pgsql/.pcppass
+      owner: postgres
+      group: postgres
+      mode: 0600
+
   - name: Start pgpool service
-    service:
-      name: pgpool
-      state: started
-      enabled: yes
+    include_tasks: ../../../../tasks/start_service_with_diagnostics.yml
+    vars:
+      svc_name: pgpool
+      svc_state: started
 
   - name: Pause for 1 minutes
     ansible.builtin.pause:
       minutes: 1
 
-  - name: select datname from pg_database
-    become_user: postgres
-    command: psql -h 127.0.0.1 -U appuser -p 9999 postgres  -c "select datname from pg_database"
-    ignore_errors: true
-    register: results
-
-  - debug:
-      var: results.stdout_lines
-
-  - name: show pool_nodes
-    become_user: postgres
-    command: psql -h 127.0.0.1 -Uappuser -p 9999 postgres  -c "show pool_nodes"
-    register: results
-
-  - debug:
-      var: results.stdout_lines
-
-  - name: show pool_version
-    become_user: postgres
-    command: psql -h 127.0.0.1 -Uappuser -p 9999 postgres  -c "show pool_version"
-    register: results
-
-  - debug:
-      var: results.stdout_lines
+  # Functional/regression assertions (pgpool reachability, pool_nodes/
+  # pool_version content, and the primary-kill/standby-promote failover test)
+  # live in pgpool/tests/test_pgpool.py and run via the testinfra verify
+  # step, not here - same principle already applied to postgis: keep only
+  # install/setup steps in this task file.

@@ -11,17 +11,6 @@
   - name: Configure repository
     include_tasks: ../../../../tasks/enable_repo.yml
 
-  # - name: setup epel release
-  #   yum:
-  #     name: epel-release
-  #     update_cache: yes
-  #     state: present
-  #   when: ansible_os_family == "RedHat"
-
-  # - name: Enable crb on rocky linux 9
-  #   become: true
-  #   command: dnf config-manager --set-enabled crb
-
   - name: install Percona Platform for PostgreSQL rpm packages
     yum:
       name: "{{ packages }}"
@@ -35,6 +24,8 @@
       - percona-postgresql{{ major_version }}-contrib
       - percona-postgresql{{ major_version }}-libs
       - percona-postgresql{{ major_version }}-server
+      - percona-postgresql{{ major_version }}-devel
+
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
@@ -63,103 +54,313 @@
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
   - name: Start Postgres RHEL
-    service:
-      name: postgresql-{{ major_version }}
-      state: started
-      enabled: yes
+    include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+    vars:
+      svc_name: postgresql-{{ major_version }}
+      svc_state: started
 
-  - name: Select available extensions
+  - name: CREATE EXTENSION postgis/postgis_raster/postgis_sfcgal/fuzzystrmatch/address_standardizer(_data_us)/postgis_tiger_geocoder/postgis_topology
     become_user: postgres
-    command: psql -c "SELECT name, default_version,installed_version FROM pg_available_extensions WHERE name LIKE 'postgis%' or name LIKE 'address%';"
-    register: results
+    command: psql -c "CREATE EXTENSION {{ item }};"
+    loop:
+      - postgis
+      - postgis_raster
+      - postgis_sfcgal
+      - fuzzystrmatch
+      - address_standardizer
+      - address_standardizer_data_us
+      - postgis_tiger_geocoder
+      - postgis_topology
+
+  # postgis_raster ships with GDAL output drivers disabled by default
+  # (postgis.gdal_enabled_drivers boots to "DISABLE_ALL" - a security
+  # hardening default.
+  - name: Enable GDAL raster output drivers (disabled by default for security)
+    become_user: postgres
+    command: psql -c "ALTER DATABASE postgres SET \"postgis.gdal_enabled_drivers\" = 'ENABLE_ALL';"
+
+  # PostGIS's own upstream regression suite, run via `make installcheck`
+  # against the already-installed Percona package (same principle as
+  # pg_audit/pg_repack/wal2json/pgvector: build from source only to get the
+  # regress harness's helper binaries, never `make install`, so installcheck
+  # validates the shipped package's SQL/library files, not a from-source
+  # build).
+
+  - name: Record the shipped package's actual linked library versions (ground truth for comparison below)
+    become_user: postgres
+    command: psql -tAc "SELECT PostGIS_Full_Version();"
+    register: shipped_postgis_full_version
 
   - debug:
-      var: results.stdout_lines
+      msg: "Shipped percona-postgis35_{{ major_version }} reports: {{ shipped_postgis_full_version.stdout }}"
 
-  - name: CREATE EXTENSION postgis
-    become_user: postgres
-    command: psql -c "CREATE EXTENSION postgis;"
-    register: results
+  - name: Install PostGIS build dependencies, version-matched to what percona-postgis35 actually depends on
+    yum:
+      name: "{{ packages }}"
+      state: present
+      update_cache: yes
+    vars:
+      packages:
+        - autoconf
+        - automake
+        - libtool
+        - pkgconfig
+        - make
+        - gcc
+        - gcc-c++
+        - git
+        - perl
+        - bison
+        - flex
+        # Version-matched to percona-postgis35_XX's real declared
+        # dependencies (gdal311-libs >= 3.11.0, geos311 >= 3.11.2,
+        # proj95 >= 9.5.1) - from Percona's own repo, not EPEL/base RHEL.
+        - gdal311
+        - gdal311-devel
+        - geos311
+        - geos311-devel
+        - proj95
+        - proj95-devel
+        - SFCGAL
+        - SFCGAL-devel
+        - json-c-devel
+        - protobuf-c-devel
+        - libxml2-devel
+        - sqlite-devel
+        - libcurl-devel
+        - libtiff-devel
+        - pcre2-devel
+
+  # Same fix as pgaudit13_set_user/setup: install gcc-toolset-14 and source
+  # its enable script before configure/build/installcheck.
+  - name: Install gcc-toolset-14 for CFLAGS/LTO compatibility on RHEL 9
+    dnf:
+      name: gcc-toolset-14
+      state: present
+    when: ansible_distribution_major_version == "9"
+
+  # PostgreSQL's JIT bitcode index is built with $(LLVM_BINPATH)/llvm-lto.
+  # Try to install the exact matching llvm major first (keeps clang/llvm-lto
+  # runtime llvm-libs internally consistent), and if that specific major
+  # isn't available in the repos, fall back to symlinking whatever
+  # llvm-lto binary IS present into the path PG's Makefile.global expects,
+  # so the build still completes.
+  - name: Ensure llvm toolchain matches target PostgreSQL for JIT bitcode (RHEL)
+    shell: |
+      set -uo pipefail
+      MG="/usr/pgsql-{{ major_version }}/lib/pgxs/src/Makefile.global"
+      [ -f "$MG" ] || { echo "Makefile.global not found at $MG; skipping"; exit 0; }
+
+      LLVM_BIN=$(awk -F= '/^LLVM_BINPATH/{gsub(/ /,"",$2); print $2; exit}' "$MG")
+      if [ -z "$LLVM_BIN" ]; then
+        echo "with_llvm not enabled (no LLVM_BINPATH); nothing to do"; exit 0
+      fi
+      if [ -x "$LLVM_BIN/llvm-lto" ]; then
+        echo "llvm-lto already present at $LLVM_BIN/llvm-lto"; exit 0
+      fi
+
+      VER=$(echo "$LLVM_BIN" | sed -n 's;.*/llvm\([0-9]\+\).*;\1;p')
+      echo "PG built with llvm major: ${VER:-unknown} (LLVM_BINPATH=$LLVM_BIN)"
+
+      # Preferred: install the matching major (the provider is the unversioned
+      # `llvm` package at that version, e.g. llvm-20.*, not a `llvm20` package).
+      if [ -n "$VER" ]; then
+        dnf install -y --allowerasing "llvm-${VER}*" "llvm-devel-${VER}*" "clang-${VER}*" || true
+      fi
+      if [ -x "$LLVM_BIN/llvm-lto" ]; then
+        echo "Installed matching llvm ${VER}"; exit 0
+      fi
+
+      # Fallback: symlink an existing llvm-lto into the expected path.
+      LTO=$(command -v llvm-lto 2>/dev/null || find /usr/bin /usr/lib64 /opt/rh -name llvm-lto 2>/dev/null | head -1)
+      if [ -z "$LTO" ]; then
+        echo "ERROR: llvm-lto not found and llvm-${VER} unavailable" >&2
+        exit 1
+      fi
+      echo "WARN: llvm-${VER} unavailable; symlinking $LTO -> $LLVM_BIN/llvm-lto"
+      mkdir -p "$LLVM_BIN"
+      ln -sf "$LTO" "$LLVM_BIN/llvm-lto"
+    args:
+      executable: /bin/bash
+    become: true
+    register: postgis_llvm_setup
+    when: ansible_os_family == "RedHat"
 
   - debug:
-      var: results.stdout_lines
+      var: postgis_llvm_setup.stdout_lines
+    when: ansible_os_family == "RedHat"
 
-  - name: CREATE EXTENSION postgis_raster
-    become_user: postgres
-    command: psql -c "CREATE EXTENSION postgis_raster;"
-    register: results
-
-  - debug:
-      var: results.stdout_lines
-
-  - name: CREATE EXTENSION postgis_sfcgal
-    become_user: postgres
-    command: psql -c "CREATE EXTENSION postgis_sfcgal;"
-    register: results
-
-  - debug:
-      var: results.stdout_lines
-
-  - name: CREATE EXTENSION fuzzystrmatch
-    become_user: postgres
-    command: psql -c "CREATE EXTENSION fuzzystrmatch; "
-    register: results
+  - name: Record the actual build-time library versions we're about to compile against
+    shell: |
+      export PATH="/usr/gdal311/bin:/usr/geos311/bin:$PATH"
+      export PKG_CONFIG_PATH="/usr/gdal311/lib/pkgconfig:/usr/geos311/lib64/pkgconfig:/usr/proj95/lib64/pkgconfig"
+      echo "geos-config:     $(geos-config --version 2>&1 || echo 'not found')"
+      echo "gdal-config:     $(gdal-config --version 2>&1 || echo 'not found')"
+      echo "gdalinfo formats: $(gdalinfo --formats 2>&1 | grep -i tif || echo 'no tif/GTiff driver')"
+      echo "proj (pkg-config): $(pkg-config --modversion proj 2>&1 || echo 'not found')"
+      echo "json-c (pkg-config): $(pkg-config --modversion json-c 2>&1 || echo 'not found')"
+      echo "protobuf-c (pkg-config): $(pkg-config --modversion libprotobuf-c 2>&1 || echo 'not found')"
+      echo "sfcgal (pkg-config): $(pkg-config --modversion sfcgal 2>&1 || echo 'not found')"
+    args:
+      executable: /bin/bash
+    register: build_time_lib_versions
+    changed_when: false
+    ignore_errors: true
 
   - debug:
-      var: results.stdout_lines
+      msg: >-
+        Build-time library versions (what we're about to compile postgis against):
+        {{ build_time_lib_versions.stdout_lines }}
+        --- compare this against the shipped package's ground truth reported above:
+        {{ shipped_postgis_full_version.stdout }}
+        --- a mismatch here (e.g. shipped GEOS="3.9.x" but geos-config reports 3.12.x) means
+        this from-source build will not be representative of the actual shipped binary,
+        even if it compiles and installcheck passes.
 
-  - name: CREATE EXTENSION address_standardizer
+  - name: Clone postgis sources matching the packaged version
+    git:
+      repo: "{{ repo }}"
+      version: "{{ version }}"
+      dest: /tmp/postgis
+    vars:
+      repo: "{{ lookup('env', 'COMPONENT_REPO') }}"
+      version: "{{ lookup('env', 'COMPONENT_VERSION') }}"
     become_user: postgres
-    command: psql -c "CREATE EXTENSION address_standardizer;"
-    register: results
+
+  - name: Autogen postgis
+    shell: ./autogen.sh
+    args:
+      chdir: /tmp/postgis
+    become_user: postgres
+    environment:
+      PATH: "/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
+
+  # gdal311/geos311/proj95 install to their own prefixes (/usr/gdal311,
+  # /usr/geos311, /usr/proj95), not standard system paths - PATH
+  # PKG_CONFIG_PATH need these explicitly for ./configure's autodetection
+  - name: Configure postgis against the already-installed GEOS/PROJ/GDAL/SFCGAL/json-c libraries
+    shell: |
+      {% if ansible_distribution_major_version == "9" %}
+      source /opt/rh/gcc-toolset-14/enable
+      {% endif %}
+      set -o pipefail
+      ./configure 2>&1 | tee /tmp/postgis-configure.log
+    args:
+      chdir: /tmp/postgis
+      executable: /bin/bash
+    become_user: postgres
+    environment:
+      PATH: "/usr/gdal311/bin:/usr/geos311/bin:/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
+      PKG_CONFIG_PATH: "/usr/gdal311/lib/pkgconfig:/usr/geos311/lib64/pkgconfig:/usr/proj95/lib64/pkgconfig:{{ ansible_env.PKG_CONFIG_PATH | default('') }}"
+    register: postgis_configure
+    ignore_errors: true
 
   - debug:
-      var: results.stdout_lines
+      var: postgis_configure.stdout_lines
 
-  - name: CREATE EXTENSION address_standardizer_data_us
+  - name: Show config.log if configure failed (autotools records *why* a library wasn't detected here)
+    shell: cat /tmp/postgis/config.log
+    register: postgis_config_log
+    when: postgis_configure is defined and postgis_configure.rc != 0
+    ignore_errors: true
     become_user: postgres
-    command: psql -c "CREATE EXTENSION address_standardizer_data_us;"
-    register: results
 
   - debug:
-      var: results.stdout_lines
+      var: postgis_config_log.stdout_lines
+    when: postgis_configure is defined and postgis_configure.rc != 0 and postgis_config_log is defined
 
-  - name: CREATE EXTENSION postgis_tiger_geocoder
+  - name: Fail the playbook if postgis configure failed
+    fail:
+      msg: "postgis ./configure failed with return code {{ postgis_configure.rc }} - see config.log above"
+    when: postgis_configure is defined and postgis_configure.rc != 0
+
+  - name: Build postgis from source (compile-only - the installed package above is what installcheck validates)
+    shell: |
+      {% if ansible_distribution_major_version == "9" %}
+      source /opt/rh/gcc-toolset-14/enable
+      {% endif %}
+      set -o pipefail
+      make -j "$(nproc)" 2>&1 | tee /tmp/postgis-build.log
+    args:
+      chdir: /tmp/postgis
+      executable: /bin/bash
     become_user: postgres
-    command: psql -c "CREATE EXTENSION postgis_tiger_geocoder;"
-    register: results
+    environment:
+      PATH: "/usr/gdal311/bin:/usr/geos311/bin:/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
+    register: postgis_build
+    ignore_errors: true
 
   - debug:
-      var: results.stdout_lines
+      var: postgis_build.stdout_lines
 
-  - name: CREATE EXTENSION postgis_topology
+  - name: Fail the playbook if the postgis build failed
+    fail:
+      msg: "postgis `make` failed with return code {{ postgis_build.rc }} - see build log above"
+    when: postgis_build is defined and postgis_build.rc != 0
+
+  # PostGIS's test suite runs via `make installcheck`
+  # against the already-installed Percona package (same principle as
+  # pg_audit/pg_repack/wal2json/pgvector: build from source only to get the
+  # regress harness's helper binaries, never `make install`, so installcheck
+  # validates the shipped package's SQL/library files, not a from-source
+  # build).
+  - name: Run the PostGIS regression suite against the installed package
+    shell: |
+      {% if ansible_distribution_major_version == "9" %}
+      source /opt/rh/gcc-toolset-14/enable
+      {% endif %}
+      set -o pipefail
+      make installcheck 2>&1 | tee /tmp/postgis-installcheck.log
+    args:
+      chdir: /tmp/postgis
+      executable: /bin/bash
     become_user: postgres
-    command: psql -c "CREATE EXTENSION postgis_topology;"
-    register: results
+    environment:
+      PATH: "/usr/gdal311/bin:/usr/geos311/bin:/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
+    register: postgis_installcheck
+    ignore_errors: true
 
   - debug:
-      var: results.stdout_lines
+      var: postgis_installcheck.stdout_lines
 
-  - name: Display ppg version
+  # Kept as a safety and diagnosis net for reference in case of a failure
+  - name: Find regression diff/error files if the suite failed
+    shell: >
+      find /tmp/postgis /tmp/pgis_reg \( -name "*.diffs" -o -name "*.err" \)
+      -exec sh -c 'echo "=== {} ==="; cat "{}"' \; 2>/dev/null
+    register: postgis_diffs
+    when: postgis_installcheck is defined and postgis_installcheck.rc != 0
+    ignore_errors: true
     become_user: postgres
-    shell: psql -c "select version()"
-    register: results
 
   - debug:
-        var: results.stdout_lines
+      var: postgis_diffs.stdout_lines
+    when: postgis_installcheck is defined and postgis_installcheck.rc != 0 and postgis_diffs is defined
 
-  - name: Select available extensions
+  # Kept as a safety and diagnosis net for reference in case of a failure
+  - name: Diagnose raster2pgsql's ability to read a real test raster directly (bypassing the regress harness)
+    shell: |
+      export PATH="/usr/gdal311/bin:/usr/geos311/bin:$PATH"
+      echo "=== gdalinfo --version ==="
+      gdalinfo --version 2>&1 || echo "gdalinfo not found or failed"
+      echo "=== gdalinfo --formats (checking for GTiff driver specifically) ==="
+      gdalinfo --formats 2>&1 | grep -i tif || echo "no tif/GTiff driver listed (or gdalinfo unavailable)"
+      echo "=== gdalinfo on the failing test raster ==="
+      gdalinfo /tmp/postgis/raster/test/regress/loader/testraster2.tif 2>&1 || echo "gdalinfo failed to read the file, rc=$?"
+      echo "=== freshly-built raster2pgsql on the same file ==="
+      /tmp/postgis/raster/loader/raster2pgsql /tmp/postgis/raster/test/regress/loader/testraster2.tif diag_raster_check 2>&1 || echo "raster2pgsql failed, rc=$?"
+    args:
+      executable: /bin/bash
+    register: postgis_raster_diag
+    when: postgis_installcheck is defined and postgis_installcheck.rc != 0
+    ignore_errors: true
     become_user: postgres
-    command: psql -c "SELECT name, default_version,installed_version FROM pg_available_extensions WHERE name LIKE 'postgis%' or name LIKE 'address%';"
-    register: results
 
   - debug:
-      var: results.stdout_lines
+      var: postgis_raster_diag.stdout_lines
+    when: postgis_installcheck is defined and postgis_installcheck.rc != 0 and postgis_raster_diag is defined
 
-  - name: Select available extensions
-    become_user: postgres
-    command: psql -c "SELECT PostGIS_Full_Version();"
-    register: results
-
-  - debug:
-      var: results.stdout_lines
+  - name: Fail the playbook if the postgis regression suite failed
+    fail:
+      msg: "PostGIS installcheck failed with return code {{ postgis_installcheck.rc }} - see regression diffs above"
+    when: postgis_installcheck is defined and postgis_installcheck.rc != 0

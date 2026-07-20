@@ -90,9 +90,10 @@
     append: yes
 
 - name: Stop Postgres
-  service:
-    name: postgresql
-    state: stopped
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: stopped
 - name: Ensure Apache is stopped and port 80 is free
   ansible.builtin.service:
     name: apache2
@@ -116,6 +117,16 @@
     group: postgres
     mode: "0755"
 
+# move_home above relocates /var/lib/postgresql (postgres's original home,
+# which is also the parent of every cluster's data directory, create a symlink
+# to the moved home directory.
+- name: Symlink /var/lib/postgresql back to the moved home directory
+  become: true
+  ansible.builtin.file:
+    src: /home/postgres
+    dest: /var/lib/postgresql
+    state: link
+
 - name: Find process holding port 80
   ansible.builtin.shell: |
     # Find the PID using netstat or ss
@@ -138,11 +149,20 @@
   ignore_errors: true
   register: output
 
+  # Explicitly listing every test/define.yaml module except `performance`
+  # (benchmarks, not correctness), `test` (tests test.pl's own test-runner
+  # infrastructure - test/command/test/{build,define,lint,test,coverage} -
+  # not pgbackrest's own behavior), and `doc` (tests pgbackrest's man-page/
+  # reference-doc generation tooling - doc/command/build/* - unrelated to
+  # backup/restore correctness and not something we ship or use).
 - name: Run pgbackrest regression
   become_user: postgres
   command: pgbackrest/test/test.pl --psql-bin=/usr/lib/postgresql/{{ major_version }}/bin \
     --no-valgrind --log-level-test-file=off --no-coverage-report \
-    --module=command --module=storage --vm-out --vm=none --no-coverage --test-path /tmp
+    --module=common --module=protocol --module=config --module=storage \
+    --module=postgres --module=build --module=info \
+    --module=db --module=command --module=integration \
+    --vm-out --vm=none --no-coverage --test-path /tmp
   args:
     chdir: "/tmp"
   ignore_errors: true
@@ -165,3 +185,72 @@
   when:
     - regression is defined
     - regression.rc != 0
+
+# The regression suite above builds pgbackrest from source and only ever
+# exercises that from-source build - percona-pgbackrest, the package
+# customers actually install, was never installed or run at all. This
+# functional smoke test installs the real package and puts it to work
+# (stanza-create + a real full backup against the live cluster + info),
+# verified end-to-end in a local Docker container before adding it here.
+- name: Install real percona-pgbackrest package
+  apt:
+    name: percona-pgbackrest
+    state: latest
+    update_cache: yes
+  environment:
+    PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+- name: Start Postgres for the packaged pgbackrest functional test
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: started
+
+- name: Create pgbackrest repo directory
+  file:
+    path: /var/lib/pgbackrest
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0750"
+
+- name: Create /etc/pgbackrest directory
+  file:
+    path: /etc/pgbackrest
+    state: directory
+
+- name: Write pgbackrest.conf for the packaged-binary functional test
+  copy:
+    dest: /etc/pgbackrest/pgbackrest.conf
+    owner: postgres
+    group: postgres
+    content: |
+      [global]
+      repo1-path=/var/lib/pgbackrest
+      repo1-retention-full=2
+
+      [test]
+      pg1-path=/var/lib/postgresql/{{ major_version }}/main
+      pg1-port=5432
+
+- name: Enable archive_mode for the packaged pgbackrest functional test
+  lineinfile:
+    path: /etc/postgresql/{{ major_version }}/main/postgresql.conf
+    line: archive_mode = on
+
+- name: Set archive_command to the packaged pgbackrest binary
+  lineinfile:
+    path: /etc/postgresql/{{ major_version }}/main/postgresql.conf
+    line: "archive_command = 'pgbackrest --stanza=test archive-push %p'"
+
+- name: Restart Postgres to pick up archive_mode
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: restarted
+
+# stanza-create / backup / incremental backup / restore and all their
+# assertions live in pgbackrest/tests/test_pgbackrest.py (testinfra verify
+# step) instead of here - matching the postgis/pgpool pattern of keeping
+# setup/tasks/main.yml to install+configure only, with all functional
+# actions and assertions in one place in pytest.

@@ -539,7 +539,7 @@
     when: ansible_os_family == "RedHat"
 
   - name: Restart etcd RHEL
-    include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
+    include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
     vars:
       svc_name: etcd
       svc_state: restarted
@@ -658,7 +658,7 @@
   #     enabled: yes
 
   - name: Enable and start patroni with wait
-    include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
+    include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
     vars:
       svc_name: patroni
       svc_state: started
@@ -791,25 +791,25 @@
     when: ansible_os_family == "RedHat"
 
   - name: Start etcd
-    include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
+    include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
     vars:
       svc_name: etcd
       svc_state: started
 
   - name: Start patroni0
-    include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
+    include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
     vars:
       svc_name: patroni0
       svc_state: started
 
   - name: Start patroni1
-    include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
+    include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
     vars:
       svc_name: patroni1
       svc_state: started
 
   - name: Start patroni2
-    include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
+    include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
     vars:
       svc_name: patroni2
       svc_state: started
@@ -828,14 +828,14 @@
       haproxy_cfg: /etc/haproxy/haproxy.cfg
 
   - name: Start pgpool service
-    include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
+    include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
     vars:
       svc_name: pgpool
       svc_state: started
     when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('14.7', '>=', strict=True))
 
   - name: Start pgpool service
-    include_tasks: "{{ role_path }}/../../tasks/start_ha_service_with_diagnostics.yml"
+    include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
     vars:
       svc_name: percona-pgpool2
       svc_state: started
