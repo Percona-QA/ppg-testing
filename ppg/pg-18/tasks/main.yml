@@ -4,14 +4,17 @@
     pg_version_to_install: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
     io_method: "{{ lookup('env', 'IO_METHOD') | default('worker') }}"
 
-- name: End play on RHEL 8 and Rocky 8 for io_uring, as uring not supported
-  meta: end_play
+- name: Fall back to worker io_method on RHEL 8, Rocky 8 and OracleLinux 8, as uring not supported
+  ansible.builtin.set_fact:
+    io_method: worker
   when:
     - io_method in ['io_uring']
     - >
       (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'Rocky' and ansible_facts['distribution_major_version'] | int == 8)
       or
       (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'RedHat' and ansible_facts['distribution_major_version'] | int == 8)
+      or
+      (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'OracleLinux' and ansible_facts['distribution_major_version'] | int == 8)
 
 - name: End play on Ubuntu 26 and versions older than 18.4
   meta: end_host
