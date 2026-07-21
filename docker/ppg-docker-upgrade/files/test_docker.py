@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 import time
 import psycopg2
@@ -195,15 +196,29 @@ def _expected_ubi_major_version():
 
     Rules:
       - tag contains 'ubi8'  -> expect RHEL/UBI 8
+      - tag contains 'ubi9'  -> expect RHEL/UBI 9
       - tag contains 'ubi10' -> expect RHEL/UBI 10
-      - no 'ubi' in tag      -> default to RHEL/UBI 9
+      - no 'ubi' in tag      -> default to RHEL/UBI 9 (legacy bare tags)
+      - unknown 'ubi*' tag   -> fail fast
     """
     tag = IMG_TAG.lower()
-    if 'ubi8' in tag:
-        return '8'
-    if 'ubi10' in tag:
-        return '10'
-    return '9'
+    if "ubi" not in tag:
+        return "9"
+
+    match = re.search(r"ubi(\d+)", tag)
+    if not match:
+        raise AssertionError(
+            f"Unrecognized UBI tag format: '{IMG_TAG}'. "
+            "Expected examples: '18-ubi8', '18', '18-ubi10'."
+        )
+
+    ubi_major = match.group(1)
+    if ubi_major not in {"8", "9", "10"}:
+        raise AssertionError(
+            f"Unsupported UBI major '{ubi_major}' in tag '{IMG_TAG}'. "
+            "Supported UBI majors are: 8, 9, 10."
+        )
+    return ubi_major
 
 
 def test_base_image_matches_ubi_tag(host):
@@ -212,6 +227,7 @@ def test_base_image_matches_ubi_tag(host):
     which can report the exact same VERSION_ID and would otherwise pass this check silently.
 
     - ubi8  tag -> RHEL/UBI 8
+    - ubi9  tag -> RHEL/UBI 9
     - ubi10 tag -> RHEL/UBI 10
     - no ubi    -> RHEL/UBI 9 (default)
     """
