@@ -15,6 +15,20 @@
     database_name: 'postgres'
     server_port: 5432
     ssl_version: "{{ lookup('env', 'SSL_VERSION') }}"
+    io_method: "{{ lookup('env', 'IO_METHOD') | default('worker') }}"
+
+- name: Fall back to worker io_method on RHEL 8, Rocky 8 and OracleLinux 8, as uring not supported
+  ansible.builtin.set_fact:
+    io_method: worker
+  when:
+    - (major_version | int) >= 18
+    - io_method in ['io_uring']
+    - >
+      (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'Rocky' and ansible_facts['distribution_major_version'] | int == 8)
+      or
+      (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'RedHat' and ansible_facts['distribution_major_version'] | int == 8)
+      or
+      (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'OracleLinux' and ansible_facts['distribution_major_version'] | int == 8)
 
 - name: task to run for aarch64 architecture
   shell: echo {{ tarball_url }} | sed  's:x86_64:aarch64:'
@@ -100,6 +114,47 @@
   environment:
     PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
   become_user: postgres
+
+- name: Comment out any existing io_method line (PG18+)
+  ansible.builtin.replace:
+    path: "{{ data_dir }}/postgresql.conf"
+    regexp: '^(?!#)(.*io_method.*)$'
+    replace: '# \1'
+  when: (major_version | int) >= 18
+
+- name: Set io_method in postgresql.conf (PG18+)
+  ansible.builtin.lineinfile:
+    path: "{{ data_dir }}/postgresql.conf"
+    line: "io_method = {{ io_method }}"
+  when: (major_version | int) >= 18
+
+- name: Check if io_uring is disabled
+  command: cat /proc/sys/kernel/io_uring_disabled
+  register: uring_disabled
+  ignore_errors: true
+  when:
+    - (major_version | int) >= 18
+    - io_method in ['io_uring']
+    - ansible_os_family == 'RedHat'
+
+- debug: var=uring_disabled.stdout_lines
+  when:
+    - (major_version | int) >= 18
+    - io_method in ['io_uring']
+    - ansible_os_family == 'RedHat'
+
+- name: Enable io_uring if possible
+  become: true
+  sysctl:
+    name: kernel.io_uring_disabled
+    value: 0
+    state: present
+  when:
+    - (major_version | int) >= 18
+    - io_method in ['io_uring']
+    - ansible_os_family == 'RedHat'
+    - uring_disabled.stdout is defined
+    - uring_disabled.stdout | int > 0
 
 - name: Start Postgres Server
   become: true
