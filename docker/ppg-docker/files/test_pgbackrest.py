@@ -46,9 +46,9 @@ def host(request):
     # 1. Initialize and Start
     host_instance.run(f"chown postgres:postgres {PG_DATA_DIR}")
     if host_instance.run(f"test -f {PG_DATA_DIR}/PG_VERSION").rc != 0:
-        host_instance.run(f"runuser -u postgres -- {PG_BIN_DIR}/initdb -D {PG_DATA_DIR}")
+        host_instance.run(f"gosu postgres {PG_BIN_DIR}/initdb -D {PG_DATA_DIR}")
 
-    host_instance.run(f"runuser -u postgres -- {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} start -w")
+    host_instance.run(f"gosu postgres {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} start -w")
 
     yield host_instance
     subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True)
@@ -78,7 +78,7 @@ repo1-retention-full=2
 
     # 3. Apply PG Settings
     def run_pg(cmd):
-        return host.run(f'runuser -u postgres -- {PG_BIN_DIR}/psql -c "{cmd}"')
+        return host.run(f'gosu postgres {PG_BIN_DIR}/psql -c "{cmd}"')
 
     run_pg("ALTER SYSTEM SET archive_mode='on';")
     # Archive command is now simple because it reads the config file!
@@ -88,7 +88,7 @@ repo1-retention-full=2
 
     # 4. Restart to apply
     restart = host.run(
-        f"runuser -u postgres -- {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} restart -m fast -w"
+        f"gosu postgres {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} restart -m fast -w"
     )
     assert restart.rc == 0
 
@@ -104,7 +104,7 @@ def cleanup_repo(host):
 @pytest.mark.order(1)
 def test_stanza_creation(setup_pgbackrest_config, cleanup_repo, host):
     """Initializes the pgBackRest stanza in a clean environment."""
-    cmd = "runuser -u postgres -- pgbackrest --stanza=testing stanza-create"
+    cmd = "gosu postgres pgbackrest --stanza=testing stanza-create"
     result = host.run(cmd)
     assert result.rc == 0
     assert "stanza-create command end: completed successfully" in result.stdout
@@ -114,12 +114,12 @@ def test_stanza_creation(setup_pgbackrest_config, cleanup_repo, host):
 def test_full_backup(host, setup_pgbackrest_config):
     """Performs the initial Full Backup and verifies repository health."""
     # 1. Execute Full Backup
-    backup_cmd = "runuser -u postgres -- pgbackrest --stanza=testing --type=full backup"
+    backup_cmd = "gosu postgres pgbackrest --stanza=testing --type=full backup"
     result = host.run(backup_cmd)
     assert result.rc == 0
 
     # 2. Verify info status
-    info_cmd = "runuser -u postgres -- pgbackrest --stanza=testing --output=json info"
+    info_cmd = "gosu postgres pgbackrest --stanza=testing --output=json info"
     info_result = host.run(info_cmd)
     assert info_result.rc == 0
 
@@ -134,34 +134,34 @@ def test_restore_workflow(host, setup_pgbackrest_config):
     # 1. Insert unique test data
     test_id = 777
     host.run(
-        f"runuser -u postgres -- {PG_BIN_DIR}/psql "
+        f"gosu postgres {PG_BIN_DIR}/psql "
         f"-c 'CREATE TABLE IF NOT EXISTS backup_test (id int);'"
     )
     host.run(
-        f"runuser -u postgres -- {PG_BIN_DIR}/psql "
+        f"gosu postgres {PG_BIN_DIR}/psql "
         f"-c 'INSERT INTO backup_test VALUES ({test_id});'"
     )
 
     # 2. Force WAL switch to push the new data to the archive
-    host.run(f"runuser -u postgres -- {PG_BIN_DIR}/psql -c 'CHECKPOINT; SELECT pg_switch_wal();'")
+    host.run(f"gosu postgres {PG_BIN_DIR}/psql -c 'CHECKPOINT; SELECT pg_switch_wal();'")
     time.sleep(3)
 
     # 3. Simulate total data loss
-    host.run(f"runuser -u postgres -- {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} stop -m immediate")
+    host.run(f"gosu postgres {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} stop -m immediate")
     host.run(f"rm -rf {PG_DATA_DIR}/*")
 
     # 4. Restore from pgBackRest
-    restore_cmd = "runuser -u postgres -- pgbackrest --stanza=testing restore"
+    restore_cmd = "gosu postgres pgbackrest --stanza=testing restore"
     assert host.run(restore_cmd).rc == 0
 
     # 5. Start PG and wait for it to finish replaying WALs
-    host.run(f"runuser -u postgres -- {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} start -w")
+    host.run(f"gosu postgres {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} start -w")
 
     # Loop: Wait for recovery mode to end (pg_is_in_recovery() == false)
     recovery_complete = False
     for _ in range(20):
         status = host.run(
-            f"runuser -u postgres -- {PG_BIN_DIR}/psql -t -c 'SELECT pg_is_in_recovery();'"
+            f"gosu postgres {PG_BIN_DIR}/psql -t -c 'SELECT pg_is_in_recovery();'"
         )
         if "f" in status.stdout.strip():
             recovery_complete = True
@@ -172,7 +172,7 @@ def test_restore_workflow(host, setup_pgbackrest_config):
 
     # 6. Verify our unique data survived the restore
     verify = host.run(
-        f"runuser -u postgres -- {PG_BIN_DIR}/psql -t "
+        f"gosu postgres {PG_BIN_DIR}/psql -t "
         f"-c 'SELECT count(*) FROM backup_test WHERE id = {test_id};'"
     )
     assert "1" in verify.stdout.strip()
@@ -183,18 +183,18 @@ def test_differential_backup(host, setup_pgbackrest_config):
     """Verifies that a differential backup only records changes since the Full."""
     # 1. Add some data to ensure there's a 'delta' to record
     host.run(
-        f"runuser -u postgres -- {PG_BIN_DIR}/psql "
+        f"gosu postgres {PG_BIN_DIR}/psql "
         f"-c 'CREATE TABLE diff_test (id int); INSERT INTO diff_test VALUES (1);'"
     )
 
     # 2. Run Differential Backup
     # Note: This requires a prior Full backup to exist (which order(2) provides)
-    diff_cmd = "runuser -u postgres -- pgbackrest --stanza=testing --type=diff backup"
+    diff_cmd = "gosu postgres pgbackrest --stanza=testing --type=diff backup"
     result = host.run(diff_cmd)
     assert result.rc == 0
 
     # 3. Verify in info that we now have a 'diff' type backup
-    info_cmd = "runuser -u postgres -- pgbackrest --stanza=testing --output=json info"
+    info_cmd = "gosu postgres pgbackrest --stanza=testing --output=json info"
     data = json.loads(host.run(info_cmd).stdout)
 
     # Check the backup list for a 'diff' type
@@ -212,26 +212,26 @@ def test_corruption_and_delta_restore(host, setup_pgbackrest_config):
     assert target_file, "Could not find a data file to corrupt"
 
     # 2. Stop PG and corrupt the file
-    host.run(f"runuser -u postgres -- {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} stop -m immediate")
+    host.run(f"gosu postgres {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} stop -m immediate")
     # Overwrite the first 100 bytes with junk
     host.run(f"dd if=/dev/urandom of={target_file} bs=100 count=1 conv=notrunc")
 
     # 3. Perform a --delta restore
     # Unlike a full restore, --delta uses checksums to find and fix ONLY corrupted/missing files.
     # It is MUCH faster than wiping the whole directory.
-    delta_restore_cmd = "runuser -u postgres -- pgbackrest --stanza=testing --delta restore"
+    delta_restore_cmd = "gosu postgres pgbackrest --stanza=testing --delta restore"
     result = host.run(delta_restore_cmd)
     assert result.rc == 0
     assert "restore command end: completed successfully" in result.stdout
 
     # 4. Restart and Verify
-    host.run(f"runuser -u postgres -- {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} start -w")
+    host.run(f"gosu postgres {PG_BIN_DIR}/pg_ctl -D {PG_DATA_DIR} start -w")
 
     # Check recovery status
     recovery_complete = False
     for _ in range(15):
         status = host.run(
-            f"runuser -u postgres -- {PG_BIN_DIR}/psql -t -c 'SELECT pg_is_in_recovery();'"
+            f"gosu postgres {PG_BIN_DIR}/psql -t -c 'SELECT pg_is_in_recovery();'"
         )
         if "f" in status.stdout.strip():
             recovery_complete = True
@@ -242,6 +242,6 @@ def test_corruption_and_delta_restore(host, setup_pgbackrest_config):
 
     # Ensure our previous data (from the Diff test) is still readable
     verify = host.run(
-        f"runuser -u postgres -- {PG_BIN_DIR}/psql -t -c 'SELECT count(*) FROM diff_test;'"
+        f"gosu postgres {PG_BIN_DIR}/psql -t -c 'SELECT count(*) FROM diff_test;'"
     )
     assert "1" in verify.stdout.strip()
