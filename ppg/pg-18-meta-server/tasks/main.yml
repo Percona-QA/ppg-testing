@@ -2,6 +2,19 @@
 - name: Setting facts so that they will be persisted in the fact cache
   ansible.builtin.set_fact:
     pg_version_to_install: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
+    io_method: "{{ lookup('env', 'IO_METHOD') | default('worker') }}"
+
+- name: Fall back to worker io_method on RHEL 8, Rocky 8 and OracleLinux 8, as uring not supported
+  ansible.builtin.set_fact:
+    io_method: worker
+  when:
+    - io_method in ['io_uring']
+    - >
+      (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'Rocky' and ansible_facts['distribution_major_version'] | int == 8)
+      or
+      (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'RedHat' and ansible_facts['distribution_major_version'] | int == 8)
+      or
+      (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'OracleLinux' and ansible_facts['distribution_major_version'] | int == 8)
 
 - name: End play on Ubuntu 26 and versions older than 18.4
   meta: end_host
@@ -15,11 +28,69 @@
 - name: install Percona Platform for PostgreSQL 18 packages
   include_tasks: ../../../../tasks/install_ppg_meta_server.yml
 
+- name: Comment out any existing io_method line (Debian, PG18+)
+  ansible.builtin.replace:
+    path: /etc/postgresql/18/main/postgresql.conf
+    regexp: '^(?!#)(.*io_method.*)$'
+    replace: '# \1'
+  when: ansible_os_family == "Debian"
+
+- name: Set io_method in postgresql.conf (Debian, PG18+)
+  ansible.builtin.lineinfile:
+    path: /etc/postgresql/18/main/postgresql.conf
+    line: "io_method = {{ io_method }}"
+  when: ansible_os_family == "Debian"
+
+- name: Restart postgresql service for Debian based (apply io_method)
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: restarted
+  when: ansible_os_family == "Debian"
+
 - name: Initialize Postgres RHEL
   command: /usr/pgsql-18/bin/postgresql-18-setup initdb
   environment:
     PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
   when: ansible_os_family == "RedHat"
+
+- name: Comment out any existing io_method line (RHEL, PG18+)
+  ansible.builtin.replace:
+    path: /var/lib/pgsql/18/data/postgresql.conf
+    regexp: '^(?!#)(.*io_method.*)$'
+    replace: '# \1'
+  when: ansible_os_family == "RedHat"
+
+- name: Set io_method in postgresql.conf (RHEL, PG18+)
+  ansible.builtin.lineinfile:
+    path: /var/lib/pgsql/18/data/postgresql.conf
+    line: "io_method = {{ io_method }}"
+  when: ansible_os_family == "RedHat"
+
+- name: Check if io_uring is disabled
+  command: cat /proc/sys/kernel/io_uring_disabled
+  register: uring_disabled
+  ignore_errors: true
+  when:
+    - io_method in ['io_uring']
+    - ansible_os_family == 'RedHat'
+
+- debug: var=uring_disabled.stdout_lines
+  when:
+    - io_method in ['io_uring']
+    - ansible_os_family == 'RedHat'
+
+- name: Enable io_uring if possible
+  become: true
+  sysctl:
+    name: kernel.io_uring_disabled
+    value: 0
+    state: present
+  when:
+    - io_method in ['io_uring']
+    - ansible_os_family == 'RedHat'
+    - uring_disabled.stdout is defined
+    - uring_disabled.stdout | int > 0
 
 - name: Start Postgres RHEL
   include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
