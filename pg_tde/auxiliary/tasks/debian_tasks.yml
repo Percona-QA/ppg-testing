@@ -59,6 +59,7 @@
         - sysbench
         - meson
         - ninja-build
+        - cmake
         - lcov
         - perltidy
         - lsof

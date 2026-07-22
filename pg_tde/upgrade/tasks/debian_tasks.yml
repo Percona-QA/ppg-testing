@@ -24,6 +24,7 @@
         - pkgconf
         - meson
         - ninja-build
+        - cmake
         - zlib1g-dev
         - libssl-dev
         - libreadline6-dev

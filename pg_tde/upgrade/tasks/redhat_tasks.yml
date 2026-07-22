@@ -139,6 +139,7 @@
         - numactl-devel
         - meson
         - ninja-build
+        - cmake
         - perl
       state: latest
       update_cache: true

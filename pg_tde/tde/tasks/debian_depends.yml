@@ -43,6 +43,7 @@
         - autoconf
         - meson
         - ninja-build
+        - cmake
         - libjson-c-dev
         - libhttp-server-simple-perl
         - python3-pykmip
