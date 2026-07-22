@@ -78,6 +78,13 @@
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     when: ansible_distribution_major_version == "8"
 
+  - name: Install gcc-toolset-10 on RHEL 8 for libkmip C++20 support (GCC 8 lacks <span>)
+    become: true
+    yum:
+      name: gcc-toolset-10
+      state: present
+    when: ansible_distribution_major_version == "8"
+
   - name: Install clang clang-devel on RHEL 9
     become: true
     command: yum install -y clang-devel clang
