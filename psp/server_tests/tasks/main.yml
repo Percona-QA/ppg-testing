@@ -177,6 +177,13 @@
       version: "{{ lookup('env', 'PSP_BRANCH') }}"
     become_user: postgres
     register: results
+    # Anonymous HTTPS git is rate-limited by GitHub per source IP. With many
+    # matrix hosts cloning through one NAT egress IP, the shared bucket drains
+    # and GitHub returns HTTP 403; retry with backoff so a throttled host
+    # recovers instead of failing the run.
+    retries: 5
+    delay: 30
+    until: results is succeeded
 
   - debug: var=results.stdout_lines
 
@@ -193,6 +200,10 @@
     when:
       - testsuite in ['installcheck-world', 'check-tde']
     register: results
+    # Same GitHub per-IP 403 throttle as the PSP clone above; retry with backoff.
+    retries: 5
+    delay: 30
+    until: results is succeeded
 
   - debug: var=results.stdout_lines
 
@@ -217,6 +228,10 @@
     when:
       - testsuite in ['installcheck-world', 'check-tde']
     register: results
+    # Submodules are fetched from GitHub too; same per-IP 403 throttle applies.
+    retries: 5
+    delay: 30
+    until: results is succeeded
 
   - debug: var=results.stdout_lines
 

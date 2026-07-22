@@ -26,6 +26,13 @@
     become: true
     become_user: postgres
     register: tde_clone_result
+    # Anonymous HTTPS git is rate-limited by GitHub per source IP. With many
+    # matrix hosts cloning through one NAT egress IP, the shared bucket drains
+    # and GitHub returns HTTP 403; retry with backoff so a throttled host
+    # recovers instead of failing the run.
+    retries: 5
+    delay: 30
+    until: tde_clone_result is succeeded
 
   - name: Initialize pg_tde submodules
     command: git submodule update --init --recursive
@@ -34,6 +41,11 @@
       executable: /bin/bash
     become: true
     become_user: postgres
+    register: tde_submodule_result
+    # Submodules are fetched from GitHub too; same per-IP 403 throttle applies.
+    retries: 5
+    delay: 30
+    until: tde_submodule_result is succeeded
 
   # PostgreSQL's JIT bitcode is compiled with CLANG (=/usr/bin/clang) and the
   # bitcode index is built with $(LLVM_BINPATH)/llvm-lto, where LLVM_BINPATH is
