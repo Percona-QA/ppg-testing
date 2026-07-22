@@ -233,6 +233,27 @@ def test_base_image_matches_ubi_tag(host):
     )
 
 
+def test_privilege_drop_tools_available(host):
+    """Check which privilege-drop tools (gosu/runuser/su) exist in the image.
+
+    gosu is asserted as a baseline requirement: it's present on every UBI
+    variant tested so far (8/9/10) and is the tool test_pgbackrest.py now
+    relies on in the UBI10-scoped ppg-docker/ppg-docker-upgrade roles.
+    This role's test_pgbackrest.py still uses runuser (UBI10 is not in
+    scope here yet), so runuser/su presence is recorded for visibility but
+    not asserted, since it's known to vary by UBI major (present on
+    15/16/17-ubi10, absent on 14/18-ubi10) and this role isn't tested
+    against UBI10 currently.
+    """
+    gosu = host.run("command -v gosu")
+    assert gosu.rc == 0, "gosu not found in the image."
+
+    runuser_present = host.run("command -v runuser").rc == 0
+    su_present = host.run("command -v su").rc == 0
+    print(f"\n[INFO] runuser present: {runuser_present}")
+    print(f"[INFO] su present: {su_present}")
+
+
 @pytest.fixture()
 def postgresql_binary(host):
     pg_binary = f"{PG_BIN_DIR}/postgres"
