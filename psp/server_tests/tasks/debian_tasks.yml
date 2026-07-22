@@ -45,6 +45,7 @@
         - meson
         - ninja-build
         - cmake
+        - python3-pip
         - libjson-c-dev
         - libhttp-server-simple-perl
         - python3-pykmip
