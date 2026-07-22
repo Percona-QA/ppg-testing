@@ -91,6 +91,7 @@
       - gcc
       - meson
       - ninja-build
+      - cmake
       - lz4
       - lz4-devel
       - python3

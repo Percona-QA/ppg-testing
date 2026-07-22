@@ -154,6 +154,7 @@
       - sysbench
       - meson
       - ninja-build
+      - cmake
 
   ## Handled by percona-qa helper scripts at test runtime
   ##- name: Install OpenBao
