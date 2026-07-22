@@ -365,6 +365,9 @@
     become_user: postgres
     ansible.builtin.shell: |
       set -o pipefail
+      {% if ansible_os_family == "RedHat" and ansible_distribution_major_version == "8" %}
+      source /opt/rh/gcc-toolset-10/enable
+      {% endif %}
       export LD_LIBRARY_PATH="/opt/pgsql/lib:${LD_LIBRARY_PATH:-}"
       rm -rf /tmp/pg_tde-build
       meson setup --buildtype=release -Dpg_config=/opt/pgsql/bin/pg_config -Dwerror=true /tmp/pg_tde-build 2>&1 | tee /tmp/tde-build.log
@@ -389,6 +392,9 @@
     become: true
     ansible.builtin.shell: |
       set -o pipefail
+      {% if ansible_os_family == "RedHat" and ansible_distribution_major_version == "8" %}
+      source /opt/rh/gcc-toolset-10/enable
+      {% endif %}
       meson install -C /tmp/pg_tde-build 2>&1 | tee /tmp/tde-install.log
     args:
       executable: /bin/bash
