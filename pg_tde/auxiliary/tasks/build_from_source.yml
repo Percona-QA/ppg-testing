@@ -10,6 +10,13 @@
     become: true
     become_user: postgres
     register: psp_clone_results
+    # Anonymous HTTPS git is rate-limited by GitHub per source IP. With ~30
+    # matrix hosts cloning through one NAT egress IP, the shared bucket drains
+    # and GitHub returns HTTP 403. Retry with backoff so a throttled host
+    # recovers on a later attempt instead of failing the run.
+    retries: 5
+    delay: 30
+    until: psp_clone_results is succeeded
 
   - name: Debug git results
     debug:
@@ -24,6 +31,11 @@
     become: true
     become_user: postgres
     register: tde_clone_results
+    # Same GitHub per-IP rate-limit (403) as the PSP clone above; retry with
+    # backoff so a throttled host recovers instead of failing the run.
+    retries: 5
+    delay: 30
+    until: tde_clone_results is succeeded
 
   - name: Debug git results
     debug:
@@ -37,6 +49,11 @@
     become_user: postgres
     when: not install_from_packages
     register: results
+    # Submodules are fetched from GitHub too, so the same per-IP 403 throttle
+    # applies; retry with backoff.
+    retries: 5
+    delay: 30
+    until: results is succeeded
 
   - debug: var=results.stdout_lines
 
