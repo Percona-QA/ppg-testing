@@ -284,6 +284,27 @@ def _expected_ubi_major_version():
     return '9'
 
 
+# RPM package names that were renamed on some UBI majors. Keyed by the
+# canonical name used in settings.py / pg_docker_versions; only the
+# `host.package()` lookup uses the resolved name, so version lookups still
+# key off the canonical name below. No-op today (this role isn't tested
+# against UBI10 tags yet), but keeps behavior correct if that changes.
+RPM_NAME_OVERRIDES_BY_UBI_MAJOR = {
+    # RHEL10 defaults to Python 3.12, so python3-etcd was rebuilt as
+    # python3.12-etcd (python3-ydiff was not renamed the same way).
+    "python3-etcd": {"10": "python3.12-etcd"},
+}
+
+
+def _installed_package_name(package):
+    """Resolve the RPM package name actually installed for the current UBI
+    major, accounting for names that changed between UBI variants."""
+    overrides = RPM_NAME_OVERRIDES_BY_UBI_MAJOR.get(package)
+    if not overrides:
+        return package
+    return overrides.get(_expected_ubi_major_version(), package)
+
+
 def test_base_image_matches_ubi_tag(host):
     """Verify the container base OS major version matches the UBI version in the image tag,
     and that the base OS is genuinely RHEL rather than a look-alike (e.g. Oracle Linux),
@@ -509,12 +530,15 @@ def test_rpm_package_is_installed(host, package):
     if "oidc_validator" in package and int(MAJOR_VER) < 18:
         pytest.skip(f"Skipping {package} for PostgreSQL {MAJOR_VER} (only supported on 18.2+).")
 
-    pkg = host.package(package)
+    installed_name = _installed_package_name(package)
+    pkg = host.package(installed_name)
 
     # 2. Verify Installation
-    assert pkg.is_installed, f"Package {package} is not installed"
+    assert pkg.is_installed, f"Package {installed_name} is not installed"
 
-    # 3. Dynamic Version Lookup
+    # 3. Dynamic Version Lookup (keyed by the canonical name, not the
+    # UBI-specific installed name, since pg_docker_versions is keyed
+    # canonically)
     pkg_data = pg_docker_versions.get(package)
 
     if isinstance(pkg_data, dict):
@@ -527,15 +551,15 @@ def test_rpm_package_is_installed(host, package):
         expected_version = pg_docker_versions.get("version")
 
     # --- Console Output Enhancement ---
-    print(f"\n[VERIFYING] Package: {package}")
+    print(f"\n[VERIFYING] Package: {installed_name}")
     print(f"            Expected: {expected_version}")
     print(f"            Found:    {pkg.version}")
 
     assert pkg.version == expected_version, (
-        f"Version mismatch for {package}. Expected: {expected_version}, Found: {pkg.version}"
+        f"Version mismatch for {installed_name}. Expected: {expected_version}, Found: {pkg.version}"
     )
 
-    print(f"[SUCCESS] {package} version {pkg.version} verified.")
+    print(f"[SUCCESS] {installed_name} version {pkg.version} verified.")
 
 
 @pytest.mark.parametrize("package", EXCLUDED_TELEMETRY_PACKAGES)
