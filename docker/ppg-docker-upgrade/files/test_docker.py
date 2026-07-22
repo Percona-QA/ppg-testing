@@ -599,6 +599,27 @@ def test_openssl_version_matches_ubi(host):
     )
 
 
+def test_privilege_drop_tools_available(host):
+    """Check which privilege-drop tools (gosu/runuser/su) exist in the image.
+
+    gosu is required: the test harness (test_pgbackrest.py) drops from root
+    to the postgres user via `gosu postgres <cmd>`, since runuser/su are
+    known to be inconsistently present across UBI10 majors (present on
+    15/16/17-ubi10, absent on 14/18-ubi10). runuser/su presence is recorded
+    for visibility but not asserted, since their absence doesn't break
+    anything this harness relies on.
+    """
+    gosu = host.run("command -v gosu")
+    assert gosu.rc == 0, (
+        "gosu not found in the image - required by the test harness "
+        "(test_pgbackrest.py) to drop privileges from root to postgres."
+    )
+
+    runuser_present = host.run("command -v runuser").rc == 0
+    su_present = host.run("command -v su").rc == 0
+    print(f"\n[INFO] runuser present: {runuser_present}")
+    print(f"[INFO] su present: {su_present}")
+
 
 @pytest.mark.needs_preload
 def test_pg_stat_monitor_extension_version(host):
