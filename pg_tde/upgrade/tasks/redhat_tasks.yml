@@ -91,12 +91,12 @@
   # toolchain matching the target PostgreSQL build). It is pre-baked into some
   # x86 images but not the ARM ones, so install it explicitly. Mirrors the
   # working pg_tde/tde role (redhat_depends.yml).
-  - name: Install gcc-toolset-14 for source builds (RHEL/Rocky/OL 9)
+  - name: Install gcc-toolset-14 for source builds (RHEL/Rocky/OL 8/9)
     dnf:
       name: gcc-toolset-14
       state: present
     become: true
-    when: ansible_distribution_major_version == "9"
+    when: ansible_distribution_major_version in ["8", "9"]
 
   - name: Install build and utility packages
     yum:
