@@ -57,15 +57,30 @@ set -uo pipefail
 
 # ── Resolve configuration ────────────────────────────────────────────────────
 
-OLD_VERSION="${OLD_VERSION:-17.10}"
-NEW_VERSION="${NEW_VERSION:-18.4}"
+# CI-supplied env vars occasionally carry stray leading/trailing whitespace
+# (e.g. a job parameter built by concatenating strings with a space).  A
+# single leading space in UPGRADE_TAG once turned "repo/image:18-...-ubi10"
+# into "repo/image: 18-...-ubi10" — Docker rejects that as an invalid
+# reference and docker run fails with exit 125 before the mediator ever
+# starts. Trim every CI-supplied value up front so this can't happen again.
+_trim() {
+    local s="$1"
+    s="${s#"${s%%[![:space:]]*}"}"
+    s="${s%"${s##*[![:space:]]}"}"
+    printf '%s' "$s"
+}
+
+OLD_VERSION="$(_trim "${OLD_VERSION:-17.10}")"
+NEW_VERSION="$(_trim "${NEW_VERSION:-18.4}")"
 OLD_MAJOR="${OLD_VERSION%%.*}"
 NEW_MAJOR="${NEW_VERSION%%.*}"
-DOCKER_REPOSITORY="${DOCKER_REPOSITORY:-perconalab}"
-OLD_TAG="${OLD_TAG:-$OLD_VERSION}"
-NEW_TAG="${NEW_TAG:-$NEW_VERSION}"
+DOCKER_REPOSITORY="$(_trim "${DOCKER_REPOSITORY:-perconalab}")"
+OLD_TAG="$(_trim "${OLD_TAG:-$OLD_VERSION}")"
+NEW_TAG="$(_trim "${NEW_TAG:-$NEW_VERSION}")"
 : "${UPGRADE_TAG:?UPGRADE_TAG is required. e.g. UPGRADE_TAG=18-17-16-15-14}"
-WITH_POSTGIS="${WITH_POSTGIS:-false}"
+UPGRADE_TAG="$(_trim "$UPGRADE_TAG")"
+: "${UPGRADE_TAG:?UPGRADE_TAG is empty after trimming whitespace}"
+WITH_POSTGIS="$(_trim "${WITH_POSTGIS:-false}")"
 
 # Warn if the broken legacy "v2" mediator tag is used — it passes
 # --no-data-checksums to initdb which was only introduced in PG 18 and
