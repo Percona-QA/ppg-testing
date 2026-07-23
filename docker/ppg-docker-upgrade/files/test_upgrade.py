@@ -33,6 +33,7 @@ Volume layout on the host
 
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import time
@@ -104,6 +105,41 @@ NEW_SETTINGS = settings.get_settings(NEW_MAJOR_MINOR)
 NEW_EXTENSIONS = NEW_SETTINGS["extensions"]
 NEW_BINARIES = NEW_SETTINGS["binaries"]
 NEW_RPM_PACKAGES = NEW_SETTINGS["rpm_packages"]
+
+
+def _expected_ubi_major_version(tag):
+    """Derive expected RHEL/UBI major version from an image tag.
+
+    Lenient variant of test_docker.py's _expected_ubi_major_version (which
+    fails fast on malformed tags) — this file only uses the result to pick
+    an RPM name override, so it just falls back to '9' on anything
+    unrecognized rather than raising.
+    """
+    tag = tag.lower()
+    if "ubi" not in tag:
+        return "9"
+    match = re.search(r"ubi(\d+)", tag)
+    return match.group(1) if match else "9"
+
+
+# RPM package names that were renamed on some UBI majors. Keyed by the
+# canonical name used in settings.py; only the installed-package lookup
+# uses the resolved name.
+RPM_NAME_OVERRIDES_BY_UBI_MAJOR = {
+    # RHEL10 defaults to Python 3.12, so python3-etcd was rebuilt as
+    # python3.12-etcd (python3-ydiff was not renamed the same way).
+    "python3-etcd": {"10": "python3.12-etcd"},
+}
+
+
+def _installed_package_name(package, tag):
+    """Resolve the RPM package name actually installed for the given image
+    tag's UBI major, accounting for names that changed between UBI variants."""
+    overrides = RPM_NAME_OVERRIDES_BY_UBI_MAJOR.get(package)
+    if not overrides:
+        return package
+    return overrides.get(_expected_ubi_major_version(tag), package)
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -542,7 +578,7 @@ class TestPostUpgradePackages:
         new_host = upgrade_pipeline["new_host"]
         missing = [
             pkg for pkg in NEW_RPM_PACKAGES
-            if new_host.run(f"rpm -q {pkg}").rc != 0
+            if new_host.run(f"rpm -q {_installed_package_name(pkg, IMG_TAG_NEW)}").rc != 0
             and (IS_WITH_POSTGIS or "postgis" not in pkg)
         ]
         assert not missing, f"RPM packages not installed in new image: {missing}"
