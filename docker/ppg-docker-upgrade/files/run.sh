@@ -250,8 +250,10 @@ echo "  New cluster pre-initialised in volume $NEW_VOL"
 #   /pgolddata/postgres  — old cluster root
 #   /pgnewdata/postgres  — new cluster root (mediator writes here)
 echo "  Running pg_upgrade mediator ..."
+MEDIATOR_CONTAINER="ppg_upgrade_mediator_${OLD_MAJOR}_${NEW_MAJOR}"
+docker rm -f "$MEDIATOR_CONTAINER" > /dev/null 2>&1 || true
 docker run --rm \
-    --name "ppg_upgrade_mediator_${OLD_MAJOR}_${NEW_MAJOR}" \
+    --name "$MEDIATOR_CONTAINER" \
     -e OLD_VERSION="$OLD_MAJOR" \
     -e NEW_VERSION="$NEW_MAJOR" \
     -e OLD_DATABASE_NAME=postgres \
