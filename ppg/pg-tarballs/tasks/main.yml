@@ -108,6 +108,15 @@
     group: postgres
     mode: '0755'
 
+- name: Ensure /run/postgresql exists for the Unix socket lock file
+  become: true
+  ansible.builtin.file:
+    path: /run/postgresql
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0755'
+
 - name: Initialize Postgres
   become: true
   command: "initdb -A trust -k {{data_dir}} "
