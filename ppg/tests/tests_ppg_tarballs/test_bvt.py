@@ -69,7 +69,12 @@ def start_stop_postgresql(host,get_server_bin_path):
         cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} stop"
         result = host.run(cmd)
         assert result.rc == 0
-        cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} start"
+        # -l is required here: without it, postgres inherits pg_ctl's own
+        # stdout/stderr, which over an SSH exec channel is that channel's
+        # pipe. Since postgres is long-running and never closes it, the
+        # channel never sees EOF and host.run() hangs forever even though
+        # pg_ctl itself already returned on the remote host.
+        cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} -l /tmp/data{settings.MAJOR_VER}.log start"
         result = host.run(cmd)
         assert result.rc == 0
         cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} status"
@@ -94,7 +99,9 @@ def postgresql_query_version(host,get_psql_binary_path):
 @pytest.fixture()
 def restart_postgresql(host,get_server_bin_path):
     with host.sudo("postgres"):
-        cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} restart"
+        # -l required -- see start_stop_postgresql above for why omitting it
+        # hangs the SSH exec channel indefinitely instead of just failing.
+        cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} -l /tmp/data{settings.MAJOR_VER}.log restart"
         result = host.run(cmd)
         assert result.rc == 0
         cmd = f"{get_server_bin_path}/pg_ctl -D {DATA_DIR} status"
@@ -129,17 +136,6 @@ def test_psql_client_version(host):
     result = host.run(PG_PATH+'/bin/psql --version')
     print(result)
     assert pg_versions['version'] in result.stdout, result.stdout
-
-# @pytest.mark.upgrade
-# @pytest.mark.parametrize("package", pg_versions['deb_packages'])
-# def test_deb_package_is_installed(host, package):
-#     dist = host.system_info.distribution
-#     if dist.lower() in ["redhat", "centos", "rhel", "rocky", "ol"]:
-#         pytest.skip("This test only for Debian based platforms")
-#     pkg = host.package(package)
-#     assert pkg.is_installed
-#     assert pkg.version in pg_versions['deb_pkg_ver']
-
 
 def test_postgres_binary(postgresql_binary):
     assert postgresql_binary.exists
@@ -337,9 +333,6 @@ def test_language(host,get_psql_binary_path, language):
     rpm_dists = ["redhat", "centos", "rhel", "rocky", "ol"]
     dist = host.system_info.distribution
     with host.sudo("postgres"):
-        # if dist.lower() in ["redhat", "centos", "rhel", "rocky", "ol"]:
-        #     if "python3" in language:
-        #         pytest.skip("Skipping python3 language for Centos or RHEL")
         if dist.lower() in rpm_dists and language in ['plpythonu', "plpython2u"]:
             pytest.skip("Skipping python2 extensions for RHEL on Major version 16")
         if dist.lower() in deb_dists and language in ['plpythonu', "plpython2u"]:
@@ -369,14 +362,14 @@ def test_postgres_client_string(host, get_psql_binary_path):
         assert f"psql (PostgreSQL) {pg_versions['version']}" in host.check_output(f"{get_psql_binary_path}  -V")
 
 
-# def test_start_stop_postgresql(start_stop_postgresql):
-#     assert start_stop_postgresql.rc == 0, start_stop_postgresql.rc
-#     assert "server is running" in start_stop_postgresql.stdout, start_stop_postgresql.stdout
+def test_start_stop_postgresql(start_stop_postgresql):
+    assert start_stop_postgresql.rc == 0, start_stop_postgresql.rc
+    assert "server is running" in start_stop_postgresql.stdout, start_stop_postgresql.stdout
 
 
-# def test_restart_postgresql(restart_postgresql):
-#     assert restart_postgresql.rc == 0, restart_postgresql.stderr
-#     assert "server is running" in restart_postgresql.stdout, restart_postgresql.stdout
+def test_restart_postgresql(restart_postgresql):
+    assert restart_postgresql.rc == 0, restart_postgresql.stderr
+    assert "server is running" in restart_postgresql.stdout, restart_postgresql.stdout
 
 
 def test_build_with_liburing(host, get_server_bin_path):

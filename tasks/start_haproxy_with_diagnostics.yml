@@ -6,9 +6,18 @@
 #
 # Caller must set:
 #   haproxy_cfg - path to haproxy.cfg, e.g. /etc/haproxy/haproxy.cfg
+# Caller may set:
+#   haproxy_bin      - path (or bare name, if PATH-resolved) to the haproxy
+#                      binary; default "haproxy" (package installs put it on
+#                      the default PATH -- tarball installs need the full
+#                      {{dest_dir}}/percona-haproxy/sbin/haproxy path)
+#   haproxy_env_path - PATH environment value for the command, e.g. to make
+#                      a tarball's percona-haproxy/sbin resolvable
 
 - name: Start haproxy
-  ansible.builtin.shell: haproxy -f {{ haproxy_cfg }} -D
+  ansible.builtin.shell: "{{ haproxy_bin | default('haproxy') }} -f {{ haproxy_cfg }} -D"
+  environment:
+    PATH: "{{ haproxy_env_path | default(ansible_env.PATH) }}"
   register: __haproxy_result
   changed_when: true
   ignore_errors: true

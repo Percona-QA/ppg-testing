@@ -106,11 +106,12 @@
         log_filename = postgresql-main.log
 
   - name: Restart Postgres
-    become: true
-    become_user: postgres
-    command: "pg_ctl -D {{data_dir}} restart"
-    environment:
-      PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+    include_tasks: "{{ role_path }}/../../tasks/start_pgctl_with_diagnostics.yml"
+    vars:
+      pgctl_bin: pg_ctl
+      pgctl_data_dir: "{{ data_dir }}"
+      pgctl_action: restart
+      pgctl_env_path: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
 
   - name: Enable llvm-toolset for RHEL8 to install PostGIS
     become: true
@@ -169,6 +170,7 @@
       path: "{{data_dir}}/pg_hba.conf"
       create: yes
       owner: postgres
+      group: postgres
       block: |
         local   all             all                                     trust
         host    all             all             127.0.0.1/32            trust
@@ -179,24 +181,19 @@
     when: (ansible_os_family == "RedHat") or (ansible_os_family == "Debian")
 
   - name: Restart Postgres
-    become: true
-    become_user: postgres
-    command: "pg_ctl -D {{data_dir}} restart"
-    environment:
-      PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+    include_tasks: "{{ role_path }}/../../tasks/start_pgctl_with_diagnostics.yml"
+    vars:
+      pgctl_bin: pg_ctl
+      pgctl_data_dir: "{{ data_dir }}"
+      pgctl_action: restart
+      pgctl_env_path: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
 
-  - name: Start local ETCD server in the background
-    ansible.builtin.command:
-      cmd: "{{dest_dir}}/percona-etcd/bin/etcd"
-    async: 120
-    poll: 0
-    register: etcd_server
-
-  # - name: Wait for ETCD to start
-  #   ansible.builtin.wait_for:
-  #     port: 2379
-  #     host: localhost
-  #     timeout: 60
+  - name: Start local ETCD server with health check and diagnostics
+    include_tasks: "{{ role_path }}/../../tasks/start_etcd_with_diagnostics.yml"
+    vars:
+      etcd_bin: "{{dest_dir}}/percona-etcd/bin/etcd"
+      etcd_client_url: "http://127.0.0.1:2379"
+      etcd_log_file: /tmp/etcd.log
 
   - name: Create /etc/patroni directory
     file:
@@ -260,22 +257,22 @@
     when: ansible_os_family == "RedHat"
 
   - name: Start patroni0
-    service:
-      name: patroni0
-      state: started
-      enabled: yes
+    include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
+    vars:
+      svc_name: patroni0
+      svc_state: started
 
   - name: Start patroni1
-    service:
-      name: patroni1
-      state: started
-      enabled: yes
+    include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
+    vars:
+      svc_name: patroni1
+      svc_state: started
 
   - name: Start patroni2
-    service:
-      name: patroni2
-      state: started
-      enabled: yes
+    include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
+    vars:
+      svc_name: patroni2
+      svc_state: started
 
   - name: Create haproxy directory
     file:
@@ -292,11 +289,12 @@
       group: root
       mode: 0644
 
-  # this testcase is failing due to libcrypto.so.1 not found
   - name: Start haproxy
-    shell: haproxy -f  /etc/haproxy/haproxy.cfg -D
-    environment:
-      PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-haproxy/sbin"
+    include_tasks: "{{ role_path }}/../../tasks/start_haproxy_with_diagnostics.yml"
+    vars:
+      haproxy_cfg: /etc/haproxy/haproxy.cfg
+      haproxy_bin: "{{dest_dir}}/percona-haproxy/sbin/haproxy"
+      haproxy_env_path: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-haproxy/sbin"
 
   # - name: Remove dpkg package if present on RedHat
   #   yum:

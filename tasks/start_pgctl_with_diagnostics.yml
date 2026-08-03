@@ -1,0 +1,51 @@
+---
+# Start or restart PostgreSQL directly via pg_ctl. Tarball installs aren't
+# systemd services (unlike the package roles, which use
+# start_postgres_with_diagnostics.yml against a systemd unit) -- so "did it
+# work" means the pg_ctl command exited non-zero, not a unit state check.
+# On failure, dump the pg_ctl log file (if any) plus everything under the
+# data directory's log tree, then fail the play explicitly (register +
+# ignore_errors would otherwise swallow it).
+#
+# Caller must set:
+#   pgctl_bin      - path (or bare name, if PATH-resolved) to the pg_ctl binary
+#   pgctl_data_dir - -D argument, e.g. {{ data_dir }}
+#   pgctl_env_path - PATH environment value for the command
+# Caller may set:
+#   pgctl_action       - "start" or "restart" (default "start")
+#   pgctl_log_file     - -l argument, e.g. /tmp/data{{ major_version }}.log
+#                        (only added to the command when set)
+#   pgctl_options       - -o argument string, e.g. "-p {{ server_port }}"
+#                        (only added to the command when set)
+#   pgctl_become_user  - default "postgres"
+
+- name: "{{ pgctl_action | default('start') | capitalize }} PostgreSQL via pg_ctl"
+  become: true
+  become_user: "{{ pgctl_become_user | default('postgres') }}"
+  ansible.builtin.command: >-
+    {{ pgctl_bin }} -D {{ pgctl_data_dir }}
+    {{ ('-l ' + pgctl_log_file) if pgctl_log_file is defined else '' }}
+    {{ pgctl_action | default('start') }}
+    {{ ("-o '" + pgctl_options + "'") if pgctl_options is defined else '' }}
+  environment:
+    PATH: "{{ pgctl_env_path }}"
+  register: __pgctl_result
+  ignore_errors: true
+
+- name: Diagnose pg_ctl failure
+  when: __pgctl_result is failed
+  block:
+    - name: Dump pg_ctl log and data directory logs
+      ansible.builtin.include_tasks: "{{ role_path }}/../../tasks/dump_logs.yml"
+      vars:
+        log_files: "{{ [pgctl_log_file] if pgctl_log_file is defined else [] }}"
+        log_search_dir: "{{ pgctl_data_dir }}"
+
+- name: "Fail if PostgreSQL did not {{ pgctl_action | default('start') }} via pg_ctl"
+  ansible.builtin.fail:
+    msg: >-
+      PostgreSQL failed to {{ pgctl_action | default('start') }} via pg_ctl:
+      {{ __pgctl_result.msg | default('see diagnostics above') }}
+      stdout: {{ __pgctl_result.stdout | default('(none)') }}
+      stderr: {{ __pgctl_result.stderr | default('(none)') }}
+  when: __pgctl_result is failed
