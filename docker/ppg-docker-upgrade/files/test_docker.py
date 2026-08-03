@@ -692,6 +692,50 @@ def test_build_with_liburing(host):
     assert "--with-liburing" in output, "PostgreSQL 18 was built without --with-liburing"
 
 
+# wal_compression algorithm -> minimum PostgreSQL major version that supports it
+WAL_COMPRESSION_ALGORITHMS = {
+    "pglz": 14,
+    "lz4": 15,
+    "zstd": 15,
+}
+
+
+@pytest.mark.parametrize("algo", list(WAL_COMPRESSION_ALGORITHMS))
+def test_wal_compression_algorithms(host, algo):
+    """
+    Verify that wal_compression accepts each algorithm expected to be
+    built into this image (pglz: PG14+, lz4/zstd: PG15+).
+    ALTER SYSTEM SET rejects the value immediately if the server wasn't
+    compiled with support for it.
+
+    wal_compression is a plain boolean GUC before PG15 (pglz is the only,
+    implicit algorithm) and only became an enum accepting the literal
+    values pglz/lz4/zstd from PG15 onward, so PG14 must be driven via the
+    boolean spelling "on" rather than the literal "pglz".
+    """
+    min_ver = WAL_COMPRESSION_ALGORITHMS[algo]
+    if int(MAJOR_VER) < min_ver:
+        pytest.skip(f"wal_compression={algo} requires PG{min_ver}+, found {MAJOR_VER}")
+
+    is_pg14_pglz = algo == "pglz" and int(MAJOR_VER) < 15
+    set_value = "on" if is_pg14_pglz else algo
+    expected = "on" if is_pg14_pglz else algo
+
+    try:
+        result = host.run(f"psql -c \"ALTER SYSTEM SET wal_compression = '{set_value}';\"")
+        assert result.rc == 0, result.stderr
+        assert "ALTER SYSTEM" in result.stdout, result.stdout
+
+        reload = host.run("psql -c 'SELECT pg_reload_conf();'")
+        assert reload.rc == 0, reload.stderr
+
+        show = host.run("psql -t -c 'SHOW wal_compression;'").stdout.strip()
+        assert show == expected, f"Expected wal_compression={expected}, got '{show}'"
+    finally:
+        host.run("psql -c 'ALTER SYSTEM RESET wal_compression;'")
+        host.run("psql -c 'SELECT pg_reload_conf();'")
+
+
 @pytest.mark.parametrize(
     "flag",
     [
