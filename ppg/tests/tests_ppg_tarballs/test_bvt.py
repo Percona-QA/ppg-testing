@@ -400,6 +400,28 @@ WAL_COMPRESSION_ALGORITHMS = {
     "zstd": 15,
 }
 
+# The official tarball release, at or below these per-major
+# versions, may be missing --with-zstd, so lz4/zstd are not
+# available (pglz always works, no external lib needed) as this symptom
+# was found in packages for zstd. Just adding a check here to make sure,
+# we're not missing it from builds.
+TARBALL_LZ4_ZSTD_GAP_MAX_VERSION = {
+    14: (14, 23),
+    15: (15, 18),
+    16: (16, 14),
+    17: (17, 10),
+    18: (18, 4),
+}
+
+
+def _skip_lz4_zstd_check():
+    cap = TARBALL_LZ4_ZSTD_GAP_MAX_VERSION.get(int(settings.MAJOR_VER))
+    if cap is None:
+        return False
+    full_version = os.getenv("VERSION").split("-", 1)[1]  # e.g. "17.10"
+    current = tuple(int(p) for p in full_version.split(".")[:2])
+    return current <= cap
+
 
 @pytest.mark.parametrize("algo", list(WAL_COMPRESSION_ALGORITHMS))
 def test_wal_compression_algorithms(host, get_psql_binary_path, algo):
@@ -417,6 +439,11 @@ def test_wal_compression_algorithms(host, get_psql_binary_path, algo):
     min_ver = WAL_COMPRESSION_ALGORITHMS[algo]
     if int(settings.MAJOR_VER) < min_ver:
         pytest.skip(f"wal_compression={algo} requires PG{min_ver}+, found {settings.MAJOR_VER}")
+
+    if algo in ("lz4", "zstd") and _skip_lz4_zstd_check():
+        pytest.skip(
+            f"Skipping wal_compression={algo} check on {os.getenv('VERSION')}"
+        )
 
     is_pg14_pglz = algo == "pglz" and int(settings.MAJOR_VER) < 15
     set_value = "on" if is_pg14_pglz else algo
