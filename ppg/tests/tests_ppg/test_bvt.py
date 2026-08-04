@@ -568,6 +568,80 @@ def test_build_with_liburing(host):
     assert '--with-liburing' in output, "PostgreSQL 18 was built without --with-liburing"
 
 
+# wal_compression algorithm -> minimum PostgreSQL major version that supports it
+WAL_COMPRESSION_ALGORITHMS = {
+    "pglz": 14,
+    "lz4": 15,
+    "zstd": 15,
+}
+
+# These versions were built without --with-zstd for Ubuntu/Debian. This is
+# expected to resolve once the fix reaches the release repo for a future
+# minor version. LZ4 is present on all versions and platforms, but making sure
+# it's not missing from builds is still worthwhile.
+PACKAGE_LZ4_ZSTD_GAP_MAX_VERSION = {
+    14: (14, 23),
+    15: (15, 18),
+    16: (16, 14),
+    17: (17, 10),
+    18: (18, 4),
+}
+
+
+def _skip_lz4_zstd_check():
+    cap = PACKAGE_LZ4_ZSTD_GAP_MAX_VERSION.get(int(settings.MAJOR_VER))
+    if cap is None:
+        return False
+    raw_version = os.getenv("VERSION") or ""
+    after_dash = raw_version.split("-", 1)[1] if "-" in raw_version else raw_version
+    parts = after_dash.split(".")
+    if len(parts) < 2:
+        return True  # major-only run (e.g. "ppg-17"); assume worst case
+    return tuple(int(p) for p in parts[:2]) <= cap
+
+
+@pytest.mark.parametrize("algo", list(WAL_COMPRESSION_ALGORITHMS))
+def test_wal_compression_algorithms(host, algo):
+    """
+    Verify that wal_compression accepts each algorithm expected to be
+    built into this distribution (pglz: PG14+, lz4/zstd: PG15+).
+    ALTER SYSTEM SET rejects the value immediately if the server wasn't
+    compiled with support for it.
+
+    wal_compression is a plain boolean GUC before PG15 (pglz is the only,
+    implicit algorithm) and only became an enum accepting the literal
+    values pglz/lz4/zstd from PG15 onward, so PG14 must be driven via the
+    boolean spelling "on" rather than the literal "pglz".
+    """
+    min_ver = WAL_COMPRESSION_ALGORITHMS[algo]
+    if int(settings.MAJOR_VER) < min_ver:
+        pytest.skip(f"wal_compression={algo} requires PG{min_ver}+, found {settings.MAJOR_VER}")
+
+    if algo in ("lz4", "zstd") and _skip_lz4_zstd_check():
+        pytest.skip(
+            f"Skipping wal_compression={algo} check on {os.getenv('VERSION')}"
+        )
+
+    is_pg14_pglz = algo == "pglz" and int(settings.MAJOR_VER) < 15
+    set_value = "on" if is_pg14_pglz else algo
+    expected = "on" if is_pg14_pglz else algo
+
+    with host.sudo("postgres"):
+        try:
+            result = host.run(f"psql -c \"ALTER SYSTEM SET wal_compression = '{set_value}';\"")
+            assert result.rc == 0, result.stderr
+            assert "ALTER SYSTEM" in result.stdout, result.stdout
+
+            reload = host.run("psql -c 'SELECT pg_reload_conf();'")
+            assert reload.rc == 0, reload.stderr
+
+            show = host.check_output("psql -t -c 'SHOW wal_compression;'").strip()
+            assert show == expected, f"Expected wal_compression={expected}, got '{show}'"
+        finally:
+            host.run("psql -c 'ALTER SYSTEM RESET wal_compression;'")
+            host.run("psql -c 'SELECT pg_reload_conf();'")
+
+
 @pytest.mark.parametrize(
     "flag,skip_on_debian",
     [
