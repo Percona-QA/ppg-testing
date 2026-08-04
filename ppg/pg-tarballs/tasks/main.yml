@@ -66,6 +66,7 @@
     - file
     - wget
     - curl
+    - binutils
 
 - name: install Percona Platform for PostgreSQL {{major_version}} packages
   include_tasks: ../../../../tasks/install_openssl_for_tarballs.yml
@@ -157,11 +158,13 @@
     - uring_disabled.stdout | int > 0
 
 - name: Start Postgres Server
-  become: true
-  become_user: postgres
-  command: "pg_ctl -D {{data_dir}} -l /tmp/data{{major_version}}.log start -o '-p {{server_port}}'"
-  environment:
-    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
+  include_tasks: ../../../../tasks/start_pgctl_with_diagnostics.yml
+  vars:
+    pgctl_bin: pg_ctl
+    pgctl_data_dir: "{{ data_dir }}"
+    pgctl_log_file: "/tmp/data{{ major_version }}.log"
+    pgctl_options: "-p {{ server_port }}"
+    pgctl_env_path: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{dest_dir}}/percona-postgresql{{major_version}}/bin"
 
 - name: Display ppg version
   become: true

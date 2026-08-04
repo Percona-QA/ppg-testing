@@ -1,0 +1,46 @@
+---
+# Start etcd directly from its tarball binary (not a systemd service in this
+# repo's tarball setup, unlike the package roles which install etcd from a
+# distro package and start it via start_service_with_diagnostics.yml), and
+# wait for it to actually report healthy before returning -- Patroni's
+# bootstrap immediately after this depends on etcd already being reachable,
+# so a fire-and-forget async start with no readiness check just pushes the
+# same failure downstream to a less obvious place. On failure/timeout, dump
+# the etcd log and fail the play explicitly.
+#
+# Caller must set:
+#   etcd_bin        - path to the etcd binary
+#   etcd_client_url - e.g. "http://127.0.0.1:2379"
+# Caller may set:
+#   etcd_log_file       - default /tmp/etcd.log
+#   etcd_ready_retries  - default 30 (polled 1s apart)
+
+- name: Start etcd in the background
+  ansible.builtin.shell: >-
+    nohup {{ etcd_bin }} > {{ etcd_log_file | default('/tmp/etcd.log') }} 2>&1 < /dev/null &
+  async: 120
+  poll: 0
+
+- name: Wait for etcd to report healthy
+  ansible.builtin.uri:
+    url: "{{ etcd_client_url }}/health"
+    return_content: true
+  register: __etcd_health
+  until: __etcd_health.status is defined and __etcd_health.status == 200
+  retries: "{{ etcd_ready_retries | default(30) }}"
+  delay: 1
+  ignore_errors: true
+
+- name: Diagnose etcd startup failure
+  when: __etcd_health is failed
+  block:
+    - name: Dump etcd log
+      ansible.builtin.include_tasks: "{{ role_path }}/../../tasks/dump_logs.yml"
+      vars:
+        log_files:
+          - "{{ etcd_log_file | default('/tmp/etcd.log') }}"
+
+- name: Fail if etcd never became healthy
+  ansible.builtin.fail:
+    msg: "etcd did not report healthy at {{ etcd_client_url }}/health within the allotted retries"
+  when: __etcd_health is failed

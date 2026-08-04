@@ -9,6 +9,26 @@
     command: dnf module disable postgresql -y
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
 
+  # RHEL/Rocky/OL enable SELinux enforcing by default; Debian/Ubuntu don't
+  # ship it at all. Confirmed: RHEL-family hosts (9/10, both amd64 and
+  # arm64) hang on the etcd/Patroni smoke tests' loopback health checks
+  # where Debian/Ubuntu don't -- this is a disposable CI test host, not a
+  # hardened target, so remove the likely cause up front instead of just
+  # detecting it after a test times out.
+  #
+  # NOTE: a matching "stop and disable firewalld" task was tried here too,
+  # but removed -- confirmed via a live CI failure that firewalld isn't
+  # even installed on these images ("Could not find the requested service
+  # firewalld: host"), so it was never a candidate cause here and the task
+  # was just chasing a nonexistent service.
+  - name: Set SELinux to permissive (RHEL family test hosts only)
+    ansible.posix.selinux:
+      policy: targeted
+      state: permissive
+    become: true
+    when: ansible_os_family == "RedHat"
+    ignore_errors: true
+
   - name: Install liburing debian
     apt:
       name: "{{ packages }}"
@@ -25,6 +45,7 @@
       name:
         - liburing
         - liburing-devel
+        - numactl-libs
       state: latest
       update_cache: yes
     when: ansible_os_family == "RedHat"
@@ -55,6 +76,28 @@
       src: "{{ tarball_url }}"
       dest:  "{{dest_dir}}"
       remote_src: true
+
+  # unarchive succeeds as long as tarball_url points to *some* valid
+  # archive, even if its PG major version doesn't match VERSION -- e.g.
+  # TARBALL_URL overridden to a ppg-17.10 build while VERSION is left at
+  # its default ppg-18.4. That mismatch used to only surface several tasks
+  # later as a confusing "initdb: No such file or directory" (PATH built
+  # from major_version pointed at a percona-postgresql18 dir that was
+  # never extracted). Fail here instead, naming the actual mismatch.
+  - name: Fail fast if VERSION doesn't match the extracted tarball's PG major version
+    ansible.builtin.stat:
+      path: "{{ dest_dir }}/percona-postgresql{{ major_version }}"
+    register: __expected_pg_dir
+
+  - name: Assert VERSION matches TARBALL_URL
+    ansible.builtin.fail:
+      msg: >-
+        VERSION={{ lookup('env', 'VERSION') }} (major version {{ major_version }})
+        doesn't match the tarball extracted from TARBALL_URL={{ tarball_url }} --
+        expected to find {{ dest_dir }}/percona-postgresql{{ major_version }},
+        but it doesn't exist. Check that VERSION and TARBALL_URL agree on the
+        same PG major version.
+    when: not __expected_pg_dir.stat.exists
 
   - name: Copy Percona pl-languages to /opt
     become: true
