@@ -1,0 +1,135 @@
+---
+# PG-2615: percona-pg-telemetry is now a weak dependency (Recommends/Suggests)
+# of the PG server package, specifically so that users who have concerns can
+# opt out of installing it. This exercises that opt-out path end to end:
+# remove percona-pg-telemetry, reinstall the server package with weak
+# dependencies disabled, and confirm it does NOT get pulled back in.
+#
+# Only applicable to versions that ship the PG-2615 packaging (ppg-14.24,
+# ppg-15.19, ppg-16.15, ppg-17.11, ppg-18.5 and later) — older minors still
+# hard-depend on percona-telemetry-agent and have no weak dependency to opt
+# out of. Callers must gate the include on `weak_dependency_expected` (set by
+# tasks/verify_telemetry.yml, which is assumed to have already run in this
+# play so percona-pg-telemetry is currently installed via the default
+# recommends-on install). This restores that default state again at the end
+# so later tasks in the play see the same package set a normal install would
+# produce.
+
+- name: Setting facts so that they will be persisted in the fact cache
+  ansible.builtin.set_fact:
+    pg_version_to_install: "{{ lookup('env', 'VERSION') | regex_replace('^(?:ppg|psp)-','') }}"
+
+- name: Extract major version
+  ansible.builtin.set_fact:
+    major_version: "{{ pg_version_to_install.split('.')[0] }}"
+
+- name: Set service name based on the operating system
+  set_fact:
+    postgresql_service_name: "{{ 'postgresql-' + major_version if ansible_facts['os_family'] == 'RedHat' else 'postgresql' }}"
+
+- name: Set package names based on the major version and OS
+  set_fact:
+    telemetry_package_name: "percona-pg-telemetry{{ major_version }}"
+    server_package_name: "{{ 'percona-postgresql' + major_version + '-server' if ansible_facts['os_family'] == 'RedHat' else 'percona-postgresql-' + major_version }}"
+
+- name: Remove "{{ telemetry_package_name }}" so we can test opting back out at install time
+  ansible.builtin.package:
+    name: "{{ telemetry_package_name }}"
+    state: absent
+  become: true
+
+- name: Confirm "{{ server_package_name }}" survives removing "{{ telemetry_package_name }}"
+  ansible.builtin.command:
+    cmd: "{{ 'rpm -q ' ~ server_package_name if ansible_facts['os_family'] == 'RedHat' else 'dpkg -s ' ~ server_package_name }}"
+  register: server_after_removal
+  changed_when: false
+
+- name: Fail if "{{ server_package_name }}" was removed along with "{{ telemetry_package_name }}"
+  ansible.builtin.fail:
+    msg: "{{ server_package_name }} should not be affected by removing {{ telemetry_package_name }}."
+  when: server_after_removal.rc != 0
+
+- name: Reinstall "{{ server_package_name }}" with weak dependencies disabled (RedHat)
+  ansible.builtin.command:
+    cmd: "dnf reinstall -y --setopt=install_weak_deps=False {{ server_package_name }}"
+  become: true
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Reinstall "{{ server_package_name }}" with weak dependencies disabled (Debian)
+  ansible.builtin.command:
+    cmd: "apt-get install --reinstall -y --no-install-recommends {{ server_package_name }}"
+  become: true
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Check whether "{{ telemetry_package_name }}" is installed on RedHat
+  ansible.builtin.command:
+    cmd: rpm -q "{{ telemetry_package_name }}"
+  register: telemetry_after_optout_rpm
+  ignore_errors: true
+  changed_when: false
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Check whether "{{ telemetry_package_name }}" is installed on Debian/Ubuntu
+  ansible.builtin.shell: dpkg -l | grep "{{ telemetry_package_name }}"
+  register: telemetry_after_optout_deb
+  ignore_errors: true
+  changed_when: false
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Normalize "{{ telemetry_package_name }}" post-opt-out status across OS families
+  ansible.builtin.set_fact:
+    telemetry_after_optout: "{{ telemetry_after_optout_rpm if ansible_facts['os_family'] == 'RedHat' else telemetry_after_optout_deb }}"
+
+- name: Fail if opting out of weak dependencies still installed "{{ telemetry_package_name }}"
+  ansible.builtin.fail:
+    msg: >-
+      {{ telemetry_package_name }} got reinstalled even though weak
+      dependencies were explicitly disabled while reinstalling
+      {{ server_package_name }}. It is no longer being treated as a weak
+      dependency.
+  when: telemetry_after_optout.rc == 0
+
+- name: Print confirmation that opting out of the weak dependency works
+  ansible.builtin.debug:
+    msg: >-
+      {{ telemetry_package_name }} was correctly skipped when installing
+      {{ server_package_name }} with weak dependencies disabled.
+
+- name: Confirm "{{ postgresql_service_name }}" is still running after the reinstall
+  ansible.builtin.systemd:
+    name: "{{ postgresql_service_name }}"
+    state: started
+  register: postgresql_service_after_optout
+
+- name: Fail if "{{ postgresql_service_name }}" is not running after the reinstall
+  ansible.builtin.fail:
+    msg: >-
+      The {{ postgresql_service_name }} service is not running after
+      reinstalling {{ server_package_name }} without weak dependencies!
+  when: postgresql_service_after_optout.status['ActiveState'] != 'active'
+
+# Restore the default (recommends-on) install so the rest of the suite sees
+# the same package set a normal install would produce.
+- name: Reinstall "{{ telemetry_package_name }}" to restore the default install state (RedHat)
+  ansible.builtin.command:
+    cmd: "dnf install -y {{ telemetry_package_name }}"
+  become: true
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Reinstall "{{ telemetry_package_name }}" to restore the default install state (Debian)
+  ansible.builtin.apt:
+    name: "{{ telemetry_package_name }}"
+    state: present
+  become: true
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Confirm "{{ telemetry_package_name }}" is back after restoring the default install state
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Fail if "{{ telemetry_package_name }}" was not restored
+  ansible.builtin.fail:
+    msg: "{{ telemetry_package_name }} was not reinstalled after the opt-out test."
+  when: telemetry_package_name not in ansible_facts.packages
