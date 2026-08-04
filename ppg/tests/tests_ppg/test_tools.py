@@ -44,6 +44,18 @@ PG_CRON_MIN_VERSIONS = {
     18: version.parse("18.4"),
 }
 
+# Minimum PostgreSQL versions where percona-pg-telemetry became a weak
+# dependency (Recommends/Suggests) of the server package instead of a hard
+# Requires/Depends, and percona-telemetry-agent stopped being pulled in at
+# all (PG-2615).
+TELEMETRY_WEAK_DEP_MIN_VERSIONS = {
+    14: version.parse("14.24"),
+    15: version.parse("15.19"),
+    16: version.parse("16.15"),
+    17: version.parse("17.11"),
+    18: version.parse("18.5"),
+}
+
 # Minimum PostgreSQL versions where pg_tde_upgrade binary is available
 PG_TDE_UPGRADE_MIN_VERSIONS = {
     17: version.parse("17.10"),
@@ -1011,6 +1023,76 @@ def test_pg_telemetry_extension_version(host):
         result = host.run("psql -c 'SELECT percona_pg_telemetry_version();' | awk 'NR==3{print $1}'")
         assert result.rc == 0, result.stderr
         assert result.stdout.strip("\n") == pg_versions['pg_telemetry_version']
+
+
+def _telemetry_weak_dep_expected():
+    """True if this version ships the PG-2615 weak-dependency packaging."""
+    current_ver = version.parse(pg_versions.get("version", "0.0"))
+    min_ver = TELEMETRY_WEAK_DEP_MIN_VERSIONS.get(current_ver.major)
+    return min_ver is not None and current_ver >= min_ver
+
+
+def test_pg_telemetry_agent_not_a_dependency(host):
+    """PG-2615: percona-telemetry-agent must not be installed on versions
+    shipping the weak-dependency packaging -- it's no longer a dependency
+    of percona-pg-telemetry at all."""
+    if settings.MAJOR_VER in ["18"]:
+        pytest.skip("Telemetry not supported on PSP 18 and onwards.")
+    if not _telemetry_weak_dep_expected():
+        pytest.skip(f"pre-PG-2615 packaging for PostgreSQL {pg_versions.get('version')}; "
+                    f"agent is expected here instead")
+    agent = host.package("percona-telemetry-agent")
+    assert not agent.is_installed, (
+        "percona-telemetry-agent is installed, but PG-2615 removed it as a "
+        "runtime dependency of percona-pg-telemetry."
+    )
+
+
+def test_pg_server_package_recommends_not_requires_telemetry(host):
+    """PG-2615: the PG server package must Recommend (not Require)
+    percona-pg-telemetry."""
+    if settings.MAJOR_VER in ["18"]:
+        pytest.skip("Telemetry not supported on PSP 18 and onwards.")
+    if not _telemetry_weak_dep_expected():
+        pytest.skip(f"pre-PG-2615 packaging for PostgreSQL {pg_versions.get('version')}")
+
+    telemetry_pkg = f"percona-pg-telemetry{MAJOR_VER}"
+    dist = host.system_info.distribution.lower()
+    if dist in ["redhat", "centos", "rocky", "ol", "rhel"]:
+        server_pkg = f"percona-postgresql{MAJOR_VER}-server"
+        requires = host.run(f"rpm -q --requires {server_pkg}").stdout
+        recommends = host.run(f"rpm -q --recommends {server_pkg}").stdout
+    else:
+        server_pkg = f"percona-postgresql-{MAJOR_VER}"
+        requires = host.run(f"dpkg-query -W -f='${{Depends}}\\n' {server_pkg}").stdout
+        recommends = host.run(f"dpkg-query -W -f='${{Recommends}}\\n' {server_pkg}").stdout
+
+    assert telemetry_pkg not in requires, (
+        f"{server_pkg} still hard-requires {telemetry_pkg}: {requires}"
+    )
+    assert telemetry_pkg in recommends, (
+        f"{server_pkg} does not recommend {telemetry_pkg}: {recommends}"
+    )
+
+
+def test_pg_telemetry_package_does_not_depend_on_agent(host):
+    """PG-2615: percona-pg-telemetry must not depend on
+    percona-telemetry-agent at all."""
+    if settings.MAJOR_VER in ["18"]:
+        pytest.skip("Telemetry not supported on PSP 18 and onwards.")
+    if not _telemetry_weak_dep_expected():
+        pytest.skip(f"pre-PG-2615 packaging for PostgreSQL {pg_versions.get('version')}")
+
+    telemetry_pkg = f"percona-pg-telemetry{MAJOR_VER}"
+    dist = host.system_info.distribution.lower()
+    if dist in ["redhat", "centos", "rocky", "ol", "rhel"]:
+        requires = host.run(f"rpm -q --requires {telemetry_pkg}").stdout
+    else:
+        requires = host.run(f"dpkg-query -W -f='${{Depends}}\\n' {telemetry_pkg}").stdout
+
+    assert "percona-telemetry-agent" not in requires, (
+        f"{telemetry_pkg} still depends on percona-telemetry-agent: {requires}"
+    )
 
 
 @pytest.mark.parametrize("binary", TDE_BINARIES)

@@ -41,6 +41,10 @@
 - name: Verify telemetry installation
   include_tasks: ../../../../tasks/verify_telemetry.yml
 
+- name: Verify telemetry weak-dependency opt-out
+  include_tasks: ../../../../tasks/verify_telemetry_weak_dependency.yml
+  when: weak_dependency_expected | default(false)
+
 - name: Install GCC Deb
   apt:
     name: gcc
