@@ -1,0 +1,250 @@
+---
+# PG-2615/PG-2620: verifies the percona-pg-telemetry weak-dependency
+# packaging survives a minor or major upgrade correctly. Included by the
+# *-minor-upgrade and *-major-upgrade roles after the upgrade itself
+# completes (FROM_VERSION -> VERSION).
+#
+# Distinct from tasks/verify_telemetry.yml (fresh-install checks, single
+# version) because upgrades need to reason about BOTH the FROM_VERSION and
+# VERSION package states:
+#   - same-major (minor) upgrades transition a single package in place --
+#     if FROM_VERSION was hard-dependency and VERSION is weak-dependency,
+#     percona-telemetry-agent must survive the upgrade untouched (it isn't
+#     forcibly removed just because it stopped being a dependency).
+#   - cross-major (major) upgrades install the new major's packages
+#     side by side via pg_upgrade (data-directory migration only); the old
+#     major's packages, including its telemetry package, are never removed
+#     by this process and must still be present afterward.
+#
+# Expects FROM_VERSION and VERSION env vars (same as the upgrade roles
+# themselves use).
+
+- name: Set upgrade-verification facts
+  ansible.builtin.set_fact:
+    from_pg_version: "{{ lookup('env', 'FROM_VERSION') | regex_replace('^(?:ppg|psp)-', '') }}"
+    to_pg_version: "{{ lookup('env', 'VERSION') | regex_replace('^(?:ppg|psp)-', '') }}"
+
+- name: Set upgrade-verification major versions
+  ansible.builtin.set_fact:
+    from_major_version: "{{ from_pg_version.split('.')[0] }}"
+    to_major_version: "{{ to_pg_version.split('.')[0] }}"
+
+- name: Determine the minimum minor version carrying the PG-2615 weak-dependency change (FROM/TO)
+  ansible.builtin.set_fact:
+    from_weak_dependency_threshold: "{{ ({'14': '14.24', '15': '15.19', '16': '16.15', '17': '17.11', '18': '18.5'})[from_major_version] | default('0', true) }}"
+    to_weak_dependency_threshold: "{{ ({'14': '14.24', '15': '15.19', '16': '16.15', '17': '17.11', '18': '18.5'})[to_major_version] | default('0', true) }}"
+
+- name: Determine whether FROM_VERSION/VERSION ship the PG-2615 weak-dependency packaging
+  ansible.builtin.set_fact:
+    from_weak_dependency_expected: "{{ from_pg_version is version(from_weak_dependency_threshold, '>=', strict=True) }}"
+    to_weak_dependency_expected: "{{ to_pg_version is version(to_weak_dependency_threshold, '>=', strict=True) }}"
+
+- name: Set package names for upgrade verification
+  ansible.builtin.set_fact:
+    from_telemetry_package_name: "percona-pg-telemetry{{ from_major_version }}"
+    to_telemetry_package_name: "percona-pg-telemetry{{ to_major_version }}"
+    to_server_package_name: "{{ 'percona-postgresql' + to_major_version + '-server' if ansible_facts['os_family'] == 'RedHat' else 'percona-postgresql-' + to_major_version }}"
+
+- name: Print upgrade telemetry-packaging summary
+  ansible.builtin.debug:
+    msg: >-
+      Upgrading {{ from_pg_version }} ({{ 'weak' if from_weak_dependency_expected else 'hard' }}-dependency)
+      -> {{ to_pg_version }} ({{ 'weak' if to_weak_dependency_expected else 'hard' }}-dependency),
+      {{ 'same major' if from_major_version == to_major_version else 'cross major' }}.
+
+# ---------------------------------------------------------------------------
+# 1. The target version's telemetry package must be installed after the
+#    upgrade (default recommends-on behavior, or a hard Require for
+#    pre-PG-2615 versions).
+# ---------------------------------------------------------------------------
+- name: Check "{{ to_telemetry_package_name }}" is installed on RedHat
+  ansible.builtin.command:
+    cmd: rpm -q "{{ to_telemetry_package_name }}"
+  register: to_telemetry_status_rpm
+  ignore_errors: true
+  changed_when: false
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Check "{{ to_telemetry_package_name }}" is installed on Debian/Ubuntu
+  ansible.builtin.shell: dpkg -l | grep "{{ to_telemetry_package_name }}"
+  register: to_telemetry_status_deb
+  ignore_errors: true
+  changed_when: false
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Normalize "{{ to_telemetry_package_name }}" install status across OS families
+  ansible.builtin.set_fact:
+    to_telemetry_status: "{{ to_telemetry_status_rpm if ansible_facts['os_family'] == 'RedHat' else to_telemetry_status_deb }}"
+
+- name: Fail if "{{ to_telemetry_package_name }}" is not installed after upgrade
+  ansible.builtin.fail:
+    msg: "{{ to_telemetry_package_name }} is not installed after upgrading to {{ to_pg_version }}."
+  when: to_telemetry_status.rc != 0
+
+# ---------------------------------------------------------------------------
+# 2. Same-major (minor) upgrade transitioning hard-dep -> weak-dep: the
+#    agent must survive the upgrade untouched.
+# ---------------------------------------------------------------------------
+- name: Check percona-telemetry-agent install status on RedHat
+  ansible.builtin.command:
+    cmd: rpm -q percona-telemetry-agent
+  register: agent_status_rpm
+  ignore_errors: true
+  changed_when: false
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Check percona-telemetry-agent install status on Debian/Ubuntu
+  ansible.builtin.shell: dpkg -l | grep percona-telemetry-agent
+  register: agent_status_deb
+  ignore_errors: true
+  changed_when: false
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Normalize percona-telemetry-agent install status across OS families
+  ansible.builtin.set_fact:
+    agent_status: "{{ agent_status_rpm if ansible_facts['os_family'] == 'RedHat' else agent_status_deb }}"
+
+- name: Fail if percona-telemetry-agent did not survive a hard-dep -> weak-dep upgrade
+  ansible.builtin.fail:
+    msg: >-
+      percona-telemetry-agent is missing after upgrading from a
+      hard-dependency version ({{ from_pg_version }}) to a weak-dependency
+      version ({{ to_pg_version }}). It should never be force-removed just
+      because it stopped being a dependency.
+  when:
+    - from_major_version == to_major_version
+    - not from_weak_dependency_expected
+    - to_weak_dependency_expected
+    - agent_status.rc != 0
+
+- name: Print confirmation that percona-telemetry-agent survived the upgrade
+  ansible.builtin.debug:
+    msg: "percona-telemetry-agent correctly survived the hard-dep -> weak-dep upgrade (still installed)."
+  when:
+    - from_major_version == to_major_version
+    - not from_weak_dependency_expected
+    - to_weak_dependency_expected
+    - agent_status.rc == 0
+
+# ---------------------------------------------------------------------------
+# 3. Cross-major (major) upgrade: pg_upgrade only migrates the data
+#    directory -- the old major's packages, including its telemetry
+#    package, are never removed and must still be present.
+# ---------------------------------------------------------------------------
+- name: Check "{{ from_telemetry_package_name }}" is still installed on RedHat (major upgrade)
+  ansible.builtin.command:
+    cmd: rpm -q "{{ from_telemetry_package_name }}"
+  register: from_telemetry_status_rpm
+  ignore_errors: true
+  changed_when: false
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+    - from_major_version != to_major_version
+
+- name: Check "{{ from_telemetry_package_name }}" is still installed on Debian/Ubuntu (major upgrade)
+  ansible.builtin.shell: dpkg -l | grep "{{ from_telemetry_package_name }}"
+  register: from_telemetry_status_deb
+  ignore_errors: true
+  changed_when: false
+  when:
+    - ansible_facts['os_family'] == 'Debian'
+    - from_major_version != to_major_version
+
+- name: Fail if "{{ from_telemetry_package_name }}" was unexpectedly removed by the major upgrade (RedHat)
+  ansible.builtin.fail:
+    msg: >-
+      {{ from_telemetry_package_name }} is missing after a major upgrade to
+      {{ to_pg_version }}. Major upgrades only migrate the data directory
+      (pg_upgrade); the old major's packages should be untouched.
+  when:
+    - from_major_version != to_major_version
+    - ansible_facts['os_family'] == 'RedHat'
+    - from_telemetry_status_rpm.rc is defined
+    - from_telemetry_status_rpm.rc != 0
+
+- name: Fail if "{{ from_telemetry_package_name }}" was unexpectedly removed by the major upgrade (Debian)
+  ansible.builtin.fail:
+    msg: >-
+      {{ from_telemetry_package_name }} is missing after a major upgrade to
+      {{ to_pg_version }}. Major upgrades only migrate the data directory
+      (pg_upgrade); the old major's packages should be untouched.
+  when:
+    - from_major_version != to_major_version
+    - ansible_facts['os_family'] == 'Debian'
+    - from_telemetry_status_deb.rc is defined
+    - from_telemetry_status_deb.rc != 0
+
+# ---------------------------------------------------------------------------
+# 4. Dependency-metadata check on the TARGET version's server package.
+# ---------------------------------------------------------------------------
+- name: Get "{{ to_server_package_name }}" strong Requires (RedHat)
+  ansible.builtin.command:
+    cmd: rpm -q --requires "{{ to_server_package_name }}"
+  register: to_server_requires
+  changed_when: false
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Get "{{ to_server_package_name }}" weak Recommends (RedHat)
+  ansible.builtin.command:
+    cmd: rpm -q --recommends "{{ to_server_package_name }}"
+  register: to_server_recommends
+  changed_when: false
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Get "{{ to_server_package_name }}" Depends (Debian)
+  ansible.builtin.shell: dpkg-query -W -f='${Depends}\n' "{{ to_server_package_name }}"
+  register: to_server_depends
+  changed_when: false
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Get "{{ to_server_package_name }}" Recommends (Debian)
+  ansible.builtin.shell: dpkg-query -W -f='${Recommends}\n' "{{ to_server_package_name }}"
+  register: to_server_recommends_deb
+  changed_when: false
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Fail if "{{ to_server_package_name }}" still hard-requires "{{ to_telemetry_package_name }}" (RedHat)
+  ansible.builtin.fail:
+    msg: >-
+      {{ to_server_package_name }} still lists {{ to_telemetry_package_name }}
+      under Requires: {{ to_server_requires.stdout }}.
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+    - to_weak_dependency_expected
+    - to_telemetry_package_name in to_server_requires.stdout
+
+- name: Fail if "{{ to_server_package_name }}" does not Recommend "{{ to_telemetry_package_name }}" (RedHat)
+  ansible.builtin.fail:
+    msg: >-
+      {{ to_server_package_name }} does not list {{ to_telemetry_package_name }}
+      under Recommends: {{ to_server_recommends.stdout }}.
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+    - to_weak_dependency_expected
+    - to_telemetry_package_name not in to_server_recommends.stdout
+
+- name: Fail if "{{ to_server_package_name }}" still hard-depends on "{{ to_telemetry_package_name }}" (Debian)
+  ansible.builtin.fail:
+    msg: >-
+      {{ to_server_package_name }} still lists {{ to_telemetry_package_name }}
+      under Depends: {{ to_server_depends.stdout }}.
+  when:
+    - ansible_facts['os_family'] == 'Debian'
+    - to_weak_dependency_expected
+    - to_telemetry_package_name in to_server_depends.stdout
+
+- name: Fail if "{{ to_server_package_name }}" does not recommend "{{ to_telemetry_package_name }}" (Debian)
+  ansible.builtin.fail:
+    msg: >-
+      {{ to_server_package_name }} does not list {{ to_telemetry_package_name }}
+      under Recommends: {{ to_server_recommends_deb.stdout }}.
+  when:
+    - ansible_facts['os_family'] == 'Debian'
+    - to_weak_dependency_expected
+    - to_telemetry_package_name not in to_server_recommends_deb.stdout
+
+- name: Print confirmation of post-upgrade telemetry dependency wiring
+  ansible.builtin.debug:
+    msg: >-
+      Post-upgrade telemetry packaging for {{ to_pg_version }} verified
+      ({{ 'weak' if to_weak_dependency_expected else 'hard' }}-dependency model).

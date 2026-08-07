@@ -408,3 +408,7 @@
 
 - debug:
     var: results.stdout_lines
+
+# =========Telemetry weak-dependency upgrade verification
+- name: Verify telemetry weak-dependency survived the upgrade
+  include_tasks: ../../../tasks/verify_telemetry_upgrade.yml

@@ -1048,9 +1048,13 @@ def test_pg_telemetry_agent_not_a_dependency(host):
     )
 
 
+@pytest.mark.upgrade
 def test_pg_server_package_recommends_not_requires_telemetry(host):
     """PG-2615: the PG server package must Recommend (not Require)
-    percona-pg-telemetry."""
+    percona-pg-telemetry. Pure dependency-metadata check, valid whether this
+    host was freshly installed or just upgraded -- marked `upgrade` so it
+    also runs in the minor/major upgrade verifier passes (see
+    tasks/verify_telemetry_upgrade.yml for the Ansible-layer equivalent)."""
     if settings.MAJOR_VER in ["18"]:
         pytest.skip("Telemetry not supported on PSP 18 and onwards.")
     if not _telemetry_weak_dep_expected():
@@ -1075,9 +1079,12 @@ def test_pg_server_package_recommends_not_requires_telemetry(host):
     )
 
 
+@pytest.mark.upgrade
 def test_pg_telemetry_package_does_not_depend_on_agent(host):
     """PG-2615: percona-pg-telemetry must not depend on
-    percona-telemetry-agent at all."""
+    percona-telemetry-agent at all. Pure dependency-metadata check, marked
+    `upgrade` for the same reason as
+    test_pg_server_package_recommends_not_requires_telemetry above."""
     if settings.MAJOR_VER in ["18"]:
         pytest.skip("Telemetry not supported on PSP 18 and onwards.")
     if not _telemetry_weak_dep_expected():
@@ -1093,6 +1100,49 @@ def test_pg_telemetry_package_does_not_depend_on_agent(host):
     assert "percona-telemetry-agent" not in requires, (
         f"{telemetry_pkg} still depends on percona-telemetry-agent: {requires}"
     )
+
+
+@pytest.mark.upgrade
+def test_pg_telemetry_agent_state_after_upgrade(host):
+    """PG-2615: percona-telemetry-agent's expected state after a minor
+    upgrade depends on where it upgraded FROM, not just the target version --
+    unlike the tests above, this one only makes sense in the upgrade
+    verifier pass (it skips outright without a FROM_VERSION, i.e. on a fresh
+    install). Mirrors the "agent survives a hard-dep -> weak-dep transition"
+    check in tasks/verify_telemetry_upgrade.yml, but only for same-major
+    (in-place) upgrades -- cross-major upgrades install the new major's
+    packages side by side rather than upgrading anything in place, and are
+    covered by the Ansible-layer check instead."""
+    if settings.MAJOR_VER in ["18"]:
+        pytest.skip("Telemetry not supported on PSP 18 and onwards.")
+    from_version = os.getenv("FROM_VERSION")
+    if not from_version:
+        pytest.skip("no FROM_VERSION (not an upgrade scenario)")
+
+    from_ver = version.parse(from_version.split("-", 1)[-1])
+    to_ver = version.parse(pg_versions.get("version", "0.0"))
+    if from_ver.major != to_ver.major:
+        pytest.skip("cross-major upgrade; old major's packages aren't touched in place, "
+                    "see tasks/verify_telemetry_upgrade.yml instead")
+
+    from_min_ver = TELEMETRY_WEAK_DEP_MIN_VERSIONS.get(from_ver.major)
+    from_weak_dep = from_min_ver is not None and from_ver >= from_min_ver
+    to_weak_dep = _telemetry_weak_dep_expected()
+
+    agent = host.package("percona-telemetry-agent")
+    if not from_weak_dep and to_weak_dep:
+        assert agent.is_installed, (
+            f"percona-telemetry-agent is missing after upgrading from a "
+            f"hard-dependency version ({from_version}) to a weak-dependency "
+            f"version ({pg_versions.get('version')}) -- it should never be "
+            f"force-removed just because it stopped being a dependency."
+        )
+    elif to_weak_dep:
+        # weak-dep -> weak-dep: the agent should never have been installed.
+        assert not agent.is_installed, (
+            "percona-telemetry-agent is installed on a weak-dependency-to-"
+            "weak-dependency upgrade; nothing should have pulled it in."
+        )
 
 
 @pytest.mark.parametrize("binary", TDE_BINARIES)
