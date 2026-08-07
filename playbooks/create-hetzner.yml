@@ -1,0 +1,152 @@
+---
+# Hetzner Cloud create playbook for the molecule delegated driver: the hcloud
+# sibling of create.yml (EC2). Servers boot from the newest promoted factory
+# snapshot (jenkins-pipelines ppg/packer-hetzner label contract), resolved at
+# runtime by labels and never from a pinned image ID, and every run gets its
+# own throwaway ed25519 SSH key instead of a shared one.
+- name: Create
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  no_log: "{{ not (lookup('env', 'MOLECULE_DEBUG') | bool or molecule_yml.provisioner.log|default(false) | bool) }}"
+  vars:
+    ssh_port: 22
+    # The factory snapshots log in as root: the packer bake runs as root with
+    # ssh_clear_authorized_keys, and on server create Hetzner cloud-init
+    # injects the ssh_keys passed to the API into root's authorized_keys.
+    ssh_user: root
+    ephemeral_directory: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}"
+    # Label-safe run id: MOLECULE_RUN_ID when the caller sets one, otherwise
+    # derived from the ephemeral directory + Jenkins job/build so create and
+    # destroy compute the same value for the same run.
+    run_id: "{{ lookup('env', 'MOLECULE_RUN_ID')
+      | default(((ephemeral_directory ~ lookup('env', 'JOB_NAME') ~ lookup('env', 'BUILD_NUMBER')) | hash('sha1'))[:12], true) }}"
+    keypair_path: "{{ ephemeral_directory }}/ssh_key-{{ run_id }}"
+    ssh_key_name: "molecule-{{ run_id }}"
+    # Placement fallback order. A location without capacity is skipped.
+    hetzner_locations: "{{ (lookup('env', 'HETZNER_LOCATIONS') | default('fsn1 nbg1 hel1', true)).split() }}"
+    # Snapshot lookup fallback when a platform carries no image_selector field.
+    # May be empty: then every platform MUST declare image_selector (asserted
+    # below), so a scenario can never silently test the wrong OS.
+    image_selector_base: "{{ lookup('env', 'PPG_IMAGE_SELECTOR_BASE') }}"
+    # The hcloud API architecture enum is x86|arm. The factory labels and the
+    # platform arch field use x86_64|arm64.
+    arch_api_map:
+      x86_64: x86
+      arm64: arm
+
+  tasks:
+    - name: Assert HCLOUD_TOKEN is present (hetzner.hcloud modules read it from the environment)
+      ansible.builtin.assert:
+        that: lookup('env', 'HCLOUD_TOKEN') | length > 0
+        fail_msg: HCLOUD_TOKEN is empty; bind the hcloud-ppg-qa-token Jenkins credential
+        quiet: true
+
+    # Fail closed before any resource is created: a platform without its own
+    # image_selector and no PPG_IMAGE_SELECTOR_BASE would otherwise turn into
+    # an empty label selector that matches EVERY snapshot, and a wrong-OS
+    # green is worse than a missing-var red.
+    - name: Assert every platform has an image selector
+      ansible.builtin.assert:
+        that: (item.image_selector | default(image_selector_base, true) | length) > 0
+        fail_msg: >-
+          Platform {{ item.name }} declares no image_selector and
+          PPG_IMAGE_SELECTOR_BASE is empty; set one of them
+        quiet: true
+      loop: "{{ molecule_yml.platforms }}"
+
+    - name: Generate a per-run ed25519 keypair (no shared key on Hetzner)
+      community.crypto.openssh_keypair:
+        path: "{{ keypair_path }}"
+        type: ed25519
+        mode: "0600"
+      register: run_keypair
+
+    - name: Upload the run public key (labeled so destroy and the janitor can find it)
+      hetzner.hcloud.ssh_key:
+        name: "{{ ssh_key_name }}"
+        public_key: "{{ run_keypair.public_key }}"
+        labels:
+          ppg_run: "{{ run_id }}"
+          role: ppg-molecule-test
+        state: present
+
+    - name: Resolve promoted snapshots per platform (labels, never pinned IDs)
+      hetzner.hcloud.image_info:
+        type: snapshot
+        architecture: "{{ arch_api_map[item.arch | default('x86_64', true)] }}"
+        label_selector: "{{ (item.image_selector | default(image_selector_base, true)) ~ ',arch=' ~ (item.arch | default('x86_64', true)) }}"
+      loop: "{{ molecule_yml.platforms }}"
+      register: image_lookup
+
+    - name: Assert every platform matched at least one snapshot
+      ansible.builtin.assert:
+        that: item.hcloud_image_info | length > 0
+        fail_msg: >-
+          No promoted snapshot matches platform {{ item.item.name }}
+          (selector {{ (item.item.image_selector | default(image_selector_base, true)) ~ ',arch=' ~ (item.item.arch | default('x86_64', true)) }});
+          has the factory promoted this combo yet?
+        quiet: true
+      loop: "{{ image_lookup.results }}"
+
+    # image_info returns no created field. hcloud image IDs increase
+    # monotonically, so the highest id IS the newest snapshot (its factory_run
+    # label is the human-readable twin of that ordering).
+    - name: Pick the newest snapshot per platform
+      ansible.builtin.set_fact:
+        platform_images: "{{ platform_images | default({}) | combine({item.item.name: (item.hcloud_image_info | sort(attribute='id') | last).id}) }}"
+      loop: "{{ image_lookup.results }}"
+
+    - name: Start with an empty created-server list
+      ansible.builtin.set_fact:
+        hetzner_created: []
+
+    - name: Create molecule server(s) (per platform, with location fallback)
+      ansible.builtin.include_tasks: tasks/hetzner-server-attempt.yml
+      vars:
+        hetzner_fresh_attempt: true
+      loop: "{{ molecule_yml.platforms }}"
+      loop_control:
+        loop_var: platform
+
+    - name: Wait for SSH
+      ansible.builtin.wait_for:
+        port: "{{ ssh_port }}"
+        host: "{{ item.server.ipv4_address }}"
+        search_regex: SSH
+        delay: 10
+        timeout: 320
+      loop: "{{ hetzner_created }}"
+
+    - name: Wait for boot process to finish
+      ansible.builtin.pause:
+        minutes: 2
+
+    # Mandatory configuration for Molecule to function: with the managed
+    # delegated driver, molecule reads address/user/port/identity_file from
+    # this file to build the connection options (run_id and ssh_key_name are
+    # bookkeeping for destroy-hetzner.yml, and molecule ignores unknown keys).
+    - name: Populate instance config dict
+      ansible.builtin.set_fact:
+        instance_conf_dict:
+          instance: "{{ item.platform.name }}"
+          address: "{{ item.server.ipv4_address }}"
+          user: "{{ item.platform.ssh_user | default(ssh_user, true) }}"
+          port: "{{ ssh_port }}"
+          identity_file: "{{ keypair_path }}"
+          connection: ssh
+          instance_id: "{{ item.server.id }}"
+          run_id: "{{ run_id }}"
+          ssh_key_name: "{{ ssh_key_name }}"
+      loop: "{{ hetzner_created }}"
+      register: instance_config_dict
+
+    - name: Convert instance config dict to a list
+      ansible.builtin.set_fact:
+        instance_conf: "{{ instance_config_dict.results | map(attribute='ansible_facts.instance_conf_dict') | list }}"
+
+    - name: Dump instance config
+      ansible.builtin.copy:
+        content: "{{ instance_conf | to_json | from_json | to_yaml }}"
+        dest: "{{ molecule_instance_config }}"
+        mode: "0600"
