@@ -1,0 +1,84 @@
+---
+# Hetzner Cloud destroy playbook for the molecule delegated driver: the hcloud
+# sibling of destroy.yml (EC2). Deletes by the stored server id first, then a
+# ppg_run label sweep catches servers the instance config lost track of, then
+# the run's SSH key and the local key files go. Idempotent when nothing
+# exists. The hourly janitor in jenkins-pipelines is the backstop.
+- name: Destroy
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  no_log: "{{ not (lookup('env', 'MOLECULE_DEBUG') | bool or molecule_yml.provisioner.log|default(false) | bool) }}"
+  vars:
+    ephemeral_directory: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}"
+    # Same derivation as create-hetzner.yml, so a destroy that finds no
+    # instance config still cleans this run's resources.
+    run_id: "{{ lookup('env', 'MOLECULE_RUN_ID')
+      | default(((ephemeral_directory ~ lookup('env', 'JOB_NAME') ~ lookup('env', 'BUILD_NUMBER')) | hash('sha1'))[:12], true) }}"
+    keypair_path: "{{ ephemeral_directory }}/ssh_key-{{ run_id }}"
+    ssh_key_name: "molecule-{{ run_id }}"
+  tasks:
+    - name: Read the instance config, tolerating a missing file
+      block:
+        - name: Populate instance config
+          ansible.builtin.set_fact:
+            instance_conf: "{{ lookup('file', molecule_instance_config) | from_yaml }}"
+            skip_instances: false
+      rescue:
+        - name: Populate instance config when file missing
+          ansible.builtin.set_fact:
+            instance_conf: []
+            skip_instances: true
+
+    # failed_when: false mirrors destroy.yml: an already-gone server or a
+    # transient API error never reddens an otherwise-green run. The label
+    # sweep below and the hourly janitor are the backstops.
+    - name: Destroy molecule instance(s) by stored id
+      hetzner.hcloud.server:
+        id: "{{ item.instance_id }}"
+        state: absent
+      loop: "{{ instance_conf }}"
+      when: not skip_instances
+      failed_when: false
+
+    # The role label rides along with ppg_run so this sweep can only ever
+    # match servers this playbook family created (same rule as the janitor:
+    # never sweep by ppg_run alone).
+    - name: Find any survivors of this run by label
+      hetzner.hcloud.server_info:
+        label_selector: "ppg_run={{ run_id }},role=ppg-molecule-test"
+      register: run_servers
+
+    - name: Destroy survivors
+      hetzner.hcloud.server:
+        id: "{{ item.id }}"
+        state: absent
+      loop: "{{ run_servers.hcloud_server_info | default([]) }}"
+      failed_when: false
+
+    # Key names from the instance config first (exact), plus this run's
+    # derived name. state=absent on a name that never existed is a no-op.
+    - name: Delete the run SSH key(s)
+      hetzner.hcloud.ssh_key:
+        name: "{{ item }}"
+        state: absent
+      loop: "{{ ((instance_conf | map(attribute='ssh_key_name', default='') | select | list) + [ssh_key_name]) | unique }}"
+
+    - name: Remove the local key files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ keypair_path }}"
+        - "{{ keypair_path }}.pub"
+
+    # Mandatory configuration for Molecule to function.
+    - name: Populate instance config
+      ansible.builtin.set_fact:
+        instance_conf: []
+
+    - name: Dump instance config
+      ansible.builtin.copy:
+        content: "{{ instance_conf | to_json | from_json | to_yaml }}"
+        dest: "{{ molecule_instance_config }}"
+        mode: "0600"

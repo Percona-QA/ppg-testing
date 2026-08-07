@@ -1,0 +1,56 @@
+---
+# One placement attempt for the platform in `platform`: create the server in
+# the location the cursor points at. On failure advance the cursor and recurse
+# into the next location, failing only when every location was tried.
+# create-hetzner.yml includes this once per platform with
+# hetzner_fresh_attempt=true (resets the cursor). The recursive include below
+# passes false so the cursor survives across attempts.
+- name: Reset the location cursor for {{ platform.name }}
+  ansible.builtin.set_fact:
+    hetzner_location_index: 0
+  when: hetzner_fresh_attempt | bool
+
+- name: Attempt the current fallback location for {{ platform.name }}
+  block:
+    - name: Create server in the current fallback location for {{ platform.name }}
+      hetzner.hcloud.server:
+        # RFC1123 server name: molecule-<run-id>-<platform>, sanitized and
+        # capped at 63 chars (Jenkins platform names embed JOB_NAME).
+        name: "{{ ('molecule-' ~ run_id ~ '-' ~ (platform.name | lower | regex_replace('[^a-z0-9-]', '-')))[:63] | regex_replace('-+$', '') }}"
+        # Platform value first (the pipeline sets it from the
+        # htz_server_type_* map), then the per-arch env var, then the
+        # cpx32/cax21 defaults, mirroring the AWS t3.large tier.
+        server_type: "{{ platform.server_type
+          | default(lookup('env', 'htz_server_type_' ~ (platform.arch | default('x86_64', true))), true)
+          | default({'x86_64': 'cpx32', 'arm64': 'cax21'}[platform.arch | default('x86_64', true)], true) }}"
+        image: "{{ platform_images[platform.name] }}"
+        location: "{{ hetzner_locations[hetzner_location_index | int] }}"
+        ssh_keys:
+          - "{{ ssh_key_name }}"
+        labels:
+          ppg_run: "{{ run_id }}"
+          role: ppg-molecule-test
+        user_data: "{{ platform.user_data | default(omit) }}"
+        state: started
+      register: hetzner_server_result
+
+    - name: Record created server for {{ platform.name }}
+      ansible.builtin.set_fact:
+        hetzner_created: "{{ hetzner_created + [{'platform': platform, 'server': hetzner_server_result.hcloud_server}] }}"
+  rescue:
+    - name: Advance the location cursor
+      ansible.builtin.set_fact:
+        hetzner_location_index: "{{ (hetzner_location_index | int) + 1 }}"
+
+    - name: Fail when every location was tried
+      ansible.builtin.fail:
+        msg: >-
+          Could not place {{ platform.name }} in any of
+          {{ hetzner_locations | join(', ') }}:
+          {{ ansible_failed_result.msg | default('server create failed') }}
+      when: hetzner_location_index | int >= hetzner_locations | length
+
+    - name: Retry in the next location
+      ansible.builtin.include_tasks: hetzner-server-attempt.yml
+      vars:
+        hetzner_fresh_attempt: false
