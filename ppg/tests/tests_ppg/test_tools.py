@@ -37,6 +37,16 @@ LLVMJIT_MIN_VERSIONS = {
     18: version.parse("18.4"),
 }
 
+# Minimum PostgreSQL versions where percona-patroni requires python3.12+ on RHEL 8
+# (the first version strictly after 14.23, 15.18, 16.14, 17.10, 18.4)
+PATRONI_PYTHON312_MIN_VERSIONS = {
+    14: version.parse("14.24"),
+    15: version.parse("15.19"),
+    16: version.parse("16.15"),
+    17: version.parse("17.11"),
+    18: version.parse("18.5"),
+}
+
 # Minimum PostgreSQL versions where pg_cron is available
 PG_CRON_MIN_VERSIONS = {
     14: version.parse("14.23"),
@@ -476,6 +486,16 @@ def test_patroni_service(host):
     assert patroni.is_enabled
 
 
+def _skip_if_patroni_python312_unavailable():
+    """Skip if the python3.12+ patroni dependency isn't expected yet for the
+    current PostgreSQL version."""
+    current_ver = version.parse(pg_versions.get("version", "0.0"))
+    min_ver = PATRONI_PYTHON312_MIN_VERSIONS.get(current_ver.major)
+    if min_ver is None or current_ver < min_ver:
+        pytest.skip(f"python3.12+ patroni dependency not expected for "
+                    f"PostgreSQL {pg_versions.get('version')}")
+
+
 @pytest.mark.upgrade
 def test_patroni_requires_python312(host):
     """percona-patroni must declare a hard dependency on python3.12 or newer on
@@ -483,6 +503,7 @@ def test_patroni_requires_python312(host):
     check, valid whether this host was freshly installed or just upgraded --
     marked `upgrade` so it also runs in the minor/major upgrade verifier
     passes."""
+    _skip_if_patroni_python312_unavailable()
     dist = host.system_info.distribution
     if dist.lower() in ["ubuntu", "debian"]:
         pytest.skip("python3.12+ dependency pin only applies to RHEL-based packaging")
