@@ -1,4 +1,6 @@
 import os
+import re
+
 import pytest
 
 import testinfra.utils.ansible_runner
@@ -23,7 +25,6 @@ EXPECTED_VERSIONS = {
 }
 
 
-@pytest.mark.upgrade
 @pytest.mark.parametrize("package", DEB_PACKAGES)
 def test_deb_package_is_installed(host, package):
     ds = host.system_info.distribution
@@ -44,7 +45,6 @@ def test_deb_package_is_installed(host, package):
     print(f"[SUCCESS] {package} version {pkg.version} verified.")
 
 
-@pytest.mark.upgrade
 @pytest.mark.parametrize("package", RPM_PACKAGES)
 def test_rpm_package_is_installed(host, package):
     with host.sudo():
@@ -67,3 +67,25 @@ def test_rpm_package_is_installed(host, package):
                 f"Version mismatch for {package}. Expected: {expected}, Found: {pkg.version}"
             )
         print(f"[SUCCESS] {package} version {pkg.version} verified.")
+
+
+def test_patroni_requires_python312(host):
+    """percona-patroni must declare a hard dependency on python3.12 or newer on
+    RHEL-based platforms (RHEL/Rocky/OL 8, 9, 10)."""
+    ds = host.system_info.distribution
+    if ds.lower() in ["debian", "ubuntu"]:
+        pytest.skip("python3.12+ dependency pin only applies to RHEL-based packaging")
+    with host.sudo():
+        result = host.run("rpm -q --requires percona-patroni")
+        assert result.rc == 0, f"failed to query percona-patroni requires: {result.stderr}"
+        match = re.search(r"python\(abi\)\s*=\s*(\d+)\.(\d+)", result.stdout)
+        assert match, (
+            f"percona-patroni on {ds} {host.system_info.release} does not declare a "
+            f"python(abi) requirement. Requires:\n{result.stdout}"
+        )
+        abi_version = (int(match.group(1)), int(match.group(2)))
+        assert abi_version >= (3, 12), (
+            f"percona-patroni on {ds} {host.system_info.release} requires python(abi) "
+            f"{abi_version[0]}.{abi_version[1]}, expected 3.12 or newer. "
+            f"Requires:\n{result.stdout}"
+        )
