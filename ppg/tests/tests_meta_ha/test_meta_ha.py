@@ -2,6 +2,7 @@ import os
 import re
 
 import pytest
+from packaging import version
 
 import testinfra.utils.ansible_runner
 
@@ -22,6 +23,16 @@ EXPECTED_VERSIONS = {
     "percona-patroni": pg_versions["patroni"]["version"],
     "etcd":            pg_versions["etcd"]["version"],
     "percona-haproxy": pg_versions["haproxy"]["version"],
+}
+
+# Minimum PostgreSQL versions where percona-patroni requires python3.12+ on RHEL 8
+# (the first version strictly after 14.23, 15.18, 16.14, 17.10, 18.4)
+PATRONI_PYTHON312_MIN_VERSIONS = {
+    14: version.parse("14.24"),
+    15: version.parse("15.19"),
+    16: version.parse("16.15"),
+    17: version.parse("17.11"),
+    18: version.parse("18.5"),
 }
 
 
@@ -69,9 +80,20 @@ def test_rpm_package_is_installed(host, package):
         print(f"[SUCCESS] {package} version {pkg.version} verified.")
 
 
+def _skip_if_patroni_python312_unavailable():
+    """Skip if the python3.12+ patroni dependency isn't expected yet for the
+    current PostgreSQL version."""
+    current_ver = version.parse(pg_versions.get("version", "0.0"))
+    min_ver = PATRONI_PYTHON312_MIN_VERSIONS.get(current_ver.major)
+    if min_ver is None or current_ver < min_ver:
+        pytest.skip(f"python3.12+ patroni dependency not expected for "
+                    f"PostgreSQL {pg_versions.get('version')}")
+
+
 def test_patroni_requires_python312(host):
     """percona-patroni must declare a hard dependency on python3.12 or newer on
     RHEL-based platforms (RHEL/Rocky/OL 8, 9, 10)."""
+    _skip_if_patroni_python312_unavailable()
     ds = host.system_info.distribution
     if ds.lower() in ["debian", "ubuntu"]:
         pytest.skip("python3.12+ dependency pin only applies to RHEL-based packaging")
