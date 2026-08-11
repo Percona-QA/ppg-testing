@@ -44,18 +44,10 @@
       with_items: "{{ molecule_yml.platforms }}"
       register: subnet_facts
 
-    - name: Check AZ-fallback subnets
-      amazon.aws.ec2_vpc_subnet_info:
-        region: "{{ (molecule_yml.platforms | first).region | default(default_region) }}"
-        filters:
-          subnet-id: "{{ item }}"
-      with_items: "{{ az_fallback_subnet_ids }}"
-      register: fallback_subnet_facts
-
     - name: Populate subnet vpc
       set_fact:
         subnet_dict: "{{ subnet_dict|default({}) | combine({ item.subnets[0].id: item.subnets[0].vpc_id }) }}"
-      with_items: "{{ subnet_facts.results + fallback_subnet_facts.results }}"
+      with_items: "{{ subnet_facts.results }}"
 
     - name: Create security group
       amazon.aws.ec2_security_group:
@@ -67,15 +59,11 @@
         region: "{{ item.region|default(default_region) }}"
       with_items: "{{ molecule_yml.platforms }}"
 
-    - name: Create security group for AZ-fallback VPCs
-      amazon.aws.ec2_security_group:
-        name: "{{ security_group_name_prefix }}-{{ subnet_dict[item] }}"
-        description: "{{ security_group_description }}"
-        rules: "{{ security_group_rules }}"
-        rules_egress: "{{ security_group_rules_egress }}"
-        vpc_id: "{{ subnet_dict[item] }}"
-        region: "{{ (molecule_yml.platforms | first).region | default(default_region) }}"
-      with_items: "{{ az_fallback_subnet_ids }}"
+    # AZ-fallback subnets are resolved lazily, only inside create_instance_retry.yml,
+    # so a normal (non-capacity-failure) run makes zero extra EC2 API calls. Doing
+    # this unconditionally here previously doubled DescribeSubnets/security-group
+    # calls on every parallel molecule run and contributed to RequestLimitExceeded
+    # throttling under psp-check-parallel.
 
 #    - name: Delete remote keypair
 #      ec2_key:

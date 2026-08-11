@@ -4,6 +4,30 @@
 # platform dict) and retry_candidates (remaining subnet ids to try, in order).
 # Ansible loops can't "break" on first success without spawning every remaining
 # item too, so early-exit is simulated via recursion instead.
+- name: "Resolve VPC for AZ-fallback subnet {{ retry_candidates[0] }}"
+  amazon.aws.ec2_vpc_subnet_info:
+    region: "{{ retry_platform.region | default(default_region) }}"
+    filters:
+      subnet-id: "{{ retry_candidates[0] }}"
+  register: fallback_subnet_info
+  when: retry_candidates[0] not in subnet_dict
+
+- name: "Record VPC for AZ-fallback subnet {{ retry_candidates[0] }}"
+  set_fact:
+    subnet_dict: "{{ subnet_dict | combine({ retry_candidates[0]: fallback_subnet_info.subnets[0].vpc_id }) }}"
+  when: retry_candidates[0] not in subnet_dict
+
+- name: "Ensure security group exists for AZ-fallback subnet {{ retry_candidates[0] }}"
+  # Idempotent (ensures/returns the existing group), and this whole file only
+  # runs on the rare capacity-retry path, so no gating needed to save calls here.
+  amazon.aws.ec2_security_group:
+    name: "{{ security_group_name_prefix }}-{{ subnet_dict[retry_candidates[0]] }}"
+    description: "{{ security_group_description }}"
+    rules: "{{ security_group_rules }}"
+    rules_egress: "{{ security_group_rules_egress }}"
+    vpc_id: "{{ subnet_dict[retry_candidates[0]] }}"
+    region: "{{ retry_platform.region | default(default_region) }}"
+
 - name: "Retry create instance for {{ retry_platform.name }} in subnet {{ retry_candidates[0] }}"
   amazon.aws.ec2_instance:
     key_name: "{{ keypair_name }}"
