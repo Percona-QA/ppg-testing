@@ -35,6 +35,15 @@ REQUIRED_LABEL_KEYS = (
 )
 RED_HAT_TRADEMARK_FORBIDDEN = ("Red Hat", "RHEL", "RedHat")
 
+# Registry manifest media types must be OCI-only: no Docker-format
+# (vnd.docker) entries, and no mixing of OCI and Docker formats.
+EXPECTED_INDEX_MEDIA_TYPE = "application/vnd.oci.image.index.v1+json"
+EXPECTED_MANIFEST_MEDIA_TYPE = "application/vnd.oci.image.manifest.v1+json"
+# The manifest list/index is published under the base tag, without the
+# per-architecture "-arm64" suffix this test may be running under.
+_BASE_TAG = IMG_TAG[:-6] if IMG_TAG.endswith("-arm64") else IMG_TAG
+MANIFEST_IMAGE = f"{IMAGE.rsplit(':', 1)[0]}:{_BASE_TAG}"
+
 
 # --- Fixtures ---
 @pytest.fixture(scope="session")
@@ -78,6 +87,19 @@ def image_labels():
     return json.loads(result.stdout) if result.stdout.strip() else {}
 
 
+@pytest.fixture(scope="session")
+def image_manifest():
+    """Fixture to fetch the registry manifest list/index once per session."""
+    result = subprocess.run(
+        ["docker", "manifest", "inspect", MANIFEST_IMAGE],
+        env={**os.environ, "DOCKER_CLI_EXPERIMENTAL": "enabled"},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return json.loads(result.stdout)
+
+
 def test_ppg_postgres_image_labels(image_labels):
     """Use the image_labels fixture for testing."""
     # Now 'image_labels' is just a dictionary you can assert against
@@ -102,6 +124,30 @@ def test_ppg_postgres_image_labels(image_labels):
         f"Label 'name' does not contain '{EXPECTED_LABEL_NAME_POSTGRESQL}'"
     )
     assert image_labels.get("name").startswith(REQUIRED_LABEL_NAME_PREFIX)
+
+
+def test_ppg_postgres_image_manifest_media_types(image_manifest):
+    """Verify the manifest list/index and every platform manifest are
+    OCI-only: no vnd.docker entries and no mixing of OCI and Docker types."""
+    top_level_media_type = image_manifest.get("mediaType")
+    assert top_level_media_type == EXPECTED_INDEX_MEDIA_TYPE, (
+        f"Top-level mediaType for {MANIFEST_IMAGE} must be "
+        f"'{EXPECTED_INDEX_MEDIA_TYPE}', got '{top_level_media_type}'"
+    )
+
+    platform_manifests = image_manifest.get("manifests", [])
+    assert platform_manifests, f"No platform manifests found for {MANIFEST_IMAGE}"
+
+    non_oci_entries = [
+        f"{entry.get('platform', {}).get('architecture')}={entry.get('mediaType')}"
+        for entry in platform_manifests
+        if entry.get("mediaType") != EXPECTED_MANIFEST_MEDIA_TYPE
+    ]
+    assert not non_oci_entries, (
+        f"Non-OCI platform manifest(s) found for {MANIFEST_IMAGE}: "
+        f"{', '.join(non_oci_entries)}. All platform manifests must use "
+        f"'{EXPECTED_MANIFEST_MEDIA_TYPE}'."
+    )
 
 
 def test_ppg_postgres_licenses(host):
