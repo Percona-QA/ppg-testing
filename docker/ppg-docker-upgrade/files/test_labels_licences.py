@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import time
+import urllib.request
 
 import pytest
 import testinfra
@@ -43,6 +44,24 @@ EXPECTED_MANIFEST_MEDIA_TYPE = "application/vnd.oci.image.manifest.v1+json"
 # per-architecture "-arm64" suffix this test may be running under.
 _BASE_TAG = IMG_TAG[:-6] if IMG_TAG.endswith("-arm64") else IMG_TAG
 MANIFEST_IMAGE = f"{IMAGE.rsplit(':', 1)[0]}:{_BASE_TAG}"
+
+# Queried directly over the registry HTTP API rather than via the docker CLI:
+# `docker manifest inspect`/`buildx imagetools inspect` can fail on hosts
+# with no configured credential helper, even for public, anonymous images.
+DOCKER_HUB_TOKEN_URL = "https://auth.docker.io/token"
+DOCKER_HUB_REGISTRY_URL = "https://registry-1.docker.io/v2"
+MANIFEST_ACCEPT_HEADER = ", ".join((
+    "application/vnd.oci.image.index.v1+json",
+    "application/vnd.docker.distribution.manifest.list.v2+json",
+    "application/vnd.oci.image.manifest.v1+json",
+    "application/vnd.docker.distribution.manifest.v2+json",
+))
+
+
+def _fetch_json(url, headers=None):
+    request = urllib.request.Request(url, headers=headers or {})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.loads(response.read())
 
 
 # --- Fixtures ---
@@ -90,14 +109,14 @@ def image_labels():
 @pytest.fixture(scope="session")
 def image_manifest():
     """Fixture to fetch the registry manifest list/index once per session."""
-    result = subprocess.run(
-        ["docker", "manifest", "inspect", MANIFEST_IMAGE],
-        env={**os.environ, "DOCKER_CLI_EXPERIMENTAL": "enabled"},
-        capture_output=True,
-        text=True,
-        check=True,
+    repo_path, tag = MANIFEST_IMAGE.split(":", 1)
+    token = _fetch_json(
+        f"{DOCKER_HUB_TOKEN_URL}?service=registry.docker.io&scope=repository:{repo_path}:pull"
+    )["token"]
+    return _fetch_json(
+        f"{DOCKER_HUB_REGISTRY_URL}/{repo_path}/manifests/{tag}",
+        headers={"Authorization": f"Bearer {token}", "Accept": MANIFEST_ACCEPT_HEADER},
     )
-    return json.loads(result.stdout)
 
 
 def test_ppg_postgres_image_labels(image_labels):
