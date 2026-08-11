@@ -1,0 +1,60 @@
+---
+# Recursive AZ fallback for a single platform whose primary-subnet launch hit
+# InsufficientInstanceCapacity. Expects: retry_platform (the original molecule_yml
+# platform dict) and retry_candidates (remaining subnet ids to try, in order).
+# Ansible loops can't "break" on first success without spawning every remaining
+# item too, so early-exit is simulated via recursion instead.
+- name: "Retry create instance for {{ retry_platform.name }} in subnet {{ retry_candidates[0] }}"
+  amazon.aws.ec2_instance:
+    key_name: "{{ keypair_name }}"
+    image_id: "{{ retry_platform.image }}"
+    instance_type: "{{ retry_platform.instance_type }}"
+    vpc_subnet_id: "{{ retry_candidates[0] }}"
+    security_group: "{{ security_group_name_prefix }}-{{ subnet_dict[retry_candidates[0]] }}"
+    tags: "{{
+        retry_platform.instance_tags | combine({
+          'Name': retry_platform.name,
+          'ssh_user': retry_platform.ssh_user | default(ssh_user)
+        })
+        if retry_platform.instance_tags is defined
+        else {
+            'Name': retry_platform.name,
+            'ssh_user': retry_platform.ssh_user | default(ssh_user)
+        }
+      }}"
+    wait: true
+    network:
+      assign_public_ip: true
+    exact_count: 1
+    region: "{{ retry_platform.region | default(default_region) }}"
+    volumes:
+      - device_name: "{{ retry_platform.root_device_name }}"
+        ebs:
+          volume_type: gp3
+          volume_size: "{{ retry_platform.volume_size | default(30) }}"
+          delete_on_termination: true
+  register: retry_result
+  ignore_errors: true
+
+- name: "Record successful AZ-fallback launch for {{ retry_platform.name }}"
+  set_fact:
+    retried_instances: "{{ retried_instances | default({}) | combine({ retry_platform.name: retry_result }) }}"
+  when: retry_result is succeeded
+
+- name: "No AZ fallback left for {{ retry_platform.name }}"
+  fail:
+    msg: >-
+      Exhausted all AZ fallbacks ({{ az_fallback_subnet_ids }}) for
+      {{ retry_platform.name }} ({{ retry_platform.instance_type }}):
+      {{ retry_result.msg | default('unknown error') }}
+  when:
+    - retry_result is failed
+    - retry_candidates[1:] | length == 0
+
+- name: "Advance to next AZ fallback for {{ retry_platform.name }}"
+  include_tasks: create_instance_retry.yml
+  vars:
+    retry_candidates: "{{ retry_candidates[1:] }}"
+  when:
+    - retry_result is failed
+    - retry_candidates[1:] | length > 0

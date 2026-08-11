@@ -26,6 +26,14 @@
         cidr_ip: '0.0.0.0/0'
     keypair_name: "molecule-pkg-tests"
     keypair_path: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/ssh_key"
+    # All known AZ subnets, so a capacity-driven fallback (see create_instance_retry.yml)
+    # always has a subnet_dict entry and pre-created security group to launch into,
+    # regardless of which one a platform originally pinned.
+    az_fallback_subnet_ids: "{{ [
+        lookup('env', 'vpc_subnet_id_aws1'),
+        lookup('env', 'vpc_subnet_id_aws2'),
+        lookup('env', 'vpc_subnet_id_aws3')
+      ] | select | unique | list }}"
 
   tasks:
     - name: Check subnet
@@ -36,10 +44,18 @@
       with_items: "{{ molecule_yml.platforms }}"
       register: subnet_facts
 
+    - name: Check AZ-fallback subnets
+      amazon.aws.ec2_vpc_subnet_info:
+        region: "{{ (molecule_yml.platforms | first).region | default(default_region) }}"
+        filters:
+          subnet-id: "{{ item }}"
+      with_items: "{{ az_fallback_subnet_ids }}"
+      register: fallback_subnet_facts
+
     - name: Populate subnet vpc
       set_fact:
         subnet_dict: "{{ subnet_dict|default({}) | combine({ item.subnets[0].id: item.subnets[0].vpc_id }) }}"
-      with_items: "{{ subnet_facts.results }}"
+      with_items: "{{ subnet_facts.results + fallback_subnet_facts.results }}"
 
     - name: Create security group
       amazon.aws.ec2_security_group:
@@ -50,6 +66,16 @@
         vpc_id: "{{ subnet_dict[item.vpc_subnet_id] }}"
         region: "{{ item.region|default(default_region) }}"
       with_items: "{{ molecule_yml.platforms }}"
+
+    - name: Create security group for AZ-fallback VPCs
+      amazon.aws.ec2_security_group:
+        name: "{{ security_group_name_prefix }}-{{ subnet_dict[item] }}"
+        description: "{{ security_group_description }}"
+        rules: "{{ security_group_rules }}"
+        rules_egress: "{{ security_group_rules_egress }}"
+        vpc_id: "{{ subnet_dict[item] }}"
+        region: "{{ (molecule_yml.platforms | first).region | default(default_region) }}"
+      with_items: "{{ az_fallback_subnet_ids }}"
 
 #    - name: Delete remote keypair
 #      ec2_key:
@@ -134,11 +160,50 @@
       until: ec2_jobs.finished
       retries: 300
       with_items: "{{ server.results }}"
+      ignore_errors: true
 
     # Mandatory configuration for Molecule to function.
     - name: ec2_job info
       debug:
         msg: "ec2_jobs Info : {{ ec2_jobs.results }}"
+
+    - name: Identify launches that failed on InsufficientInstanceCapacity
+      set_fact:
+        capacity_failed_launches: "{{ ec2_jobs.results
+          | select('failed')
+          | selectattr('msg', 'defined')
+          | selectattr('msg', 'search', 'Insufficient(Instance|Host)Capacity')
+          | list }}"
+
+    - name: Fail immediately on any non-capacity launch error
+      fail:
+        msg: "{{ item.msg }}"
+      loop: "{{ ec2_jobs.results | select('failed') | list }}"
+      when: item not in capacity_failed_launches
+
+    - name: Retry capacity-exhausted launches in the next available AZ
+      include_tasks: create_instance_retry.yml
+      vars:
+        retry_platform: "{{ item.item.item }}"
+        retry_candidates: "{{ az_fallback_subnet_ids | reject('equalto', item.item.item.vpc_subnet_id) | list }}"
+      loop: "{{ capacity_failed_launches }}"
+      loop_control:
+        label: "{{ item.item.item.name }}"
+
+    - name: Build merged results list (splice in AZ-fallback launches)
+      set_fact:
+        merged_ec2_results: "{{ (merged_ec2_results | default([])) + [
+            (retried_instances | default({}))[item.item.item.name]
+            if item.item.item.name in (retried_instances | default({}))
+            else item
+          ] }}"
+      loop: "{{ ec2_jobs.results }}"
+      loop_control:
+        label: "{{ item.item.item.name }}"
+
+    - name: Replace ec2_jobs.results with AZ-fallback-aware results
+      set_fact:
+        ec2_jobs: "{{ ec2_jobs | combine({'results': merged_ec2_results}) }}"
 
     - name: Populate minimal instance config dict for destroy safety
       set_fact:
