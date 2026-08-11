@@ -1,8 +1,10 @@
+import json
 import os
 import docker
 import time
 import pytest
 import shlex
+import urllib.request
 
 client = docker.from_env()
 
@@ -40,6 +42,22 @@ REQUIRED_LABEL_KEYS = ("name", "vendor", "version", "release", "summary", "descr
 
 # Substrings that must not appear in name, vendor, maintainer (Red Hat trademark)
 RED_HAT_TRADEMARK_FORBIDDEN = ("Red Hat", "RHEL", "RedHat")
+
+# Registry manifest media types must be OCI-only: no Docker-format
+# (vnd.docker) entries, and no mixing of OCI and Docker formats. Queried
+# directly over the registry HTTP API rather than via the docker CLI:
+# `docker manifest inspect`/`buildx imagetools inspect` can fail on hosts
+# with no configured credential helper, even for public, anonymous images.
+DOCKER_HUB_TOKEN_URL = "https://auth.docker.io/token"
+DOCKER_HUB_REGISTRY_URL = "https://registry-1.docker.io/v2"
+MANIFEST_ACCEPT_HEADER = ", ".join((
+    "application/vnd.oci.image.index.v1+json",
+    "application/vnd.docker.distribution.manifest.list.v2+json",
+    "application/vnd.oci.image.manifest.v1+json",
+    "application/vnd.docker.distribution.manifest.v2+json",
+))
+EXPECTED_INDEX_MEDIA_TYPE = "application/vnd.oci.image.index.v1+json"
+EXPECTED_MANIFEST_MEDIA_TYPE = "application/vnd.oci.image.manifest.v1+json"
 
 # --- Clean Helpers ---
 
@@ -161,6 +179,51 @@ def _check_base_image_is_rhel(image_ref, tag_hint):
         f"Base image {image_ref} is not genuine RHEL/UBI: /etc/os-release reports ID='{os_id}'. "
         f"Look-alike distros (e.g. Oracle Linux reports ID='ol') can mirror RHEL's VERSION_ID "
         f"exactly and would pass the version check above while not actually being RHEL/UBI."
+    )
+
+
+def _fetch_json(url, headers=None):
+    request = urllib.request.Request(url, headers=headers or {})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.loads(response.read())
+
+
+def _fetch_manifest(image_ref):
+    """Fetch the registry manifest list/index for image_ref (name:tag)."""
+    repo_path, tag = image_ref.rsplit(":", 1)
+    token = _fetch_json(
+        f"{DOCKER_HUB_TOKEN_URL}?service=registry.docker.io&scope=repository:{repo_path}:pull"
+    )["token"]
+    return _fetch_json(
+        f"{DOCKER_HUB_REGISTRY_URL}/{repo_path}/manifests/{tag}",
+        headers={"Authorization": f"Bearer {token}", "Accept": MANIFEST_ACCEPT_HEADER},
+    )
+
+
+def _validate_manifest_media_types(image_ref):
+    """Verify the manifest list/index and every platform manifest for
+    image_ref are OCI-only: no vnd.docker entries and no mixing of OCI and
+    Docker types."""
+    manifest = _fetch_manifest(image_ref)
+
+    top_level_media_type = manifest.get("mediaType")
+    assert top_level_media_type == EXPECTED_INDEX_MEDIA_TYPE, (
+        f"Top-level mediaType for {image_ref} must be "
+        f"'{EXPECTED_INDEX_MEDIA_TYPE}', got '{top_level_media_type}'"
+    )
+
+    platform_manifests = manifest.get("manifests", [])
+    assert platform_manifests, f"No platform manifests found for {image_ref}"
+
+    non_oci_entries = [
+        f"{entry.get('platform', {}).get('architecture')}={entry.get('mediaType')}"
+        for entry in platform_manifests
+        if entry.get("mediaType") != EXPECTED_MANIFEST_MEDIA_TYPE
+    ]
+    assert not non_oci_entries, (
+        f"Non-OCI platform manifest(s) found for {image_ref}: "
+        f"{', '.join(non_oci_entries)}. All platform manifests must use "
+        f"'{EXPECTED_MANIFEST_MEDIA_TYPE}'."
     )
 
 
@@ -312,6 +375,24 @@ def test_ppg_pgbouncer_image_is_genuine_rhel():
     if not image_ref:
         pytest.skip("PGBOUNCER_IMAGE not set (required for base image check)")
     _check_base_image_is_rhel(image_ref, IMG_TAG)
+
+
+@pytest.mark.order(0)
+def test_ppg_postgres_image_manifest_media_types():
+    """Verify the PostgreSQL image's manifest list/index is OCI-only."""
+    image_ref = os.getenv("PG_IMAGE")
+    if not image_ref:
+        pytest.skip("PG_IMAGE not set (required for manifest media type validation)")
+    _validate_manifest_media_types(image_ref)
+
+
+@pytest.mark.order(0)
+def test_ppg_pgbouncer_image_manifest_media_types():
+    """Verify the PgBouncer image's manifest list/index is OCI-only."""
+    image_ref = os.getenv("PGBOUNCER_IMAGE")
+    if not image_ref:
+        pytest.skip("PGBOUNCER_IMAGE not set (required for manifest media type validation)")
+    _validate_manifest_media_types(image_ref)
 
 
 @pytest.mark.order(0)
