@@ -146,7 +146,14 @@
       # version-locked subpackage (e.g. glibc vs glibc-gconv-extra) are
       # published out of sync. Falls back to the largest consistent version
       # set instead of failing on a "best" candidate that has no partner.
-      ansible.builtin.shell: dnf update -y --nobest
+      # --exclude=kernel*: these are ephemeral test instances that never
+      # reboot and nothing in this suite checks the kernel version, but the
+      # default cloud-image /boot partition is too small to hold old+new
+      # kernel at once mid-transaction (dnf update -y --nobest fails with
+      # "needs N more space on the /boot filesystem"). Skip kernel packages
+      # entirely rather than resizing /boot for a VM that gets destroyed
+      # at the end of the run.
+      ansible.builtin.shell: dnf update -y --nobest --exclude=kernel*
       when: ansible_os_family == "RedHat"
 
     - name: Enable Powertools on Rocky 8
