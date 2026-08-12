@@ -184,7 +184,7 @@
       # "needs N more space on the /boot filesystem"). Skip kernel packages
       # entirely rather than resizing /boot for a VM that gets destroyed
       # at the end of the run.
-      ansible.builtin.shell: dnf update -y --nobest --exclude=kernel*
+      ansible.builtin.shell: dnf update -y --nobest
       when: ansible_os_family == "RedHat"
 
     - name: Enable Powertools on Rocky 8
