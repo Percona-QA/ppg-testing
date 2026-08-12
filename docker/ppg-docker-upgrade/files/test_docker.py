@@ -1186,6 +1186,20 @@ def test_wal2json_logical_decoding(host):
         if wal_level != "logical":
             pytest.skip(f"wal_level is {wal_level}; 'logical' is required.")
 
+        # PostgreSQL added an output_plugin_libraries allowlist starting the
+        # 14.24/15.19/16.15/17.11 minors (confirmed empirically -- the GUC
+        # doesn't exist at all on older minors): any output plugin not
+        # listed there is rejected with 'library "wal2json" may not be used
+        # as an output plugin'. Add wal2json to the allowlist when the GUC
+        # exists; this is a no-op on older minors, which have no such
+        # restriction.
+        allowlist = host.run("psql -t -c 'SHOW output_plugin_libraries;'")
+        if allowlist.rc == 0 and "wal2json" not in allowlist.stdout:
+            current = allowlist.stdout.strip()
+            new_list = f"{current}, wal2json" if current else "wal2json"
+            host.run(f"psql -c 'ALTER SYSTEM SET output_plugin_libraries TO {new_list};'")
+            host.run("psql -c 'SELECT pg_reload_conf();'")
+
         # 2. Setup a test table
         host.run("psql -c 'CREATE TABLE wal_test (id int PRIMARY KEY, name text);'")
 
@@ -1512,6 +1526,8 @@ redhat_percona_telemetry_agent = "/etc/sysconfig/percona-telemetry-agent"
 def test_telemetry_package_is_installed(host, package):
     if int(MAJOR_VER) in [18]:
         pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+    if package == "percona-telemetry-agent":
+        _skip_if_telemetry_agent_unavailable()
     dist = host.system_info.distribution
     pkg = host.package(package)
     assert pkg.is_installed
@@ -1520,6 +1536,7 @@ def test_telemetry_package_is_installed(host, package):
 def test_telemetry_agent_service_enabled(host):
     if int(MAJOR_VER) in [18]:
         pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+    _skip_if_telemetry_agent_unavailable()
     service = host.service("percona-telemetry-agent")
     #assert service.is_running
     assert service.is_enabled
@@ -1529,6 +1546,7 @@ def test_telemetry_log_directory_exists(host):
     """Test if the directory exists."""
     if int(MAJOR_VER) in [18]:
         pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+    _skip_if_telemetry_agent_unavailable()
     logdir = host.file(log_directory)
     assert logdir.exists, f"Directory {log_directory} does not exist."
 
@@ -1538,6 +1556,7 @@ def test_telemetry_log_files_exist(host,file_name):
     """Test if the required files exist within the directory."""
     if int(MAJOR_VER) in [18]:
         pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+    _skip_if_telemetry_agent_unavailable()
     file_path = os.path.join(log_directory, file_name)
     log_file_name = host.file(file_path)
     assert log_file_name.exists, f"File {file_path} does not exist."
@@ -1547,6 +1566,7 @@ def get_telemetry_agent_conf_file(host):
     """Determine the percona-telemetry-agent path based on the OS."""
     if int(MAJOR_VER) in [18]:
         pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+    _skip_if_telemetry_agent_unavailable()
     dist = host.system_info.distribution
     # if dist.lower() in ["redhat", "centos", "rhel", "rocky"]:
     #     return redhat_percona_telemetry_agent
@@ -1559,6 +1579,7 @@ def test_telemetry_json_directories_exist(host):
     """Test if the history and pg directories exist."""
     if int(MAJOR_VER) in [18]:
         pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+    _skip_if_telemetry_agent_unavailable()
     for directory in common_directories:
         assert host.file(directory).exists, f"Directory {directory} does not exist."
 
@@ -1567,6 +1588,7 @@ def test_telemetry_agent_conf_exists(host):
     """Test if the percona-telemetry-agent conf file exists."""
     if int(MAJOR_VER) in [18]:
         pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+    _skip_if_telemetry_agent_unavailable()
     agent_path = get_telemetry_agent_conf_file(host)
     assert host.file(agent_path).exists, f"{agent_path} does not exist."
 
@@ -1614,6 +1636,28 @@ PG_TDE_UPGRADE_MIN_VERSIONS = {
     17: version.parse("17.10"),
     18: version.parse("18.4"),
 }
+
+# Minimum PPG patch versions where percona-telemetry-agent was removed as a
+# runtime dependency of percona-pg-telemetry (PG-2615), keyed by major version
+# integer. At or beyond these versions the agent package, its service, its
+# config file, and its log/history directories no longer exist.
+TELEMETRY_AGENT_REMOVED_MIN_VERSIONS = {
+    14: version.parse("14.24"),
+    15: version.parse("15.19"),
+    16: version.parse("16.15"),
+    17: version.parse("17.11"),
+}
+
+
+def _skip_if_telemetry_agent_unavailable():
+    """Skip the calling test if percona-telemetry-agent is not expected to be installed."""
+    current_ver = version.parse(MAJOR_MINOR_VER)
+    min_ver = TELEMETRY_AGENT_REMOVED_MIN_VERSIONS.get(int(MAJOR_VER))
+    if min_ver is not None and current_ver >= min_ver:
+        pytest.skip(
+            f"percona-telemetry-agent is no longer a dependency starting "
+            f"{min_ver} (PG-2615) -- found {MAJOR_MINOR_VER}."
+        )
 
 
 def _skip_if_llvmjit_unavailable():

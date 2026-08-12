@@ -1362,6 +1362,20 @@ def test_wal2json_logical_decoding(host):
         if wal_level != "logical":
             pytest.skip(f"wal_level is {wal_level}; 'logical' is required.")
 
+        # PostgreSQL added an output_plugin_libraries allowlist starting the
+        # 14.24/15.19/16.15/17.11 minors (confirmed empirically -- the GUC
+        # doesn't exist at all on older minors): any output plugin not
+        # listed there is rejected with 'library "wal2json" may not be used
+        # as an output plugin'. Add wal2json to the allowlist when the GUC
+        # exists; this is a no-op on older minors, which have no such
+        # restriction.
+        allowlist = host.run("psql -t -c 'SHOW output_plugin_libraries;'")
+        if allowlist.rc == 0 and "wal2json" not in allowlist.stdout:
+            current = allowlist.stdout.strip()
+            new_list = f"{current}, wal2json" if current else "wal2json"
+            host.run(f"psql -c 'ALTER SYSTEM SET output_plugin_libraries TO {new_list};'")
+            host.run("psql -c 'SELECT pg_reload_conf();'")
+
         # 2. Setup a test table
         host.run("psql -c 'CREATE TABLE wal_test (id int PRIMARY KEY, name text);'")
 
