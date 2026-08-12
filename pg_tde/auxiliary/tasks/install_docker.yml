@@ -34,7 +34,8 @@
 # /boot on most roles' base images can't fit old+new kernel at once, and no
 # other role needs a kernel bump) — so this role updates its own kernel
 # explicitly, right where it's needed, overriding that exclude with
-# --disableexcludes=main. Without this, the box still runs the old kernel
+# --disableexcludes=main.
+# right where it's needed. Without this, the box still runs the old kernel
 # and those modules are missing on disk, so dockerd fails to register the
 # bridge driver. We bump the kernel, install the latest kernel-modules-extra,
 # and reboot into the matching kernel.
