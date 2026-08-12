@@ -5,6 +5,25 @@
   become_method: sudo
   gather_facts: true
   tasks:
+    # dnf will opportunistically pull in a kernel bump as a side effect of
+    # almost any package install (weak/transitive deps, "keep consistent"
+    # resolution) — we've hit this via the general update, a plain package
+    # install, and a "yum cache refresh" alike, each hitting the same
+    # too-small cloud-image /boot partition (can't hold old+new kernel at
+    # once mid-transaction). Patching individual tasks doesn't scale, so
+    # exclude kernel* globally for every dnf/yum call for the rest of this
+    # ephemeral VM's life, set before any other yum/dnf task runs. Nothing
+    # in this suite reboots or checks kernel version except pg_tde/auxiliary's
+    # EL10 Docker setup, which explicitly overrides this with
+    # --disableexcludes=main where it genuinely needs a newer kernel.
+    - name: Exclude kernel packages from all dnf/yum transactions on this VM
+      become: true
+      ansible.builtin.lineinfile:
+        path: /etc/dnf/dnf.conf
+        line: exclude=kernel*
+        insertafter: '^\[main\]'
+      when: ansible_os_family == "RedHat"
+
     # Rocky's default baseos/appstream/crb repos resolve mirrors through the
     # mirrorlist service, which is unreliable on Rocky 10 (esp. aarch64) and
     # fails with "No URLs in mirrorlist". Pin them to the canonical CDN baseurl
