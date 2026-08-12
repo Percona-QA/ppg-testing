@@ -11,16 +11,28 @@
     # install, and a "yum cache refresh" alike, each hitting the same
     # too-small cloud-image /boot partition (can't hold old+new kernel at
     # once mid-transaction). Patching individual tasks doesn't scale, so
-    # exclude kernel* globally for every dnf/yum call for the rest of this
-    # ephemeral VM's life, set before any other yum/dnf task runs. Nothing
-    # in this suite reboots or checks kernel version except pg_tde/auxiliary's
-    # EL10 Docker setup, which explicitly overrides this with
-    # --disableexcludes=main where it genuinely needs a newer kernel.
+    # exclude the bootable-kernel packages globally for every dnf/yum call
+    # for the rest of this ephemeral VM's life, set before any other yum/dnf
+    # task runs. Nothing in this suite reboots or checks kernel version
+    # except pg_tde/auxiliary's EL10 Docker setup, which explicitly overrides
+    # this with --disableexcludes=main where it genuinely needs a newer kernel.
+    #
+    # Deliberately NOT a "kernel*" glob: that also matched kernel-headers and
+    # kernel-srpm-macros, which are build-time packages (not part of the
+    # running kernel image, don't touch /boot) required by the standard
+    # gcc/glibc-devel/perl-devel toolchain. Excluding them broke every
+    # compiler-toolchain install on RHEL/Rocky/OL 8, 9, and 10 with a dnf
+    # depsolve error. List only the packages that actually land in /boot.
     - name: Exclude kernel packages from all dnf/yum transactions on this VM
       become: true
       ansible.builtin.lineinfile:
         path: /etc/dnf/dnf.conf
-        line: exclude=kernel*
+        line: >-
+          exclude=kernel kernel-core kernel-modules kernel-modules-core
+          kernel-modules-extra kernel-debug kernel-debug-core
+          kernel-debug-modules kernel-debug-modules-core
+          kernel-debug-modules-extra kernel-tools kernel-tools-libs
+          kernel-uki-virt kernel-debug-uki-virt
         insertafter: '^\[main\]'
       when: ansible_os_family == "RedHat"
 
