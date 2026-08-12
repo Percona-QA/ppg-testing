@@ -78,7 +78,9 @@
       when: ansible_facts['os_family'] == 'RedHat'
 
     - name: Check "{{ telemetry_package_name }}" is installed on Debian/Ubuntu
-      ansible.builtin.shell: dpkg -l | grep "{{ telemetry_package_name }}"
+      # dpkg -l | grep also matches a removed-but-not-purged ("rc") entry --
+      # query ${Status} directly so only "ok installed" counts.
+      ansible.builtin.shell: dpkg-query -W -f='${Status}\n' "{{ telemetry_package_name }}" 2>/dev/null | grep "ok installed"
       register: telemetry_status_deb
       ignore_errors: true
       changed_when: false
@@ -117,7 +119,7 @@
       when: ansible_facts['os_family'] == 'RedHat'
 
     - name: Check percona-telemetry-agent is not installed on Debian/Ubuntu
-      ansible.builtin.shell: dpkg -l | grep percona-telemetry-agent
+      ansible.builtin.shell: dpkg-query -W -f='${Status}\n' percona-telemetry-agent 2>/dev/null | grep "ok installed"
       register: telemetry_agent_status_deb
       ignore_errors: true
       changed_when: false
@@ -246,24 +248,48 @@
           {{ telemetry_package_name }}, and {{ telemetry_package_name }} does
           not depend on percona-telemetry-agent.
 
+    # Always print the actual package specs used above, not just on
+    # failure -- on a passing run this data never otherwise reaches the CI
+    # log, which makes debugging a later, unrelated failure in this same
+    # play (e.g. the service check right below) much harder than it needs
+    # to be.
+    - name: Print "{{ server_package_name }}"/"{{ telemetry_package_name }}" dependency specs (RedHat)
+      ansible.builtin.debug:
+        msg:
+          "{{ server_package_name }} Requires": "{{ server_requires.stdout_lines }}"
+          "{{ server_package_name }} Recommends": "{{ server_recommends.stdout_lines }}"
+          "{{ telemetry_package_name }} Requires": "{{ telemetry_requires.stdout_lines }}"
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Print "{{ server_package_name }}"/"{{ telemetry_package_name }}" dependency specs (Debian)
+      ansible.builtin.debug:
+        msg:
+          "{{ server_package_name }} Depends": "{{ server_depends.stdout }}"
+          "{{ server_package_name }} Recommends": "{{ server_recommends_deb.stdout }}"
+          "{{ telemetry_package_name }} Depends": "{{ telemetry_depends_deb.stdout }}"
+      when: ansible_facts['os_family'] == 'Debian'
+
     # -------------------------------------------------------------------
     # 4. Sanity: PostgreSQL itself must still be running fine without
     #    percona-telemetry-agent installed.
     # -------------------------------------------------------------------
     - name: Check if "{{ postgresql_service_name }}" is running
-      ansible.builtin.systemd:
-        name: "{{ postgresql_service_name }}"
-        state: started
-      register: postgresql_service
+      # Not a no-op read if the service isn't already active -- this can
+      # trigger a real start attempt, so route it through the diagnostics
+      # helper (journalctl + postgres logs on failure) instead of a bare
+      # systemd call with no detail if that happens.
+      ansible.builtin.include_tasks: "{{ role_path }}/../../tasks/start_postgres_with_diagnostics.yml"
+      vars:
+        svc_name: "{{ postgresql_service_name }}"
+        svc_state: started
 
-    - name: Validate that "{{ postgresql_service_name }}" is running
-      ansible.builtin.fail:
-        msg: "The {{ postgresql_service_name }} service is not running!"
-      when: postgresql_service.status['ActiveState'] != 'active'
-
-    - name: Print the status of "{{ postgresql_service_name }}"
+    - name: Print confirmation that "{{ postgresql_service_name }}" is running
+      # No separate re-check/validate needed: start_postgres_with_diagnostics.yml
+      # above already fails the play (with journalctl/log diagnostics attached)
+      # if the service didn't reach state=started, so reaching this line means
+      # it did.
       ansible.builtin.debug:
-        msg: "The {{ postgresql_service_name }} service is {{ postgresql_service.status['ActiveState'] }}."
+        msg: "The {{ postgresql_service_name }} service is active."
 
 # =============================================================================
 # OLD PACKAGING (pre PG-2615): percona-telemetry-agent is a hard dependency of
@@ -298,13 +324,15 @@
       when: ansible_facts['os_family'] == 'RedHat'
 
     - name: Check if "{{ telemetry_package_name }}" is installed on Debian/Ubuntu
-      ansible.builtin.shell: dpkg -l | grep "{{ telemetry_package_name }}"
+      # dpkg -l | grep also matches a removed-but-not-purged ("rc") entry --
+      # query ${Status} directly so only "ok installed" counts.
+      ansible.builtin.shell: dpkg-query -W -f='${Status}\n' "{{ telemetry_package_name }}" 2>/dev/null | grep "ok installed"
       register: telemetry_status
       ignore_errors: true
       when: ansible_facts['os_family'] == 'Debian'
 
     - name: Check if percona-telemetry-agent is installed on Debian/Ubuntu
-      ansible.builtin.shell: dpkg -l | grep percona-telemetry-agent
+      ansible.builtin.shell: dpkg-query -W -f='${Status}\n' percona-telemetry-agent 2>/dev/null | grep "ok installed"
       register: telemetry_agent_status
       ignore_errors: true
       when: ansible_facts['os_family'] == 'Debian'

@@ -66,7 +66,9 @@
   when: ansible_facts['os_family'] == 'RedHat'
 
 - name: Check "{{ to_telemetry_package_name }}" is installed on Debian/Ubuntu
-  ansible.builtin.shell: dpkg -l | grep "{{ to_telemetry_package_name }}"
+  # dpkg -l | grep also matches a removed-but-not-purged ("rc") entry --
+  # query ${Status} directly so only "ok installed" counts.
+  ansible.builtin.shell: dpkg-query -W -f='${Status}\n' "{{ to_telemetry_package_name }}" 2>/dev/null | grep "ok installed"
   register: to_telemetry_status_deb
   ignore_errors: true
   changed_when: false
@@ -94,7 +96,7 @@
   when: ansible_facts['os_family'] == 'RedHat'
 
 - name: Check percona-telemetry-agent install status on Debian/Ubuntu
-  ansible.builtin.shell: dpkg -l | grep percona-telemetry-agent
+  ansible.builtin.shell: dpkg-query -W -f='${Status}\n' percona-telemetry-agent 2>/dev/null | grep "ok installed"
   register: agent_status_deb
   ignore_errors: true
   changed_when: false
@@ -142,7 +144,7 @@
     - from_major_version != to_major_version
 
 - name: Check "{{ from_telemetry_package_name }}" is still installed on Debian/Ubuntu (major upgrade)
-  ansible.builtin.shell: dpkg -l | grep "{{ from_telemetry_package_name }}"
+  ansible.builtin.shell: dpkg-query -W -f='${Status}\n' "{{ from_telemetry_package_name }}" 2>/dev/null | grep "ok installed"
   register: from_telemetry_status_deb
   ignore_errors: true
   changed_when: false
@@ -248,3 +250,19 @@
     msg: >-
       Post-upgrade telemetry packaging for {{ to_pg_version }} verified
       ({{ 'weak' if to_weak_dependency_expected else 'hard' }}-dependency model).
+
+# Print the actual specs unconditionally (not just in a fail message) so a
+# CI log always shows what was checked, pass or fail.
+- name: Print "{{ to_server_package_name }}" specs (RedHat)
+  ansible.builtin.debug:
+    msg:
+      "{{ to_server_package_name }} Requires": "{{ to_server_requires.stdout_lines }}"
+      "{{ to_server_package_name }} Recommends": "{{ to_server_recommends.stdout_lines }}"
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Print "{{ to_server_package_name }}" specs (Debian)
+  ansible.builtin.debug:
+    msg:
+      "{{ to_server_package_name }} Depends": "{{ to_server_depends.stdout }}"
+      "{{ to_server_package_name }} Recommends": "{{ to_server_recommends_deb.stdout }}"
+  when: ansible_facts['os_family'] == 'Debian'
