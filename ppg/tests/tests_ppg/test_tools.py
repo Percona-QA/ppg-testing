@@ -37,7 +37,7 @@ LLVMJIT_MIN_VERSIONS = {
     18: version.parse("18.4"),
 }
 
-# Minimum PostgreSQL versions where percona-patroni requires python3.12+ on RHEL 8
+# Minimum PostgreSQL versions where percona-patroni requires python3.12+ on RHEL
 # (the first version strictly after 14.23, 15.18, 16.14, 17.10, 18.4)
 PATRONI_PYTHON312_MIN_VERSIONS = {
     14: version.parse("14.24"),
@@ -45,6 +45,20 @@ PATRONI_PYTHON312_MIN_VERSIONS = {
     16: version.parse("16.15"),
     17: version.parse("17.11"),
     18: version.parse("18.5"),
+}
+
+# Versions an in-place upgrade must originate FROM before the python3.12
+# patroni dependency is expected to have been picked up. Below these, the
+# upgrade path itself (as opposed to a fresh install) isn't guaranteed to
+# have refreshed patroni to the python3.12 build yet (seen on RHEL 8 major
+# upgrade 15.18 -> 16.15 and minor upgrade 16.14 -> 16.15, both landing on
+# python(abi) = 3.6 instead).
+PATRONI_PYTHON312_UPGRADE_FROM_MIN_VERSIONS = {
+    14: version.parse("14.24"),
+    15: version.parse("15.19"),
+    16: version.parse("16.15"),
+    17: version.parse("17.11"),
+    18: version.parse("18.6"),
 }
 
 # Minimum PostgreSQL versions where pg_cron is available
@@ -496,14 +510,30 @@ def _skip_if_patroni_python312_unavailable():
                     f"PostgreSQL {pg_versions.get('version')}")
 
 
+def _skip_if_patroni_python312_upgrade_pending():
+    """Skip if this is an in-place upgrade from a version below
+    PATRONI_PYTHON312_UPGRADE_FROM_MIN_VERSIONS -- the upgrade path isn't
+    guaranteed to have refreshed patroni to the python3.12 build yet. Comes
+    from Jenkins-pipelines via FROM_VERSION; a no-op on a fresh install."""
+    from_version = os.getenv("FROM_VERSION")
+    if not from_version:
+        return
+    from_ver = version.parse(from_version.split("-", 1)[-1])
+    min_ver = PATRONI_PYTHON312_UPGRADE_FROM_MIN_VERSIONS.get(from_ver.major)
+    if min_ver is not None and from_ver < min_ver:
+        pytest.skip(f"upgrading from PostgreSQL {from_version}, which predates the "
+                    f"python3.12 patroni dependency ({min_ver}) -- the upgrade path "
+                    f"itself isn't expected to have picked it up yet")
+
+
 @pytest.mark.upgrade
 def test_patroni_requires_python312(host):
     """percona-patroni must declare a hard dependency on python3.12 or newer on
-    RHEL-based platforms (RHEL/Rocky/OL 8, 9, 10). Pure dependency-metadata
-    check, valid whether this host was freshly installed or just upgraded --
-    marked `upgrade` so it also runs in the minor/major upgrade verifier
-    passes."""
+    RHEL-based platforms. Pure dependency-metadata check, valid whether this
+    host was freshly installed or just upgraded -- marked `upgrade` so it also
+    runs in the minor/major upgrade verifier passes."""
     _skip_if_patroni_python312_unavailable()
+    _skip_if_patroni_python312_upgrade_pending()
     dist = host.system_info.distribution
     if dist.lower() in ["ubuntu", "debian"]:
         pytest.skip("python3.12+ dependency pin only applies to RHEL-based packaging")

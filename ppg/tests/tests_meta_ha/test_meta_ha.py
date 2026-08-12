@@ -25,7 +25,7 @@ EXPECTED_VERSIONS = {
     "percona-haproxy": pg_versions["haproxy"]["version"],
 }
 
-# Minimum PostgreSQL versions where percona-patroni requires python3.12+ on RHEL 8
+# Minimum PostgreSQL versions where percona-patroni requires python3.12+ on RHEL
 # (the first version strictly after 14.23, 15.18, 16.14, 17.10, 18.4)
 PATRONI_PYTHON312_MIN_VERSIONS = {
     14: version.parse("14.24"),
@@ -92,7 +92,7 @@ def _skip_if_patroni_python312_unavailable():
 
 def test_patroni_requires_python312(host):
     """percona-patroni must declare a hard dependency on python3.12 or newer on
-    RHEL-based platforms (RHEL/Rocky/OL 8, 9, 10)."""
+    RHEL-based platforms."""
     _skip_if_patroni_python312_unavailable()
     ds = host.system_info.distribution
     if ds.lower() in ["debian", "ubuntu"]:
