@@ -30,4 +30,9 @@ pgvector = {
     "16.14": {"version": "0.8.3", "extension_version": "0.8.3"},
     "17.10": {"version": "0.8.3", "extension_version": "0.8.3"},
     "18.4": {"version": "0.8.3", "extension_version": "0.8.3"},
+    "14.24": {"version": "0.8.6", "extension_version": "0.8.6"},
+    "15.19": {"version": "0.8.6", "extension_version": "0.8.6"},
+    "16.15": {"version": "0.8.6", "extension_version": "0.8.6"},
+    "17.11": {"version": "0.8.6", "extension_version": "0.8.6"},
+    "18.6": {"version": "0.8.6", "extension_version": "0.8.6"},
 }
