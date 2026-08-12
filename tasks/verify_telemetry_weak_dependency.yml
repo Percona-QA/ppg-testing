@@ -32,6 +32,47 @@
     telemetry_package_name: "percona-pg-telemetry{{ major_version }}"
     server_package_name: "{{ 'percona-postgresql' + major_version + '-server' if ansible_facts['os_family'] == 'RedHat' else 'percona-postgresql-' + major_version }}"
 
+- name: Set PostgreSQL configuration file path based on the operating system
+  set_fact:
+    postgresql_conf_path: "{{ '/var/lib/pgsql/' + major_version + '/data/postgresql.conf' if ansible_facts['os_family'] == 'RedHat' else '/etc/postgresql/' + major_version + '/main/postgresql.conf' }}"
+
+# If percona_pg_telemetry is configured in shared_preload_libraries (e.g. by
+# install_ppgNN_tools.yml earlier in this same play), removing the package
+# below would delete the .so file postgres is configured to preload -- ANY
+# subsequent restart (ours, or the RPM's own %postun `systemctl try-restart`
+# scriptlet on the reinstall further down) would then fatally fail with
+# "could not access file "percona_pg_telemetry": No such file or directory".
+# Confirmed against a real RHEL9 VM: removing the package while it's still
+# preloaded reproduces exactly this crash. Strip it out and restart *before*
+# touching the package, and restore it (with another restart) at the end.
+- name: Capture the current shared_preload_libraries line, if any
+  ansible.builtin.command:
+    cmd: grep -E '^shared_preload_libraries\s*=' "{{ postgresql_conf_path }}"
+  register: shared_preload_line
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Determine whether "{{ telemetry_package_name }}" is preloaded
+  ansible.builtin.set_fact:
+    telemetry_is_preloaded: "{{ shared_preload_line.rc == 0 and 'percona_pg_telemetry' in shared_preload_line.stdout }}"
+
+- name: Temporarily drop percona_pg_telemetry from shared_preload_libraries
+  when: telemetry_is_preloaded
+  become: true
+  block:
+    - name: Strip percona_pg_telemetry out of shared_preload_libraries
+      ansible.builtin.replace:
+        path: "{{ postgresql_conf_path }}"
+        regexp: 'percona_pg_telemetry,?\s*|,\s*percona_pg_telemetry'
+        replace: ""
+
+    - name: Restart "{{ postgresql_service_name }}" without percona_pg_telemetry preloaded
+      ansible.builtin.include_tasks: "{{ role_path }}/../../tasks/start_postgres_with_diagnostics.yml"
+      vars:
+        svc_name: "{{ postgresql_service_name }}"
+        svc_state: restarted
+
 - name: Remove "{{ telemetry_package_name }}" so we can test opting back out at install time
   ansible.builtin.package:
     name: "{{ telemetry_package_name }}"
@@ -72,7 +113,10 @@
   when: ansible_facts['os_family'] == 'RedHat'
 
 - name: Check whether "{{ telemetry_package_name }}" is installed on Debian/Ubuntu
-  ansible.builtin.shell: dpkg -l | grep "{{ telemetry_package_name }}"
+  # dpkg -l | grep would also match a package removed-but-not-purged (status
+  # "rc"), which apt-get remove (not purge) leaves behind -- query ${Status}
+  # directly so only a genuinely-installed "ok installed" counts.
+  ansible.builtin.shell: dpkg-query -W -f='${Status}\n' "{{ telemetry_package_name }}" 2>/dev/null | grep "ok installed"
   register: telemetry_after_optout_deb
   ignore_errors: true
   changed_when: false
@@ -81,6 +125,53 @@
 - name: Normalize "{{ telemetry_package_name }}" post-opt-out status across OS families
   ansible.builtin.set_fact:
     telemetry_after_optout: "{{ telemetry_after_optout_rpm if ansible_facts['os_family'] == 'RedHat' else telemetry_after_optout_deb }}"
+
+# Print the actual package specs unconditionally (not just in a fail
+# message) so a CI log always shows exactly what was checked, whether this
+# passes or fails -- this is the data that would have made the Debian
+# "rc" vs "ii" detection bug immediately obvious without needing to
+# reproduce it separately.
+- name: Get "{{ server_package_name }}" Requires after the reinstall (RedHat)
+  ansible.builtin.command:
+    cmd: rpm -q --requires "{{ server_package_name }}"
+  register: server_requires_after_optout
+  changed_when: false
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Get "{{ server_package_name }}" Recommends after the reinstall (RedHat)
+  ansible.builtin.command:
+    cmd: rpm -q --recommends "{{ server_package_name }}"
+  register: server_recommends_after_optout
+  changed_when: false
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Get "{{ server_package_name }}" Depends after the reinstall (Debian)
+  ansible.builtin.shell: dpkg-query -W -f='${Depends}\n' "{{ server_package_name }}"
+  register: server_depends_after_optout
+  changed_when: false
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Get "{{ server_package_name }}" Recommends after the reinstall (Debian)
+  ansible.builtin.shell: dpkg-query -W -f='${Recommends}\n' "{{ server_package_name }}"
+  register: server_recommends_after_optout_deb
+  changed_when: false
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Print "{{ telemetry_package_name }}"/"{{ server_package_name }}" specs after the reinstall (RedHat)
+  ansible.builtin.debug:
+    msg:
+      "{{ telemetry_package_name }} (rpm -q)": "{{ telemetry_after_optout.stdout | default('not installed') }}"
+      "{{ server_package_name }} Requires": "{{ server_requires_after_optout.stdout_lines }}"
+      "{{ server_package_name }} Recommends": "{{ server_recommends_after_optout.stdout_lines }}"
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Print "{{ telemetry_package_name }}"/"{{ server_package_name }}" specs after the reinstall (Debian)
+  ansible.builtin.debug:
+    msg:
+      "{{ telemetry_package_name }} (dpkg-query Status)": "{{ telemetry_after_optout.stdout | default('not installed') }}"
+      "{{ server_package_name }} Depends": "{{ server_depends_after_optout.stdout }}"
+      "{{ server_package_name }} Recommends": "{{ server_recommends_after_optout_deb.stdout }}"
+  when: ansible_facts['os_family'] == 'Debian'
 
 - name: Fail if opting out of weak dependencies still installed "{{ telemetry_package_name }}"
   ansible.builtin.fail:
@@ -98,17 +189,15 @@
       {{ server_package_name }} with weak dependencies disabled.
 
 - name: Confirm "{{ postgresql_service_name }}" is still running after the reinstall
-  ansible.builtin.systemd:
-    name: "{{ postgresql_service_name }}"
-    state: started
-  register: postgresql_service_after_optout
-
-- name: Fail if "{{ postgresql_service_name }}" is not running after the reinstall
-  ansible.builtin.fail:
-    msg: >-
-      The {{ postgresql_service_name }} service is not running after
-      reinstalling {{ server_package_name }} without weak dependencies!
-  when: postgresql_service_after_optout.status['ActiveState'] != 'active'
+  # Reinstalling the server package can itself trigger a service
+  # restart via the RPM's own %postun scriptlet (systemctl try-restart on
+  # upgrade paths, which `dnf reinstall` goes through) -- if that in-package
+  # restart fails, dump journalctl + postgres logs here instead of the bare
+  # "control process exited" message with no detail.
+  ansible.builtin.include_tasks: "{{ role_path }}/../../tasks/start_postgres_with_diagnostics.yml"
+  vars:
+    svc_name: "{{ postgresql_service_name }}"
+    svc_state: started
 
 # Restore the default (recommends-on) install so the rest of the suite sees
 # the same package set a normal install would produce.
@@ -133,3 +222,19 @@
   ansible.builtin.fail:
     msg: "{{ telemetry_package_name }} was not reinstalled after the opt-out test."
   when: telemetry_package_name not in ansible_facts.packages
+
+- name: Restore percona_pg_telemetry in shared_preload_libraries
+  when: telemetry_is_preloaded
+  become: true
+  block:
+    - name: Restore the original shared_preload_libraries line
+      ansible.builtin.lineinfile:
+        path: "{{ postgresql_conf_path }}"
+        regexp: '^shared_preload_libraries\s*='
+        line: "{{ shared_preload_line.stdout }}"
+
+    - name: Restart "{{ postgresql_service_name }}" with percona_pg_telemetry preloaded again
+      ansible.builtin.include_tasks: "{{ role_path }}/../../tasks/start_postgres_with_diagnostics.yml"
+      vars:
+        svc_name: "{{ postgresql_service_name }}"
+        svc_state: restarted
