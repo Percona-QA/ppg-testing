@@ -23,12 +23,7 @@
 
 - name: Yum update
   become: true
-  # --exclude=kernel*: kernel-modules-extra below is pinned to ansible_kernel
-  # (the currently running kernel), not "latest", and nothing here reboots —
-  # so this role never needs a kernel bump, but the small cloud-image /boot
-  # partition can't fit old+new kernel at once mid-transaction (see the
-  # identical fix in playbooks/prepare.yml).
-  command: yum -y update --exclude=kernel*
+  command: yum -y update
   when: ansible_os_family == "RedHat"
 
 - name: Ensure required dependencies are installed
@@ -44,9 +39,6 @@
   dnf:
     name: "kernel-modules-extra-{{ ansible_kernel }}"
     state: present
-    # prepare.yml sets a global exclude=kernel* in /etc/dnf/dnf.conf; override
-    # it here since this package name matches that glob.
-    disable_excludes: main
   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
 - name: Ensure br_netfilter module is loaded (RHEL 10 only)
@@ -63,8 +55,7 @@
 - name: Yum update
   become: true
   # Refreshes metadata for the Docker CE repo just added above — not a
-  # system update, so use makecache rather than "yum -y update" (which
-  # can hit the same /boot-space kernel issue fixed above).
+  # system update, so use makecache rather than "yum -y update".
   command: yum makecache
   when: ansible_os_family == "RedHat"
 
