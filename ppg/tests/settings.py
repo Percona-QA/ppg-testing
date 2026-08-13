@@ -2606,7 +2606,7 @@ def get_settings(distro_type):
             "PG_TDE_package_version": "2.2.2",
             "PG_TDE_sql_version": "2.2",
             "PG_OIDC_VALIDATOR_version": "1.1.0",
-            "PG_OIDC_VALIDATOR_package_version": "1.1",
+            "PG_OIDC_VALIDATOR_package_version": "1.1.0",
             "PG_CRON_version": "1.6.7",
             "PG_CRON_package_version": "1.6.7",
             "PG_CRON_sql_version": "1.6",
