@@ -132,6 +132,50 @@
     svc_name: postgresql
     svc_state: restarted
 
+# PostgreSQL added an output_plugin_libraries allowlist GUC starting the
+# 14.24/15.19/16.15/17.11 minors (confirmed empirically against real
+# perconalab images -- the GUC doesn't exist at all on older minors): any
+# output plugin not listed there is rejected with 'library "wal2json" may
+# not be used as an output plugin', which is exactly what makes wal2json's
+# own "make installcheck" regression suite fail 30/30 on those versions
+# (it creates a logical replication slot using the wal2json plugin). Add
+# wal2json to the allowlist when the GUC exists; this is a no-op on older
+# minors, which have no such restriction.
+- name: Check whether the output_plugin_libraries allowlist GUC exists
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - psql
+      - -tAc
+      - SHOW output_plugin_libraries
+  register: output_plugin_libraries_check
+  changed_when: false
+  failed_when: false
+
+- name: Allowlist wal2json in output_plugin_libraries
+  when:
+    - output_plugin_libraries_check.rc == 0
+    - "'wal2json' not in output_plugin_libraries_check.stdout"
+  become_user: postgres
+  block:
+    - name: Add wal2json to output_plugin_libraries
+      ansible.builtin.command:
+        argv:
+          - psql
+          - -v
+          - ON_ERROR_STOP=1
+          - -c
+          - >-
+            ALTER SYSTEM SET output_plugin_libraries TO
+            {{ output_plugin_libraries_check.stdout.strip() }}, wal2json
+
+    - name: Reload PostgreSQL configuration to pick up output_plugin_libraries
+      ansible.builtin.command:
+        argv:
+          - psql
+          - -c
+          - SELECT pg_reload_conf()
+
 - name: Test wal2json
   make:
     target: installcheck
