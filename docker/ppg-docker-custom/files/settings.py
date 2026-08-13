@@ -65,9 +65,9 @@ patroni = {
     "16.14": {"version": "4.1.3", "binary_version": "patroni 4.1.3"},
     "17.10": {"version": "4.1.3", "binary_version": "patroni 4.1.3"},
     "18.4": {"version": "4.1.3", "binary_version": "patroni 4.1.3"},
-    "16.15": {"version": "4.1.4", "binary_version": "patroni 4.1.4"},
-    "17.11": {"version": "4.1.4", "binary_version": "patroni 4.1.4"},
-    "18.6": {"version": "4.1.4", "binary_version": "patroni 4.1.4"},
+    "16.15": {"version": "4.1.5", "binary_version": "patroni 4.1.5"},
+    "17.11": {"version": "4.1.5", "binary_version": "patroni 4.1.5"},
+    "18.6": {"version": "4.1.5", "binary_version": "patroni 4.1.5"},
 }
 
 pgbackrest = {
