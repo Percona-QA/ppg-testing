@@ -1623,6 +1623,41 @@ def test_pg_oidc_validator_config(host):
         )
 
 
+def test_pg_oidc_validator_loaded_module_version(host):
+    """Verify pg_oidc_validator's own embedded version (compiled in via
+    PG_MODULE_MAGIC_EXT), read through PG18's pg_get_loaded_modules() --
+    independent of whatever the OS package metadata says in
+    test_pg_oidc_validator_package_version above. The library loads lazily
+    on first OAuth attempt, so force it into the session with LOAD first.
+    """
+    major = int(settings.MAJOR_VER)
+    if major < 18:
+        pytest.skip(f"pg_oidc_validator supported only on PG-18+ (got {major})")
+
+    current_ver_str = pg_versions.get('version', '0.0')
+    if version.parse(current_ver_str) < version.parse("18.2"):
+        pytest.skip(f"pg_oidc_validator requires PG 18.2+, found {current_ver_str}")
+
+    expected_version = pg_versions.get("PG_OIDC_VALIDATOR_version")
+    if not expected_version:
+        pytest.skip("PG_OIDC_VALIDATOR_version not defined in pg_versions.")
+
+    psql = "psql -t -A -c"
+    with host.sudo("postgres"):
+        result = host.run(f"{psql} \"LOAD 'pg_oidc_validator';\"")
+        assert result.rc == 0, f"failed to LOAD pg_oidc_validator: {result.stderr}"
+
+        result = host.run(
+            f"{psql} \"SELECT version FROM pg_get_loaded_modules() "
+            f"WHERE module_name = 'pg_oidc_validator';\""
+        )
+        assert result.rc == 0, f"failed to query pg_get_loaded_modules(): {result.stderr}"
+        assert result.stdout.strip() == expected_version, (
+            f"pg_oidc_validator loaded-module version mismatch: expected "
+            f"{expected_version}, got '{result.stdout.strip()}'"
+        )
+
+
 def _skip_if_pg_cron_unavailable():
     """Skip if pg_cron is not available for the current PostgreSQL version."""
     current_ver = version.parse(pg_versions.get("version", "0.0"))
