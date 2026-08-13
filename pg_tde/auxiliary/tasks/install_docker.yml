@@ -1,12 +1,7 @@
 
 - name: Update yum cache before Docker setup
   become: true
-  # Was "yum -y update" — a full system update, not a cache refresh. That
-  # pulled in kernel packages unscoped, which can hit the same too-small
-  # /boot failure that prepare.yml now avoids via --exclude=kernel* (see
-  # playbooks/prepare.yml). makecache is what "update the cache" actually
-  # means here.
-  command: yum makecache
+  command: yum -y update
   when: ansible_os_family == "RedHat"
 
 - name: Ensure required dependencies are installed
@@ -30,27 +25,17 @@
 
 # Docker's bridge network needs the br_netfilter and xt_addrtype kernel
 # modules, shipped in kernel-modules-extra matched to the *running* kernel.
-# prepare.yml sets a global exclude=kernel* in /etc/dnf/dnf.conf (a too-small
-# /boot on most roles' base images can't fit old+new kernel at once, and no
-# other role needs a kernel bump) — so this role updates its own kernel
-# explicitly, right where it's needed, overriding that exclude with
-# --disableexcludes=main. Without this, the box still runs the old kernel
-# and those modules are missing on disk, so dockerd fails to register the
-# bridge driver. We bump the kernel, install the latest kernel-modules-extra,
-# and reboot into the matching kernel.
+# prepare.yml runs `dnf update`, which installs a newer kernel; without a
+# reboot the box still runs the old kernel and those modules are missing on
+# disk, so dockerd fails to register the bridge driver. We install the latest
+# kernel-modules-extra and reboot into the matching kernel.
 # OL 10 (UEK) already has these modules built in and has no kernel-modules-extra
 # package, so the install is best-effort there and the reboot is scoped out.
-- name: Update kernel packages on EL10 (needed for matching kernel-modules-extra below)
-  become: true
-  ansible.builtin.shell: dnf update -y --nobest --disableexcludes=main kernel*
-  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
-
 - name: Install kernel-modules-extra (latest) on EL10
   become: true
   ansible.builtin.dnf:
     name: kernel-modules-extra
     state: latest
-    disable_excludes: main
   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
   ignore_errors: true
 
@@ -102,8 +87,7 @@
 
 - name: Update yum cache after adding Docker repo
   become: true
-  # Was "yum -y update" — see the identical fix above for why that's wrong here.
-  command: yum makecache
+  command: yum -y update
   when: ansible_os_family == "RedHat"
 
 - name: Install Docker packages

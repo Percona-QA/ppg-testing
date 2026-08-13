@@ -5,37 +5,6 @@
   become_method: sudo
   gather_facts: true
   tasks:
-    # dnf will opportunistically pull in a kernel bump as a side effect of
-    # almost any package install (weak/transitive deps, "keep consistent"
-    # resolution) — we've hit this via the general update, a plain package
-    # install, and a "yum cache refresh" alike, each hitting the same
-    # too-small cloud-image /boot partition (can't hold old+new kernel at
-    # once mid-transaction). Patching individual tasks doesn't scale, so
-    # exclude the bootable-kernel packages globally for every dnf/yum call
-    # for the rest of this ephemeral VM's life, set before any other yum/dnf
-    # task runs. Nothing in this suite reboots or checks kernel version
-    # except pg_tde/auxiliary's EL10 Docker setup, which explicitly overrides
-    # this with --disableexcludes=main where it genuinely needs a newer kernel.
-    #
-    # Deliberately NOT a "kernel*" glob: that also matched kernel-headers and
-    # kernel-srpm-macros, which are build-time packages (not part of the
-    # running kernel image, don't touch /boot) required by the standard
-    # gcc/glibc-devel/perl-devel toolchain. Excluding them broke every
-    # compiler-toolchain install on RHEL/Rocky/OL 8, 9, and 10 with a dnf
-    # depsolve error. List only the packages that actually land in /boot.
-    - name: Exclude kernel packages from all dnf/yum transactions on this VM
-      become: true
-      ansible.builtin.lineinfile:
-        path: /etc/dnf/dnf.conf
-        line: >-
-          exclude=kernel kernel-core kernel-modules kernel-modules-core
-          kernel-modules-extra kernel-debug kernel-debug-core
-          kernel-debug-modules kernel-debug-modules-core
-          kernel-debug-modules-extra kernel-tools kernel-tools-libs
-          kernel-uki-virt kernel-debug-uki-virt
-        insertafter: '^\[main\]'
-      when: ansible_os_family == "RedHat"
-
     # Rocky's default baseos/appstream/crb repos resolve mirrors through the
     # mirrorlist service, which is unreliable on Rocky 10 (esp. aarch64) and
     # fails with "No URLs in mirrorlist". Pin them to the canonical CDN baseurl
@@ -177,14 +146,7 @@
       # version-locked subpackage (e.g. glibc vs glibc-gconv-extra) are
       # published out of sync. Falls back to the largest consistent version
       # set instead of failing on a "best" candidate that has no partner.
-      # --exclude=kernel*: these are ephemeral test instances that never
-      # reboot and nothing in this suite checks the kernel version, but the
-      # default cloud-image /boot partition is too small to hold old+new
-      # kernel at once mid-transaction (dnf update -y --nobest fails with
-      # "needs N more space on the /boot filesystem"). Skip kernel packages
-      # entirely rather than resizing /boot for a VM that gets destroyed
-      # at the end of the run.
-      ansible.builtin.shell: dnf update -y --nobest --exclude=kernel*
+      ansible.builtin.shell: dnf update -y --nobest
       when: ansible_os_family == "RedHat"
 
     - name: Enable Powertools on Rocky 8
