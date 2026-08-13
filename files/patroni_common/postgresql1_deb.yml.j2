@@ -93,10 +93,10 @@ bootstrap:
 postgresql:
   listen: 127.0.0.1:5434
   connect_address: 127.0.0.1:5434
-  data_dir: /var/lib/pgsql/patroni_test/data/postgresql1
-  bin_dir: /usr/pgsql-14/bin/
+  data_dir: /var/lib/postgresql/patroni_test/data/postgresql1
+  bin_dir: /usr/lib/postgresql/{{ patroni_pg_major }}/bin/
 #  config_dir:
-  pgpass: /var/lib/pgsql/patroni_test/pgpass1
+  pgpass: /var/lib/postgresql/patroni_test/pgpass1
   authentication:
     replication:
       username: replicator

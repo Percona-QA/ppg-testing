@@ -88,6 +88,15 @@
     group: postgres
     mode: 0755
 
+# This role tests ONLY the Patroni/etcd/haproxy HA stack -- no standalone
+# PostgreSQL instance runs on this host, so there's nothing else here to
+# keep isolated from (contrast with ppg-<major>'s install_ppg<major>_tools.yml,
+# which layers an isolated HA sandbox alongside a standalone instance shared
+# by many unrelated extension/tool tests). Because of that, the plain
+# `patroni` systemd unit installed by the package IS the real cluster
+# member "postgresql0" (config below) -- this is a genuine 3-node cluster:
+# patroni (=node 0), patroni1, patroni2. There is no separate
+# patroni0.service in this role.
 - name: Copy postgresql0.yml for patroni service
   copy:
     src: postgresql0.yml
@@ -109,18 +118,6 @@
     svc_async: 180
     svc_poll: 5
     log_search_dir: /var/lib/pgsql
-
-- name: Copy postgresql0.yml for patroni service
-  copy:
-    src: postgresql0.yml
-    dest: /var/lib/pgsql/patroni_test/postgresql0.yml
-    owner: postgres
-    group: postgres
-    mode: 0644
-
-- name: Replace server version in postgresql.yml
-  become: true
-  shell: sed -i 's/16/{{ major_version }}/' /var/lib/pgsql/patroni_test/postgresql0.yml
 
 - name: Copy postgresql1.yml for patroni service
   copy:
@@ -145,13 +142,6 @@
 - name: Replace server version in postgresql2.yml
   become: true
   shell: sed -i 's/16/{{ major_version }}/' /var/lib/pgsql/patroni_test/postgresql2.yml
-
-- name: Set patroni_test files permissions readable by all
-  file:
-    path: /var/lib/pgsql/patroni_test/postgresql0.yml
-    owner: postgres
-    group: postgres
-    mode: 0644
 
 - name: Set patroni_test files permissions readable by all
   file:
