@@ -182,6 +182,31 @@
       update_cache: yes
     when: ansible_os_family == "RedHat"
 
+  # --- Patroni/etcd/haproxy HA sandbox -------------------------------------
+  # This role also runs a plain, standalone PostgreSQL instance (initdb'd
+  # and started earlier in this role's tasks/main.yml) that dozens of
+  # unrelated tests in this same file exercise directly (pgbackrest,
+  # pgaudit, pg_stat_monitor, postgis, pg_cron, telemetry, etc.). The
+  # Patroni cluster below is a fully separate, isolated 3-node sandbox --
+  # its own data dirs/ports under patroni_test/, nodes named
+  # postgresql0/1/2 -- so it never touches that standalone instance.
+  # Because of that isolation, the plain `patroni` systemd unit (installed
+  # by the package) is only ever a packaging-sanity check here
+  # (test_patroni_service asserts is_enabled, nothing about it actually
+  # running or being part of the cluster); the *real* cluster members are
+  # patroni0/patroni1/patroni2. See the Debian "Enable (but do not start)
+  # patroni" task below for why that distinction matters in practice.
+  #
+  # The patroniN service/config files themselves live in the shared
+  # files/patroni_common/ at the repo root, not in this role's own files/ --
+  # they're identical (or, for the postgresqlN configs, differ only by the
+  # bin_dir path) across every ppg-<major> role, so ppg-14..18 all render
+  # them from that one shared location instead of keeping five near-
+  # duplicate copies.
+  - name: Set patroni template major version fact
+    set_fact:
+      patroni_pg_major: "{{ pg_version_to_install.split('.')[0] }}"
+
   - name: Install patroni RPM
     yum:
       name: percona-patroni
@@ -657,8 +682,8 @@
   #     - not patroni_cfg_stat.stat.exists
 
   - name: Copy postgresql.yml for patroni service Debian
-    copy:
-      src: postgresql0_deb.yml
+    template:
+      src: "{{ role_path }}/../../files/patroni_common/postgresql0_deb.yml.j2"
       dest: /etc/patroni/patroni.yml
       owner: postgres
       group: postgres
@@ -684,7 +709,7 @@
   #     state: started
   #     enabled: yes
 
-  - name: Enable and start patroni with wait
+  - name: Enable and start patroni with wait RHEL
     include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
     vars:
       svc_name: patroni
@@ -692,6 +717,22 @@
       svc_daemon_reload: true
       svc_async: 180
       svc_poll: 5
+    when: ansible_os_family == "RedHat"
+
+  # Debian's /etc/patroni/patroni.yml is copied from the same
+  # postgresql0_deb.yml template as patroni0's config just below, so both
+  # would claim the same etcd member name "postgresql0" if both actually
+  # ran -- whichever starts second crashes with "there is already a node
+  # named 'postgresql0' running". patroni0/1/2 are the real 3-node cluster;
+  # this base unit only needs to exist and be enabled for test_patroni_service,
+  # so enable it without starting it on Debian.
+  - name: Enable (but do not start) patroni on Debian
+    include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
+    vars:
+      svc_name: patroni
+      svc_state: stopped
+      svc_daemon_reload: true
+    when: ansible_os_family == "Debian"
 
   - name: Create test patroni directory RHEL
     file:
@@ -710,8 +751,8 @@
     when: ansible_os_family == "Debian"
 
   - name: Copy postgresql0.yml for patroni service Debian
-    copy:
-      src: postgresql0_deb.yml
+    template:
+      src: "{{ role_path }}/../../files/patroni_common/postgresql0_deb.yml.j2"
       dest: /var/lib/postgresql/patroni_test/postgresql0.yml
       owner: postgres
       group: postgres
@@ -719,8 +760,8 @@
     when: ansible_os_family == "Debian"
 
   - name: Copy postgresql1.yml for patroni service Debian
-    copy:
-      src: postgresql1_deb.yml
+    template:
+      src: "{{ role_path }}/../../files/patroni_common/postgresql1_deb.yml.j2"
       dest: /var/lib/postgresql/patroni_test/postgresql1.yml
       owner: postgres
       group: postgres
@@ -728,8 +769,8 @@
     when: ansible_os_family == "Debian"
 
   - name: Copy postgresql2.yml for patroni service Debian
-    copy:
-      src: postgresql2_deb.yml
+    template:
+      src: "{{ role_path }}/../../files/patroni_common/postgresql2_deb.yml.j2"
       dest: /var/lib/postgresql/patroni_test/postgresql2.yml
       owner: postgres
       group: postgres
@@ -737,8 +778,8 @@
     when: ansible_os_family == "Debian"
 
   - name: Copy postgresql0.yml for patroni service RHEL
-    copy:
-      src: postgresql0.yml
+    template:
+      src: "{{ role_path }}/../../files/patroni_common/postgresql0.yml.j2"
       dest: /var/lib/pgsql/patroni_test/postgresql0.yml
       owner: postgres
       group: postgres
@@ -746,8 +787,8 @@
     when: ansible_os_family == "RedHat"
 
   - name: Copy postgresql1.yml for patroni service RHEL
-    copy:
-      src: postgresql1.yml
+    template:
+      src: "{{ role_path }}/../../files/patroni_common/postgresql1.yml.j2"
       dest: /var/lib/pgsql/patroni_test/postgresql1.yml
       owner: postgres
       group: postgres
@@ -755,8 +796,8 @@
     when: ansible_os_family == "RedHat"
 
   - name: Copy postgresql2.yml for patroni service RHEL
-    copy:
-      src: postgresql2.yml
+    template:
+      src: "{{ role_path }}/../../files/patroni_common/postgresql2.yml.j2"
       dest: /var/lib/pgsql/patroni_test/postgresql2.yml
       owner: postgres
       group: postgres
@@ -765,7 +806,7 @@
 
   - name: Copy patroni0 service file Debian
     copy:
-      src: patroni0_deb.service
+      src: "{{ role_path }}/../../files/patroni_common/patroni0_deb.service"
       dest: /lib/systemd/system/patroni0.service
       owner: root
       group: root
@@ -774,7 +815,7 @@
 
   - name: Copy patroni1 service file Debian
     copy:
-      src: patroni1_deb.service
+      src: "{{ role_path }}/../../files/patroni_common/patroni1_deb.service"
       dest: /lib/systemd/system/patroni1.service
       owner: root
       group: root
@@ -783,7 +824,7 @@
 
   - name: Copy patroni2 service file Debian
     copy:
-      src: patroni2_deb.service
+      src: "{{ role_path }}/../../files/patroni_common/patroni2_deb.service"
       dest: /lib/systemd/system/patroni2.service
       owner: root
       group: root
@@ -792,7 +833,7 @@
 
   - name: Copy patroni0 service file RHEL
     copy:
-      src: patroni0.service
+      src: "{{ role_path }}/../../files/patroni_common/patroni0.service"
       dest: /usr/lib/systemd/system/patroni0.service
       owner: root
       group: root
@@ -801,7 +842,7 @@
 
   - name: Copy patroni1 service file RHEL
     copy:
-      src: patroni1.service
+      src: "{{ role_path }}/../../files/patroni_common/patroni1.service"
       dest: /usr/lib/systemd/system/patroni1.service
       owner: root
       group: root
@@ -810,7 +851,7 @@
 
   - name: Copy patroni2 service file RHEL
     copy:
-      src: patroni2.service
+      src: "{{ role_path }}/../../files/patroni_common/patroni2.service"
       dest: /usr/lib/systemd/system/patroni2.service
       owner: root
       group: root
@@ -843,7 +884,7 @@
 
   - name: Copy haproxy.cfg
     copy:
-      src: haproxy.cfg
+      src: "{{ role_path }}/../../files/patroni_common/haproxy.cfg"
       dest: /etc/haproxy/haproxy.cfg
       owner: root
       group: root

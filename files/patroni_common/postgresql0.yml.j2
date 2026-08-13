@@ -1,10 +1,10 @@
 scope: batman
 #namespace: /service/
-name: postgresql1
+name: postgresql0
 
 restapi:
-  listen: 127.0.0.1:8009
-  connect_address: 127.0.0.1:8009
+  listen: 127.0.0.1:8008
+  connect_address: 127.0.0.1:8008
 #  certfile: /etc/ssl/certs/ssl-cert-snakeoil.pem
 #  keyfile: /etc/ssl/private/ssl-cert-snakeoil.key
 #  authentication:
@@ -32,9 +32,9 @@ etcd3:
 
 #raft:
 #  data_dir: .
-#  self_addr: 127.0.0.1:2223
+#  self_addr: 127.0.0.1:2222
 #  partner_addrs:
-#  - 127.0.0.1:2222
+#  - 127.0.0.1:2223
 #  - 127.0.0.1:2224
 
 bootstrap:
@@ -45,6 +45,12 @@ bootstrap:
     loop_wait: 10
     retry_timeout: 10
     maximum_lag_on_failover: 1048576
+#    master_start_timeout: 300
+#    synchronous_mode: false
+    #standby_cluster:
+      #host: 127.0.0.1
+      #port: 1111
+      #primary_slot_name: patroni
     postgresql:
       use_pg_rewind: true
 #      use_slots: true
@@ -91,12 +97,12 @@ bootstrap:
         - createdb
 
 postgresql:
-  listen: 127.0.0.1:5434
-  connect_address: 127.0.0.1:5434
-  data_dir: /var/lib/postgresql/patroni_test/data/postgresql1
-  bin_dir: /usr/lib/postgresql/16/bin/
+  listen: 127.0.0.1:5433
+  connect_address: 127.0.0.1:5433
+  data_dir: /var/lib/pgsql/patroni_test/data/postgresql0
+  bin_dir: /usr/pgsql-{{ patroni_pg_major }}/bin/
 #  config_dir:
-  pgpass: /var/lib/postgresql/patroni_test/pgpass1
+  pgpass: /var/lib/pgsql/patroni_test/pgpass0
   authentication:
     replication:
       username: replicator
@@ -112,16 +118,18 @@ postgresql:
   parameters:
     # Fully qualified kerberos ticket file for the running user
     # same as KRB5CCNAME used by the GSS
-#    krb_server_keyfile: /var/spool/keytabs/postgres
+#   krb_server_keyfile: /var/spool/keytabs/postgres
     unix_socket_directories: '.'
-  basebackup:
-      - verbose
-      - max-rate: 100M
-#      - waldir: /pg-wal-mount/external-waldir # only needed in case pg_wal is symlinked outside of data_dir
   # Additional fencing script executed after acquiring the leader lock but before promoting the replica
   #pre_promote: /path/to/pre_promote.sh
+
+#watchdog:
+#  mode: automatic # Allowed values: off, automatic, required
+#  device: /dev/watchdog
+#  safety_margin: 5
 
 tags:
     nofailover: false
     noloadbalance: false
     clonefrom: false
+    nosync: false
