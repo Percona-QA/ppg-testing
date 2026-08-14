@@ -305,7 +305,7 @@
   become: true
   become_user: postgres
   ansible.builtin.shell: |
-    {% if ansible_os_family == 'RedHat' and ansible_distribution_major_version == '9' %}
+    {% if ansible_os_family == 'RedHat' and ansible_distribution_major_version in ['8', '9'] %}
     source /opt/rh/gcc-toolset-14/enable
     {% endif %}
     set -o pipefail
@@ -338,7 +338,7 @@
   become: true
   become_user: postgres
   ansible.builtin.shell: |
-    {% if ansible_os_family == 'RedHat' and ansible_distribution_major_version == '9' %}
+    {% if ansible_os_family == 'RedHat' and ansible_distribution_major_version in ['8', '9'] %}
     source /opt/rh/gcc-toolset-14/enable
     {% endif %}
     set -o pipefail
