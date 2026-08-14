@@ -1724,12 +1724,13 @@ def test_pg_oidc_validator_loaded_module_version(host):
     if not expected_version:
         pytest.skip("PG_OIDC_VALIDATOR_version not defined in pg_versions.")
 
-    psql = "psql -t -A -c"
+    psql = "psql -t -A -q -c"
     with host.sudo("postgres"):
         # LOAD and the SELECT must run in the same session -- LOAD only
         # loads the module into the backend that issues it, and a separate
         # `psql` invocation would open a fresh connection where the module
-        # was never loaded.
+        # was never loaded. -q suppresses the "LOAD" command-tag line psql
+        # would otherwise print before the SELECT's own output.
         result = host.run(
             f"{psql} \"LOAD 'pg_oidc_validator'; SELECT version FROM "
             f"pg_get_loaded_modules() WHERE module_name = 'pg_oidc_validator';\""
