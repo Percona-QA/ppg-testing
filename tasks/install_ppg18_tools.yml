@@ -934,6 +934,11 @@
     vars:
       haproxy_cfg: /etc/haproxy/haproxy.cfg
 
+  - name: Wait for the HA cluster to be reachable through haproxy
+    include_tasks: "{{ role_path }}/../../tasks/wait_for_haproxy_backend.yml"
+    vars:
+      haproxy_port: 5000
+
   - name: Start pgpool service
     include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
     vars:

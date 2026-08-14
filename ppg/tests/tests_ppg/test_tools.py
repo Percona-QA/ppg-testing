@@ -172,8 +172,13 @@ def pgaudit(host):
         if dist.lower() in ["debian", "ubuntu"]:
             log_file = "/var/log/postgresql/postgresql-{}-main.log".format(settings.MAJOR_VER)
         elif dist.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
-            log_files = "ls /var/lib/pgsql/{}/data/log/".format(settings.MAJOR_VER)
-            file_name = host.check_output(log_files).strip("\n")
+            # log_filename rotates by day-of-week (postgresql-%a.log), so more
+            # than one file can exist if the run crosses a day boundary --
+            # take the most recently modified one, not the raw `ls` output
+            # (which would otherwise glue multiple filenames together with an
+            # embedded newline and break the `cat` below).
+            log_files = "ls -t /var/lib/pgsql/{}/data/log/".format(settings.MAJOR_VER)
+            file_name = host.check_output(log_files).splitlines()[0]
             log_file = "".join(["/var/lib/pgsql/{}/data/log/".format(settings.MAJOR_VER), file_name])
         file = host.file(log_file)
         file_content = file.content_string
