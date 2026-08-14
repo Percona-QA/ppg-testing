@@ -92,12 +92,15 @@
       - prename
     when: ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
 
+  # OL 10 (UEK kernel) has no kernel-modules-extra package at all — best-effort
+  # here, same as the equivalent install in install_docker.yml.
   - name: Install kernel-modules-extra on RHEL 10
     become: true
     dnf:
       name: "kernel-modules-extra"
       state: present
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
+    ignore_errors: true
 
   - name: CLANG Version
     command: clang --version
