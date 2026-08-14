@@ -76,17 +76,13 @@
       pg_install_dir: "/opt/pgsql"
     when: not install_from_packages
 
-  - name: End play on RHEL 8 and Rocky 8 for pg-18>= and io_uring, as uring not supported
+  - name: End play on RHEL 8, OL 8, and Rocky 8 for pg-18>= and io_uring, as uring not supported
     meta: end_play
     when:
       - (major_version | int) >= 18
       - io_method in ['io_uring']
-      - >
-        (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'Rocky' and ansible_facts['distribution_major_version'] | int == 8)
-        or
-        (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'RedHat' and ansible_facts['distribution_major_version'] | int == 8)
-        or
-        (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'OracleLinux' and ansible_facts['distribution_major_version'] | int == 8)
+      - ansible_facts['os_family'] == 'RedHat'
+      - ansible_facts['distribution_major_version'] | int == 8
 
   # On Debian 13 / Ubuntu 26 systemd mounts /tmp as a RAM-backed tmpfs (~16 GB,
   # half of RAM). The test framework runs in /tmp/pgtest and the suite needs

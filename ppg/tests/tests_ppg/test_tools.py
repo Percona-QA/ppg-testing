@@ -1,3 +1,4 @@
+import json
 import os
 import re
 
@@ -171,8 +172,13 @@ def pgaudit(host):
         if dist.lower() in ["debian", "ubuntu"]:
             log_file = "/var/log/postgresql/postgresql-{}-main.log".format(settings.MAJOR_VER)
         elif dist.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
-            log_files = "ls /var/lib/pgsql/{}/data/log/".format(settings.MAJOR_VER)
-            file_name = host.check_output(log_files).strip("\n")
+            # log_filename rotates by day-of-week (postgresql-%a.log), so more
+            # than one file can exist if the run crosses a day boundary --
+            # take the most recently modified one, not the raw `ls` output
+            # (which would otherwise glue multiple filenames together with an
+            # embedded newline and break the `cat` below).
+            log_files = "ls -t /var/lib/pgsql/{}/data/log/".format(settings.MAJOR_VER)
+            file_name = host.check_output(log_files).splitlines()[0]
             log_file = "".join(["/var/lib/pgsql/{}/data/log/".format(settings.MAJOR_VER), file_name])
         file = host.file(log_file)
         file_content = file.content_string
@@ -830,12 +836,88 @@ def test_python_etcd(host):
             assert package.is_installed
 
 
+def _patroni_config_path(host):
+    dist = host.system_info.distribution.lower()
+    if dist in ["ubuntu", "debian"]:
+        return "/var/lib/postgresql/patroni_test/postgresql1.yml"
+    return "/var/lib/pgsql/patroni_test/postgresql1.yml"
+
+
+def _dump_patroni_diagnostics(host):
+    """Best-effort diagnostics for a patroni cluster test failure -- gathered
+    inline so a flaky CI failure carries the evidence needed to root-cause
+    it (patronictl's view of the cluster, plus each unit's own status/log),
+    instead of requiring live SSH archaeology after molecule has already
+    destroyed the instance. Only ever called from a failing assertion's
+    message (lazily evaluated by `assert`), so it costs nothing when tests
+    pass."""
+    lines = []
+    with host.sudo("postgres"):
+        cluster = host.run(f"patronictl -c {_patroni_config_path(host)} list")
+    lines.append("--- patronictl list ---")
+    lines.append((cluster.stdout or "(no stdout)").strip())
+    if cluster.stderr:
+        lines.append(cluster.stderr.strip())
+
+    with host.sudo():
+        for svc in ["patroni", "patroni0", "patroni1", "patroni2", "etcd", "haproxy"]:
+            status = host.run(f"systemctl status {svc} --no-pager -l")
+            lines.append(f"--- systemctl status {svc} ---")
+            lines.append(status.stdout.strip())
+
+            journal = host.run(f"journalctl -u {svc} --no-pager -n 40")
+            lines.append(f"--- journalctl -u {svc} (last 40 lines) ---")
+            lines.append(journal.stdout.strip())
+
+    return "\n".join(lines)
+
+
 def test_patroni_cluster(host):
     assert host.service("etcd").is_running
     with host.sudo("postgres"):
         select = 'cd && psql --host 127.0.0.1 --port 5000 postgres -c "select version()"'
         result = host.run(select)
-        assert result.rc == 0, result.stderr
+    assert result.rc == 0, f"{result.stderr}\n\n{_dump_patroni_diagnostics(host)}"
+
+
+@pytest.fixture(scope="module")
+def patroni_cluster_data(host):
+    """Run patronictl against the patroni0/1/2 test cluster and return the
+    parsed member list. A single successful psql connect through haproxy
+    (test_patroni_cluster above) tolerates one dead member as long as
+    haproxy still finds a healthy backend among the rest -- that's exactly
+    how the patroni0/base-patroni.service etcd identity collision went
+    unnoticed for so long. Checking patronictl's member list directly (like
+    patroni/setup/tests/test_patroni.py already does) catches a missing or
+    unhealthy member precisely instead of relying on haproxy's tolerance."""
+    with host.sudo("postgres"):
+        result = host.run(f"patronictl -c {_patroni_config_path(host)} list -f json")
+        assert result.rc == 0, f"{result.stderr}\n\n{_dump_patroni_diagnostics(host)}"
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        pytest.fail(f"Failed to parse patronictl JSON output: {e}\nOutput: {result.stdout}")
+
+
+@pytest.mark.upgrade
+def test_patroni_cluster_member_count(host, patroni_cluster_data):
+    expected_nodes = 3
+    assert len(patroni_cluster_data) == expected_nodes, (
+        f"Expected {expected_nodes} patroni cluster members (patroni0/1/2), "
+        f"found {len(patroni_cluster_data)}: {patroni_cluster_data}\n\n"
+        f"{_dump_patroni_diagnostics(host)}"
+    )
+
+
+@pytest.mark.upgrade
+def test_patroni_cluster_has_one_leader(host, patroni_cluster_data):
+    roles = [node.get("Role") for node in patroni_cluster_data]
+    leader_count = roles.count("Leader")
+    assert leader_count == 1, (
+        f"Expected exactly 1 Leader among the patroni cluster members, "
+        f"found {leader_count}: {patroni_cluster_data}\n\n"
+        f"{_dump_patroni_diagnostics(host)}"
+    )
 
 
 def test_haproxy_version(host):

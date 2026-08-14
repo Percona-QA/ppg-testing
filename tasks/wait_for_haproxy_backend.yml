@@ -1,0 +1,34 @@
+---
+# haproxy's health check for the patroni-managed batman cluster needs
+# `rise 2` consecutive passes at `inter 3s` (see files/patroni_common/
+# haproxy.cfg) before it marks a freshly-elected leader UP -- and haproxy
+# itself is typically started well before patroni0/1/2 even exist, so it
+# spends its first health-check cycles finding nothing to check at all.
+# Ansible's own "Start haproxy"/"Start patroniN" tasks only confirm those
+# processes are running, not that haproxy has actually caught up and has a
+# healthy backend -- if a test connects through haproxy in that gap (often
+# only a few seconds, right after a leader election/promotion), it gets
+# "server closed the connection unexpectedly" even though the cluster is
+# completely healthy a moment later. Close the gap here by waiting for the
+# actual client-facing connection to work before considering the role done.
+#
+# Caller must set:
+#   haproxy_port - the client-facing port to check, e.g. 5000
+
+- name: Wait for the HA cluster to be reachable through haproxy on port {{ haproxy_port }}
+  become: true
+  become_user: postgres
+  ansible.builtin.command: psql --host 127.0.0.1 --port {{ haproxy_port }} postgres -c "select 1"
+  register: __haproxy_ready
+  until: __haproxy_ready.rc == 0
+  retries: 20
+  delay: 3
+  changed_when: false
+  ignore_errors: true
+
+- name: Fail if the HA cluster never became reachable through haproxy
+  ansible.builtin.fail:
+    msg: >-
+      haproxy on port {{ haproxy_port }} never reached a healthy backend
+      within the timeout: {{ __haproxy_ready.stderr | default('(no stderr)') }}
+  when: __haproxy_ready is failed or __haproxy_ready.rc != 0
