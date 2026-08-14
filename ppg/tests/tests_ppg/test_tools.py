@@ -1726,12 +1726,13 @@ def test_pg_oidc_validator_loaded_module_version(host):
 
     psql = "psql -t -A -c"
     with host.sudo("postgres"):
-        result = host.run(f"{psql} \"LOAD 'pg_oidc_validator';\"")
-        assert result.rc == 0, f"failed to LOAD pg_oidc_validator: {result.stderr}"
-
+        # LOAD and the SELECT must run in the same session -- LOAD only
+        # loads the module into the backend that issues it, and a separate
+        # `psql` invocation would open a fresh connection where the module
+        # was never loaded.
         result = host.run(
-            f"{psql} \"SELECT version FROM pg_get_loaded_modules() "
-            f"WHERE module_name = 'pg_oidc_validator';\""
+            f"{psql} \"LOAD 'pg_oidc_validator'; SELECT version FROM "
+            f"pg_get_loaded_modules() WHERE module_name = 'pg_oidc_validator';\""
         )
         assert result.rc == 0, f"failed to query pg_get_loaded_modules(): {result.stderr}"
         assert result.stdout.strip() == expected_version, (
