@@ -85,6 +85,8 @@
         (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'Rocky' and ansible_facts['distribution_major_version'] | int == 8)
         or
         (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'RedHat' and ansible_facts['distribution_major_version'] | int == 8)
+        or
+        (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'OracleLinux' and ansible_facts['distribution_major_version'] | int == 8)
 
   # On Debian 13 / Ubuntu 26 systemd mounts /tmp as a RAM-backed tmpfs (~16 GB,
   # half of RAM). The test framework runs in /tmp/pgtest and the suite needs
