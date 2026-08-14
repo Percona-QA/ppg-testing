@@ -629,6 +629,19 @@
 # =============================
 # Run pg_tde regression tests
 # =============================
+
+# PPG packages on RHEL/OL/Rocky set logging_collector=on in their initdb
+# postgresql.conf.sample. PostgreSQL::Test::Cluster::wait_for_log() reads the
+# pg_ctl -l file, not the logging-collector directory, so any wait_for_log()
+# call hangs for 300 s when logging_collector is on. Patch the test to force
+# logging_collector=off so both nodes write logs where the framework expects.
+- name: Patch wal_archiving_symlink.pl to disable logging_collector on RedHat
+  ansible.builtin.lineinfile:
+    path: /tmp/pg_tde/t/wal_archiving_symlink.pl
+    insertafter: "archive_mode = on"
+    line: "$primary->append_conf('postgresql.conf', \"logging_collector = off\");"
+  when: ansible_os_family == "RedHat"
+
 - name: Run check-tde tests
   ansible.builtin.shell: |
     export PGCTLTIMEOUT=120
