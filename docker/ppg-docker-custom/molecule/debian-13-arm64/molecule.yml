@@ -4,9 +4,9 @@ dependency:
 driver:
   name: ${driver}
 platforms:
-  - name: debian12-arm-${BUILD_NUMBER}-${JOB_NAME}
+  - name: debian13-arm-${BUILD_NUMBER}-${JOB_NAME}
     region: ${region}
-    image: ${ami_debian12_arm64}
+    image: ${ami_debian13_arm64}
     vpc_subnet_id: ${vpc_subnet_id_aws2}
     instance_type: t4g.medium
     ssh_user: admin
