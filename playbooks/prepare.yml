@@ -113,7 +113,13 @@
       vars:
         packages:
         - systemd-sysv
-      when: ansible_os_family == "Debian" and ansible_distribution_release != "trusty"
+      # Same dpkg-lock race as the apt task above: cloud-init/unattended-upgrades
+      # can still be running apt-get in the background right after boot.
+      retries: 60
+      delay: 10
+      register: systemd_sysv_result
+      until: systemd_sysv_result is not failed
+      when: ansible_os_family == "Debian"
 
     - name: install needed packages for running tests with yum
       yum:
