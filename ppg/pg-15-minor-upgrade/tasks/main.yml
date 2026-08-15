@@ -84,6 +84,11 @@
     repo: "{{ lookup('env', 'TO_REPO') }}"
     pg_version: "{{ lookup('env', 'VERSION') }}"
 
+# percona-pg-telemetry15 is listed explicitly (it's otherwise only pulled in
+# as a weak dependency/Recommends of the server package) so that this
+# post-repo-switch install actually upgrades it too -- an already-installed
+# package satisfying an unversioned Recommends is not otherwise re-resolved
+# to a newer version by apt/dnf.
 - name: install Percona Platform for PostgreSQL deb packages
   apt:
     name: "{{ packages }}"
@@ -100,6 +105,7 @@
       - percona-postgresql-contrib
       - percona-postgresql-doc
       - percona-postgresql-doc-15
+      - percona-pg-telemetry15
       - percona-postgresql-plperl-15
       - percona-postgresql-plpython3-15
       - percona-postgresql-pltcl-15
@@ -145,6 +151,7 @@
         - percona-postgresql-client-common
         - percona-postgresql-common
         - percona-postgresql15
+        - percona-pg-telemetry15
         - percona-postgresql15-contrib
         - percona-postgresql15-debuginfo
         - percona-postgresql15-devel

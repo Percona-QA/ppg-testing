@@ -79,6 +79,11 @@
     repo: "{{ lookup('env', 'TO_REPO') }}"
     pg_version: "{{ lookup('env', 'VERSION') }}"
 
+# percona-pg-telemetry17 is listed explicitly (it's otherwise only pulled in
+# as a weak dependency/Recommends of the server package) so that this
+# post-repo-switch install actually upgrades it too -- an already-installed
+# package satisfying an unversioned Recommends is not otherwise re-resolved
+# to a newer version by apt/dnf.
 - name: install Percona Platform for PostgreSQL deb packages
   apt:
     name: "{{ packages }}"
@@ -95,6 +100,7 @@
       - percona-postgresql-contrib
       - percona-postgresql-doc
       - percona-postgresql-doc-17
+      - percona-pg-telemetry17
       - percona-postgresql-plperl-17
       - percona-postgresql-plpython3-17
       - percona-postgresql-pltcl-17
@@ -141,6 +147,7 @@
         - percona-postgresql-client-common
         - percona-postgresql-common
         - percona-postgresql17
+        - percona-pg-telemetry17
         - percona-postgresql17-contrib
         - percona-postgresql17-debuginfo
         - percona-postgresql17-devel
