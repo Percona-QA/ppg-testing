@@ -77,9 +77,9 @@ pgbackrest = {
     "16.14": {"version": "2.58.0", "binary_version": "pgBackRest 2.58.0"},
     "17.10": {"version": "2.58.0", "binary_version": "pgBackRest 2.58.0"},
     "18.4": {"version": "2.58.0", "binary_version": "pgBackRest 2.58.0"},
-    "16.15": {"version": "2.59.0", "binary_version": "pgBackRest 2.59.0"},
-    "17.11": {"version": "2.59.0", "binary_version": "pgBackRest 2.59.0"},
-    "18.6": {"version": "2.59.0", "binary_version": "pgBackRest 2.59.0"},
+    "16.15": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
+    "17.11": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
+    "18.6": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
 }
 
 pgvector = {
@@ -150,9 +150,9 @@ timescaledb = {
     "16.14": {"version": "2.28.2"},
     "17.10": {"version": "2.28.2"},
     "18.4": {"version": "2.28.2"},
-    "16.15": {"version": "2.29.1"},
-    "17.11": {"version": "2.29.1"},
-    "18.6": {"version": "2.29.1"},
+    "16.15": {"version": "2.29.2"},
+    "17.11": {"version": "2.29.2"},
+    "18.6": {"version": "2.29.2"},
 }
 
 h3 = {
