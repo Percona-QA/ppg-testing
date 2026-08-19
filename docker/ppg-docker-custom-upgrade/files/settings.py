@@ -182,7 +182,7 @@ pgrouting = {
 pg_oidc_validator = {
     "18.3": {"version": "1.0", "extension_version": "1.0"},
     "18.4": {"version": "1.0", "extension_version": "1.0"},
-    "18.6": {"version": "1.0", "extension_version": "1.0"},
+    "18.6": {"version": "1.1.0", "extension_version": "1.1.0"},
 }
 
 hll = {
