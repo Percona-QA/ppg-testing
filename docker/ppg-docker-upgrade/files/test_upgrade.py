@@ -40,6 +40,7 @@ import time
 
 import pytest
 import testinfra
+from packaging import version
 
 import settings
 
@@ -69,6 +70,18 @@ IMG_TAG_OLD = os.environ.get("OLD_TAG", OLD_MAJOR_MINOR)
 IMG_TAG_NEW = os.environ.get("NEW_TAG", NEW_MAJOR_MINOR)
 UPGRADE_IMG_TAG = os.environ.get("UPGRADE_TAG", "v2")
 IS_WITH_POSTGIS = os.getenv("WITH_POSTGIS", "false").lower() == "true"
+
+# Minimum PPG patch versions where percona-telemetry-agent was removed as a
+# runtime dependency of percona-pg-telemetry (PG-2615), keyed by major version
+# integer. At or beyond these versions the agent package is no longer
+# installed automatically. Mirrors TELEMETRY_AGENT_REMOVED_MIN_VERSIONS in
+# test_docker.py.
+TELEMETRY_AGENT_REMOVED_MIN_VERSIONS = {
+    14: version.parse("14.24"),
+    15: version.parse("15.19"),
+    16: version.parse("16.15"),
+    17: version.parse("17.11"),
+}
 
 # When run.sh drives the upgrade it passes UPGRADE_NEW_VOL (a Docker named
 # volume) instead of a host path.  In standalone mode (SKIP_UPGRADE=false)
@@ -598,11 +611,19 @@ class TestPostUpgradePackages:
         assert not missing, f"PostgreSQL config files missing after upgrade: {missing}"
 
     def test_telemetry_agent_installed(self, upgrade_pipeline):
-        """percona-telemetry-agent must be present in PG 14–17 images and is
-        not available from PG 18 onwards (mirrors ppg-docker behaviour)."""
+        """percona-telemetry-agent must be present in PG 14–17 images, except
+        once a major reaches the minor version where the agent was dropped as
+        a hard dependency of percona-pg-telemetry (PG-2615), and is not
+        available at all from PG 18 onwards (mirrors ppg-docker behaviour)."""
         if int(NEW_MAJOR) >= 18:
             pytest.skip(
                 f"percona-telemetry-agent not available in PG {NEW_MAJOR} — skipping"
+            )
+        min_ver = TELEMETRY_AGENT_REMOVED_MIN_VERSIONS.get(int(NEW_MAJOR))
+        if min_ver is not None and version.parse(NEW_MAJOR_MINOR) >= min_ver:
+            pytest.skip(
+                f"percona-telemetry-agent is no longer a dependency starting "
+                f"{min_ver} (PG-2615) -- found {NEW_MAJOR_MINOR}."
             )
         new_host = upgrade_pipeline["new_host"]
         result = new_host.run("rpm -q percona-telemetry-agent")
@@ -1032,7 +1053,18 @@ class TestUpgradeImageExtensionFiles:
 
     def test_telemetry_agent_installed(self, upgrade_image_host):
         """``percona-telemetry-agent`` must be present in the upgrade image.
-        The image ships PG 14–17 which all require it."""
+
+        The image also bundles PG 12/13 (not just the 14-18 majors this file
+        otherwise tracks) to bridge those older upgrade paths. Their
+        telemetry packages (percona-pg-telemetry12/13) predate PG-2615 and
+        still hard-depend on the agent -- confirmed via ``rpm -q
+        --whatrequires percona-telemetry-agent`` against the real image --
+        so it is pulled in regardless of where PG 14-17 stand on the
+        weak-dependency cutoff. Unlike test_pg_telemetry_agent_installed in
+        TestPostUpgradePackages, this one is intentionally NOT version-gated
+        on PG-2615: gating it the same way would make it silently skip once
+        14-17 all pass their cutoffs, even though PG 12/13 keep the
+        assertion valid."""
         result = upgrade_image_host.run("rpm -q percona-telemetry-agent")
         assert result.rc == 0, (
             "percona-telemetry-agent should be installed in upgrade image"
