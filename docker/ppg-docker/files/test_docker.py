@@ -29,7 +29,7 @@ else:
     IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG}"
 
 # --- Settings ---
-pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER)
+pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER, IS_PSP)
 DOCKER_RHEL_FILES = pg_docker_versions["rhel_files"]
 DOCKER_RPM_PACKAGES = pg_docker_versions["rpm_packages"]
 DOCKER_EXTENSIONS = pg_docker_versions["extensions"]

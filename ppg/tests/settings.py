@@ -2647,6 +2647,11 @@ def get_settings(distro_type):
         "PG_TDE_version": "pg_tde 2.2.2",
         "PG_TDE_package_version": "2.2.2",
         "PG_TDE_sql_version": "2.2",
+        # psp-16.15 builds pgbackrest separately from ppg-16.15 and ships a
+        # newer version for the same PG minor: confirmed 2.59.1 here (vs
+        # 2.59.0 inherited from ppg-16.15 above).
+        "pgbackrest": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
+        "percona-version": "16.15.1",
     }
 
     return settings
