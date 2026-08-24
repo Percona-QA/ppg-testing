@@ -467,7 +467,6 @@ pgbackrest = {
 # that key when is_psp is true; get_settings() applies it.
 PSP_OVERRIDES = {
     "16.15": {
-        "percona-pgbackrest": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
         "percona-version": "16.15.1",
     },
 }
