@@ -16,6 +16,10 @@ MAJOR_MINOR_VER = os.getenv("VERSION")
 DOCKER_REPO = os.getenv("DOCKER_REPOSITORY")
 IMG_TAG = os.getenv("TAG")
 IS_WITH_POSTGIS = os.getenv("WITH_POSTGIS", "false").lower() == "true"
+# The pre-upgrade ("old version") side of an upgrade run can be a psp-<major>
+# tagged image (e.g. OLD_VERSION_DOCKER_TAG=16-psp-ubi8) even for major < 17;
+# the tag is the only reliable signal for that case, same as ppg-docker.
+IS_PSP = int(MAJOR_VER) >= 17 or 'psp' in IMG_TAG.lower()
 PG_BIN_DIR = f"/usr/pgsql-{MAJOR_VER}/bin"
 PG_DATA_DIR = "/data/db"
 if IS_WITH_POSTGIS:
@@ -24,7 +28,7 @@ else:
     IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG}"
 
 # --- Settings ---
-pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER)
+pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER, IS_PSP)
 DOCKER_RHEL_FILES = pg_docker_versions["rhel_files"]
 DOCKER_RPM_PACKAGES = pg_docker_versions["rpm_packages"]
 DOCKER_EXTENSIONS = pg_docker_versions["extensions"]
@@ -180,7 +184,7 @@ def test_shared_preload_libraries_is_empty(cursor, request):
 def test_psql_string(host):
     # 'host' now binds to the container
     psql_output = host.check_output("psql -V")
-    if int(MAJOR_VER) in [17, 18]:
+    if IS_PSP:
         assert f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Server for PostgreSQL {pg_docker_versions['percona-version']}" in host.check_output('psql -V')
     else:
         assert f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Distribution" in host.check_output('psql -V')
@@ -1526,17 +1530,32 @@ redhat_percona_telemetry_agent = "/etc/sysconfig/percona-telemetry-agent"
 def test_telemetry_package_is_installed(host, package):
     if int(MAJOR_VER) in [18]:
         pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
-    if package == "percona-telemetry-agent":
-        _skip_if_telemetry_agent_unavailable()
-    dist = host.system_info.distribution
     pkg = host.package(package)
+    if package == "percona-telemetry-agent" and _telemetry_agent_removed_expected():
+        # Assert absence rather than skip -- a skip here would silently miss
+        # a stale build that still pulls the agent in despite the version
+        # being past the PG-2620 threshold (real bug found in psp-16: server
+        # correctly Recommends-not-Requires percona-pg-telemetry16, but that
+        # package itself was never rebuilt and still hard-depends on the
+        # agent).
+        assert not pkg.is_installed, (
+            "percona-telemetry-agent is installed, but PG-2620 removed it as "
+            f"a dependency starting PostgreSQL {MAJOR_MINOR_VER} -- the "
+            "packaging for this version is stale."
+        )
+        return
     assert pkg.is_installed
 
 
 def test_telemetry_agent_service_enabled(host):
     if int(MAJOR_VER) in [18]:
         pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
-    _skip_if_telemetry_agent_unavailable()
+    if _telemetry_agent_removed_expected():
+        assert not host.package("percona-telemetry-agent").is_installed, (
+            "percona-telemetry-agent is installed, but PG-2620 removed it as "
+            f"a dependency starting PostgreSQL {MAJOR_MINOR_VER}."
+        )
+        return
     service = host.service("percona-telemetry-agent")
     #assert service.is_running
     assert service.is_enabled
@@ -1638,7 +1657,7 @@ PG_TDE_UPGRADE_MIN_VERSIONS = {
 }
 
 # Minimum PPG patch versions where percona-telemetry-agent was removed as a
-# runtime dependency of percona-pg-telemetry (PG-2615), keyed by major version
+# runtime dependency of percona-pg-telemetry (PG-2620), keyed by major version
 # integer. At or beyond these versions the agent package, its service, its
 # config file, and its log/history directories no longer exist.
 TELEMETRY_AGENT_REMOVED_MIN_VERSIONS = {
@@ -1649,14 +1668,29 @@ TELEMETRY_AGENT_REMOVED_MIN_VERSIONS = {
 }
 
 
-def _skip_if_telemetry_agent_unavailable():
-    """Skip the calling test if percona-telemetry-agent is not expected to be installed."""
+def _telemetry_agent_removed_expected():
+    """True if this version's packaging should no longer pull in percona-telemetry-agent.
+
+    A version.parse(MAJOR_MINOR_VER) >= threshold here only reflects what the
+    *expected* packaging model is for this VERSION -- it does NOT confirm the
+    actual published package was built correctly. Callers that skip on this
+    (rather than asserting absence) cannot catch a case where the package
+    itself is stale and still pulls the agent in despite the version being
+    past the threshold (e.g. a psp-16 build that never got rebuilt against
+    the PG-2620 fix) -- see test_telemetry_package_is_installed and
+    test_telemetry_agent_service_enabled below, which assert instead.
+    """
     current_ver = version.parse(MAJOR_MINOR_VER)
     min_ver = TELEMETRY_AGENT_REMOVED_MIN_VERSIONS.get(int(MAJOR_VER))
-    if min_ver is not None and current_ver >= min_ver:
+    return min_ver is not None and current_ver >= min_ver
+
+
+def _skip_if_telemetry_agent_unavailable():
+    """Skip the calling test if percona-telemetry-agent is not expected to be installed."""
+    if _telemetry_agent_removed_expected():
         pytest.skip(
-            f"percona-telemetry-agent is no longer a dependency starting "
-            f"{min_ver} (PG-2615) -- found {MAJOR_MINOR_VER}."
+            f"percona-telemetry-agent is no longer a dependency for "
+            f"PostgreSQL {MAJOR_MINOR_VER} (PG-2620)."
         )
 
 

@@ -20,7 +20,10 @@
 #         /etc/postgresql/<ver>/main, so pg_tde_upgrade is told where to find
 #         it via --old-options/--new-options '-c config_file=...'.
 # Both initialize the new cluster with --no-data-checksums to match the FROM
-# cluster (pg_upgrade requires matching checksum settings).
+# cluster (pg_upgrade requires matching checksum settings). --no-data-checksums
+# only exists as an initdb option from PG 18 onward (checksums became
+# default-on there); for TO major < 18, checksums already default to off, so
+# the flag is omitted entirely rather than passed unconditionally.
 #
 # Steps:
 #   1.  Enable Percona repo for TO version
@@ -127,7 +130,7 @@
     command: /usr/pgsql-{{ to_major_version }}/bin/postgresql-{{ to_major_version }}-setup initdb
     become: true
     environment:
-      PGSETUP_INITDB_OPTIONS: "--no-data-checksums"
+      PGSETUP_INITDB_OPTIONS: "{{ '--no-data-checksums' if to_major_version | int >= 18 else '' }}"
     when: ansible_os_family == "RedHat"
     ignore_errors: true
 
@@ -140,7 +143,9 @@
     ignore_errors: true
 
   - name: Create TO cluster data directory (Debian)
-    command: pg_createcluster {{ to_major_version }} main -- --no-data-checksums
+    command: >-
+      pg_createcluster {{ to_major_version }} main
+      {{ '-- --no-data-checksums' if to_major_version | int >= 18 else '' }}
     become: true
     when: ansible_os_family == "Debian"
     ignore_errors: true
