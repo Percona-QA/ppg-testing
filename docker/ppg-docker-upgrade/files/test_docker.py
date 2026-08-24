@@ -16,6 +16,10 @@ MAJOR_MINOR_VER = os.getenv("VERSION")
 DOCKER_REPO = os.getenv("DOCKER_REPOSITORY")
 IMG_TAG = os.getenv("TAG")
 IS_WITH_POSTGIS = os.getenv("WITH_POSTGIS", "false").lower() == "true"
+# The pre-upgrade ("old version") side of an upgrade run can be a psp-<major>
+# tagged image (e.g. OLD_VERSION_DOCKER_TAG=16-psp-ubi8) even for major < 17;
+# the tag is the only reliable signal for that case, same as ppg-docker.
+IS_PSP = int(MAJOR_VER) >= 17 or 'psp' in IMG_TAG.lower()
 PG_BIN_DIR = f"/usr/pgsql-{MAJOR_VER}/bin"
 PG_DATA_DIR = "/data/db"
 if IS_WITH_POSTGIS:
@@ -24,7 +28,7 @@ else:
     IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG}"
 
 # --- Settings ---
-pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER)
+pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER, IS_PSP)
 DOCKER_RHEL_FILES = pg_docker_versions["rhel_files"]
 DOCKER_RPM_PACKAGES = pg_docker_versions["rpm_packages"]
 DOCKER_EXTENSIONS = pg_docker_versions["extensions"]
@@ -180,7 +184,7 @@ def test_shared_preload_libraries_is_empty(cursor, request):
 def test_psql_string(host):
     # 'host' now binds to the container
     psql_output = host.check_output("psql -V")
-    if int(MAJOR_VER) in [17, 18]:
+    if IS_PSP:
         assert f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Server for PostgreSQL {pg_docker_versions['percona-version']}" in host.check_output('psql -V')
     else:
         assert f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Distribution" in host.check_output('psql -V')

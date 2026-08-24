@@ -124,6 +124,19 @@ pgbackrest = {
     "18.6": {"version": "2.59.0", "binary_version": "pgBackRest 2.59.0"},
 }
 
+# Some packages/fields are built or reported separately for psp-<major> images
+# and can differ from the plain ppg image for the same PG minor version.
+# Confirmed for 16.15: psp-16.15 reports itself as "Percona Server for
+# PostgreSQL 16.15.1" in `psql -V` (a string plain ppg-16.15 never prints,
+# since it's not a PSP build); pgbackrest stays 2.59.0, same as plain ppg-16.15.
+# Key by ppg_version -> {settings key: value} to override just that key when
+# is_psp is true; get_settings() applies it.
+PSP_OVERRIDES = {
+    "16.15": {
+        "percona-version": "16.15.1",
+    },
+}
+
 pgvector = {
     "14.22": {"version": "0.8.2", "extension_version": "0.8.2"},
     "15.17": {"version": "0.8.2", "extension_version": "0.8.2"},
@@ -1112,5 +1125,8 @@ ppg_versions = {
 }
 
 
-def get_settings(ppg_version):
-    return ppg_versions[ppg_version]
+def get_settings(ppg_version, is_psp=False):
+    result = dict(ppg_versions[ppg_version])
+    if is_psp:
+        result.update(PSP_OVERRIDES.get(ppg_version, {}))
+    return result
