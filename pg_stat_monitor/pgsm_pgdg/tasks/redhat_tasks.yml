@@ -305,6 +305,11 @@
       path: /var/lib/pgsql/{{ major_version }}/data/postgresql.conf
       line: shared_preload_libraries = 'pg_stat_monitor'
 
+  - name: Enable prepared transactions for RHEL
+    lineinfile:
+      path: /var/lib/pgsql/{{ major_version }}/data/postgresql.conf
+      line: max_prepared_transactions = 10
+
   - name: Restart Postgres RHEL
     service:
       name: postgresql-{{ major_version }}
