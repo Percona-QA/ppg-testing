@@ -228,6 +228,11 @@
       path: /etc/postgresql/{{ major_version }}/main/postgresql.conf
       line: shared_preload_libraries = 'pg_stat_monitor'
 
+  - name: Enable prepared transactions for Debian
+    lineinfile:
+      path: /etc/postgresql/{{ major_version }}/main/postgresql.conf
+      line: max_prepared_transactions = 10
+
   - name: Stop postgresql service for Debian based
     service:
       name: postgresql
