@@ -46,6 +46,12 @@
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
+  - name: Install krb5-devel (RedHat family)
+    become: true
+    yum:
+      name: krb5-devel
+      state: present
+
   - name: LLVM Version
     command: llvm-config --version
     ignore_errors: true
