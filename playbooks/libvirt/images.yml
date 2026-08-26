@@ -1,0 +1,54 @@
+---
+# image catalog for the libvirt backend.
+# key = value of the ami_* env vars in local/env.sh.
+# ssh_user is the cloud image default user (differs from the AMI ssh_user
+# in molecule.yml, which the libvirt backend ignores on purpose).
+# checksum is either a pinned hash or a checksum-file url (get_url looks the
+# image filename up in it). debian/ubuntu/rocky publish latest/current images
+# that get rebuilt upstream, so they point at the checksum file next to the
+# image and follow rotations. ol urls are versioned and immutable, their
+# hashes are pinned from the html table at yum.oracle.com/oracle-linux-templates.html.
+debian-12:
+  url: https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2
+  checksum: "sha512:https://cloud.debian.org/images/cloud/bookworm/latest/SHA512SUMS"
+  ssh_user: debian
+debian-13:
+  url: https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2
+  checksum: "sha512:https://cloud.debian.org/images/cloud/trixie/latest/SHA512SUMS"
+  ssh_user: debian
+ubuntu-22:
+  url: https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img
+  checksum: "sha256:https://cloud-images.ubuntu.com/jammy/current/SHA256SUMS"
+  ssh_user: ubuntu
+ubuntu-24:
+  url: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+  checksum: "sha256:https://cloud-images.ubuntu.com/noble/current/SHA256SUMS"
+  ssh_user: ubuntu
+ubuntu-26:
+  url: https://cloud-images.ubuntu.com/resolute/current/resolute-server-cloudimg-amd64.img
+  checksum: "sha256:https://cloud-images.ubuntu.com/resolute/current/SHA256SUMS"
+  ssh_user: ubuntu
+rocky-8:
+  url: https://dl.rockylinux.org/pub/rocky/8/images/x86_64/Rocky-8-GenericCloud-Base.latest.x86_64.qcow2
+  checksum: "sha256:https://dl.rockylinux.org/pub/rocky/8/images/x86_64/CHECKSUM"
+  ssh_user: rocky
+rocky-9:
+  url: https://dl.rockylinux.org/pub/rocky/9/images/x86_64/Rocky-9-GenericCloud-Base.latest.x86_64.qcow2
+  checksum: "sha256:https://dl.rockylinux.org/pub/rocky/9/images/x86_64/CHECKSUM"
+  ssh_user: rocky
+rocky-10:
+  url: https://dl.rockylinux.org/pub/rocky/10/images/x86_64/Rocky-10-GenericCloud-Base.latest.x86_64.qcow2
+  checksum: "sha256:https://dl.rockylinux.org/pub/rocky/10/images/x86_64/CHECKSUM"
+  ssh_user: rocky
+ol-8:
+  url: https://yum.oracle.com/templates/OracleLinux/OL8/u10/x86_64/OL8U10_x86_64-kvm-b287.qcow2
+  checksum: "sha256:cf9eb243b7390311f1e2896e3e6849241e521e6592c8be9907956e3a6cee1f0c"
+  ssh_user: cloud-user
+ol-9:
+  url: https://yum.oracle.com/templates/OracleLinux/OL9/u8/x86_64/OL9U8_x86_64-kvm-b293.qcow2
+  checksum: "sha256:b12103391327abee8090686759c0d62dac9a7af2bf0f45fdf6b0d085a0fbb52b"
+  ssh_user: cloud-user
+ol-10:
+  url: https://yum.oracle.com/templates/OracleLinux/OL10/u1/x86_64/OL10U1_x86_64-kvm-b291.qcow2
+  checksum: "sha256:8e59326c4bf7cfa58a6cac404db8ed583fe3a5f4c460e2b73c64988785bb4f0f"
+  ssh_user: cloud-user
