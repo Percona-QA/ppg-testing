@@ -5,52 +5,25 @@
   gather_facts: false
   no_log: "{{ not (lookup('env', 'MOLECULE_DEBUG') | bool or molecule_yml.provisioner.log|default(false) | bool) }}"
   vars:
-    # See playbooks/create.yml for why: raises the default ~5-attempt botocore
-    # retry budget so terminate calls survive RequestLimitExceeded throttling
-    # when many molecule pipelines tear down in parallel against the same account.
-    aws_retry_config:
-      retries:
-        mode: adaptive
-        max_attempts: 15
+    backend_driver: "{{ lookup('env', 'driver') }}"
   tasks:
-    - block:
-        - name: Populate instance config
-          set_fact:
-            instance_conf: "{{ lookup('file', molecule_instance_config) | from_yaml }}"
-            skip_instances: false
-      rescue:
-        - name: Populate instance config when file missing
-          set_fact:
-            instance_conf: {}
-            skip_instances: true
+    - name: Check driver selection
+      fail:
+        msg: "driver env var must be ec2, delegated or default, got '{{ backend_driver }}'. Source local/env.sh or the CI env first."
+      when: backend_driver not in ['ec2', 'delegated', 'default']
 
-    # Synchronous, hard-bounded teardown. The old fire-and-forget (async: 7200,
-    # poll: 0) + async_status retry:300 loop could hang for hours if a
-    # termination stalled or the async worker died ("worker found in dead
-    # state"). ec2_instance owns the wait here with a real timeout; the terminate
-    # request is issued to AWS regardless, so no VM leak. failed_when: false keeps
-    # a slow teardown from reddening an otherwise-green test run.
-    - name: Destroy molecule instance(s)
-      amazon.aws.ec2_instance:
-        state: absent
-        instance_ids: "{{ item.instance_id }}"
-        region: "{{ item.region }}"
-        wait: true
-        wait_timeout: 600
-        aws_config: "{{ aws_retry_config }}"
-      register: server
-      with_items: "{{ instance_conf }}"
-      when: not skip_instances
-      failed_when: false
+    - name: Destroy instances on AWS
+      include_tasks: aws/destroy_tasks.yml
+      when: backend_driver == 'ec2'
+      vars:
+        # See playbooks/create.yml for why: raises the default ~5-attempt botocore
+        # retry budget so terminate calls survive RequestLimitExceeded throttling
+        # when many molecule pipelines tear down in parallel against the same account.
+        aws_retry_config:
+          retries:
+            mode: adaptive
+            max_attempts: 15
 
-    # Mandatory configuration for Molecule to function.
-
-    - name: Populate instance config
-      set_fact:
-        instance_conf: {}
-
-    - name: Dump instance config
-      copy:
-        content: "{{ instance_conf | to_json | from_json | to_yaml }}"
-        dest: "{{ molecule_instance_config }}"
-      when: server.changed | bool
+    - name: Destroy instances on libvirt
+      include_tasks: libvirt/destroy_tasks.yml
+      when: backend_driver in ['delegated', 'default']
