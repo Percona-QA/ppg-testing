@@ -1,0 +1,91 @@
+version: '3'
+
+vars:
+  VENV:
+    sh: 'echo "${PPG_VENV:-{{.ROOT_DIR}}/.venv}"'
+  SEQ: '{{.SEQ | default "test"}}'
+
+tasks:
+  venv:
+    desc: create the molecule venv (PPG_VENV, default .venv in the repo)
+    status:
+      - test -x {{.VENV}}/bin/molecule
+      - '! {{.VENV}}/bin/python -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec(\"selinux\") else 1)"'
+    cmds:
+      - python3 -m venv {{.VENV}}
+      - >-
+        {{.VENV}}/bin/pip install 'molecule==3.3.0' 'PyYaml==5.3.1'
+        pytest-testinfra pytest 'ansible<10.0.0' 'setuptools<81' 'ansible-lint<6'
+      # molecule pulls in the "selinux" pypi shim, which only proxies to the
+      # system libselinux bindings via /usr/bin/pythonX.Y and hard-crashes
+      # ansible when that python or the bindings are missing (mise/pyenv
+      # pythons, non-selinux distros). ansible copes fine without the module.
+      - '{{.VENV}}/bin/pip uninstall -y -q selinux'
+
+  check:
+    desc: sanity check runner tools and the libvirt connection
+    cmds:
+      - '{{.VENV}}/bin/molecule --version | head -1'
+      - command -v virsh >/dev/null || { echo "virsh missing"; exit 1; }
+      - command -v genisoimage >/dev/null || command -v mkisofs >/dev/null || command -v xorriso >/dev/null || { echo "genisoimage/mkisofs/xorriso missing"; exit 1; }
+      - . local/env.sh && virsh -c "$LIBVIRT_URI" list --all
+      - . local/env.sh && virsh -c "$LIBVIRT_URI" net-info "${LIBVIRT_NETWORK:-default}" | grep -q 'Active:.*yes' || { echo "libvirt network not active"; exit 1; }
+      - . local/env.sh && virsh -c "$LIBVIRT_URI" pool-info "${LIBVIRT_POOL:-default}" | grep -q 'State:.*running' || { echo "libvirt pool not running"; exit 1; }
+
+  list:
+    desc: list molecule groups (or GROUP=... for its scenarios)
+    silent: true
+    cmds:
+      - |
+        if [ -n "{{.GROUP}}" ]; then
+          ls -1 {{.GROUP}}/molecule | grep -v '^__' | grep -v -- '-arm$' | grep -v '^rhel-' | tr '\n' ' '; echo
+        else
+          ls -d */*/molecule | sed 's|/molecule$||'
+        fi
+
+  run:
+    desc: 'task run GROUP=pg_tde/tde OS="ol-9 debian-13" [SEQ=converge] [-- molecule args]'
+    preconditions:
+      - sh: test -n "{{.GROUP}}" && test -n "{{.OS}}"
+        msg: "GROUP and OS are required"
+      - sh: test -d {{.GROUP}}/molecule
+        msg: "no molecule dir in {{.GROUP}}, see: task list"
+    cmds:
+      - |
+        . local/env.sh
+        export PATH="{{.VENV}}/bin:$PATH"
+        cd {{.GROUP}}
+        for os in {{.OS}}; do
+          echo ">>> {{.GROUP}} $os: molecule {{.SEQ}} {{.CLI_ARGS}}"
+          molecule {{.SEQ}} -s "$os" {{.CLI_ARGS}} || exit 1
+        done
+
+  destroy:
+    desc: 'task destroy GROUP=... OS=... -- mop up leftover guests'
+    cmds:
+      - task: run
+        vars: { GROUP: '{{.GROUP}}', OS: '{{.OS}}', SEQ: destroy }
+
+  tde:
+    desc: 'task tde OS=ol-9 [SEQ=...] [-- molecule args]'
+    cmds:
+      - task: run
+        vars: { GROUP: pg_tde/tde, OS: '{{.OS}}', SEQ: '{{.SEQ}}', CLI_ARGS: '{{.CLI_ARGS}}' }
+
+  pgsm:
+    desc: 'task pgsm OS=ol-9 [SEQ=...] [-- molecule args]'
+    cmds:
+      - task: run
+        vars: { GROUP: pg_stat_monitor/pgsm, OS: '{{.OS}}', SEQ: '{{.SEQ}}', CLI_ARGS: '{{.CLI_ARGS}}' }
+
+  psp:
+    desc: 'task psp OS=ol-9 [SEQ=...] [-- molecule args]'
+    cmds:
+      - task: run
+        vars: { GROUP: psp/server_tests, OS: '{{.OS}}', SEQ: '{{.SEQ}}', CLI_ARGS: '{{.CLI_ARGS}}' }
+
+  ppg:
+    desc: 'task ppg SCENARIO=pg-17 OS=ol-9 [SEQ=...] [-- molecule args]'
+    cmds:
+      - task: run
+        vars: { GROUP: 'ppg/{{.SCENARIO}}', OS: '{{.OS}}', SEQ: '{{.SEQ}}', CLI_ARGS: '{{.CLI_ARGS}}' }

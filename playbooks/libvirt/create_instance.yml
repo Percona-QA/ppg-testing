@@ -1,0 +1,164 @@
+---
+- name: Check image key
+  fail:
+    msg: "image '{{ platform.image | default('') }}' not in playbooks/libvirt/images.yml (rhel is intentionally absent locally, use rocky)"
+  when: (platform.image | default('')) not in image_catalog
+
+- name: Set instance facts
+  set_fact:
+    img: "{{ image_catalog[platform.image] }}"
+    base_vol: "base-{{ platform.image }}.qcow2"
+    domain_name: "{{ platform.name }}"
+    size_key: "{{ (platform.instance_type | default('t3.medium')).split('.') | last }}"
+
+- name: Set instance size
+  set_fact:
+    vm_cpus: "{{ lookup('env', 'PPG_LOCAL_CPUS') | default(size_map[size_key].cpus | default(2), true) }}"
+    vm_memory_mib: "{{ lookup('env', 'PPG_LOCAL_MEMORY') | default(size_map[size_key].memory_mib | default(4096), true) }}"
+
+- name: Check base volume exists
+  command: virsh -c {{ libvirt_uri }} vol-info --pool {{ libvirt_pool }} {{ base_vol }}
+  register: base_vol_check
+  failed_when: false
+  changed_when: false
+  no_log: false
+
+- name: Download base image
+  get_url:
+    url: "{{ img.url }}"
+    dest: "{{ image_cache }}/{{ platform.image }}.qcow2"
+    checksum: "{{ img.checksum | default(omit) }}"
+    timeout: 120
+  register: base_img_download
+  until: base_img_download is succeeded
+  retries: 3
+  delay: 5
+  when: base_vol_check.rc != 0
+
+- name: Get base image size
+  stat:
+    path: "{{ image_cache }}/{{ platform.image }}.qcow2"
+  register: base_img_stat
+  when: base_vol_check.rc != 0
+
+- name: Create and upload base volume
+  shell: >-
+    virsh -c {{ libvirt_uri }} vol-create-as {{ libvirt_pool }} {{ base_vol }}
+    {{ base_img_stat.stat.size }} --format qcow2 &&
+    virsh -c {{ libvirt_uri }} vol-upload --pool {{ libvirt_pool }} {{ base_vol }}
+    {{ image_cache }}/{{ platform.image }}.qcow2 &&
+    virsh -c {{ libvirt_uri }} pool-refresh {{ libvirt_pool }}
+  when: base_vol_check.rc != 0
+  no_log: false
+
+# capacity of a qcow2 volume is its virtual size (pool-refresh above keeps
+# the fresh-upload path correct)
+- name: Get base volume capacity
+  command: virsh -c {{ libvirt_uri }} vol-info --bytes --pool {{ libvirt_pool }} {{ base_vol }}
+  register: base_vol_info
+  changed_when: false
+  no_log: false
+
+# an overlay smaller than the base virtual size truncates the disk and
+# breaks boot (ol kvm images are 37G), so never go below it
+- name: Compute overlay size for {{ domain_name }}
+  set_fact:
+    overlay_bytes: "{{ [(platform.volume_size | default(30) | int) * 1073741824,
+                        base_vol_info.stdout | regex_search('Capacity:\\s+(\\d+)', '\\1') | first | int] | max }}"
+
+- name: Create overlay volume for {{ domain_name }}
+  command: >-
+    virsh -c {{ libvirt_uri }} vol-create-as {{ libvirt_pool }} {{ domain_name }}.qcow2
+    {{ overlay_bytes }} --format qcow2
+    --backing-vol {{ base_vol }} --backing-vol-format qcow2
+  no_log: false
+
+# prepare.yml expects the aws ami user (e.g. admin on debian), which can
+# differ from the cloud image default user, so create it as well.
+- name: Write cloud-init user-data
+  copy:
+    dest: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/{{ domain_name }}-user-data"
+    content: |
+      #cloud-config
+      users:
+        - default
+      {% if (platform.ssh_user | default('')) and platform.ssh_user != img.ssh_user %}
+        - name: {{ platform.ssh_user }}
+          shell: /bin/bash
+          sudo: ALL=(ALL) NOPASSWD:ALL
+          ssh_authorized_keys:
+            - {{ lookup('file', keypair_path + '.pub') }}
+      {% endif %}
+      ssh_authorized_keys:
+        - {{ lookup('file', keypair_path + '.pub') }}
+      growpart:
+        mode: auto
+
+- name: Write cloud-init meta-data
+  copy:
+    dest: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/{{ domain_name }}-meta-data"
+    content: |
+      instance-id: {{ domain_name }}
+      local-hostname: {{ domain_name }}
+
+# genisoimage (debian), mkisofs (cdrtools, suse) or xorriso in mkisofs mode,
+# whichever is installed. Short flags only, the long ones differ between them.
+- name: Build seed iso
+  shell: >-
+    cd {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }} &&
+    mkdir -p seed-{{ domain_name }} &&
+    cp {{ domain_name }}-user-data seed-{{ domain_name }}/user-data &&
+    cp {{ domain_name }}-meta-data seed-{{ domain_name }}/meta-data &&
+    mkiso=$(command -v genisoimage || command -v mkisofs || echo "xorriso -as mkisofs") &&
+    $mkiso -o {{ domain_name }}-seed.iso -V cidata -J -R
+    seed-{{ domain_name }}/user-data seed-{{ domain_name }}/meta-data
+
+- name: Get seed iso size
+  stat:
+    path: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/{{ domain_name }}-seed.iso"
+  register: seed_stat
+
+- name: Upload seed volume
+  shell: >-
+    virsh -c {{ libvirt_uri }} vol-create-as {{ libvirt_pool }} {{ domain_name }}-seed.iso
+    {{ seed_stat.stat.size }} --format raw &&
+    virsh -c {{ libvirt_uri }} vol-upload --pool {{ libvirt_pool }} {{ domain_name }}-seed.iso
+    {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/{{ domain_name }}-seed.iso
+  no_log: false
+
+- name: Render domain xml
+  template:
+    src: domain.xml.j2
+    dest: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/{{ domain_name }}.xml"
+
+- name: Define and start domain {{ domain_name }}
+  shell: >-
+    virsh -c {{ libvirt_uri }} define {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/{{ domain_name }}.xml &&
+    virsh -c {{ libvirt_uri }} start {{ domain_name }}
+  no_log: false
+
+- name: Wait for IP address on {{ domain_name }}
+  command: virsh -q -c {{ libvirt_uri }} domifaddr {{ domain_name }} --source lease
+  register: ipinfo
+  until: ipinfo.stdout is search('ipv4')
+  retries: 60
+  delay: 5
+  changed_when: false
+  no_log: false
+
+- name: Check IP address extracted for {{ domain_name }}
+  assert:
+    that:
+      - (ipinfo.stdout | regex_search('(\\d+\\.\\d+\\.\\d+\\.\\d+)')) is not none
+    fail_msg: "could not parse guest IP for {{ domain_name }}, check: virsh domifaddr {{ domain_name }} --source lease"
+  no_log: false
+
+- name: Record instance config entry
+  set_fact:
+    libvirt_instance_conf: "{{ (libvirt_instance_conf | default([])) + [ {
+        'instance': domain_name,
+        'address': ipinfo.stdout | regex_search('(\\d+\\.\\d+\\.\\d+\\.\\d+)'),
+        'user': img.ssh_user,
+        'port': '22',
+        'identity_file': keypair_path,
+      } ] }}"

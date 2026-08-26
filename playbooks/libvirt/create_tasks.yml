@@ -1,0 +1,100 @@
+---
+- name: Load image catalog
+  include_vars:
+    file: images.yml
+    name: image_catalog
+
+- name: Set libvirt connection facts
+  set_fact:
+    libvirt_uri: "{{ lookup('env', 'LIBVIRT_URI') | default('qemu:///system', true) }}"
+    libvirt_pool: "{{ lookup('env', 'LIBVIRT_POOL') | default('default', true) }}"
+    libvirt_network: "{{ lookup('env', 'LIBVIRT_NETWORK') | default('default', true) }}"
+    # default sits inside the repo (gitignored), not under $HOME
+    image_cache: "{{ lookup('env', 'PPG_IMAGE_CACHE') | default((playbook_dir ~ '/../.cache/images') | realpath, true) }}"
+    keypair_path: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/ssh_key"
+    ssh_common_args: "{{ lookup('env', 'ANSIBLE_SSH_COMMON_ARGS') }}"
+    hypervisor_ssh: "{{ lookup('env', 'PPG_HYPERVISOR_SSH') }}"
+    # rough libvirt equivalents of the aws instance types used in molecule.yml
+    size_map:
+      micro:   { cpus: 1, memory_mib: 1024 }
+      small:   { cpus: 1, memory_mib: 2048 }
+      medium:  { cpus: 2, memory_mib: 4096 }
+      large:   { cpus: 2, memory_mib: 8192 }
+      xlarge:  { cpus: 4, memory_mib: 8192 }
+      2xlarge: { cpus: 8, memory_mib: 16384 }
+
+- name: Ensure image cache directory
+  file:
+    path: "{{ image_cache }}"
+    state: directory
+
+- name: Generate ephemeral ssh keypair
+  command: ssh-keygen -t ed25519 -N "" -f "{{ keypair_path }}"
+  args:
+    creates: "{{ keypair_path }}"
+
+- name: Create instances
+  include_tasks: create_instance.yml
+  loop: "{{ molecule_yml.platforms }}"
+  loop_control:
+    loop_var: platform
+    label: "{{ platform.name }}"
+
+- name: Dump instance config
+  copy:
+    content: "{{ libvirt_instance_conf | to_json | from_json | to_yaml }}"
+    dest: "{{ molecule_instance_config }}"
+
+# molecule overwrites ansible_ssh_common_args in its inventory, which hides
+# the ProxyJump from ANSIBLE_SSH_COMMON_ARGS during prepare/converge.
+# ssh config is the documented delegated-driver way to route around that.
+# destroy removes the block via the same marker.
+- name: Ensure ssh config directory
+  file:
+    path: "{{ lookup('env', 'HOME') }}/.ssh"
+    state: directory
+    mode: "0700"
+  when: hypervisor_ssh | length > 0
+
+- name: Add proxyjump ssh config for guests
+  blockinfile:
+    path: "{{ lookup('env', 'HOME') }}/.ssh/config"
+    create: true
+    mode: "0600"
+    marker: "# {mark} ppg-molecule {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}"
+    block: |
+      {% for i in libvirt_instance_conf %}
+      Host {{ i.address }}
+        ProxyJump {{ hypervisor_ssh }}
+      {% endfor %}
+  when: hypervisor_ssh | length > 0
+
+- name: Wait for SSH
+  command: >-
+    ssh -i {{ keypair_path }} -p {{ item.port }} {{ ssh_common_args }}
+    -o BatchMode=yes -o ConnectTimeout=10
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+    {{ item.user }}@{{ item.address }} true
+  register: ssh_ok
+  until: ssh_ok.rc == 0
+  # several concurrent creates on one hypervisor slow first boot down a lot;
+  # 150s was observed too short with 4 parallel guests, give it 300s
+  retries: 60
+  delay: 5
+  changed_when: false
+  no_log: false
+  loop: "{{ libvirt_instance_conf }}"
+  loop_control:
+    label: "{{ item.instance }}"
+
+- name: Wait for cloud-init to finish
+  command: >-
+    ssh -i {{ keypair_path }} -p {{ item.port }} {{ ssh_common_args }}
+    -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+    {{ item.user }}@{{ item.address }} cloud-init status --wait
+  changed_when: false
+  failed_when: false
+  no_log: false
+  loop: "{{ libvirt_instance_conf }}"
+  loop_control:
+    label: "{{ item.instance }}"

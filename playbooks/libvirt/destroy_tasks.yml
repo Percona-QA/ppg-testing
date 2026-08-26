@@ -1,0 +1,53 @@
+---
+- name: Set libvirt connection facts
+  set_fact:
+    libvirt_uri: "{{ lookup('env', 'LIBVIRT_URI') | default('qemu:///system', true) }}"
+    libvirt_pool: "{{ lookup('env', 'LIBVIRT_POOL') | default('default', true) }}"
+
+- name: Stop domain {{ item.name }}
+  command: virsh -c {{ libvirt_uri }} destroy {{ item.name }}
+  loop: "{{ molecule_yml.platforms }}"
+  loop_control:
+    label: "{{ item.name }}"
+  failed_when: false
+  changed_when: false
+  no_log: false
+
+- name: Undefine domain {{ item.name }}
+  command: virsh -c {{ libvirt_uri }} undefine {{ item.name }} --nvram
+  loop: "{{ molecule_yml.platforms }}"
+  loop_control:
+    label: "{{ item.name }}"
+  failed_when: false
+  changed_when: false
+  no_log: false
+
+- name: Delete overlay volume {{ item.name }}.qcow2
+  command: virsh -c {{ libvirt_uri }} vol-delete {{ item.name }}.qcow2 --pool {{ libvirt_pool }}
+  loop: "{{ molecule_yml.platforms }}"
+  loop_control:
+    label: "{{ item.name }}"
+  failed_when: false
+  changed_when: false
+  no_log: false
+
+- name: Delete seed volume {{ item.name }}-seed.iso
+  command: virsh -c {{ libvirt_uri }} vol-delete {{ item.name }}-seed.iso --pool {{ libvirt_pool }}
+  loop: "{{ molecule_yml.platforms }}"
+  loop_control:
+    label: "{{ item.name }}"
+  failed_when: false
+  changed_when: false
+  no_log: false
+
+- name: Remove proxyjump ssh config for guests
+  blockinfile:
+    path: "{{ lookup('env', 'HOME') }}/.ssh/config"
+    marker: "# {mark} ppg-molecule {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}"
+    state: absent
+  failed_when: false
+
+- name: Dump empty instance config
+  copy:
+    content: "[]"
+    dest: "{{ molecule_instance_config }}"
