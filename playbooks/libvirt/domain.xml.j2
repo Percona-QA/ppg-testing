@@ -1,0 +1,42 @@
+<domain type='kvm'>
+  <name>{{ domain_name }}</name>
+  <memory unit='MiB'>{{ vm_memory_mib }}</memory>
+  <vcpu>{{ vm_cpus }}</vcpu>
+  <!-- efi needed: debian 13+ amd64 cloud images dropped bios boot -->
+  <os firmware='efi'>
+    <type arch='x86_64' machine='q35'>hvm</type>
+    <boot dev='hd'/>
+  </os>
+  <cpu mode='host-passthrough'/>
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+  <devices>
+    <!-- type='file', not type='volume': see the vol-path tasks in create_instance.yml -->
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='{{ overlay_path.stdout | trim }}'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+    <!-- virtio, not a sata cdrom: the debian 11/12 genericcloud cloud kernel
+         has no ahci driver, so a sata seed is invisible there and cloud-init
+         finds no datasource. NoCloud probes by the cidata label, any bus. -->
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='raw'/>
+      <source file='{{ seed_path.stdout | trim }}'/>
+      <target dev='vdb' bus='virtio'/>
+      <readonly/>
+    </disk>
+    <interface type='network'>
+      <source network='{{ libvirt_network }}'/>
+      <model type='virtio'/>
+    </interface>
+    <serial type='pty'><target port='0'/></serial>
+    <console type='pty'><target type='serial' port='0'/></console>
+    <rng model='virtio'><backend model='random'>/dev/urandom</backend></rng>
+    <memballoon model='virtio'/>
+  </devices>
+</domain>
