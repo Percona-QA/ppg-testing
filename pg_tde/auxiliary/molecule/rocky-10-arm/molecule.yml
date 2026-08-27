@@ -9,8 +9,8 @@ platforms:
     image: ${ami_rocky10_arm64}
     vpc_subnet_id: ${vpc_subnet_id_aws2}
     instance_type: m7g.2xlarge
-    volume_size: 150
     ssh_user: rocky
+    volume_size: 150
     root_device_name: /dev/sda1
     instance_tags:
       iit-billing-tag: jenkins-pg-molecule
