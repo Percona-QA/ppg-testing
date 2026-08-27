@@ -59,3 +59,96 @@ overrides:
   ubuntu-resolute-arm:
     aws:
       size: xlarge
+params:
+- name: PLATFORM
+  kind: choice
+  special: platform_choice
+  description: For what platform (OS) need to test
+  flavors:
+  - single
+- name: REPO
+  kind: choice
+  choices:
+  - testing
+  - experimental
+  - release
+  description: Packages Repo for testing
+- name: PGSM_REPO
+  kind: string
+  default: https://github.com/percona/pg_stat_monitor.git
+  description: PGSM repo that we want to test, we could also use forked developer
+    repo here.
+- name: PGSM_BRANCH
+  kind: string
+  default: 2.3.2
+  description: PGSM repo version/branch/tag to use; e.g main, 2.0.5
+- name: VERSION
+  kind: string
+  default: ppg-18.4
+  description: Server PG version for test, including major and minor version, e.g
+    ppg-16.2, ppg-15.5
+- name: PGSM_PACKAGE_INSTALL
+  kind: boolean
+  quote: '"'
+  description: Select if want to install PGSM using native package from repo.percona.com,
+    one shipped with VERSION above.
+  description_parallel: If Selected, then pgsm rpm/deb will be installed in server
+    that is shipped with ppg mentioned in VERSION above. Build sources will only be
+    used for regression and binary will not be installed into server from built sources.
+    If UnSelected, then no pgsm rpm/deb will be installed into the server, and pgsm
+    binary from the built sources will be installed into the server.
+- name: TESTING_BRANCH
+  kind: string
+  default: main
+  description: Branch for ppg-testing testing repository
+- name: DESTROY_ENV
+  kind: boolean
+  default: true
+  description: Destroy VM after tests
+  flavors:
+  - single
+- name: MAJOR_REPO
+  kind: boolean
+  quote: '"'
+  description: Enable to use major (ppg-16) repo instead of ppg-16.2
+jenkins:
+  molecule_dir: pg_stat_monitor/pgsm
+  artifacts: pg_stat_monitor/pgsm/artifacts/**/*.tar.gz
+  jobs:
+    single:
+      job_name: ppg
+      file: pgsm
+      display_name: ${env.BUILD_NUMBER}-${env.VERSION}-${env.PLATFORM}
+    parallel:
+      job_name: pgsm-parallel
+      file: pgsm-parallel
+      display_name: ${env.BUILD_NUMBER}-pgsm-${env.VERSION}
+      slack:
+        channel: '#postgresql-test'
+        params:
+        - pgsm_repo
+        - pgsm_branch
+        - pgsm_package_install
+        - version
+        - package_repo
+        - major_repo
+        args:
+        - PGSM_REPO
+        - PGSM_BRANCH
+        - PGSM_PACKAGE_INSTALL
+        - VERSION
+        - REPO
+        - MAJOR_REPO
+        fields:
+        - label: PGSM_Repo
+          param: pgsm_repo
+        - label: PGSM_Branch
+          param: pgsm_branch
+        - label: PGSM_install_from_package
+          param: pgsm_package_install
+        - label: Version
+          param: version
+        - label: Package_Repo
+          param: package_repo
+        - label: Major_Repo
+          param: major_repo

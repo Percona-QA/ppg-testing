@@ -59,3 +59,59 @@ overrides:
   ubuntu-resolute-arm:
     aws:
       size: xlarge
+params:
+- name: PLATFORM
+  kind: choice
+  special: platform_choice
+  description: For what platform (OS) need to test
+  flavors:
+  - single
+- name: PGSM_REPO
+  kind: string
+  default: https://github.com/percona/pg_stat_monitor.git
+  description: PGSM repo that we want to test, we could also use forked developer
+    repo here.
+- name: PGSM_BRANCH
+  kind: string
+  default: main
+  default_parallel: 2.3.2
+  description: PGSM repo version/branch/tag to use; e.g main, 2.0.5
+- name: VERSION
+  kind: string
+  default: ppg-18.4
+  default_parallel: pg-18.4
+  description: PGDG Server PG version for test, including major and minor version,
+    e.g pg-16.2, pg-15.5
+- name: TESTING_BRANCH
+  kind: string
+  default: main
+  description: Branch for ppg-testing testing repository
+jenkins:
+  molecule_dir: pg_stat_monitor/pgsm_pgdg
+  artifacts: pg_stat_monitor/pgsm_pgdg/artifacts/**/*.tar.gz
+  jobs:
+    single:
+      job_name: ppg
+      file: pgsm-pgdg
+      display_name: ${env.BUILD_NUMBER}-${env.VERSION}-${env.PLATFORM}
+    parallel:
+      job_name: ppg-parallel
+      file: pgsm-pgdg-parallel
+      display_name: ${env.BUILD_NUMBER}-pgsm-${env.VERSION}
+      slack:
+        channel: '#postgresql-test'
+        params:
+        - pgsm_repo
+        - pgsm_branch
+        - version
+        args:
+        - PGSM_REPO
+        - PGSM_BRANCH
+        - VERSION
+        fields:
+        - label: PGSM_Repo
+          param: pgsm_repo
+        - label: PGSM_Branch
+          param: pgsm_branch
+        - label: Version
+          param: version
