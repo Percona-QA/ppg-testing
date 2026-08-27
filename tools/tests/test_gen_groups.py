@@ -73,3 +73,21 @@ def test_write_header_marks_files(tmp_path, monkeypatch):
     assert gen_groups.write_groups(gen_groups.load_versions()) == 0
     tasks.write_text("hand written\n")
     assert gen_groups.write_groups(gen_groups.load_versions()) == 2
+
+
+def test_shared_tasks_render():
+    files = gen_groups.render_shared_tasks(DATA)
+    assert sorted(files) == sorted(
+        ["tasks/install_ppg%d%s.yml" % (m, s) for m in range(14, 19) for s in ("", "_tools")])
+    base18 = files["tasks/install_ppg18.yml"]
+    assert "percona-postgresql-common-dev" in base18
+    assert "Determine required PostgreSQL dev package" not in base18
+    base17 = files["tasks/install_ppg17.yml"]
+    assert "version('17.4', '<=', strict=True)" in base17
+    tools14 = files["tasks/install_ppg14_tools.yml"]
+    assert "pg_oidc_validator" not in tools14
+    assert "base_extensions: ['pg_stat_monitor', 'pgaudit', 'set_user']" in tools14
+    tools18 = files["tasks/install_ppg18_tools.yml"]
+    assert "percona-pg_oidc_validator18" in tools18
+    for content in files.values():
+        yaml.safe_load(content)

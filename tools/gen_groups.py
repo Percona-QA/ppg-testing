@@ -32,12 +32,28 @@ TYPES = {
 }
 
 TEMPLATES = REPO / "templates" / "groups"
+TASK_TEMPLATES = REPO / "templates" / "tasks"
 
 _env = jinja2.Environment(
     loader=jinja2.FileSystemLoader(str(TEMPLATES)),
     keep_trailing_newline=True,
     trim_blocks=True,
     lstrip_blocks=True,
+)
+
+# the shared install task files are full of ansible jinja ({{ packages }}),
+# so their templates use different delimiters: << var >> and <% if %>
+_task_env = jinja2.Environment(
+    loader=jinja2.FileSystemLoader(str(TASK_TEMPLATES)),
+    keep_trailing_newline=True,
+    trim_blocks=True,
+    lstrip_blocks=True,
+    block_start_string="<%",
+    block_end_string="%>",
+    variable_start_string="<<",
+    variable_end_string=">>",
+    comment_start_string="<#",
+    comment_end_string="#>",
 )
 
 
@@ -110,8 +126,33 @@ def all_groups(data):
             yield instance, type_name
 
 
+def render_shared_tasks(data):
+    """{repo-relative path: content} for tasks/install_ppg<major>*.yml."""
+    out = {}
+    for instance, inst in data["instances"].items():
+        if inst["flavor"] != "ppg":
+            continue
+        major = inst["major"]
+        for tpl_name, target in [
+            ("install_ppg.yml.j2", "tasks/install_ppg%d.yml" % major),
+            ("install_ppg_tools.yml.j2", "tasks/install_ppg%d_tools.yml" % major),
+        ]:
+            key = "install" if tpl_name == "install_ppg.yml.j2" else "install_tools"
+            ctx = dict(inst.get(key) or {})
+            ctx["major"] = major
+            out[target] = _task_env.get_template(tpl_name).render(**ctx)
+    return out
+
+
+def strip_header(text):
+    if text.startswith(HEADER):
+        return text[len(HEADER):]
+    return text
+
+
 def check_legacy(data):
-    """Diff rendered output against the current working tree files."""
+    """Diff rendered output against the current working tree files (the
+    generated-file header, if present, is ignored)."""
     failed = 0
     for instance, type_name in all_groups(data):
         gdir = REPO / "ppg" / group_name(instance, type_name)
@@ -122,7 +163,7 @@ def check_legacy(data):
                 print("MISSING %s" % path)
                 failed += 1
                 continue
-            original = path.read_text()
+            original = strip_header(path.read_text())
             if original != content:
                 failed += 1
                 print("DIFF %s" % path)
@@ -145,6 +186,22 @@ def check_legacy(data):
             if rel not in files:
                 print("EXTRA %s (not covered by templates)" % p)
                 failed += 1
+    for rel, content in sorted(render_shared_tasks(data).items()):
+        path = REPO / rel
+        if not path.exists():
+            print("MISSING %s" % path)
+            failed += 1
+        elif strip_header(path.read_text()) != content:
+            failed += 1
+            print("DIFF %s" % path)
+            sys.stdout.writelines(
+                difflib.unified_diff(
+                    path.read_text().splitlines(True),
+                    content.splitlines(True),
+                    fromfile=str(path),
+                    tofile="rendered",
+                )
+            )
     if failed:
         print("%d file(s) differ" % failed, file=sys.stderr)
         return 1
@@ -173,6 +230,14 @@ def write_groups(data):
             if rel.endswith((".yml", ".yaml")):
                 content = HEADER + content
             path.write_text(content)
+    for rel, content in render_shared_tasks(data).items():
+        path = REPO / rel
+        if path.exists() and not is_generated(path):
+            print("refusing to overwrite non-generated file: %s" % path,
+                  file=sys.stderr)
+            return 2
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(HEADER + content)
     return 0
 
 
@@ -199,6 +264,15 @@ def clean_groups(data):
                 gdir.rmdir()
             except OSError:
                 pass
+    for rel in render_shared_tasks(data):
+        path = REPO / rel
+        if not path.exists():
+            continue
+        if is_generated(path):
+            path.unlink()
+        else:
+            print("warning: skipping non-generated file: %s" % path,
+                  file=sys.stderr)
     return 0
 
 
