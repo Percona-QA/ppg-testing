@@ -124,6 +124,21 @@ instances:
       remove_conflicting_dev: '13.21'
       dev_switch_cutoff: '14.17'
       legacy_tail: true
+    install:
+      dev_switch_cutoff: '14.17'
+      plpython_extra: false
+    install_tools:
+      vars_gate: '14.10'
+      pgpool_low_gate: '14.7'
+      pgpool_switch: '14.23'
+      postgis_gate: '14.8'
+      gather_gate: '14.9'
+      pgvector_gate: '14.15'
+      cron_gate: '14.22'
+      base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'']'
+      legacy_layout: true
+      patroni_deb_gate: '14.12'
+      pgpool_start_gate: '14.7'
   pg-15:
     major: 15
     flavor: ppg
@@ -233,6 +248,21 @@ instances:
       remove_conflicting_dev: '14.18'
       dev_switch_cutoff: '15.12'
       legacy_tail: true
+    install:
+      dev_switch_cutoff: '15.12'
+    install_tools:
+      vars_gate: '15.5'
+      pgpool_low_gate: '15.2'
+      pgpool_switch: '15.18'
+      postgis_gate: '15.3'
+      gather_gate: '15.4'
+      pgvector_gate: '15.10'
+      cron_gate: '15.17'
+      base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'', ''percona_pg_telemetry'']'
+      legacy_layout: true
+      etcd_restart: false
+      patroni_deb_gate: '15.7'
+      pgpool_start_gate: '15.2'
   pg-16:
     major: 16
     flavor: ppg
@@ -329,6 +359,16 @@ instances:
       remove_conflicting_dev: '15.13'
       dev_switch_cutoff: '16.8'
       legacy_tail: true
+    install:
+      dev_switch_cutoff: '16.8'
+    install_tools:
+      vars_gate: '16.1'
+      pgpool_switch: '16.14'
+      pgvector_gate: '16.6'
+      cron_gate: '16.13'
+      base_extensions: '[''percona_pg_telemetry'', ''pg_stat_monitor'', ''pgaudit'', ''set_user'']'
+      legacy_layout: true
+      patroni_deb_gate: '16.3'
   pg-17:
     major: 17
     flavor: ppg
@@ -441,6 +481,15 @@ instances:
       commented_llvm: true
       remove_conflicting_dev: '16.9'
       dev_switch_cutoff: '17.4'
+    install:
+      dev_switch_cutoff: '17.4'
+    install_tools:
+      vars_gate: '17.0'
+      pgpool_switch: '17.10'
+      pgvector_gate: '17.2'
+      tde_gate: '17.7'
+      cron_gate: '17.9'
+      base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'', ''pg_tde'']'
   pg-18:
     major: 18
     flavor: ppg
@@ -502,6 +551,13 @@ instances:
       remove_conflicting_dev: '17.9'
       dev_switch_active: false
       telemetry_upgrade_verify: false
+    install: {}
+    install_tools:
+      vars_gate: '18.0'
+      pgpool_switch: '18.4'
+      cron_gate: '18.3'
+      oidc: true
+      base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'', ''pg_tde'']'
   psp-16:
     major: 16
     flavor: psp
