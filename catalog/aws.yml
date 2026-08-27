@@ -1,0 +1,11 @@
+# subnet keys only: molecule.yml gets ${vpc_subnet_id_<key>}, the ids (like
+# the AMI ids) live in jenkins-pipelines vars/moleculeEnvPPG.groovy
+subnets: [aws1, aws2, aws3]
+sizes:
+  small:   {x86: t3.small,   arm: t4g.small}
+  medium:  {x86: t3.medium,  arm: t4g.medium}
+  large:   {x86: t3.large,   arm: t4g.large}
+  xlarge:  {x86: t3.xlarge,  arm: t4g.xlarge}
+  2xlarge: {x86: t3.2xlarge, arm: t4g.2xlarge}
+  mxlarge: {x86: m7a.xlarge, arm: m7g.xlarge}
+  m2xlarge: {x86: m7a.2xlarge, arm: m7g.2xlarge}

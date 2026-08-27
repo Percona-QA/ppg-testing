@@ -1,0 +1,27 @@
+scenarios:
+  amd:
+    os: ubuntu-jammy
+  arm:
+    os: ubuntu-jammy-arm
+name_pattern: pgbackrest-U22-{scenario}-{build}
+aws:
+  size: 2xlarge
+  subnet: aws2
+cleanup: none
+verifier:
+  testinfra:
+    directory: ../../../tests/
+    junitxml: false
+sequences:
+  destroy:
+  - destroy
+  test:
+  - destroy
+  - create
+  - prepare
+  - converge
+  - verify
+  - cleanup
+  - destroy
+  cleanup:
+  - cleanup

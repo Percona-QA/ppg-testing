@@ -1,0 +1,61 @@
+os_list: all
+name_pattern: pgstatmon-{token}-{build}
+aws:
+  size: large
+  subnet: aws2
+cleanup: none
+verifier: ansible
+sequences:
+  destroy:
+  - destroy
+  test:
+  - destroy
+  - create
+  - prepare
+  - converge
+  - destroy
+  cleanup:
+  - cleanup
+overrides:
+  debian-12:
+    aws:
+      size: xlarge
+  debian-12-arm:
+    aws:
+      size: xlarge
+  debian-13:
+    aws:
+      size: xlarge
+  debian-13-arm:
+    aws:
+      size: xlarge
+  rhel-10:
+    billing_tag: jenkins-pg-molecule-rhel
+  rhel-10-arm:
+    billing_tag: jenkins-pg-molecule-rhel
+  rhel-8:
+    billing_tag: jenkins-pg-molecule-rhel
+  rhel-8-arm:
+    billing_tag: jenkins-pg-molecule-rhel
+  rhel-9:
+    billing_tag: jenkins-pg-molecule-rhel
+  rhel-9-arm:
+    billing_tag: jenkins-pg-molecule-rhel
+  ubuntu-jammy:
+    aws:
+      size: xlarge
+  ubuntu-jammy-arm:
+    aws:
+      size: xlarge
+  ubuntu-noble:
+    aws:
+      size: xlarge
+  ubuntu-noble-arm:
+    aws:
+      size: xlarge
+  ubuntu-resolute:
+    aws:
+      size: xlarge
+  ubuntu-resolute-arm:
+    aws:
+      size: xlarge

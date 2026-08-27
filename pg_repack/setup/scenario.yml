@@ -1,0 +1,22 @@
+scenarios:
+  amd:
+    os: ubuntu-jammy
+  arm:
+    os: ubuntu-jammy-arm
+name_pattern: pgrepack-U22-{scenario}-{build}
+aws:
+  size: medium
+  subnet: aws2
+cleanup: none
+verifier: ansible
+sequences:
+  destroy:
+  - destroy
+  test:
+  - destroy
+  - create
+  - prepare
+  - converge
+  - destroy
+  cleanup:
+  - cleanup

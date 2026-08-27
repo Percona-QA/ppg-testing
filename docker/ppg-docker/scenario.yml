@@ -1,0 +1,51 @@
+scenarios:
+  debian-12:
+    os: debian-12
+  debian-12-arm64:
+    os: debian-12-arm
+  debian-13:
+    os: debian-13
+  debian-13-arm64:
+    os: debian-13-arm
+  rhel-10:
+    os: rhel-10
+  rhel-10-arm64:
+    os: rhel-10-arm
+  rocky-9:
+    os: rocky-9
+  rocky-9-arm64:
+    os: rocky-9-arm
+  ubuntu-jammy:
+    os: ubuntu-jammy
+  ubuntu-jammy-arm64:
+    os: ubuntu-jammy-arm
+name_pattern: '{token}-{build}-{job}'
+aws:
+  size: medium
+  subnet: aws2
+cleanup: none
+verifier: ansible
+sequences:
+  destroy:
+  - destroy
+  test:
+  - destroy
+  - create
+  - prepare
+  - converge
+  - destroy
+overrides:
+  rhel-10:
+    billing_tag: jenkins-pg-molecule-rhel
+    aws:
+      size: large
+  rhel-10-arm64:
+    billing_tag: jenkins-pg-molecule-rhel
+    aws:
+      size: large
+  rocky-9:
+    aws:
+      size: large
+  rocky-9-arm64:
+    aws:
+      size: large

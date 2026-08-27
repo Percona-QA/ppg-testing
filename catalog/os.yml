@@ -1,0 +1,111 @@
+debian-12:
+  token: debian12
+  ami_var: debian12
+  family: deb
+  aws:
+    ssh_user: admin
+    root_device: /dev/xvda
+
+debian-13:
+  token: debian13
+  ami_var: debian13
+  family: deb
+  aws:
+    ssh_user: admin
+    root_device: /dev/xvda
+
+ol-8:
+  token: ol8
+  ami_var: ol8
+  family: rpm
+  aws:
+    ssh_user: ec2-user
+    root_device: /dev/sda1
+
+ol-9:
+  token: ol9
+  ami_var: ol9
+  family: rpm
+  aws:
+    ssh_user: ec2-user
+    root_device: /dev/sda1
+
+ol-10:
+  token: ol10
+  ami_var: ol10
+  family: rpm
+  aws:
+    ssh_user: ec2-user
+    root_device: /dev/sda1
+
+rhel-8:
+  token: rhel8
+  ami_var: rhel8
+  family: rpm
+  aws:
+    ssh_user: ec2-user
+    root_device: /dev/sda1
+
+rhel-9:
+  token: rhel9
+  ami_var: rhel9
+  family: rpm
+  aws:
+    ssh_user: ec2-user
+    root_device: /dev/sda1
+
+rhel-10:
+  token: rhel10
+  ami_var: rhel10
+  family: rpm
+  aws:
+    ssh_user: ec2-user
+    root_device: /dev/sda1
+
+rocky-8:
+  token: rocky8
+  ami_var: rocky8
+  family: rpm
+  aws:
+    ssh_user: rocky
+    root_device: /dev/sda1
+
+rocky-9:
+  token: rocky9
+  ami_var: rocky9
+  family: rpm
+  aws:
+    ssh_user: rocky
+    root_device: /dev/sda1
+
+rocky-10:
+  token: rocky10
+  ami_var: rocky10
+  family: rpm
+  aws:
+    ssh_user: rocky
+    root_device: /dev/sda1
+
+ubuntu-jammy:
+  token: ujammy
+  ami_var: ubuntu22
+  family: deb
+  aws:
+    ssh_user: ubuntu
+    root_device: /dev/sda1
+
+ubuntu-noble:
+  token: unoble
+  ami_var: ubuntu24
+  family: deb
+  aws:
+    ssh_user: ubuntu
+    root_device: /dev/sda1
+
+ubuntu-resolute:
+  token: uresolute
+  ami_var: ubuntu26
+  family: deb
+  aws:
+    ssh_user: ubuntu
+    root_device: /dev/sda1

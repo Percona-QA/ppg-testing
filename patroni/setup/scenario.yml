@@ -1,0 +1,27 @@
+scenarios:
+  amd:
+    os: rhel-9
+  arm:
+    os: rhel-9-arm
+name_pattern: patroni-rhel9-{scenario}-{build}-{job}
+aws:
+  size: medium
+  subnet: aws2
+cleanup: none
+verifier:
+  testinfra:
+    directory: ../../../tests/
+    junitxml: false
+sequences:
+  destroy:
+  - destroy
+  test:
+  - destroy
+  - create
+  - prepare
+  - converge
+  - verify
+  - cleanup
+  - destroy
+  cleanup:
+  - cleanup

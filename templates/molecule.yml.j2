@@ -1,0 +1,63 @@
+{{ header }}---
+dependency:
+  name: galaxy
+driver:
+  name: ${driver}
+platforms:
+  - name: {{ name }}
+    region: {{ region }}
+    image: {{ image }}
+    vpc_subnet_id: {{ subnet_id }}
+    instance_type: {{ instance_type }}
+    ssh_user: {{ ssh_user }}
+{%- if volume_size %}
+    volume_size: {{ volume_size }}
+{%- endif %}
+    root_device_name: {{ root_device }}
+    instance_tags:
+      iit-billing-tag: {{ billing_tag }}
+provisioner:
+  name: ansible
+  log: True
+  playbooks:
+    create: ../../../../playbooks/create.yml
+    destroy: ../../../../playbooks/destroy.yml
+    prepare: ../../../../playbooks/prepare.yml
+{%- if cleanup_playbook %}
+    cleanup: {{ cleanup_playbook }}
+{%- endif %}
+    converge: {{ converge }}
+verifier:
+{%- if verifier == "ansible" %}
+  name: ansible
+{%- else %}
+  name: testinfra
+  directory: {{ verifier.testinfra.directory }}
+  options:
+    verbose: true
+    s: true
+{%- if verifier.testinfra.markers is defined %}
+    m: {{ verifier.testinfra.markers | join(" or ") }}
+{%- endif %}
+{%- if verifier.testinfra.junitxml | default(true) %}
+    junitxml: report.xml
+{%- endif %}
+{%- endif %}
+scenario:
+{%- if emit_scenario_name %}
+  name: {{ scenario_dir_name }}
+{%- endif %}
+  destroy_sequence:
+{%- for s in sequences.destroy %}
+    - {{ s }}
+{%- endfor %}
+{%- if sequences.cleanup is defined %}
+  cleanup_sequence:
+{%- for s in sequences.cleanup %}
+    - {{ s }}
+{%- endfor %}
+{%- endif %}
+  test_sequence:
+{%- for s in sequences.test %}
+    - {{ s }}
+{%- endfor %}

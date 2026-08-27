@@ -1,0 +1,19 @@
+os_list: all
+name_pattern: tde-auxiliary-{token}-{build}
+aws:
+  size: m2xlarge
+  subnet: aws2
+  volume_size: 150
+cleanup: none
+verifier: ansible
+sequences:
+  destroy:
+  - destroy
+  test:
+  - destroy
+  - create
+  - prepare
+  - converge
+  - destroy
+  cleanup:
+  - cleanup
