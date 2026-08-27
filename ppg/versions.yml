@@ -1,0 +1,593 @@
+# Per-major data for the generated ppg role groups (ppg/pg-14..18*, psp-16*).
+# tools/gen_groups.py renders these at runtime from templates/groups/.
+#
+# Each instance carries flavor (ppg/psp), major, and one section per scenario
+# type (server, meta-server, meta-ha, minor-upgrade, major-upgrade). The
+# 'gates' lists are the End-play/fail guards at the top of tasks/main.yml:
+# action end_host/end_play/fail(+msg), distribution or family match,
+# os_version, pg version literal and compare op. Everything else is small
+# per-major knobs the templates branch on -- see templates/groups/.
+instances:
+  pg-14:
+    major: 14
+    flavor: ppg
+    server:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 14.23
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '14.23'
+        op: <
+      - name: End play on Debian 13
+        action: end_play
+        distribution: Debian
+        os_version: '13'
+        version: '14.19'
+        op: <=
+      subnet: aws2
+      legacy_debian_overrides: true
+    meta-server:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 14.23
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '14.23'
+        op: <
+    meta-ha:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 14.23
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '14.23'
+        op: <
+      cleanup_extra_rpm:
+      - etcd
+      - percona-haproxy
+    minor-upgrade:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 14.23
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '14.23'
+        op: <
+      - name: End play on rocky linux 9
+        action: end_play
+        family: RedHat
+        os_version: '9'
+        version: '14.6'
+        op: <=
+      - name: End play on Debian 12
+        action: end_play
+        family: Debian
+        os_version: '12'
+        version: '14.8'
+        op: <=
+      - name: End play on Debian 13
+        action: end_play
+        distribution: Debian
+        os_version: '13'
+        version: '14.19'
+        op: <=
+      - name: End play on Ubuntu 24
+        action: end_play
+        distribution: Ubuntu
+        os_version: '24'
+        version: '14.11'
+        op: <=
+      upgrade_to_fact: false
+      extra_repo_refresh: true
+      telemetry_comment: extended
+      plpython3_extra: false
+      tde: false
+      dev_switch_cutoff: '14.17'
+      dev_switch_var: pg_version_to_install
+      stop_pause: false
+    major-upgrade:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 14.23
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '14.23'
+        op: <
+      - name: End play on rocky linux 9
+        action: end_play
+        family: RedHat
+        os_version: '9'
+        version: '13.9'
+        op: <=
+      - name: End play on Debian 12
+        action: end_play
+        family: Debian
+        os_version: '12'
+        version: '13.11'
+        op: <=
+      - name: End play on Debian 13
+        action: end_play
+        distribution: Debian
+        os_version: '13'
+        version: '13.22'
+        op: <=
+      - name: End play on Ubuntu 24
+        action: end_play
+        distribution: Ubuntu
+        os_version: '24'
+        version: '13.14'
+        op: <=
+      enable_only: false
+      commented_plpython: true
+      commented_llvm: false
+      remove_conflicting_dev: '13.21'
+      dev_switch_cutoff: '14.17'
+      legacy_tail: true
+  pg-15:
+    major: 15
+    flavor: ppg
+    server:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 15.18
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '15.18'
+        op: <
+      - name: End play on Debian 13
+        action: end_play
+        distribution: Debian
+        os_version: '13'
+        version: '15.14'
+        op: <=
+      subnet: aws1
+      legacy_debian_overrides: true
+    meta-server:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 15.18
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '15.18'
+        op: <
+    meta-ha:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 15.18
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '15.18'
+        op: <
+    minor-upgrade:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 15.18
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '15.18'
+        op: <
+      - name: End play on rocky linux 9
+        action: end_play
+        family: RedHat
+        os_version: '9'
+        version: '15.1'
+        op: <=
+      - name: End play on Debian 12
+        action: end_play
+        family: Debian
+        os_version: '12'
+        version: '15.3'
+        op: <=
+      - name: End play on Debian 13
+        action: end_play
+        distribution: Debian
+        os_version: '13'
+        version: '15.14'
+        op: <=
+      - name: End play on Ubuntu 24
+        action: end_play
+        distribution: Ubuntu
+        os_version: '24'
+        version: '15.6'
+        op: <=
+      dev_pkg_deb: percona-postgresql-common-dev
+      tde: false
+      remove_conflicting_dev: '15.13'
+      dev_switch_cutoff: '15.12'
+    major-upgrade:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 14.23
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '14.23'
+        op: <
+      - name: End play on rocky linux 9
+        action: end_play
+        family: RedHat
+        os_version: '9'
+        version: '14.6'
+        op: <=
+      - name: End play on Debian 12
+        action: end_play
+        family: Debian
+        os_version: '12'
+        version: '14.8'
+        op: <=
+      - name: End play on Debian 13
+        action: end_play
+        distribution: Debian
+        os_version: '13'
+        version: '14.19'
+        op: <=
+      - name: End play on Ubuntu 24
+        action: end_play
+        distribution: Ubuntu
+        os_version: '24'
+        version: '14.11'
+        op: <=
+      commented_plpython: true
+      commented_llvm: false
+      dev_pkg_deb: percona-postgresql-server-dev-all
+      remove_conflicting_dev: '14.18'
+      dev_switch_cutoff: '15.12'
+      legacy_tail: true
+  pg-16:
+    major: 16
+    flavor: ppg
+    server:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 16.14
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '16.14'
+        op: <
+      - name: End play on Debian 13 and 16.10 and older versions
+        action: end_play
+        distribution: Debian
+        os_version: '13'
+        version: '16.10'
+        op: <=
+      subnet: aws2
+      legacy_debian_overrides: true
+    meta-server:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 16.14
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '16.14'
+        op: <
+    meta-ha:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 16.14
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '16.14'
+        op: <
+    minor-upgrade:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 16.14
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '16.14'
+        op: <
+      - name: End play on Ubuntu 24
+        action: end_play
+        distribution: Ubuntu
+        os_version: '24'
+        version: '16.2'
+        op: <=
+      - name: End play on Debian 13
+        action: end_play
+        distribution: Debian
+        os_version: '13'
+        version: '16.10'
+        op: <=
+      dev_pkg_deb: percona-postgresql-common-dev
+      tde: false
+      remove_conflicting_dev: '16.9'
+      dev_switch_cutoff: '16.8'
+    major-upgrade:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 15.18
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '15.18'
+        op: <
+      - name: End play on rocky linux 9
+        action: end_play
+        family: RedHat
+        os_version: '9'
+        version: '15.2'
+        op: <=
+      - name: End play on Debian 12
+        action: end_play
+        family: Debian
+        os_version: '12'
+        version: '15.3'
+        op: <=
+      - name: End play on Debian 13
+        action: end_play
+        distribution: Debian
+        os_version: '13'
+        version: '15.14'
+        op: <=
+      - name: End play on Ubuntu 24
+        action: end_play
+        distribution: Ubuntu
+        os_version: '24'
+        version: '15.6'
+        op: <=
+      commented_plpython: true
+      commented_llvm: true
+      remove_conflicting_dev: '15.13'
+      dev_switch_cutoff: '16.8'
+      legacy_tail: true
+  pg-17:
+    major: 17
+    flavor: ppg
+    server:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 17.10
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '17.10'
+        op: <
+      - name: End play on RedHat 10 and 17.5 and older versions
+        action: fail
+        msg: Stopping execution on rhel 10 because 17.5 and below are not supported.
+        family: RedHat
+        os_version: '10'
+        version: '17.5'
+        op: <=
+      subnet: aws1
+    meta-server:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 17.10
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '17.10'
+        op: <
+      - name: End play on RedHat 10 and 17.5 and older versions
+        action: fail
+        msg: Stopping execution on rhel 10 because 17.5 and below are not supported.
+        family: RedHat
+        os_version: '10'
+        version: '17.5'
+        op: <=
+    meta-ha:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 17.10
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '17.10'
+        op: <
+      - name: End play on RedHat 10 and 17.5 and older versions
+        action: fail
+        msg: Stopping execution on rhel 10 because 17.5 and below are not supported.
+        family: RedHat
+        os_version: '10'
+        version: '17.5'
+        op: <=
+    minor-upgrade:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 17.10
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '17.10'
+        op: <
+      - name: End play on Ubuntu 24
+        action: end_play
+        distribution: Ubuntu
+        os_version: '24'
+        version: '16.2'
+        op: <=
+      - name: End play on Debian 13
+        action: end_play
+        distribution: Debian
+        os_version: '13'
+        version: '17.6'
+        op: <=
+      - name: End play on RedHat 10 and 16.9 and older versions
+        action: fail
+        msg: Stopping execution on rhel 10 because 16.9 and below are not supported.
+        family: RedHat
+        os_version: '10'
+        version: '16.9'
+        op: <=
+      tde: true
+      remove_conflicting_dev: '17.5'
+      dev_switch_cutoff: '17.4'
+      dev_singles_commented: true
+    major-upgrade:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 16.14
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '16.14'
+        op: <
+      - name: End play on Debian 13
+        action: end_play
+        distribution: Debian
+        os_version: '13'
+        version: '16.10'
+        op: <=
+      - name: End play on Ubuntu 24
+        action: end_play
+        distribution: Ubuntu
+        os_version: '24'
+        version: '16.2'
+        op: <=
+      - name: End play on RedHat 10 and 16.9 and older versions
+        action: fail
+        msg: Stopping execution on rhel 10 because 16.9 and below are not supported.
+        family: RedHat
+        os_version: '10'
+        version: '16.9'
+        op: <=
+      psp_from: true
+      commented_plpython: true
+      commented_llvm: true
+      remove_conflicting_dev: '16.9'
+      dev_switch_cutoff: '17.4'
+  pg-18:
+    major: 18
+    flavor: ppg
+    server:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 18.4
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '18.4'
+        op: <
+      subnet: aws2
+      telemetry_verify: false
+    meta-server:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 18.4
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '18.4'
+        op: <
+    meta-ha:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 18.4
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '18.4'
+        op: <
+    minor-upgrade:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 18.4
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '18.4'
+        op: <
+      telemetry_comment: none
+      tde: true
+      remove_conflicting_dev: '18.5'
+      dev_switch_active: false
+      dev_switch_cutoff: '18.1'
+      dev_singles_commented: true
+      telemetry_upgrade_verify: false
+    major-upgrade:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 17.10
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '17.10'
+        op: <
+      - name: End play on Debian 13
+        action: end_play
+        distribution: Debian
+        os_version: '13'
+        version: '17.6'
+        op: <=
+      remove_conflicting_dev: '17.9'
+      dev_switch_active: false
+      telemetry_upgrade_verify: false
+  psp-16:
+    major: 16
+    flavor: psp
+    server:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 16.14
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '16.14'
+        op: <
+      subnet: aws2
+    meta-server:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 16.14
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '16.14'
+        op: <
+    meta-ha:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 16.14
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '16.14'
+        op: <
+    minor-upgrade:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 16.14
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '16.14'
+        op: <
+      - name: End play on Ubuntu 24
+        action: end_play
+        distribution: Ubuntu
+        os_version: '24'
+        version: '16.2'
+        op: <=
+      - name: End play on Debian 13
+        action: end_play
+        distribution: Debian
+        os_version: '13'
+        version: '16.10'
+        op: <=
+      dev_pkg_deb: percona-postgresql-common-dev
+      tde: false
+      remove_conflicting_dev: '16.9'
+      dev_switch_cutoff: '16.8'
+    major-upgrade:
+      gates:
+      - name: End play on Ubuntu 26 and versions older than 15.18
+        action: end_host
+        distribution: Ubuntu
+        os_version: '26'
+        version: '15.18'
+        op: <
+      - name: End play on rocky linux 9
+        action: end_play
+        family: RedHat
+        os_version: '9'
+        version: '15.2'
+        op: <=
+      - name: End play on Debian 12
+        action: end_play
+        family: Debian
+        os_version: '12'
+        version: '15.3'
+        op: <=
+      - name: End play on Debian 13
+        action: end_play
+        distribution: Debian
+        os_version: '13'
+        version: '15.14'
+        op: <=
+      - name: End play on Ubuntu 24
+        action: end_play
+        distribution: Ubuntu
+        os_version: '24'
+        version: '15.6'
+        op: <=
+      commented_plpython: true
+      commented_llvm: true
+      remove_conflicting_dev: '15.13'
+      dev_switch_cutoff: '16.8'
+      legacy_tail: true

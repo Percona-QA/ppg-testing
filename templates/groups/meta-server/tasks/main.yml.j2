@@ -1,0 +1,26 @@
+{% import '_shared.j2' as s %}
+---
+{{ s.version_fact(flavor) }}
+{% if major >= 18 %}
+{{ s.io_method_fact() }}
+{% endif %}
+
+{{ gates_text }}
+
+- name: Configure repository
+  include_tasks: ../../../../tasks/enable_repo.yml
+
+- name: install Percona Platform for PostgreSQL {{ major }} packages
+  include_tasks: ../../../../tasks/install_ppg_meta_server.yml
+
+{% if major >= 18 %}
+{{ s.io_method_debian(major) }}
+
+{% endif %}
+{{ s.init_postgres_rhel(major) }}
+
+{% if major >= 18 %}
+{{ s.io_method_rhel(major) }}
+
+{% endif %}
+{{ s.start_postgres_rhel(major) }}

@@ -1,0 +1,84 @@
+{% import '_shared.j2' as s %}
+---
+{% if flavor == 'psp' %}
+# PSP {{ major }} (Percona Server for PostgreSQL {{ major }}, psp-{{ major }} repo) install test.
+#
+# PSP {{ major }} is a superset of ppg-{{ major }}.x: the same package set plus pg_tde. With
+# pg_tde not enabled it runs as vanilla PostgreSQL, so this role reuses the
+# ppg-{{ major }} shared install tasks verbatim and only adds the pg_tde package on
+# top. Functional TDE coverage lives in pg_tde/tde and pg_tde/upgrade — not
+# here.
+#
+# VERSION is expected in the form psp-{{ major }}.14. The psp-{{ major }} repo has no per-minor
+# variants (tasks/enable_repo.yml trims the minor before percona-release).
+
+{% endif %}
+{{ s.version_fact(flavor) }}
+{% if major >= 18 %}
+{{ s.io_method_fact() }}
+{% endif %}
+
+{{ gates_text }}
+
+- name: Configure repository
+  include_tasks: ../../../../tasks/enable_repo.yml
+
+- name: install Percona {{ 'Server' if flavor == 'psp' else 'Platform' }} for PostgreSQL {{ major }} packages
+  include_tasks: ../../../../tasks/install_ppg{{ major }}.yml
+
+{% if major >= 18 %}
+{{ s.io_method_debian(major) }}
+
+{% endif %}
+{{ s.init_postgres_rhel(major) }}
+
+{% if major >= 18 %}
+{{ s.io_method_rhel(major) }}
+
+{% endif %}
+{{ s.start_postgres_rhel(major) }}
+
+- name: Install PPG tools
+  include_tasks: ../../../../tasks/install_ppg{{ major }}_tools.yml
+
+{% if flavor == 'psp' %}
+- name: Install pg_tde packages (PSP-only component)
+  include_tasks: ../../../../tasks/install_psp{{ major }}_tde.yml
+
+{% endif %}
+# =========Telemetry testcases
+{% if telemetry_verify | default(true) %}
+- name: Verify telemetry installation
+  include_tasks: ../../../../tasks/verify_telemetry.yml
+
+- name: Verify telemetry weak-dependency opt-out
+  include_tasks: ../../../../tasks/verify_telemetry_weak_dependency.yml
+  when: weak_dependency_expected | default(false)
+{% else %}
+# - name: Verify telemetry installation
+#   include_tasks: ../../../../tasks/verify_telemetry.yml
+{% endif %}
+
+- name: Install GCC Deb
+  apt:
+    name: gcc
+  when: ansible_os_family == "Debian"
+
+- name: Install GCC RHEL
+  yum:
+    name: gcc
+  when: ansible_os_family == "RedHat"
+
+- name: Create temporary directory for compilation
+  command: mkdir /tmp/libpq_command_temp_dir
+
+- name: Copy libpq source file
+  copy:
+    src: ../../common/files/lib_version.c
+    dest: /tmp/libpq_command_temp_dir
+
+- name: Delete dpkg-query for RHEL
+  yum:
+    name: dpkg
+    state: absent
+  when: ansible_os_family == "RedHat"

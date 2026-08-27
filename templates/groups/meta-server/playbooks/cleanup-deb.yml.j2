@@ -1,0 +1,18 @@
+---
+- name: Cleanup
+  hosts: all
+  become: true
+  become_method: sudo
+  tasks:
+    - name: remove Postgresql deb packages
+      apt:
+        name: "{{ '{{' }} packages {{ '}}' }}"
+        state: absent
+      vars:
+        packages:
+          - percona-postgresql-{{ major }}
+          - percona-postgresql-{{ major }}-pgaudit
+          - percona-postgresql-{{ major }}-repack
+          - percona-postgresql-{{ major }}-wal2json
+          - percona-pg-stat-monitor{{ major }}
+      when: ansible_distribution == "Debian"

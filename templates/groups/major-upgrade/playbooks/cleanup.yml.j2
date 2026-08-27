@@ -1,0 +1,268 @@
+{% set v = '{{' %}{% set w = '}}' %}
+---
+{% if major >= 15 %}
+- name: Fix broken
+  hosts: all
+  become: true
+  become_method: sudo
+  tasks:
+    - name: Fix Postgresql-{{ prev }} deb packages
+      apt:
+        name: "{{ v }} packages {{ w }}"
+        state: fixed
+        update_cache: true
+      vars:
+        packages:
+          - percona-postgresql-{{ prev }}
+          - percona-postgresql-{{ prev }}-dbgsym
+          - percona-postgresql-client-{{ prev }}
+          - percona-postgresql-doc-{{ prev }}
+          - percona-postgresql-plperl-{{ prev }}
+          - percona-postgresql-plpython3-{{ prev }}
+          - percona-postgresql-pltcl-{{ prev }}
+          - percona-postgresql-server-dev-{{ prev }}
+          - percona-postgresql-client-{{ prev }}-dbgsym
+          - percona-postgresql-plperl-{{ prev }}-dbgsym
+          - percona-postgresql-plpython3-{{ prev }}-dbgsym
+          - percona-postgresql-pltcl-{{ prev }}-dbgsym
+          - percona-pg-stat-monitor{{ prev }}
+          - percona-pgaudit{{ prev }}-set-user
+          - percona-postgresql-{{ prev }}-wal2json
+      ignore_errors: true
+      when: ansible_os_family == "Debian"
+
+{% endif %}
+- name: Cleanup
+  hosts: all
+  become: true
+  become_method: sudo
+  tasks:
+{% if major >= 18 %}
+    - name: Remove PG{{ prev }} extension and add-on packages first
+      apt:
+        name: "{{ v }} packages {{ w }}"
+        state: absent
+        update_cache: true
+      ignore_errors: true
+      vars:
+        packages:
+          - percona-postgresql-{{ prev }}-pgaudit
+          - percona-postgresql-{{ prev }}-pgaudit-dbgsym
+          - percona-postgresql-{{ prev }}-repack
+          - percona-postgresql-{{ prev }}-repack-dbgsym
+          - percona-postgresql-{{ prev }}-postgis-3
+          - percona-postgresql-{{ prev }}-wal2json
+          - percona-postgresql-{{ prev }}-wal2json-dbgsym
+          - percona-pg-stat-monitor{{ prev }}
+          - percona-pg-stat-monitor{{ prev }}-dbgsym
+          - percona-pgaudit{{ prev }}-set-user
+          - percona-pgaudit{{ prev }}-set-user-dbgsym
+          - percona-pg-telemetry{{ prev }}
+          - percona-postgresql-postgis
+          - percona-postgresql-postgis-scripts
+      when: ansible_os_family == "Debian"
+
+    - name: Remove core PG{{ prev }} deb packages
+      apt:
+        name: "{{ v }} packages {{ w }}"
+        state: absent
+      ignore_errors: true
+      vars:
+        packages:
+          - percona-postgresql-{{ prev }}
+          - percona-postgresql-{{ prev }}-dbgsym
+          - percona-postgresql-client-{{ prev }}
+          - percona-postgresql-doc-{{ prev }}
+          - percona-postgresql-plperl-{{ prev }}
+          - percona-postgresql-plpython3-{{ prev }}
+          - percona-postgresql-pltcl-{{ prev }}
+          - percona-postgresql-server-dev-{{ prev }}
+          - percona-postgresql-client-{{ prev }}-dbgsym
+          - percona-postgresql-plperl-{{ prev }}-dbgsym
+          - percona-postgresql-plpython3-{{ prev }}-dbgsym
+          - percona-postgresql-pltcl-{{ prev }}-dbgsym
+      when: ansible_os_family == "Debian"
+
+    - name: Fix any remaining broken packages after PG{{ prev }} removal
+      shell: apt-get -f install -y
+      args:
+        executable: /bin/bash
+      ignore_errors: true
+      when: ansible_os_family == "Debian"
+
+    - name: remove Postgresql rpm packages
+      yum:
+        name: "{{ v }} packages {{ w }}"
+        state: absent
+      vars:
+        packages:
+          - percona-postgresql{{ prev }}
+          - percona-postgresql{{ prev }}-contrib
+          - percona-postgresql{{ prev }}-debuginfo
+          - percona-postgresql{{ prev }}-devel
+          - percona-postgresql{{ prev }}-docs
+          - percona-postgresql{{ prev }}-libs
+          - percona-postgresql{{ prev }}-llvmjit
+          - percona-postgresql{{ prev }}-plperl
+          - percona-postgresql{{ prev }}-plpython
+          - percona-postgresql{{ prev }}-pltcl
+          - percona-postgresql{{ prev }}-server
+          - percona-postgresql{{ prev }}-test
+          - percona-postgresql{{ prev }}-debugsource
+          - percona-postgresql{{ prev }}-devel-debuginfo
+          - percona-postgresql{{ prev }}-libs-debuginfo
+          - percona-postgresql{{ prev }}-plperl-debuginfo
+          - percona-postgresql{{ prev }}-plpython-debuginfo
+          - percona-postgresql{{ prev }}-plpython3-debuginfo
+          - percona-postgresql{{ prev }}-pltcl-debuginfo
+          - percona-postgresql{{ prev }}-server-debuginfo
+      ignore_errors: true
+      when: ansible_os_family == "RedHat"
+
+    - name: remove pg_repack rpm packages
+      yum:
+        name: percona-pg_repack{{ prev }}
+        state: absent
+      ignore_errors: true
+      when: ansible_os_family == "RedHat"
+{% else %}
+    - name: remove Postgresql deb packages
+      apt:
+        name: "{{ v }} packages {{ w }}"
+        state: absent
+{% if major >= 15 %}
+        update_cache: true
+{% else %}
+        update_cache: yes
+{% endif %}
+      vars:
+        packages:
+          - percona-postgresql-{{ prev }}
+{% if major >= 15 %}
+          - percona-postgresql-{{ prev }}-dbgsym
+{% endif %}
+          - percona-postgresql-client-{{ prev }}
+          - percona-postgresql-doc-{{ prev }}
+          - percona-postgresql-plperl-{{ prev }}
+          - percona-postgresql-plpython3-{{ prev }}
+          - percona-postgresql-pltcl-{{ prev }}
+          - percona-postgresql-server-dev-{{ prev }}
+{% if major < 15 %}
+          - percona-postgresql-{{ prev }}-dbgsym
+{% endif %}
+          - percona-postgresql-client-{{ prev }}-dbgsym
+          - percona-postgresql-plperl-{{ prev }}-dbgsym
+          - percona-postgresql-plpython3-{{ prev }}-dbgsym
+          - percona-postgresql-pltcl-{{ prev }}-dbgsym
+{% if major >= 15 %}
+          - percona-pg-stat-monitor{{ prev }}
+          - percona-pgaudit{{ prev }}-set-user
+          - percona-postgresql-{{ prev }}-wal2json
+{% endif %}
+      ignore_errors: true
+      when: ansible_os_family == "Debian"
+
+{% if major >= 15 %}
+    # - name: Remove Percona Platform for PostgreSQL deb packages
+    #   apt:
+    #     name: "{{ v }} packages {{ w }}"
+    #     state: absent
+    #   vars:
+    #     packages:
+    #     - percona-postgresql-plpython-{{ prev }}
+    #     - percona-postgresql-plpython-{{ prev }}-dbgsym
+    #     - percona-postgresql-server-dev-{{ prev }}-dbgsym
+    #   when:
+    #     - ansible_os_family == "Debian"
+    #     - lookup('env', 'PG_VERSION') == "ppg-{{ prev }}.5"
+{% else %}
+    - name: Remove Percona Platform for PostgreSQL deb packages
+      apt:
+        name: "{{ v }} packages {{ w }}"
+        state: absent
+      vars:
+        packages:
+        - percona-postgresql-plpython-{{ prev }}
+        - percona-postgresql-plpython-{{ prev }}-dbgsym
+        - percona-postgresql-server-dev-{{ prev }}-dbgsym
+      when:
+        - ansible_os_family == "Debian"
+        - lookup('env', 'PG_VERSION') == "ppg-{{ prev }}.5"
+{% endif %}
+
+    - name: remove Postgresql rpm packages
+      yum:
+        name: "{{ v }} packages {{ w }}"
+        state: absent
+      vars:
+        packages:
+          - percona-postgresql{{ prev }}
+          - percona-postgresql{{ prev }}
+          - percona-postgresql{{ prev }}-contrib
+          - percona-postgresql{{ prev }}-debuginfo
+          - percona-postgresql{{ prev }}-devel
+          - percona-postgresql{{ prev }}-docs
+          - percona-postgresql{{ prev }}-libs
+          - percona-postgresql{{ prev }}-llvmjit
+          - percona-postgresql{{ prev }}-plperl
+          - percona-postgresql{{ prev }}-plpython
+          - percona-postgresql{{ prev }}-pltcl
+          - percona-postgresql{{ prev }}-server
+          - percona-postgresql{{ prev }}-test
+          - percona-postgresql{{ prev }}-debuginfo
+          - percona-postgresql{{ prev }}-debugsource
+          - percona-postgresql{{ prev }}-devel-debuginfo
+          - percona-postgresql{{ prev }}-libs-debuginfo
+          - percona-postgresql{{ prev }}-plperl-debuginfo
+          - percona-postgresql{{ prev }}-plpython-debuginfo
+          - percona-postgresql{{ prev }}-plpython3-debuginfo
+          - percona-postgresql{{ prev }}-pltcl-debuginfo
+          - percona-postgresql{{ prev }}-server-debuginfo
+{% if major >= 15 %}
+      ignore_errors: true
+{% endif %}
+      when: ansible_os_family == "RedHat"
+
+{% if major >= 15 %}
+    # - name: remove pgaudit deb packages
+    #   apt:
+    #     name: percona-postgresql-{{ prev }}-pgaudit
+    #     state: absent
+    #   when: ansible_os_family == "Debian"
+
+    # - name: remove pg_repack deb packages
+    #   apt:
+    #     name: "{{ v }} packages {{ w }}"
+    #     state: absent
+    #   vars:
+    #     packages:
+    #       - percona-postgresql-{{ prev }}-repack
+    #       - percona-postgresql-{{ prev }}-repack-dbgsym
+    #   when: ansible_os_family == "Debian"
+{% else %}
+    - name: remove pgaudit deb packages
+      apt:
+        name: percona-postgresql-{{ prev }}-pgaudit
+        state: absent
+      when: ansible_os_family == "Debian"
+
+    - name: remove pg_repack deb packages
+      apt:
+        name: "{{ v }} packages {{ w }}"
+        state: absent
+      vars:
+        packages:
+          - percona-postgresql-{{ prev }}-repack
+          - percona-postgresql-{{ prev }}-repack-dbgsym
+      when: ansible_os_family == "Debian"
+{% endif %}
+
+    - name: remove pg_repack rpm packages
+      yum:
+        name: percona-pg_repack{{ prev }}
+        state: absent
+{% if major >= 15 %}
+      ignore_errors: true
+{% endif %}
+      when: ansible_os_family == "RedHat"
+{% endif %}

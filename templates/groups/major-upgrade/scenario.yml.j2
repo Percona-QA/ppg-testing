@@ -1,0 +1,84 @@
+os_list: all
+name_pattern: '{token}-{build}-{job}'
+aws:
+  size: large
+  subnet: aws2
+cleanup: shared
+verifier:
+  testinfra:
+    directory: ../../../tests/tests_{{ 'psp' if flavor == 'psp' else 'ppg' }}
+    markers:
+    - upgrade
+sequences:
+  destroy:
+  - destroy
+  test:
+  - destroy
+  - create
+  - prepare
+  - converge
+  - verify
+  - cleanup
+  - destroy
+  cleanup:
+  - cleanup
+overrides:
+  debian-12:
+    aws:
+      size: small
+  debian-12-arm:
+    aws:
+      size: small
+{% for os in ['debian-13', 'debian-13-arm'] %}
+  {{ os }}:
+{% if flavor != 'psp' %}
+    cleanup: per-family
+{% endif %}
+    aws:
+      size: small
+    sequences:
+      destroy:
+      - destroy
+      test:
+      - destroy
+      - create
+      - prepare
+      - converge
+      - verify
+      - destroy
+      cleanup:
+      - cleanup
+{% endfor %}
+  rhel-10:
+    billing_tag: jenkins-pg-molecule-rhel
+  rhel-10-arm:
+    billing_tag: jenkins-pg-molecule-rhel
+  rhel-8:
+    billing_tag: jenkins-pg-molecule-rhel
+  rhel-8-arm:
+    billing_tag: jenkins-pg-molecule-rhel
+  rhel-9:
+    billing_tag: jenkins-pg-molecule-rhel
+  rhel-9-arm:
+    billing_tag: jenkins-pg-molecule-rhel
+  ubuntu-jammy:
+{% if flavor != 'psp' %}
+    cleanup: per-family
+{% endif %}
+    aws:
+      size: small
+  ubuntu-jammy-arm:
+    aws:
+      size: small
+  ubuntu-noble:
+    aws:
+      size: small
+  ubuntu-noble-arm:
+    aws:
+      size: small
+  ubuntu-resolute:
+    aws:
+      size: small
+  ubuntu-resolute-arm:
+    aws:
+      size: small
