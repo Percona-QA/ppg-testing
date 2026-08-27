@@ -1,0 +1,91 @@
+os_list: all
+name_pattern: '{token}-{build}-{job}'
+aws:
+  size: large
+  subnet: aws2
+cleanup: shared
+verifier:
+  testinfra:
+    directory: ../../../tests/tests_psp
+    markers:
+    - upgrade
+sequences:
+  destroy:
+  - destroy
+  test:
+  - destroy
+  - create
+  - prepare
+  - converge
+  - verify
+  - cleanup
+  - destroy
+  cleanup:
+  - cleanup
+overrides:
+  debian-12:
+    aws:
+      size: small
+  debian-12-arm:
+    aws:
+      size: small
+  debian-13:
+    aws:
+      size: small
+    sequences:
+      destroy:
+      - destroy
+      test:
+      - destroy
+      - create
+      - prepare
+      - converge
+      - verify
+      - destroy
+      cleanup:
+      - cleanup
+  debian-13-arm:
+    aws:
+      size: small
+    sequences:
+      destroy:
+      - destroy
+      test:
+      - destroy
+      - create
+      - prepare
+      - converge
+      - verify
+      - destroy
+      cleanup:
+      - cleanup
+  rhel-10:
+    billing_tag: jenkins-pg-molecule-rhel
+  rhel-10-arm:
+    billing_tag: jenkins-pg-molecule-rhel
+  rhel-8:
+    billing_tag: jenkins-pg-molecule-rhel
+  rhel-8-arm:
+    billing_tag: jenkins-pg-molecule-rhel
+  rhel-9:
+    billing_tag: jenkins-pg-molecule-rhel
+  rhel-9-arm:
+    billing_tag: jenkins-pg-molecule-rhel
+  ubuntu-jammy:
+    aws:
+      size: small
+  ubuntu-jammy-arm:
+    aws:
+      size: small
+  ubuntu-noble:
+    aws:
+      size: small
+  ubuntu-noble-arm:
+    aws:
+      size: small
+  ubuntu-resolute:
+    aws:
+      size: small
+  ubuntu-resolute-arm:
+    aws:
+      size: small

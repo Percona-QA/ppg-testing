@@ -1,0 +1,20 @@
+os_list: all
+name_pattern: tde-core-{token}-{build}
+aws:
+  size: mxlarge
+  subnet: aws2
+  volume_size: 100
+billing_tag: jenkins-pg-worker
+cleanup: none
+verifier: ansible
+sequences:
+  destroy:
+  - destroy
+  test:
+  - destroy
+  - create
+  - prepare
+  - converge
+  - destroy
+  cleanup:
+  - cleanup

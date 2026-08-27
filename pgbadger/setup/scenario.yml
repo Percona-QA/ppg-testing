@@ -1,0 +1,25 @@
+scenarios:
+  amd:
+    os: ubuntu-jammy
+  arm:
+    os: ubuntu-jammy-arm
+name_pattern: pgbadger-U22-{scenario}-{build}
+aws:
+  size: small
+  subnet: aws2
+cleanup: none
+verifier:
+  testinfra:
+    directory: ../../tests/
+sequences:
+  destroy:
+  - destroy
+  test:
+  - destroy
+  - create
+  - prepare
+  - converge
+  - verify
+  - destroy
+  cleanup:
+  - cleanup

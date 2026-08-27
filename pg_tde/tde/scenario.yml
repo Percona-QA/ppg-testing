@@ -1,0 +1,11 @@
+name_pattern: "pgtde-{token}-{build}"
+verifier: ansible
+cleanup: none
+os_list: all
+aws:
+  size: xlarge
+  subnet: aws2
+sequences:
+  destroy: [destroy]
+  cleanup: [cleanup]
+  test: [destroy, create, prepare, converge, destroy]

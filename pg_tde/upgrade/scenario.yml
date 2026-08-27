@@ -1,0 +1,18 @@
+os_list: all
+name_pattern: tde-upgrade-{token}-{build}
+aws:
+  size: xlarge
+  subnet: aws2
+cleanup: none
+verifier: ansible
+sequences:
+  destroy:
+  - destroy
+  test:
+  - destroy
+  - create
+  - prepare
+  - converge
+  - destroy
+  cleanup:
+  - cleanup

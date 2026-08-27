@@ -1,0 +1,22 @@
+scenarios:
+  amd:
+    os: ubuntu-noble
+  arm:
+    os: ubuntu-noble-arm
+name_pattern: pgvector-unoble-{scenario}-{build}
+aws:
+  size: xlarge
+  subnet: aws2
+cleanup: none
+verifier: ansible
+sequences:
+  destroy:
+  - destroy
+  test:
+  - destroy
+  - create
+  - prepare
+  - converge
+  - destroy
+  cleanup:
+  - cleanup
