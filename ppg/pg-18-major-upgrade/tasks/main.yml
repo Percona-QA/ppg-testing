@@ -25,8 +25,8 @@
 - name: End play on Debian 13
   meta: end_play
   when: ansible_distribution == "Debian" and
-   ansible_distribution_major_version == "13" and
-   pg_version_to_install | string is version('17.6', '<=', strict=True)
+    ansible_distribution_major_version == "13" and
+    pg_version_to_install | string is version('17.6', '<=', strict=True)
 
 - name: Setup initial (old) repository
   command: percona-release enable {{ pg_version }} {{ repo }}
