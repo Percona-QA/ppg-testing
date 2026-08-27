@@ -1,0 +1,98 @@
+---
+- name: Cleanup
+  hosts: all
+  become: true
+  become_method: sudo
+  tasks:
+    - name: Remove extension and add-on packages first
+      apt:
+        name: "{{ '{{' }} packages {{ '}}' }}"
+        state: absent
+      vars:
+        packages:
+          - percona-postgresql-{{ major }}-pgaudit
+          - percona-postgresql-{{ major }}-repack
+          - percona-postgresql-{{ major }}-repack-dbgsym
+          - percona-pgaudit{{ major }}-set-user
+          - percona-pgaudit{{ major }}-set-user-dbgsym
+          - percona-postgresql-{{ major }}-wal2json
+          - percona-postgresql-{{ major }}-wal2json-dbgsym
+          - percona-pg-stat-monitor{{ major }}
+          - percona-pg-stat-monitor{{ major }}-dbgsym
+{% if major >= 18 %}
+          - percona-pg-tde{{ major }}
+          - percona-pg-tde{{ major }}-client
+          - percona-pg-tde{{ major }}-dbgsym
+          - percona-pgpool2
+          - percona-pgpool2-dbgsym
+          - libpgpool2
+          - percona-postgresql-{{ major }}-cron
+          - percona-postgresql-{{ major }}-pgvector
+          - percona-postgresql-{{ major }}-pgvector-dbgsym
+          - percona-pg-oidc-validator{{ major }}
+          - percona-pg-oidc-validator{{ major }}-dbgsym
+          - percona-postgis
+          - percona-postgresql-postgis-scripts
+          - percona-postgresql-{{ major }}-postgis-3-scripts
+          - percona-pg-gather
+{% endif %}
+          - percona-pgbackrest
+          - percona-pgbackrest-doc
+          - percona-patroni
+          - percona-patroni-dbgsym
+{% if major >= 18 %}
+          - percona-patroni-doc
+{% endif %}
+          - percona-pgbadger
+          - percona-pgbouncer
+          - percona-pgbouncer-dbgsym
+      when: ansible_os_family == "Debian"
+
+    - name: Remove core PostgreSQL deb packages
+      apt:
+        name: "{{ '{{' }} packages {{ '}}' }}"
+        state: absent
+      vars:
+        packages:
+{% if flavor != 'psp' %}
+          - percona-postgresql
+{% endif %}
+          - percona-postgresql-{{ major }}
+          - percona-postgresql-all
+{% if flavor != 'psp' %}
+          - percona-postgresql-client
+{% endif %}
+          - percona-postgresql-client-{{ major }}
+          - percona-postgresql-contrib
+          - percona-postgresql-doc
+          - percona-postgresql-doc-{{ major }}
+          - percona-postgresql-plperl-{{ major }}
+          - percona-postgresql-plpython3-{{ major }}
+          - percona-postgresql-pltcl-{{ major }}
+          - percona-postgresql-server-dev-{{ major }}
+          - percona-postgresql-server-dev-all
+          - percona-postgresql-{{ major }}-dbgsym
+          - percona-postgresql-client-{{ major }}-dbgsym
+          - percona-postgresql-plperl-{{ major }}-dbgsym
+          - percona-postgresql-plpython3-{{ major }}-dbgsym
+          - percona-postgresql-pltcl-{{ major }}-dbgsym
+      when: ansible_os_family == "Debian"
+
+    - name: Remove postgresql Debian developer packages
+      apt:
+        name: "{{ '{{' }} packages {{ '}}' }}"
+        state: absent
+      vars:
+        packages:
+        - libecpg-compat3
+        - libecpg-compat3-dbgsym
+        - libecpg-dev-dbgsym
+        - libecpg-dev
+        - libecpg6-dbgsym
+        - libecpg6
+        - libpgtypes3
+        - libpgtypes3-dbgsym
+        - libpq-dev
+        - libpq5-dbgsym
+        - libpq5
+      when: ansible_os_family == "Debian"

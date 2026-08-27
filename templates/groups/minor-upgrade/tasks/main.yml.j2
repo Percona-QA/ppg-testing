@@ -1,0 +1,359 @@
+{% import '_shared.j2' as s %}
+{% set v = '{{' %}{% set w = '}}' %}
+---
+{% if flavor == 'psp' %}
+# Minor upgrade test: PPG-{{ major }} -> PSP-{{ major }}.
+#
+# Same PostgreSQL major version ({{ major }}) on both sides — this is a repo/package
+# swap, not a pg_upgrade, exactly like pg-{{ major }}-minor-upgrade. The one PSP delta:
+# after the package refresh, install pg_tde on top via the shared
+# install_psp{{ major }}_tde.yml (install_ppg{{ major }}_tools.yml already ran below, so the
+# full extension set it expects in shared_preload_libraries is present).
+
+{% endif %}
+- name: Configure repository
+  include_tasks: ../../../tasks/install_percona_release.yml
+
+- name: Setting facts so that they will be persisted in the fact cache
+  ansible.builtin.set_fact:
+{% if flavor == 'psp' %}
+    pg_version_to_install: "{{ v }} lookup('env', 'FROM_VERSION') | regex_replace('^(?:ppg|psp)-', '') {{ w }}"
+    upgrade_to_pg_version: "{{ v }} lookup('env', 'VERSION') | regex_replace('^(?:ppg|psp)-', '') {{ w }}"
+    # psp only ships one repo per major version (psp-{{ major }}), no psp-{{ major }}.xx minor
+    # repos exist, unlike ppg (ppg-{{ major }}.14 etc.) — trim the minor for psp only.
+    to_repo_version: "{{ v }} lookup('env', 'VERSION').split('.')[0] if lookup('env', 'VERSION').startswith('psp-') else lookup('env', 'VERSION') {{ w }}"
+{% else %}
+    pg_version_to_install: "{{ v }} lookup('env', 'FROM_VERSION') | replace('ppg-','') {{ w }}"
+{% if upgrade_to_fact | default(true) %}
+    upgrade_to_pg_version: "{{ v }} lookup('env', 'VERSION') | replace('ppg-','') {{ w }}"
+{% endif %}
+{% endif %}
+
+{{ gates_text }}
+
+- name: Setup initial (old) repository
+  command: percona-release enable {{ v }} pg_version {{ w }} {{ v }} repo {{ w }}
+  vars:
+    repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
+    pg_version: "{{ v }} lookup('env', 'FROM_VERSION') {{ w }}"
+
+- name: install Percona Platform for PostgreSQL {{ major }} packages
+  include_tasks: ../../../../tasks/install_ppg{{ major }}.yml
+
+{{ s.init_postgres_rhel(major) }}
+
+- name: Install PPG tools
+  include_tasks: ../../../../tasks/install_ppg{{ major }}_tools.yml
+
+{{ s.start_postgres_rhel(major) }}
+
+- name: Start postgresql service for Debian based
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: started
+  when: ansible_os_family == "Debian"
+
+- name: Seed data-integrity baseline before upgrade
+  include_tasks: ../../../../tasks/seed_data_integrity.yml
+
+- name: Disable old repository
+  command: percona-release disable {{ v }} pg_version {{ w }} {{ v }} repo {{ w }}
+  vars:
+    repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
+    pg_version: "{{ v }} lookup('env', 'FROM_VERSION') {{ w }}"
+
+{% if flavor == 'psp' %}
+- name: Setup new repository
+  command: percona-release enable {{ v }} to_repo_version {{ w }} {{ v }} repo {{ w }}
+  vars:
+    repo: "{{ v }} lookup('env', 'TO_REPO') {{ w }}"
+{% else %}
+- name: Setup new repository
+  command: percona-release enable {{ v }} pg_version {{ w }} {{ v }} repo {{ w }}
+  vars:
+    repo: "{{ v }} lookup('env', 'TO_REPO') {{ w }}"
+    pg_version: "{{ v }} lookup('env', 'VERSION') {{ w }}"
+{% endif %}
+
+{% if extra_repo_refresh | default(false) %}
+- name: Update apt cache
+  apt:
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: Disable postgresql DNF module on RHEL/Rocky/OL
+  command: dnf module disable postgresql -y
+  ignore_errors: true
+  when: ansible_os_family == "RedHat"
+
+{% endif %}
+{% if telemetry_comment | default('short') != 'none' %}
+# percona-pg-telemetry{{ major }} is listed explicitly (it's otherwise only pulled in
+# as a weak dependency/Recommends of the server package) so that this
+# post-repo-switch install actually upgrades it too -- an already-installed
+# package satisfying an unversioned Recommends is not otherwise re-resolved
+{% if telemetry_comment | default('short') == 'extended' %}
+# to a newer version by apt/dnf. This step is inlined (rather than reusing
+# tasks/install_ppg{{ major }}.yml, as it did before) so that change doesn't also
+# affect that shared file's other callers (ppg/pg-{{ major }}, ppg/pg-{{ major + 1 }}-major-upgrade).
+{% else %}
+# to a newer version by apt/dnf.
+{% endif %}
+{% endif %}
+- name: install Percona Platform for PostgreSQL deb packages
+  apt:
+    name: "{{ v }} packages {{ w }}"
+    update_cache: yes
+    state: latest
+  vars:
+    packages:
+      - percona-postgresql
+      - percona-postgresql-{{ major }}
+      - percona-postgresql-all
+      - percona-postgresql-client
+      - percona-postgresql-client-{{ major }}
+      - percona-postgresql-common
+      - percona-postgresql-contrib
+      - percona-postgresql-doc
+      - percona-postgresql-doc-{{ major }}
+{% if telemetry_comment | default('short') != 'none' %}
+      - percona-pg-telemetry{{ major }}
+{% endif %}
+      - percona-postgresql-plperl-{{ major }}
+      - percona-postgresql-plpython3-{{ major }}
+      - percona-postgresql-pltcl-{{ major }}
+      - percona-postgresql-server-dev-{{ major }}
+      - {{ dev_pkg_deb | default('percona-postgresql-server-dev-all') }}
+      - percona-postgresql-{{ major }}-dbgsym
+      - percona-postgresql-client-{{ major }}-dbgsym
+      - percona-postgresql-plperl-{{ major }}-dbgsym
+      - percona-postgresql-plpython3-{{ major }}-dbgsym
+      - percona-postgresql-pltcl-{{ major }}-dbgsym
+      - postgresql-client-common
+      - postgresql-common
+
+  when: ansible_os_family == "Debian"
+  environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+{% if plpython3_extra | default(true) %}
+- name: install Percona Platform for PostgreSQL deb packages
+  apt:
+    name: "{{ v }} packages {{ w }}"
+    update_cache: yes
+    state: latest
+  vars:
+    packages:
+    - percona-postgresql-plpython3-{{ major }}
+    - percona-postgresql-plpython3-{{ major }}-dbgsym
+  when:
+    - ansible_os_family == "Debian"
+
+{% endif %}
+{% if tde | default(false) and major >= 18 %}
+- name: Install pg_tde packages RHEL
+  yum:
+    name: "{{ v }} packages {{ w }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+    - percona-pg_tde{{ major }}
+    - percona-pg_tde{{ major }}-devel
+    - percona-pg_tde{{ major }}-debugsource
+    - percona-pg_tde{{ major }}-debuginfo
+  when: ansible_os_family == "RedHat"
+
+- name: Install pg_tde packages Debian
+  apt:
+    name: "{{ v }} packages {{ w }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+    - percona-pg-tde{{ major }}
+    - percona-pg-tde{{ major }}-client
+    - percona-pg-tde{{ major }}-dbgsym
+  when: ansible_os_family == "Debian"
+
+{% endif %}
+{% if remove_conflicting_dev | default(none) %}
+#Remove conflicting package to make installation move on
+- name: Remove conflicting percona-postgresql-common-dev
+  ansible.builtin.package:
+    name: percona-postgresql-common-dev
+    state: absent
+  when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('{{ remove_conflicting_dev }}', '>=', strict=True))
+
+{% endif %}
+- name: install Percona Platform for PostgreSQL rpm packages for RHEL
+  yum:
+    name: "{{ v }} packages {{ w }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+        - percona-postgresql-client-common
+        - percona-postgresql-common
+        - percona-postgresql{{ major }}
+{% if telemetry_comment | default('short') != 'none' %}
+        - percona-pg-telemetry{{ major }}
+{% endif %}
+        - percona-postgresql{{ major }}-contrib
+        - percona-postgresql{{ major }}-debuginfo
+        - percona-postgresql{{ major }}-devel
+        - percona-postgresql{{ major }}-docs
+        - percona-postgresql{{ major }}-libs
+        - percona-postgresql{{ major }}-llvmjit
+        - percona-postgresql{{ major }}-plpython3
+        - percona-postgresql{{ major }}-plperl
+        - percona-postgresql{{ major }}-pltcl
+        - percona-postgresql{{ major }}-server
+        - percona-postgresql{{ major }}-test
+        - percona-postgresql{{ major }}-contrib-debuginfo
+        - percona-postgresql{{ major }}-debuginfo
+        - percona-postgresql{{ major }}-debugsource
+        - percona-postgresql{{ major }}-devel-debuginfo
+        - percona-postgresql{{ major }}-libs-debuginfo
+        - percona-postgresql{{ major }}-plperl-debuginfo
+        - percona-postgresql{{ major }}-pltcl-debuginfo
+        - percona-postgresql{{ major }}-plpython3-debuginfo
+        - percona-postgresql{{ major }}-server-debuginfo
+{% if major >= 18 %}
+        - percona-postgresql-common-dev
+{% endif %}
+  when: ansible_os_family == "RedHat"
+  environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+{% if dev_switch_active | default(true) %}
+- name: Determine required PostgreSQL dev package for RHEL
+  set_fact:
+    pg_dev_package: >-
+      {{ v }} 'percona-postgresql-server-dev-all'
+         if ({{ dev_switch_var | default('upgrade_to_pg_version') }} | string is version('{{ dev_switch_cutoff }}', '<=', strict=True))
+         else 'percona-postgresql-common-dev' {{ w }}
+  when: ansible_os_family == "RedHat"
+
+- name: Install PostgreSQL dev package on RHEL
+  yum:
+    name: "{{ v }} pg_dev_package {{ w }}"
+    state: latest
+    update_cache: yes
+  when: ansible_os_family == "RedHat"
+
+{% else %}
+# - name: Determine required PostgreSQL dev package for RHEL
+#   set_fact:
+#     pg_dev_package: >-
+#       {{ v }} 'percona-postgresql-server-dev-all'
+#          if (upgrade_to_pg_version | string is version('{{ dev_switch_cutoff }}', '<=', strict=True))
+#          else 'percona-postgresql-common-dev' {{ w }}
+#   when: ansible_os_family == "RedHat"
+
+# - name: Install PostgreSQL dev package on RHEL
+#   yum:
+#     name: "{{ v }} pg_dev_package {{ w }}"
+#     state: latest
+#     update_cache: yes
+#   when: ansible_os_family == "RedHat"
+
+{% endif %}
+{% if tde | default(false) and major < 18 %}
+- name: Install pg_tde packages RHEL
+  yum:
+    name: "{{ v }} packages {{ w }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+    - percona-pg_tde{{ major }}
+    - percona-pg_tde{{ major }}-devel
+    - percona-pg_tde{{ major }}-debugsource
+    - percona-pg_tde{{ major }}-debuginfo
+  when: ansible_os_family == "RedHat"
+
+- name: Install pg_tde packages Debian
+  apt:
+    name: "{{ v }} packages {{ w }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+    - percona-pg-tde{{ major }}
+    - percona-pg-tde{{ major }}-client
+    - percona-pg-tde{{ major }}-dbgsym
+  when: ansible_os_family == "Debian"
+
+{% endif %}
+{% if dev_singles_commented | default(false) %}
+# - name: Install postgresql-server-dev-all RHEL
+#   yum:
+#     name: "{{ v }} packages {{ w }}"
+#     state: latest
+#     update_cache: yes
+#   vars:
+#     packages:
+#     - percona-postgresql-server-dev-all
+#   when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('{{ major }}.4', '<=', strict=True))
+
+# - name: Install postgresql-common-dev RHEL
+#   yum:
+#     name: "{{ v }} packages {{ w }}"
+#     state: latest
+#     update_cache: yes
+#   vars:
+#     packages:
+#     - percona-postgresql-common-dev
+#   when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('{{ major }}.5', '>=', strict=True))
+
+{% endif %}
+{% if stop_pause | default(true) %}
+- name: Stop postgresql service for RHEL based
+  service:
+    name: postgresql-{{ major }}
+    state: stopped
+  when: ansible_os_family == "RedHat"
+
+- name: Stop postgresql service for Debian based
+  service:
+    name: postgresql
+    state: stopped
+  when: ansible_os_family == "Debian"
+
+- pause:
+    minutes: 1
+
+{% endif %}
+- name: Start postgresql service for RHEL based
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql-{{ major }}
+    svc_state: started
+  when: ansible_os_family == "RedHat"
+
+- name: Start postgresql service for Debian based
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: started
+  when: ansible_os_family == "Debian"
+
+{% if flavor == 'psp' %}
+- name: Install pg_tde packages (PSP-only component)
+  include_tasks: ../../../../tasks/install_psp{{ major }}_tde.yml
+
+{% endif %}
+- name: Display ppg version
+  become_user: postgres
+  shell: psql -c "select version()"
+  register: results
+
+- debug: var=results.stdout_lines
+
+{% if telemetry_upgrade_verify | default(true) %}
+# =========Telemetry weak-dependency upgrade verification
+- name: Verify telemetry weak-dependency survived the upgrade
+  include_tasks: ../../../tasks/verify_telemetry_upgrade.yml
+{% endif %}

@@ -1,0 +1,65 @@
+---
+- name: Cleanup
+  hosts: all
+  become: true
+  become_method: sudo
+  tasks:
+    - name: remove Postgresql rpm packages
+      yum:
+        name: "{{ '{{' }} packages {{ '}}' }}"
+        state: absent
+      vars:
+        packages:
+          - percona-postgresql{{ major }}
+          - percona-postgresql-client-common
+          - percona-postgresql-common
+          - percona-postgresql-server-dev-all
+          - percona-postgresql{{ major }}
+          - percona-postgresql{{ major }}-contrib
+          - percona-postgresql{{ major }}-debuginfo
+          - percona-postgresql{{ major }}-devel
+          - percona-postgresql{{ major }}-docs
+          - percona-postgresql{{ major }}-libs
+          - percona-postgresql{{ major }}-llvmjit
+          - percona-postgresql{{ major }}-plperl
+          - percona-postgresql{{ major }}-plpython
+          - percona-postgresql{{ major }}-pltcl
+          - percona-postgresql{{ major }}-server
+          - percona-postgresql{{ major }}-test
+          - percona-postgresql{{ major }}-debuginfo
+          - percona-postgresql{{ major }}-debugsource
+          - percona-postgresql{{ major }}-devel-debuginfo
+          - percona-postgresql{{ major }}-libs-debuginfo
+          - percona-postgresql{{ major }}-plperl-debuginfo
+          - percona-postgresql{{ major }}-plpython3-debuginfo
+          - percona-postgresql{{ major }}-pltcl-debuginfo
+          - percona-postgresql{{ major }}-server-debuginfo
+          - percona-pgbadger
+          - percona-pgbouncer
+          - percona-pgaudit{{ major }}_set_user
+          - percona-wal2json{{ major }}
+      when: ansible_os_family == "RedHat"
+
+    - name: remove pgaudit rpm packages
+      yum:
+        name: percona-pgaudit
+        state: absent
+      when: ansible_os_family == "RedHat"
+
+    - name: remove pg_repack rpm packages
+      yum:
+        name: percona-pg_repack{{ major }}
+        state: absent
+      when: ansible_os_family == "RedHat"
+
+    - name: remove pgbackrest rpm packages
+      yum:
+        name: percona-pgbackrest
+        state: absent
+      when: ansible_os_family == "RedHat"
+
+    - name: remove patroni rpm packages
+      yum:
+        name: percona-patroni
+        state: absent
+      when: ansible_os_family == "RedHat"
