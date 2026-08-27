@@ -16,14 +16,14 @@
 - name: End play on Ubuntu 24
   meta: end_play
   when: ansible_distribution == "Ubuntu" and
-   ansible_distribution_major_version == "24" and
-   pg_version_to_install | string is version('16.2', '<=', strict=True)
+    ansible_distribution_major_version == "24" and
+    pg_version_to_install | string is version('16.2', '<=', strict=True)
 
 - name: End play on Debian 13
   meta: end_play
   when: ansible_distribution == "Debian" and
-   ansible_distribution_major_version == "13" and
-   pg_version_to_install | string is version('16.10', '<=', strict=True)
+    ansible_distribution_major_version == "13" and
+    pg_version_to_install | string is version('16.10', '<=', strict=True)
 
 - name: Setup initial (old) repository
   command: percona-release enable {{ pg_version }} {{ repo }}
@@ -214,8 +214,7 @@
   shell: psql -c "select version()"
   register: results
 
-- debug:
-      var: results.stdout
+- debug: var=results.stdout_lines
 
 # =========Telemetry weak-dependency upgrade verification
 - name: Verify telemetry weak-dependency survived the upgrade

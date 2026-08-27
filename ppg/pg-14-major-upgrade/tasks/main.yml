@@ -25,26 +25,26 @@
 - name: End play on rocky linux 9
   meta: end_play
   when: ansible_os_family == "RedHat" and
-   ansible_distribution_major_version == "9" and
-   pg_version_to_install | string is version('13.9', '<=', strict=True)
+    ansible_distribution_major_version == "9" and
+    pg_version_to_install | string is version('13.9', '<=', strict=True)
 
 - name: End play on Debian 12
   meta: end_play
   when: ansible_os_family == "Debian" and
-   ansible_distribution_major_version == "12" and
-   pg_version_to_install | string is version('13.11', '<=', strict=True)
+    ansible_distribution_major_version == "12" and
+    pg_version_to_install | string is version('13.11', '<=', strict=True)
 
 - name: End play on Debian 13
   meta: end_play
   when: ansible_distribution == "Debian" and
-   ansible_distribution_major_version == "13" and
-   pg_version_to_install | string is version('13.22', '<=', strict=True)
+    ansible_distribution_major_version == "13" and
+    pg_version_to_install | string is version('13.22', '<=', strict=True)
 
 - name: End play on Ubuntu 24
   meta: end_play
   when: ansible_distribution == "Ubuntu" and
-   ansible_distribution_major_version == "24" and
-   pg_version_to_install | string is version('13.14', '<=', strict=True)
+    ansible_distribution_major_version == "24" and
+    pg_version_to_install | string is version('13.14', '<=', strict=True)
 
 - name: Setup initial (old) repository
   command: percona-release enable {{ pg_version }} {{ repo }}
