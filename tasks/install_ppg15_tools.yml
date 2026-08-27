@@ -580,7 +580,6 @@
       (ansible_os_family == "Debian" and ansible_lsb.major_release|int <= 11) or
       (ansible_os_family == "Debian" and pg_version_to_install | string is version('15.7', '>=', strict=True))
 
-
   - name: Install patroni related packages Debian
     apt:
       name: "{{ packages }}"
