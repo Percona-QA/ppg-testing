@@ -40,7 +40,6 @@
         - libzstd-dev
         - bzip2
         - libbz2-dev
-#        - libsharyanto-string-util-perl
         - libipc-run-perl
         - libtext-csv-xs-perl
         - python3-systemd
@@ -220,11 +219,6 @@
       state: latest
       update_cache: yes
     when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "9"
-
-  # - name: Install python3 module - patroni[etcd]
-  #   become: true
-  #   command: python3 -m pip install patroni[etcd]
-  #   when: ansible_os_family == "RedHat"
 
   - name: Install patroni debian
     apt:
@@ -441,18 +435,6 @@
         - percona-pg-gather
     when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('15.4', '>=', strict=True))
 
-  # - name: Add extensions to postgresql.conf for Debian
-  #   lineinfile:
-  #     path: /etc/postgresql/15/main/postgresql.conf
-  #     line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
-  #   when: ansible_os_family == "Debian"
-
-  # - name: Add extensions to postgresql.conf for RHEL
-  #   lineinfile:
-  #     path: /var/lib/pgsql/15/data/postgresql.conf
-  #     line: shared_preload_libraries = 'pg_stat_monitor, pgaudit, set_user'
-  #   when: ansible_os_family == "RedHat"
-
   - name: Install pg_cron packages RHEL
     yum:
       name: "{{ packages }}"
@@ -599,19 +581,6 @@
       (ansible_os_family == "Debian" and pg_version_to_install | string is version('15.7', '>=', strict=True))
 
 
-  # - name: Install patroni related packages Debian 12
-  #   apt:
-  #     name: "{{ packages }}"
-  #     state: latest
-  #     update_cache: yes
-  #   vars:
-  #     packages:
-  #       - etcd-server
-  #       - etcd-client
-  #       - percona-haproxy
-  #   when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int == 12) and
-  #     pg_version_to_install | string is version('16.2', '<=', strict=True)
-
   - name: Install patroni related packages Debian
     apt:
       name: "{{ packages }}"
@@ -628,25 +597,6 @@
       path: /etc/patroni
       state: directory
 
-  # - name: Check if patroni.yml exists
-  #   ansible.builtin.stat:
-  #     path: /etc/patroni/patroni.yml
-  #   register: patroni_cfg_stat
-  #   become: yes
-
-  # - name: Copy Patroni sample config to active config if not present
-  #   ansible.builtin.copy:
-  #     src: /etc/patroni/patroni.yml.sample
-  #     dest: /etc/patroni/patroni.yml
-  #     remote_src: yes
-  #     owner: postgres
-  #     group: postgres
-  #     mode: '0644'
-  #   become: yes
-  #   when:
-  #     - ansible_os_family == "Debian"
-  #     - not patroni_cfg_stat.stat.exists
-
   - name: Copy postgresql.yml for patroni service Debian
     template:
       src: "{{ role_path }}/../../files/patroni_common/postgresql0_deb.yml.j2"
@@ -655,25 +605,6 @@
       group: postgres
       mode: 0644
     when: ansible_os_family == "Debian"
-
-  # - name: Change systemd Type from notify to simple for Patroni
-  #   ansible.builtin.replace:
-  #     path: /usr/lib/systemd/system/patroni.service
-  #     regexp: '^Type=notify'
-  #     replace: 'Type=simple'
-  #   become: yes
-  #   when: ansible_os_family == "Debian"
-
-  # - name: Reload systemd daemon
-  #   ansible.builtin.command: systemctl daemon-reload
-  #   become: yes
-  #   when: ansible_os_family == "Debian"
-
-  # - name: Start patroni
-  #   service:
-  #     name: patroni
-  #     state: started
-  #     enabled: yes
 
   - name: Enable and start patroni with wait RHEL
     include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
@@ -886,14 +817,6 @@
       groups: sudo
       append: yes
     when: ansible_os_family == "Debian"
-
-  # - name: Remove dpkg package if present on RedHat
-  #   yum:
-  #     name: dpkg
-  #     state: absent
-  #   ignore_errors: true
-  #   when: ansible_os_family == "RedHat" and
-  #     (ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9")
 
   - name: Pause for 1 minutes
     ansible.builtin.pause:
