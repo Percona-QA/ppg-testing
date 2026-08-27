@@ -1,0 +1,33 @@
+{%- macro render_params(params) %}
+{%- for p in params %}
+{%- if p.kind == 'choice' %}
+        choice(
+            name: '{{ p.name }}',
+            description: {{ p.quote }}{{ p.description }}{{ p.quote }},
+{%- if p.special == 'platform_choice' %}
+            choices: ppgOperatingSystemsALL()
+{%- else %}
+            choices: [
+{%- for c in p.choices %}
+                '{{ c }}'{{ "," if not loop.last }}
+{%- endfor %}
+            ]
+{%- endif %}
+        )
+{%- elif p.kind == 'string' %}
+        string(
+            defaultValue: '{{ p.default }}',
+            description: {{ p.quote }}{{ p.description }}{{ p.quote }},
+            name: '{{ p.name }}'
+        )
+{%- elif p.kind == 'boolean' %}
+        booleanParam(
+            name: '{{ p.name }}',
+{%- if p.default is defined %}
+            defaultValue: {{ "true" if p.default else "false" }},
+{%- endif %}
+            description: {{ p.quote }}{{ p.description }}{{ p.quote }}
+        )
+{%- endif %}
+{%- endfor %}
+{%- endmacro %}

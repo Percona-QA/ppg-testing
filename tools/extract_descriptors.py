@@ -173,6 +173,22 @@ def canon(value):
     return json.dumps(value, sort_keys=True)
 
 
+def merge_preserved(desc, existing):
+    """merge extracted render keys (desc) with unknown top-level keys from
+    existing scenario.yml (params, jenkins, ...) -- extracted keys win."""
+    out = dict(desc)
+    for key, value in (existing or {}).items():
+        if key not in out:
+            out[key] = value
+    return out
+
+
+def canonical_text(desc):
+    """the single serialization used everywhere a scenario.yml gets written,
+    so --write output and idempotence checks can never drift apart."""
+    return yaml.safe_dump(desc, sort_keys=False, default_flow_style=False)
+
+
 def process_group(group_dir, notes):
     rel = str(group_dir.relative_to(REPO))
     names = scenario_dirs(group_dir)
@@ -390,19 +406,15 @@ def main():
             continue
 
         target = g / "scenario.yml"
-        if rel == "pg_tde/tde":
-            existing = yaml.safe_load(target.read_text())
-            if existing == desc:
-                print("%s: matches existing hand-written descriptor" % rel)
-            else:
-                print("%s: MISMATCH with existing hand-written descriptor -- extractor bug, "
-                      "leaving file alone" % rel)
-                print("  existing: %r" % existing)
-                print("  extracted: %r" % desc)
-            continue
+
+        # preserve top-level keys the extractor doesn't know about (params,
+        # jenkins, ...) -- it only owns the render keys.
+        if target.exists():
+            existing = yaml.safe_load(target.read_text()) or {}
+            desc = merge_preserved(desc, existing)
 
         if args.write:
-            target.write_text(yaml.safe_dump(desc, sort_keys=False, default_flow_style=False))
+            target.write_text(canonical_text(desc))
             written += 1
 
     print()

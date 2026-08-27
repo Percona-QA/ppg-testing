@@ -1,0 +1,83 @@
+{%- from "_params.groovy.j2" import render_params -%}
+{{ header }}library changelog: false, identifier: "lib@master", retriever: modernSCM([
+    $class: 'GitSCMSource',
+    remote: 'https://github.com/Percona-Lab/jenkins-pipelines.git'
+])
+{%- if slack %}
+
+def sendSlackNotification({{ slack.params | join(", ") }}) {
+    if (currentBuild.result == "SUCCESS") {
+        buildSummary = "Job: ${env.JOB_NAME}\n{% for f in slack.fields %}{{ f.label }}: {{ "${" }}{{ f.param }}{{ "}" }}\n{% endfor %}Status: *SUCCESS*\nBuild Report: ${env.BUILD_URL}"
+        slackSend color: "good", message: "${buildSummary}", channel: '{{ slack.channel }}'
+    } else {
+        buildSummary = "Job: ${env.JOB_NAME}\n{% for f in slack.fields %}{{ f.label }}: {{ "${" }}{{ f.param }}{{ "}" }}\n{% endfor %}Status: *FAILURE*\nBuild number: ${env.BUILD_NUMBER}\nBuild Report :${env.BUILD_URL}"
+        slackSend color: "danger", message: "${buildSummary}", channel: '{{ slack.channel }}'
+    }
+}
+{%- endif %}
+
+pipeline {
+    agent {
+        label 'min-ol-9-x64'
+    }
+    parameters {
+{{- render_params(params) }}
+    }
+    environment {
+        PATH = '/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/ec2-user/.local/bin'
+        MOLECULE_DIR = "{{ molecule_dir }}"
+    }
+    options {
+        withCredentials(moleculeDistributionJenkinsCreds())
+        buildDiscarder(logRotator(
+            daysToKeepStr: '30',
+            numToKeepStr: '100',
+            artifactNumToKeepStr: '10'
+        ))
+        retry(conditions: [agent()], count: 2)
+    }
+    stages {
+        stage('Set build name') {
+            steps {
+                script {
+                    currentBuild.displayName = "{{ display_name }}"
+                }
+            }
+        }
+        stage('Checkout') {
+            steps {
+                deleteDir()
+                git poll: false, branch: TESTING_BRANCH, url: 'https://github.com/Percona-QA/ppg-testing.git'
+            }
+        }
+        stage('Prepare') {
+            steps {
+                script {
+                    installMoleculePython39()
+                    sh "python3 tools/render.py --group {{ render_group }}"
+                }
+            }
+        }
+        stage('Test') {
+            steps {
+                script {
+                    moleculeParallelTestPPG(ppgOperatingSystemsALL(), env.MOLECULE_DIR)
+                }
+            }
+        }
+    }
+    post {
+        always {
+            script {
+                moleculeParallelPostDestroyPPG(ppgOperatingSystemsALL(), env.MOLECULE_DIR)
+{%- if slack %}
+                sendSlackNotification({% for a in slack.args %}env.{{ a }}{{ ", " if not loop.last }}{% endfor %})
+{%- endif %}
+            }
+            archiveArtifacts(
+                artifacts: '{{ artifacts }}',
+                allowEmptyArchive: true
+            )
+        }
+    }
+}

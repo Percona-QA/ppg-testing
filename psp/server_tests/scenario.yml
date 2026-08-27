@@ -16,3 +16,108 @@ sequences:
   - destroy
   cleanup:
   - cleanup
+params:
+- name: PLATFORM
+  kind: choice
+  special: platform_choice
+  description: For which platform (OS) you want to test?
+  flavors:
+  - single
+- name: VERSION
+  kind: string
+  default: '18.4'
+  description: Server PG version for test, including major and minor version, e.g
+    17.4, 17.3
+- name: PERCONA_SERVER_VERSION
+  kind: string
+  default: 18.4.1
+  description: Server PG version for test, including major and minor version, e.g
+    17.6.1
+- name: PSP_REPO
+  kind: string
+  default: https://github.com/percona/postgres
+  description: PSP repo that we want to test, we could also use forked developer repo
+    here.
+- name: PSP_BRANCH
+  kind: string
+  default: PSP_REL_18_STABLE
+  description: PSP repo version/branch/tag to use; e.g main, TDE_REL_17_STABLE
+- name: TESTING_BRANCH
+  kind: string
+  default: main
+  description: Branch for ppg-testing testing repository
+- name: TESTSUITE
+  kind: choice
+  choices:
+  - check-server
+  - check-tde
+  - installcheck-world
+  description: Testsuite to run
+- name: IO_METHOD
+  kind: choice
+  choices:
+  - sync
+  - worker
+  - io_uring
+  description: io_method to use for the server (applicable to pg-18 and onwards only).
+- name: TDE_REPO
+  kind: string
+  default: https://github.com/percona/pg_tde.git
+  description: In case you want to test a different pg_tde repository than the default
+    one.
+- name: TDE_BRANCH
+  kind: string
+  default: main
+  description: Branch for pg_tde repository. Would only be used with check-tde, check-all
+    and installcheck-world testsuites.
+- name: DESTROY_ENV
+  kind: boolean
+  default: true
+  description: Destroy VM after tests
+  flavors:
+  - single
+jenkins:
+  molecule_dir: psp/server_tests
+  artifacts: psp/server_tests/artifacts/**/*.tar.gz
+  jobs:
+    single:
+      job_name: psp-installcheck-world
+      file: psp-installcheck-world
+      display_name: ${env.BUILD_NUMBER}-psp-${env.VERSION}-${env.PLATFORM}-${env.IO_METHOD}-${env.TESTSUITE}
+    parallel:
+      job_name: psp-installcheck-world-parallel
+      file: psp-installcheck-world-parallel
+      display_name: ${env.BUILD_NUMBER}-psp-${env.VERSION}-${env.IO_METHOD}-${env.TESTSUITE}
+      slack:
+        channel: '#postgresql-test'
+        params:
+        - psp_repo
+        - psp_branch
+        - version
+        - testsuite
+        - percona_server_version
+        - io_method
+        - tde_branch
+        args:
+        - PSP_REPO
+        - PSP_BRANCH
+        - VERSION
+        - TESTSUITE
+        - PERCONA_SERVER_VERSION
+        - IO_METHOD
+        - TDE_BRANCH
+        fields:
+        - label: PSP_Repo
+          param: psp_repo
+        - label: PSP_Branch
+          param: psp_branch
+        - label: Version
+          param: version
+        - label: Testsuite
+          param: testsuite
+        - label: Percona_Server_Version
+          param: percona_server_version
+        - label: IO_Method
+          param: io_method
+        - label: TDE_Branch
+          param: tde_branch

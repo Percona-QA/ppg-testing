@@ -17,3 +17,120 @@ sequences:
   - destroy
   cleanup:
   - cleanup
+params:
+- name: PLATFORM
+  kind: choice
+  special: platform_choice
+  description: For which platform (OS) you want to test?
+  flavors:
+  - single
+- name: VERSION
+  kind: string
+  default: ppg-18.4
+  description: Server PG version for test, including major and minor version, e.g
+    17.4, 17.3
+- name: IO_METHOD
+  kind: choice
+  choices:
+  - sync
+  - worker
+  - io_uring
+  description: io_method to use for the server (applicable to pg-18 and onwards only).
+- name: TESTING_BRANCH
+  kind: string
+  default: main
+  description: Branch for ppg-testing testing repository
+- name: INSTALL_FROM_PACKAGES
+  kind: boolean
+  quote: '"'
+  description: Enable if want to install the PSP and pg_tde from the packages, intead
+    of building from sources.
+- name: REPO
+  kind: choice
+  choices:
+  - testing
+  - experimental
+  - release
+  description: Repo for testing. ONLY applicable with INSTALL_FROM_PACKAGES enabled.
+- name: PSP_REPO
+  kind: string
+  default: https://github.com/percona/postgres
+  description: PSP repo that we want to test, we could also use forked developer repo
+    here. NOT applicable with INSTALL_FROM_PACKAGES enabled.
+- name: PSP_BRANCH
+  kind: string
+  default: PSP_REL_18_STABLE
+  description: PSP repo version/branch/tag to use; e.g main, TDE_REL_17_STABLE. NOT
+    applicable with INSTALL_FROM_PACKAGES enabled.
+- name: TDE_REPO
+  kind: string
+  default: https://github.com/percona/pg_tde.git
+  description: pg_tde repo that we want to test, we could also use forked developer
+    repo here. NOT applicable with INSTALL_FROM_PACKAGES enabled.
+- name: TDE_BRANCH
+  kind: string
+  default: release-2.2.0
+  description: TDE repo version/branch/tag to use; e.g main, release-2.1. NOT applicable
+    with INSTALL_FROM_PACKAGES enabled.
+- name: PERCONA_QA_REPO
+  kind: string
+  default: https://github.com/Percona-QA/percona-qa.git
+  description: Repo that contains the percona-qa bash tests scripts.
+- name: PERCONA_QA_BRANCH
+  kind: string
+  default: master
+  description: PERCONA_QA_REPO branch to use.
+- name: SKIP_TESTCASE
+  kind: boolean
+  default: false
+  quote: '"'
+  description: Enable if want to skip some test cases.
+- name: TESTCASE_TO_SKIP
+  kind: string
+  default: ''
+  quote: ''''''''
+  description: "If SKIP_TESTCASE option is enabled, then testcase given here will\
+    \ be ignored. \n            Values should be comma separated."
+- name: DESTROY_ENV
+  kind: boolean
+  default: true
+  description: Destroy VM after tests
+  flavors:
+  - single
+jenkins:
+  molecule_dir: pg_tde/auxiliary
+  artifacts: pg_tde/auxiliary/artifacts/**/*.tar.gz
+  jobs:
+    single:
+      job_name: tde-auxiliary
+      file: tde-auxiliary
+      display_name: ${env.BUILD_NUMBER}-auxiliary-${env.VERSION}-${env.PLATFORM}-${env.IO_METHOD}
+    parallel:
+      job_name: tde-auxiliary-parallel
+      file: tde-auxiliary-parallel
+      display_name: ${env.BUILD_NUMBER}-auxiliary-${env.VERSION}-${env.IO_METHOD}
+      slack:
+        channel: '#postgresql-test'
+        params:
+        - psp_repo
+        - psp_branch
+        - version
+        - io_method
+        - tde_branch
+        args:
+        - PSP_REPO
+        - PSP_BRANCH
+        - VERSION
+        - IO_METHOD
+        - TDE_BRANCH
+        fields:
+        - label: PSP_Repo
+          param: psp_repo
+        - label: PSP_Branch
+          param: psp_branch
+        - label: Version
+          param: version
+        - label: IO_Method
+          param: io_method
+        - label: TDE_Branch
+          param: tde_branch
