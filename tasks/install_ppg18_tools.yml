@@ -634,7 +634,6 @@
       svc_state: restarted
     when: ansible_os_family == "Debian"
 
-
   - name: Install etcd packages RHEL
     yum:
       name: "{{ packages }}"
