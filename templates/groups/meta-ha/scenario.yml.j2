@@ -21,4 +21,5 @@ sequences:
   - destroy
   cleanup:
   - cleanup
+{{ s.server_params(flavor, major, default_version) }}
 {{ s.os_overrides() -}}

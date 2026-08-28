@@ -20,4 +20,5 @@ sequences:
   - converge
   - verify
   - destroy
+{{ s.upgrade_params(default_from_version, default_version) }}
 {{ s.os_overrides() -}}
