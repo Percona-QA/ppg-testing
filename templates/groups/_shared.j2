@@ -1,4 +1,61 @@
 {# shared blocks for the versioned group templates #}
+{# scenario.yml params: the env vars the task macros below and the shared tasks
+   they include (tasks/enable_repo.yml) read, declared so tools/run.py and the
+   buildbot forms can set them. the names and field order come from the jenkins
+   jobs these groups replace (ppg.groovy, ppg-upgrade.groovy), the repo choice
+   order from the hand-written descriptors (pg_tde/tde) -- either way the first
+   choice, and so the default, is testing #}
+{% macro server_params(flavor, major, version) %}
+params:
+- name: REPO
+  kind: choice
+  choices:
+  - testing
+  - experimental
+  - release
+  description: Repo for testing
+- name: VERSION
+  kind: string
+  default: {{ version }}
+  description: PG version for test, including major and minor version, e.g {{ version }}
+{% if major >= 18 %}
+- name: IO_METHOD
+  kind: choice
+  choices:
+  - worker
+  - sync
+  - io_uring
+  description: io_method to use for the server (applicable to pg-18 and onwards only).
+{% endif %}
+- name: MAJOR_REPO
+  kind: boolean
+  description: Enable to use major ({{ flavor }}-{{ major }}) repo instead of {{ version }}
+{%- endmacro %}
+{% macro upgrade_params(from_version, version) %}
+params:
+- name: FROM_REPO
+  kind: choice
+  choices:
+  - testing
+  - experimental
+  - release
+  description: From this repo the server will be upgraded
+- name: TO_REPO
+  kind: choice
+  choices:
+  - testing
+  - experimental
+  - release
+  description: To this repo the server will be upgraded
+- name: FROM_VERSION
+  kind: string
+  default: {{ from_version }}
+  description: From this version the server will be upgraded, e.g {{ from_version }}
+- name: VERSION
+  kind: string
+  default: {{ version }}
+  description: To this version the server will be upgraded, e.g {{ version }}
+{%- endmacro %}
 {% macro version_fact(flavor) %}
 - name: Setting facts so that they will be persisted in the fact cache
   ansible.builtin.set_fact:

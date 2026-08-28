@@ -100,9 +100,6 @@ At 4 slots that is not a quick check -- trim the group selection unless you real
 Sweep currently only works safely with `PPG_LOCAL_SLOTS=1`: the libvirt backend has no base-volume locking yet, different groups on the *same* OS at the same time, all wanting the same base image, the second one can get a half-uploaded base.
 Multiple slots can have sporadic failures for now.
 
-`VERSION` and `FROM_VERSION` only reach the groups whose descriptor declares them, today `pg_tde/tde`, `pg_tde/auxiliary`, `pg_stat_monitor/*` and `psp/server_tests` for `VERSION` and nothing at all for `FROM_VERSION`.
-The generated `ppg/*` groups declare no params yet, so a sweep cannot set their version; that descriptor gap is being closed separately.
-
 A group that does not declare the requested sequence runs `test` instead, which every descriptor has -- better than dropping it from the sweep unnoticed.
 `destroy` and `cleanup` are exempt from that fallback: those groups are skipped, because running a full test suite in place of a cleanup is expensive and not what was asked.
 Skips are never silent: the sweep build lists them in a `skipped` log, goes orange when it dropped some groups, and fails outright when it dropped all of them, so an empty sweep cannot read as a clean one.
