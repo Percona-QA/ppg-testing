@@ -91,3 +91,53 @@ def test_shared_tasks_render():
     assert "percona-pg_oidc_validator18" in tools18
     for content in files.values():
         yaml.safe_load(content)
+
+
+def test_major_upgrade_from_defaults_track_the_from_major():
+    """Every major-upgrade default_from_version is a copy of the previous
+    major's default_version -- nothing in the file links the two, so a minor
+    bump that misses the copies is exactly the drift this catches."""
+    for name, inst in DATA["instances"].items():
+        got = inst["major-upgrade"]["default_from_version"]
+        from_name = gen_groups.from_instance(DATA, name)
+        if from_name is None:
+            # ppg-13 and older are gone from the file (EOL, no test fixtures
+            # left either), so pg-14-major-upgrade has nothing to track: only
+            # the flavor and major of its frozen FROM default are checked
+            assert got.startswith("ppg-%d." % (inst["major"] - 1)), (
+                "ppg/versions.yml: %s major-upgrade default_from_version is %r,"
+                " expected a ppg-%d.<minor> (the previous major is EOL and no "
+                "longer in this file, so this value is frozen)"
+                % (name, got, inst["major"] - 1))
+            continue
+        want = DATA["instances"][from_name]["default_version"]
+        assert got == want, (
+            "ppg/versions.yml: %s major-upgrade default_from_version is %r but "
+            "instance %s default_version is %r -- major-upgrade starts from the "
+            "previous major, so set %s major-upgrade default_from_version to %r"
+            % (name, got, from_name, want, name, want))
+
+
+def test_minor_upgrade_from_defaults_stay_in_the_same_major():
+    """minor-upgrade goes minor -> minor inside one major: same flavor, same
+    major, and strictly older than the version it upgrades to."""
+    for name, inst in DATA["instances"].items():
+        to = inst["default_version"]
+        got = inst["minor-upgrade"]["default_from_version"]
+        prefix = to.rsplit(".", 1)[0] + "."
+        assert got.startswith(prefix), (
+            "ppg/versions.yml: %s minor-upgrade default_from_version is %r, "
+            "expected an older minor of %r (i.e. %s<minor>)"
+            % (name, got, to, prefix))
+        assert int(got.rsplit(".", 1)[1]) < int(to.rsplit(".", 1)[1]), (
+            "ppg/versions.yml: %s minor-upgrade default_from_version %r is not "
+            "older than default_version %r -- an upgrade test needs an older "
+            "FROM version" % (name, got, to))
+
+
+def test_validate_rejects_missing_param_defaults():
+    import copy
+    data = copy.deepcopy(DATA)
+    del data["instances"]["pg-17"]["default_version"]
+    with pytest.raises(ValueError, match="pg-17 has no default_version"):
+        gen_groups.validate(data)
