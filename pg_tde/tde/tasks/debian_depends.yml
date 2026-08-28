@@ -241,7 +241,18 @@
   - name: Recreate PostgreSQL cluster with C.UTF-8 locale on Debian
     become: true
     shell: |
-      pg_dropcluster {{ major_version }} main || true
+      # "systemctl stop postgresql" does not wait for the PartOf-propagated
+      # stop of the instance unit, so the cluster may still be shutting down
+      # here; pg_dropcluster then races pg_ctlcluster and aborts on either
+      # side of the race ("still running" / "could not stop server").
+      # Stop the instance unit synchronously, then drop with retries.
+      systemctl stop 'postgresql@{{ major_version }}-main' 2>/dev/null || true
+      if [ -d /etc/postgresql/{{ major_version }}/main ]; then
+          for i in 1 2 3 4 5; do
+              pg_dropcluster --stop {{ major_version }} main && break
+              sleep 2
+          done
+      fi
       pg_createcluster --locale C.UTF-8 {{ major_version }} main
     args:
       executable: /bin/bash
