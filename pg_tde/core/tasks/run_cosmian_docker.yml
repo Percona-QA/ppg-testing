@@ -1,0 +1,129 @@
+# Runs cosmian_kms inside a Ubuntu Jammy Docker container on platforms that
+# ship OpenSSL 1.x or an incompatible glibc (RHEL/Rocky/OL 8, Debian 11).
+#
+# Precondition: install_docker.yml has already run and Docker is available.
+#
+# The container:
+#   - generates TLS certs on first start using OpenSSL 3 (Ubuntu Jammy)
+#   - exposes KMIP on 127.0.0.1:5556 and HTTP on 127.0.0.1:9998
+#   - writes certs to /tmp/cosmian_certs/ on the host via a volume mount
+#
+# setup_kmip.sh detects /tmp/cosmian_certs/ca.pem at test runtime and skips
+# the native cosmian_kms startup, using the pre-started container instead.
+
+- name: Create cosmian server build directory
+  ansible.builtin.file:
+    path: /tmp/cosmian_server_build
+    state: directory
+    mode: '0755'
+
+- name: Copy Dockerfile.cosmian_server
+  ansible.builtin.copy:
+    src: ../../../pg_tde/tde/files/kmip/Dockerfile.cosmian_server
+    dest: /tmp/cosmian_server_build/Dockerfile
+
+- name: Copy gen_certs.sh
+  ansible.builtin.copy:
+    src: ../../../pg_tde/tde/files/kmip/gen_certs.sh
+    dest: /tmp/cosmian_server_build/gen_certs.sh
+    mode: '0755'
+
+- name: Copy cosmian_entrypoint.sh
+  ansible.builtin.copy:
+    src: ../../../pg_tde/tde/files/kmip/cosmian_entrypoint.sh
+    dest: /tmp/cosmian_server_build/cosmian_entrypoint.sh
+    mode: '0755'
+
+- name: Create /tmp/cosmian_certs on host (cert volume mount point)
+  ansible.builtin.file:
+    path: /tmp/cosmian_certs
+    state: directory
+    mode: '0777'
+
+- name: Build cosmian-server Docker image
+  become: true
+  ansible.builtin.shell: |
+    set -o pipefail
+    docker build --progress=plain -t cosmian-server . 2>&1 | tee /tmp/cosmian-server-build.log
+  args:
+    chdir: /tmp/cosmian_server_build
+    executable: /bin/bash
+
+- name: Stop and remove any existing cosmian-server container
+  become: true
+  ansible.builtin.shell: |
+    docker stop cosmian-server 2>/dev/null || true
+    docker rm   cosmian-server 2>/dev/null || true
+  args:
+    executable: /bin/bash
+
+- name: Run cosmian-server container
+  become: true
+  ansible.builtin.shell: |
+    docker run -d --name cosmian-server \
+      -p 127.0.0.1:5556:5556 \
+      -p 127.0.0.1:9998:9998 \
+      -v /tmp/cosmian_certs:/opt/cosmian/certs \
+      cosmian-server
+  args:
+    executable: /bin/bash
+
+- name: Wait for cosmian-server KMIP port 5556 to be ready
+  ansible.builtin.wait_for:
+    port: 5556
+    host: 127.0.0.1
+    delay: 2
+    timeout: 60
+    state: started
+  register: wait_kmip_result
+  ignore_errors: true
+
+- name: Show cosmian-server container logs on port-wait failure
+  become: true
+  ansible.builtin.shell: docker logs cosmian-server 2>&1 || true
+  register: cosmian_container_logs
+  when: wait_kmip_result is failed
+
+- ansible.builtin.debug:
+    var: cosmian_container_logs.stdout_lines
+  when: wait_kmip_result is failed
+
+- name: Show cosmian-server-build.log on port-wait failure
+  ansible.builtin.shell: cat /tmp/cosmian-server-build.log 2>/dev/null || true
+  register: cosmian_build_log
+  when: wait_kmip_result is failed
+
+- ansible.builtin.debug:
+    var: cosmian_build_log.stdout_lines
+  when: wait_kmip_result is failed
+
+- name: Fail after showing diagnostics
+  ansible.builtin.fail:
+    msg: "Timeout waiting for cosmian-server KMIP port 5556"
+  when: wait_kmip_result is failed
+
+- name: Wait for cosmian-server HTTP port 9998 to be ready
+  ansible.builtin.wait_for:
+    port: 9998
+    host: 127.0.0.1
+    delay: 2
+    timeout: 30
+    state: started
+
+- name: Set permissions on /tmp/cosmian_certs for postgres
+  become: true
+  ansible.builtin.file:
+    path: /tmp/cosmian_certs
+    state: directory
+    recurse: true
+    mode: '0755'
+
+- name: Verify certs were generated in /tmp/cosmian_certs
+  ansible.builtin.stat:
+    path: /tmp/cosmian_certs/ca.pem
+  register: ca_pem_stat
+
+- name: Fail if cosmian container did not produce ca.pem
+  ansible.builtin.fail:
+    msg: "cosmian-server container did not produce /tmp/cosmian_certs/ca.pem"
+  when: not ca_pem_stat.stat.exists
