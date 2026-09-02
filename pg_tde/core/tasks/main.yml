@@ -144,25 +144,20 @@
     delay: 5
     until: docker_info.rc == 0
 
+  # ansible_swaptotal_mb is gathered automatically (setup module) — no need
+  # to shell out to swapon/parse its human-readable output (which was the
+  # bug here before: `swapon --show=SIZE` prints "4G", not bytes, so the old
+  # regex_findall/1048576 math always came out near-zero and re-ran mkswap
+  # against an already-active swapfile on every subsequent converge of the
+  # same host, failing with "swapfile is mounted; will not make swapspace").
   - name: Ensure at least 4 GB swap is configured
     become: true
     block:
-      - name: Check if swap is already enabled
-        ansible.builtin.command: swapon --noheadings --show=SIZE
-        register: swap_status
-        changed_when: false
-        failed_when: false
-
-      - name: Set fact for existing swap size in MB
-        ansible.builtin.set_fact:
-          swap_size_mb: >-
-            {{ ((swap_status.stdout | regex_findall('\\d+') | map('int') | sum) / 1048576) | int }}
-
       - name: Create 4G swap file if not present or too small
         ansible.builtin.command: fallocate -l 4G /swapfile
         args:
           creates: /swapfile
-        when: (swap_size_mb | int) < 3000
+        when: ansible_swaptotal_mb < 3000
 
       - name: Secure swap file permissions
         ansible.builtin.file:
@@ -170,22 +165,22 @@
           owner: root
           group: root
           mode: '0600'
-        when: (swap_size_mb | int) < 3000
+        when: ansible_swaptotal_mb < 3000
 
       - name: Format swap file
         ansible.builtin.command: mkswap /swapfile
-        when: (swap_size_mb | int) < 3000
+        when: ansible_swaptotal_mb < 3000
 
       - name: Enable swap
         ansible.builtin.command: swapon /swapfile
-        when: (swap_size_mb | int) < 3000
+        when: ansible_swaptotal_mb < 3000
 
       - name: Persist swap in /etc/fstab
         ansible.builtin.lineinfile:
           path: /etc/fstab
           line: '/swapfile none swap sw 0 0'
           state: present
-        when: (swap_size_mb | int) < 3000
+        when: ansible_swaptotal_mb < 3000
 
   - name: Set stack ulimit for a specific user
     become: true
