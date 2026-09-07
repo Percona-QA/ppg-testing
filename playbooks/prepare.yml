@@ -80,9 +80,71 @@
       delay: 10
       until: epel_setup is succeeded
 
+    # Debian 11 (bullseye) is fully EOL now -- deb.debian.org and
+    # security.debian.org have stopped serving its packages entirely (404,
+    # confirmed on a live node). Non-security packages have moved to
+    # archive.debian.org, but as of this writing bullseye-security itself
+    # hasn't been archived there yet either (archive.debian.org/debian-security
+    # only has entries up to buster) -- so the security suite line is simply
+    # dropped rather than rewritten to a still-404ing path. This means the
+    # base "bullseye"/"bullseye-updates" suites' package versions are used
+    # instead of their (now completely unreachable) security-patched
+    # counterparts, which is the best available outcome for an EOL release.
     - name: Update /etc/apt/sources.list on Debian 11
       become: true
-      command: sudo sed -i 's/cdn-aws\.deb/archive/g' /etc/apt/sources.list
+      command: sudo sed -i -e 's/cdn-aws\.deb/archive/g' -e 's/deb\.debian\.org/archive.debian.org/g' -e '/security\.debian\.org/d' /etc/apt/sources.list
+      when: ansible_os_family == "Debian" and ansible_distribution_major_version == "11"
+
+    # archive.debian.org is a frozen snapshot, so its Release files carry a
+    # Valid-Until timestamp from whenever bullseye was archived. Not observed
+    # to actually block anything as of this writing, but kept as a defensive
+    # measure since that timestamp only gets further in the past over time.
+    - name: Disable apt Release-file expiry check on Debian 11 (archive.debian.org snapshots are frozen)
+      become: true
+      copy:
+        dest: /etc/apt/apt.conf.d/99no-check-valid-until
+        content: |
+          Acquire::Check-Valid-Until "false";
+        mode: '0644'
+      when: ansible_os_family == "Debian" and ansible_distribution_major_version == "11"
+
+    # Some AMI builds bake in packages (observed: gpgv, perl-base) at a
+    # security-patched version newer than anything the now-security-suite-less
+    # archive offers, which blocks installing anything that depends on the
+    # older version (e.g. gnupg needs gpgv < the installed version). apt
+    # never downgrades an already-installed package on its own, even with
+    # --allow-downgrades, unless told exactly which package+version -- so
+    # detect precisely which packages the target install actually needs
+    # downgraded (via a dry run) and fix only those, rather than a blanket
+    # downgrade of anything with a newer-than-archived version (far too broad
+    # -- that set includes systemd, dpkg, openssh-server, the kernel image,
+    # grub, etc., none of which this task has any business touching).
+    - name: Downgrade any package blocking the Debian 11 test-tooling install (archive.debian.org no longer has security-patched versions)
+      become: true
+      ansible.builtin.shell: |
+        set -uo pipefail
+        SIM_LOG=$(mktemp)
+        apt-get -y -s install {{ packages | join(' ') }} > "${SIM_LOG}" 2>&1 || true
+        BLOCKING=$(grep 'Depends:' "${SIM_LOG}" | awk '{print $4}' | sort -u)
+        for pkg in ${BLOCKING}; do
+          avail=$(apt list -a "${pkg}" 2>/dev/null | awk -F'[ /]' '!/^Listing/ && !/\/now / && NF>1 {print $3; exit}')
+          if [ -n "${avail}" ]; then
+            echo "Downgrading ${pkg} to ${avail} (blocks installing: {{ packages | join(' ') }})"
+            apt-get -y --allow-downgrades install "${pkg}=${avail}"
+          fi
+        done
+        rm -f "${SIM_LOG}"
+      args:
+        executable: /bin/bash
+      vars:
+        packages:
+          - unzip
+          - wget
+          - gnupg
+          - gnupg2
+          - rsync
+          - acl
+          - git
       when: ansible_os_family == "Debian" and ansible_distribution_major_version == "11"
 
     - name: install needed packages for running tests with apt
