@@ -26,6 +26,17 @@
         cidr_ip: '0.0.0.0/0'
     keypair_name: "molecule-pkg-tests"
     keypair_path: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/ssh_key"
+    # Every ec2_instance/ec2_security_group/ec2_vpc_subnet_info call below makes
+    # its own DescribeSecurityGroups/DescribeSubnets lookup internally, and those
+    # calls use the client's plain botocore retry policy (not AWSRetry), which
+    # gives up after ~5 attempts. With many molecule pipelines launching in
+    # parallel against the same AWS account, that budget is exhausted by
+    # RequestLimitExceeded before backoff has a chance to help. Raise it and use
+    # adaptive mode's client-side rate limiting instead.
+    aws_retry_config:
+      retries:
+        mode: adaptive
+        max_attempts: 15
     # All known AZ subnets, so a capacity-driven fallback (see create_instance_retry.yml)
     # always has a subnet_dict entry and pre-created security group to launch into,
     # regardless of which one a platform originally pinned.
@@ -41,6 +52,7 @@
         region: "{{ item.region|default(default_region) }}"
         filters:
           subnet-id: "{{ item.vpc_subnet_id }}"
+        aws_config: "{{ aws_retry_config }}"
       with_items: "{{ molecule_yml.platforms }}"
       register: subnet_facts
 
@@ -57,6 +69,7 @@
         rules_egress: "{{ security_group_rules_egress }}"
         vpc_id: "{{ subnet_dict[item.vpc_subnet_id] }}"
         region: "{{ item.region|default(default_region) }}"
+        aws_config: "{{ aws_retry_config }}"
       with_items: "{{ molecule_yml.platforms }}"
 
     # AZ-fallback subnets are resolved lazily, only inside create_instance_retry.yml,
@@ -129,6 +142,7 @@
               volume_type: gp3
               volume_size: "{{ item.volume_size | default(30) }}"
               delete_on_termination: true
+        aws_config: "{{ aws_retry_config }}"
       #with_items: "{{ molecule_yml.platforms }}"
       register: server
       loop: "{{ molecule_yml.platforms }}"

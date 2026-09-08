@@ -9,6 +9,7 @@
     region: "{{ retry_platform.region | default(default_region) }}"
     filters:
       subnet-id: "{{ retry_candidates[0] }}"
+    aws_config: "{{ aws_retry_config }}"
   register: fallback_subnet_info
   when: retry_candidates[0] not in subnet_dict
 
@@ -27,6 +28,7 @@
     rules_egress: "{{ security_group_rules_egress }}"
     vpc_id: "{{ subnet_dict[retry_candidates[0]] }}"
     region: "{{ retry_platform.region | default(default_region) }}"
+    aws_config: "{{ aws_retry_config }}"
 
 - name: "Retry create instance for {{ retry_platform.name }} in subnet {{ retry_candidates[0] }}"
   amazon.aws.ec2_instance:
@@ -57,6 +59,7 @@
           volume_type: gp3
           volume_size: "{{ retry_platform.volume_size | default(30) }}"
           delete_on_termination: true
+    aws_config: "{{ aws_retry_config }}"
   register: retry_result
   ignore_errors: true
 

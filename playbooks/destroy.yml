@@ -4,6 +4,14 @@
   connection: local
   gather_facts: false
   no_log: "{{ not (lookup('env', 'MOLECULE_DEBUG') | bool or molecule_yml.provisioner.log|default(false) | bool) }}"
+  vars:
+    # See playbooks/create.yml for why: raises the default ~5-attempt botocore
+    # retry budget so terminate calls survive RequestLimitExceeded throttling
+    # when many molecule pipelines tear down in parallel against the same account.
+    aws_retry_config:
+      retries:
+        mode: adaptive
+        max_attempts: 15
   tasks:
     - block:
         - name: Populate instance config
@@ -29,6 +37,7 @@
         region: "{{ item.region }}"
         wait: true
         wait_timeout: 600
+        aws_config: "{{ aws_retry_config }}"
       register: server
       with_items: "{{ instance_conf }}"
       when: not skip_instances
