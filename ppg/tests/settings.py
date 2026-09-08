@@ -2625,7 +2625,7 @@ def get_settings(distro_type):
             settings["ppg-16.14"]["deb_pkg_ver"],
             {
                 distro: ["2:16.14-2", "1:290-1", "290-1"]
-                for distro in ["bullseye", "jammy", "bookworm", "noble", "trixie", "resolute"]
+                for distro in ["jammy", "bookworm", "noble", "trixie", "resolute"]
             },
         ),
         "PG_TDE_version": "pg_tde 2.2.1",
@@ -2641,7 +2641,7 @@ def get_settings(distro_type):
             settings["ppg-16.15"]["deb_pkg_ver"],
             {
                 distro: ["2:16.15-2", "1:293-1", "293-1"]
-                for distro in ["bullseye", "jammy", "bookworm", "noble", "trixie", "resolute"]
+                for distro in ["jammy", "bookworm", "noble", "trixie", "resolute"]
             },
         ),
         "PG_TDE_version": "pg_tde 2.2.2",

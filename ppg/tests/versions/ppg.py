@@ -1,6 +1,6 @@
 from .extensions import get_extensions
 
-DISTROS = ['bullseye', 'jammy', 'bookworm', 'noble', 'trixie', 'resolute']
+DISTROS = ['jammy', 'bookworm', 'noble', 'trixie', 'resolute']
 DEB12_PACKAGES_TEMPLATE = [
     "percona-postgresql-{}",
     "percona-postgresql-client",

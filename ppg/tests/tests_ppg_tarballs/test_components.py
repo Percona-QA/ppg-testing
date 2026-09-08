@@ -94,12 +94,6 @@ $$ LANGUAGE pltcl STRICT;
 
 @pytest.fixture()
 def build_libpq_programm(host):
-    if host.system_info.distribution.lower() == "debian" and host.system_info.release.startswith("11"):
-        pytest.skip(
-            "Known tarball/OS gap, not a test issue: the ssl1.1 tarball's "
-            "bundled libldap.so.2 needs EVP_md2, which Debian 11's system "
-            "OpenSSL doesn't provide (MD2 support isn't compiled in)."
-        )
     # Unlike package installs, the tarball's libpq never lives on a system
     # library search path (RHEL or Debian) -- LIBRARY_PATH must be set at
     # link time on both OS families here, not just RHEL.
