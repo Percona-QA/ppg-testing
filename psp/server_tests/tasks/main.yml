@@ -429,8 +429,8 @@
     ansible.builtin.include_tasks: run_kmip_vault_server.yml
     when:
       - tde_build_output.rc | default(1) == 0
-      - (ansible_os_family == 'Debian' and ansible_distribution == 'Debian' and ansible_distribution_major_version | int == 11)
-        or (ansible_os_family == 'RedHat' and ansible_distribution_major_version == '8')
+      - ansible_os_family == 'RedHat'
+      - ansible_distribution_major_version == '8'
 
   - name: Patch CosmianKms.pm - gen_certs uses Docker-generated certs
     ansible.builtin.blockinfile:
@@ -449,8 +449,8 @@
     become: true
     when:
       - tde_build_output.rc | default(1) == 0
-      - (ansible_os_family == 'Debian' and ansible_distribution == 'Debian' and ansible_distribution_major_version | int == 11)
-        or (ansible_os_family == 'RedHat' and ansible_distribution_major_version == '8')
+      - ansible_os_family == 'RedHat'
+      - ansible_distribution_major_version == '8'
 
   - name: Patch CosmianKms.pm - start_with_free_port returns Docker container ports
     ansible.builtin.blockinfile:
@@ -464,8 +464,8 @@
     become: true
     when:
       - tde_build_output.rc | default(1) == 0
-      - (ansible_os_family == 'Debian' and ansible_distribution == 'Debian' and ansible_distribution_major_version | int == 11)
-        or (ansible_os_family == 'RedHat' and ansible_distribution_major_version == '8')
+      - ansible_os_family == 'RedHat'
+      - ansible_distribution_major_version == '8'
 
   - name: Patch CosmianKms.pm - start_on_ports restarts Docker container
     ansible.builtin.blockinfile:
@@ -489,8 +489,8 @@
     become: true
     when:
       - tde_build_output.rc | default(1) == 0
-      - (ansible_os_family == 'Debian' and ansible_distribution == 'Debian' and ansible_distribution_major_version | int == 11)
-        or (ansible_os_family == 'RedHat' and ansible_distribution_major_version == '8')
+      - ansible_os_family == 'RedHat'
+      - ansible_distribution_major_version == '8'
 
   - name: Add pg_tde to postgresql.conf
     lineinfile:

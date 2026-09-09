@@ -1,5 +1,5 @@
 # Runs cosmian_kms inside a Ubuntu Jammy Docker container on platforms that
-# ship OpenSSL 1.x or an incompatible glibc (RHEL/Rocky/OL 8, Debian 11).
+# ship OpenSSL 1.x or an incompatible glibc (RHEL/Rocky/OL 8).
 #
 # The container:
 #   - generates certs on first start using OpenSSL 3 (Ubuntu Jammy)

@@ -379,13 +379,13 @@
 # pg_tde test setup
 # =============================
 
-# kmip.pl on OpenSSL 1.x / older glibc platforms (RHEL/Rocky/OL 8, Debian 11):
+# kmip.pl on OpenSSL 1.x / older glibc platforms (RHEL/Rocky/OL 8):
 #
 # Two problems on these platforms:
 #   1. CosmianKms::gen_certs() calls `openssl x509 -copy_extensions copy` which
 #      requires OpenSSL >= 3.x.  These platforms ship OpenSSL 1.1.x.
-#   2. The cosmian_kms binary requires a newer glibc than RHEL 8 (2.28) and
-#      Debian 11 (2.31) provide, so it fails to become HTTP-ready natively.
+#   2. The cosmian_kms binary requires a newer glibc than RHEL 8 (2.28)
+#      provides, so it fails to become HTTP-ready natively.
 #
 # Fix: run cosmian_kms entirely inside a Ubuntu Jammy Docker container (glibc
 # 2.35, OpenSSL 3).  The container generates certs and serves KMIP/HTTP on
@@ -398,11 +398,8 @@
   ansible.builtin.include_tasks: run_kmip_vault_server.yml
   when:
     - tde_build_output.rc | default(1) == 0
-    - (ansible_os_family == 'Debian' and
-       ansible_distribution == 'Debian' and
-       ansible_distribution_major_version | int == 11)
-      or (ansible_os_family == 'RedHat' and
-          ansible_distribution_major_version == '8')
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version == '8'
 
 - name: Patch CosmianKms.pm - gen_certs uses Docker-generated certs
   ansible.builtin.blockinfile:
@@ -421,11 +418,8 @@
       	}
   when:
     - tde_build_output.rc | default(1) == 0
-    - (ansible_os_family == 'Debian' and
-       ansible_distribution == 'Debian' and
-       ansible_distribution_major_version | int == 11)
-      or (ansible_os_family == 'RedHat' and
-          ansible_distribution_major_version == '8')
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version == '8'
 
 - name: Patch CosmianKms.pm - start_with_free_port returns Docker container ports
   ansible.builtin.blockinfile:
@@ -439,11 +433,8 @@
       	}
   when:
     - tde_build_output.rc | default(1) == 0
-    - (ansible_os_family == 'Debian' and
-       ansible_distribution == 'Debian' and
-       ansible_distribution_major_version | int == 11)
-      or (ansible_os_family == 'RedHat' and
-          ansible_distribution_major_version == '8')
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version == '8'
 
 - name: Patch CosmianKms.pm - start_on_ports restarts Docker container
   ansible.builtin.blockinfile:
@@ -470,11 +461,8 @@
       	}
   when:
     - tde_build_output.rc | default(1) == 0
-    - (ansible_os_family == 'Debian' and
-       ansible_distribution == 'Debian' and
-       ansible_distribution_major_version | int == 11)
-      or (ansible_os_family == 'RedHat' and
-          ansible_distribution_major_version == '8')
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version == '8'
 
 # wal_archiving.pl fix for RHEL/Rocky/OL on PG17.
 #
@@ -621,7 +609,7 @@
     - tde_build_output.rc | default(1) == 0
 
 # run_kmip_vault_server.yml is now used only for OpenSSL 1.x platforms
-# (RHEL/Rocky/OL 8, Debian 11).  It installs Docker and generates KMIP certs
+# (RHEL/Rocky/OL 8).  It installs Docker and generates KMIP certs
 # inside a Ubuntu Jammy container (OpenSSL 3), placing them at
 # /tmp/cosmian_certs/ for CosmianKms.pm to pick up.
 # The include_tasks call lives near the KMIP patch tasks above.
