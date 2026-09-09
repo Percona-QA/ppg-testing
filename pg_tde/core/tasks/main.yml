@@ -6,7 +6,6 @@
       full_version: "{{ lookup('env','VERSION') | regex_replace('ppg-','') }}"
 
       # Convert "true"/"false" strings to actual Booleans
-      skip_testcase_enabled: "{{ lookup('env', 'SKIP_TESTCASE') | default('false') | bool }}"
       build_from_source: "{{ lookup('env', 'BUILD_FROM_SOURCE') | default('false') | bool }}"
 
       # Direct mappings
@@ -17,16 +16,25 @@
       tde_branch: "{{ lookup('env', 'TDE_BRANCH') }}"
       percona_qa_repo: "{{ lookup('env', 'PERCONA_QA_REPO') }}"
       percona_qa_branch: "{{ lookup('env', 'PERCONA_QA_BRANCH') }}"
-      skip_testcase_list: "{{ lookup('env', 'TESTCASE_TO_SKIP') | default('') }}"
+      # Which package source to install PSP/pg_tde from when install_from_packages
+      # is set. 'percona-release' drives the existing tasks/enable_repo.yml
+      # (REPO=testing/release/experimental). 'obs' is not wired up yet — see the
+      # "Configure repository" step below.
+      package_source: "{{ lookup('env', 'PACKAGE_SOURCE') | default('percona-release') }}"
+      obs_channel: "{{ lookup('env', 'OBS_CHANNEL') | default('devel') }}"
       # percona-qa/postgresql/pytest sections to skip by default: upgrade
       # coverage lives in the dedicated upgrade role, vault/kmip need external
       # key-provider services this role doesn't set up, and slow tests don't
       # belong in the core regression pass. Override via PYTEST_SKIP_SECTIONS.
       pytest_skip_sections: "{{ lookup('env', 'PYTEST_SKIP_SECTIONS') | default('upgrade,minor_upgrade,slow,vault,kmip,openbao', true) }}"
+      # Captured for future use — not yet consumed anywhere in this role (see
+      # the TEST_SUITE mapping discussion: the pytest suite has no sanity/smoke
+      # markers or suite concept today, only --skip-sections).
+      test_suite: "{{ lookup('env', 'TEST_SUITE') | default('All') }}"
       # ... include other env lookups here ...
       go_version: "1.25.6"
       go_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}"
-      artifact_filename: "tde-auxiliary-{{ lookup('env','VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.tar.gz"
+      artifact_filename: "tde-core-{{ lookup('env','VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.tar.gz"
       cacheable: true
 
   - name: End play on Ubuntu 26 if PostgreSQL version is not supported
@@ -116,9 +124,18 @@
     ansible.builtin.debug:
       var: tmp_redirect.stdout
 
-  - name: Configure repository
+  - name: Configure repository (percona-release)
     ansible.builtin.include_tasks: ../../../../tasks/enable_repo.yml
-    when: install_from_packages
+    when: install_from_packages and package_source == 'percona-release'
+
+  - name: Fail fast on unimplemented OBS package source
+    ansible.builtin.fail:
+      msg: >-
+        PACKAGE_SOURCE=obs (OBS_CHANNEL={{ obs_channel }}) has no repo-setup task
+        in this role yet. Add an OBS-equivalent of tasks/enable_repo.yml (repo
+        URL/GPG key per channel) before selecting this option, or use
+        PACKAGE_SOURCE=percona-release.
+    when: install_from_packages and package_source == 'obs'
 
   - name: Include Redhat tasks file
     include_tasks: 
@@ -310,27 +327,6 @@
     debug:
       msg: "Cloned version: {{ clone_results.after | default('N/A') }}"
 
-  # =============================
-  # Remove testcases to be skipped
-  # =============================
-  #- name: Remove skipped test cases
-  #  ansible.builtin.file:
-  #    path: "/tmp/percona-qa/postgresql/automation/tests/{{ item | trim }}"
-  #    state: absent
-  #  # split(',') handles single items (no comma) and lists (with comma) identically
-  #  loop: "{{ skip_testcase_list.split(',') }}"
-  #  when:
-  #    - skip_testcase_enabled                 # Already a boolean from your variable definition
-  #    - item | trim | length > 0              # Safety check for empty list items
-  #  become: true
-
-  # =============================
-  # Prepare the percona-qa pytest environment
-  # =============================
-  # Reuses the PostgreSQL + pg_tde install this role already built/installed
-  # above (pg_install_dir) instead of having setup_test_env.sh install
-  # packages again. External key providers (Cosmian KMIP, OpenBao) are
-  # skipped since vault/kmip/openbao sections are excluded by default below.
   - name: Prepare pytest environment (venv, deps, pg_tde smoke check)
     become: true
     become_user: postgres
