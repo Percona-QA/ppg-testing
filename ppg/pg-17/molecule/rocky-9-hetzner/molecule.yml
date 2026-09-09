@@ -1,0 +1,67 @@
+---
+dependency:
+  name: galaxy
+driver:
+  # Delegated: create/destroy are the hetzner playbooks below. With
+  # managed: true molecule reads the connection details they dump into the
+  # instance config (address/user/port/identity_file).
+  name: delegated
+  options:
+    managed: true
+platforms:
+  # Boots the newest promoted factory snapshot for this combo, resolved at
+  # runtime by create-hetzner.yml from image_selector + arch (never a
+  # pinned image ID). server_type comes from the pipeline's
+  # htz_server_type_* map. When empty (local run) create-hetzner.yml falls
+  # back per arch. ssh_user is root because Hetzner injects the per-run key
+  # for root on snapshot-based creates. The cloud-config adds the rocky
+  # user the shared prepare.yml expects for the QA debug keys, sudo-capable
+  # like on the AWS AMIs.
+  - name: rocky9-hetzner-${BUILD_NUMBER}-${JOB_NAME}
+    server_type: ${HETZNER_SERVER_TYPE}
+    arch: ${HETZNER_ARCH:-x86_64}
+    image_selector: role=ppg-package-test,os=rocky,os_major=9
+    ssh_user: root
+    user_data: |
+      #cloud-config
+      users:
+        - default
+        - name: rocky
+          groups: wheel
+          shell: /bin/bash
+          sudo: ALL=(ALL) NOPASSWD:ALL
+provisioner:
+  name: ansible
+  log: True
+  env:
+    # Molecule builds its own env for ansible-playbook (ephemeral collections
+    # path + user home), dropping the caller's exported value. Pass the
+    # per-workspace collections path through so the pinned, patched
+    # hetzner.hcloud copy is the one that resolves.
+    ANSIBLE_COLLECTIONS_PATH: ${ANSIBLE_COLLECTIONS_PATH}
+  playbooks:
+    create: ../../../../playbooks/create-hetzner.yml
+    destroy: ../../../../playbooks/destroy-hetzner.yml
+    prepare: ../../../../playbooks/prepare.yml
+    cleanup: ../../playbooks/cleanup-rpm.yml
+    converge: ../../playbooks/playbook.yml
+verifier:
+  name: testinfra
+  directory: ../../../tests/tests_ppg
+  options:
+    verbose: true
+    s: true
+    junitxml: report.xml
+scenario:
+  destroy_sequence:
+    - destroy
+  cleanup_sequence:
+    - cleanup
+  test_sequence:
+    - destroy
+    - create
+    - prepare
+    - converge
+    - verify
+    - cleanup
+    - destroy
