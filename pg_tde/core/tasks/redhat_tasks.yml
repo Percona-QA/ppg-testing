@@ -163,6 +163,25 @@
       - ninja-build
       - cmake
 
+  # RHEL/Rocky/OL 8 ship Python 3.6 as the default python3. The percona-qa
+  # pytest suite (setup_test_env.sh) requires 3.9+ and only ever looks for a
+  # `python3`/`python` binary on PATH, so python3 itself has to be repointed.
+  - name: Install Python 3.9 (pytest suite requires 3.9+; RHEL8-family python3 is 3.6)
+    become: true
+    yum:
+      name:
+        - python39
+        - python39-pip
+      state: present
+    when: ansible_distribution_major_version == "8"
+
+  - name: Point python3 at Python 3.9 via alternatives (RHEL8-family)
+    become: true
+    ansible.builtin.shell: |
+      alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
+      alternatives --set python3 /usr/bin/python3.9
+    when: ansible_distribution_major_version == "8"
+
   - name: Install liburing packages
     yum:
       name:

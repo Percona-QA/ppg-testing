@@ -1,0 +1,294 @@
+"""Test-level fixtures: ready-to-use cluster objects for every test module."""
+import os
+import re
+import shutil
+import time
+from pathlib import Path
+from typing import Dict, Generator, List, Tuple
+
+import pytest
+
+from conftest import allocate_port
+from lib import PgCluster, TdeManager, ReplicationManager
+from lib.cluster import initdb_args_no_data_checksums
+
+# Settings that must be present in postgresql.conf for every TDE cluster.
+# Passed via write_default_config(extra_params=...) so they are written
+# atomically and never overwritten by a subsequent write_default_config call.
+_TDE_PARAMS: Dict[str, str] = {
+    "shared_preload_libraries": "'pg_tde'",
+    "default_table_access_method": "'tde_heap'",
+}
+
+
+# ── internal helper ───────────────────────────────────────────────────────────
+
+def _safe_node_id(nodeid: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", nodeid)
+
+
+def _dump_logs_on_failure(request, clusters: List[PgCluster], failed_root: Path) -> None:
+    """Print and persist server logs for every cluster on test failure/error."""
+    rep = getattr(request.node, "rep_call", None)
+    if rep is None or rep.passed:
+        return
+    failed_root.mkdir(parents=True, exist_ok=True)
+    for c in clusters:
+        log_path = c.data_dir / "server.log"
+        artifact_log = failed_root / f"{c.data_dir.name}_server.log"
+        if log_path.exists():
+            shutil.copy2(log_path, artifact_log)
+        # Optional: preserve full PGDATA for deep post-mortem analysis.
+        if os.environ.get("PYTEST_KEEP_FAILED_PGDATA", "").lower() in {"1", "true", "yes"}:
+            shutil.copytree(c.data_dir, failed_root / f"{c.data_dir.name}_data", dirs_exist_ok=True)
+
+        log_text = c.read_log(last_n=80)
+        sep = "─" * 70
+        print(f"\n{sep}")
+        print(f"  PostgreSQL server log │ {c.data_dir.name}  port={c.port}")
+        print(f"  Data dir: {c.data_dir}")
+        if log_path.exists():
+            print(f"  Full log: {artifact_log}")
+        print(sep)
+        print(log_text if log_text else "(server.log is empty or missing)")
+        print(sep)
+    print(f"[pytest-debug] Failure artifacts: {failed_root}")
+
+
+# ── factory fixture ───────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def pg_factory(install_dir: Path, tmp_path: Path, io_method: str, request, run_dir: Path):
+    """
+    Factory that creates isolated PgCluster instances for a test.
+    All clusters are stopped and their data directories removed on teardown.
+    On failure, server logs are printed and copied under:
+      <run_dir>/pytest_failed/<sanitized-nodeid>/
+    """
+    clusters: List[PgCluster] = []
+
+    def _make(
+        name: str = "pg",
+        port: int = None,
+        socket_dir: Path = None,
+    ) -> PgCluster:
+        port = port or allocate_port()
+        data_dir = tmp_path / name
+        sock = socket_dir or tmp_path
+        cluster = PgCluster(data_dir, port, install_dir, socket_dir=sock, io_method=io_method)
+        clusters.append(cluster)
+        return cluster
+
+    yield _make
+
+    failed_root = run_dir / "pytest_failed" / _safe_node_id(request.node.nodeid)
+    _dump_logs_on_failure(request, clusters, failed_root)
+
+    for c in clusters:
+        try:
+            if c.is_ready():
+                c.stop(check=False)
+        except Exception:
+            pass
+        shutil.rmtree(c.data_dir, ignore_errors=True)
+
+
+# ── single-cluster fixtures ───────────────────────────────────────────────────
+
+
+@pytest.fixture
+def primary_cluster(pg_factory) -> Generator[PgCluster, None, None]:
+    """A started, plain PostgreSQL primary cluster."""
+    cluster = pg_factory("primary")
+    cluster.initdb()
+    cluster.write_default_config("primary")
+    cluster.add_hba_entry("local all all trust")
+    cluster.add_hba_entry("host  all all 127.0.0.1/32 trust")
+    cluster.start()
+    yield cluster
+
+
+@pytest.fixture
+def tde_primary(pg_factory) -> Generator[PgCluster, None, None]:
+    """A primary cluster with pg_tde fully set up (file key provider)."""
+    cluster = pg_factory("tde_primary")
+    cluster.initdb(extra_args=initdb_args_no_data_checksums(cluster.install_dir))
+    cluster.write_default_config("primary", extra_params=_TDE_PARAMS)
+    cluster.add_hba_entry("local all all trust")
+    cluster.add_hba_entry("host  all all 127.0.0.1/32 trust")
+    cluster.start()
+    tde = TdeManager(cluster)
+    tde.create_extension()
+    tde.add_global_key_provider_file()
+    tde.set_global_principal_key()
+    yield cluster
+
+
+# ── primary + replica pair ────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def replica_pair(pg_factory) -> Generator[Tuple[PgCluster, PgCluster], None, None]:
+    """Plain streaming replication pair (primary, standby)."""
+    primary = pg_factory("primary")
+    standby = pg_factory("standby")
+
+    primary.initdb()
+    primary.write_default_config("primary")
+    primary.configure({"wal_level": "replica", "max_wal_senders": "5", "hot_standby": "on"})
+    primary.add_hba_entry("local all all trust")
+    primary.add_hba_entry("local replication all trust")
+    primary.add_hba_entry("host  all all 127.0.0.1/32 trust")
+    primary.add_hba_entry("host  replication all 127.0.0.1/32 trust")
+    primary.start()
+
+    repl = ReplicationManager(primary, standby)
+    repl.create_standby_from_backup()
+    standby.write_default_config("replica")
+    standby.start()
+    standby.wait_ready()
+
+    # wait_ready() only checks TCP; also wait for WAL sender to appear
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        count = primary.fetchone("SELECT COUNT(*) FROM pg_stat_replication")
+        if count and int(count) >= 1:
+            break
+        time.sleep(1)
+
+    yield primary, standby
+
+
+@pytest.fixture
+def logical_pub_sub_pair(pg_factory) -> Generator[Tuple[PgCluster, PgCluster], None, None]:
+    """
+    Two independent primary clusters for logical replication.
+
+    Unlike ``replica_pair``, the subscriber is not a physical standby — it must
+    accept writes for ``CREATE SUBSCRIPTION`` / apply workers.
+    """
+    publisher = pg_factory("logical_pub")
+    subscriber = pg_factory("logical_sub")
+
+    for node in (publisher, subscriber):
+        node.initdb()
+        node.write_default_config("primary")
+
+    publisher.configure(
+        {
+            "wal_level": "logical",
+            "max_wal_senders": "10",
+            "max_replication_slots": "10",
+        }
+    )
+    subscriber.configure(
+        {
+            "wal_level": "logical",
+            "max_replication_slots": "10",
+            "max_logical_replication_workers": "10",
+        }
+    )
+
+    for node in (publisher, subscriber):
+        node.add_hba_entry("local all all trust")
+        node.add_hba_entry("local replication all trust")
+        node.add_hba_entry("host  all all 127.0.0.1/32 trust")
+        node.add_hba_entry("host  replication all 127.0.0.1/32 trust")
+
+    publisher.start()
+    subscriber.start()
+    publisher.wait_ready()
+    subscriber.wait_ready()
+
+    yield publisher, subscriber
+
+
+@pytest.fixture
+def tde_logical_pub_sub_pair(pg_factory) -> Generator[Tuple[PgCluster, PgCluster], None, None]:
+    """
+    Two independent TDE-enabled primaries for logical replication.
+
+    Each node uses its own keyring path under its PGDATA so pg_tde metadata does
+    not collide across clusters.
+    """
+    publisher = pg_factory("logical_tde_pub")
+    subscriber = pg_factory("logical_tde_sub")
+
+    for node in (publisher, subscriber):
+        node.initdb(extra_args=initdb_args_no_data_checksums(node.install_dir))
+        node.write_default_config("primary", extra_params=_TDE_PARAMS)
+
+    publisher.configure(
+        {
+            "wal_level": "logical",
+            "max_wal_senders": "10",
+            "max_replication_slots": "10",
+        }
+    )
+    subscriber.configure(
+        {
+            "wal_level": "logical",
+            "max_replication_slots": "10",
+            "max_logical_replication_workers": "10",
+        }
+    )
+
+    for node in (publisher, subscriber):
+        node.add_hba_entry("local all all trust")
+        node.add_hba_entry("local replication all trust")
+        node.add_hba_entry("host  all all 127.0.0.1/32 trust")
+        node.add_hba_entry("host  replication all 127.0.0.1/32 trust")
+
+    publisher.start()
+    subscriber.start()
+    publisher.wait_ready()
+    subscriber.wait_ready()
+
+    tde_p = TdeManager(publisher)
+    tde_p.create_extension()
+    tde_p.add_global_key_provider_file(keyfile=str(publisher.data_dir / "keyring.pub.per"))
+    tde_p.set_global_principal_key()
+
+    tde_s = TdeManager(subscriber)
+    tde_s.create_extension()
+    tde_s.add_global_key_provider_file(keyfile=str(subscriber.data_dir / "keyring.sub.per"))
+    tde_s.set_global_principal_key()
+
+    yield publisher, subscriber
+
+
+@pytest.fixture
+def tde_replica_pair(pg_factory) -> Generator[Tuple[PgCluster, PgCluster], None, None]:
+    """Streaming replication pair with pg_tde enabled on both nodes."""
+    primary = pg_factory("tde_primary")
+    standby = pg_factory("tde_standby")
+
+    primary.initdb(extra_args=initdb_args_no_data_checksums(primary.install_dir))
+    primary.write_default_config("primary", extra_params=_TDE_PARAMS)
+    primary.configure({"wal_level": "replica", "max_wal_senders": "5", "hot_standby": "on"})
+    primary.add_hba_entry("local all all trust")
+    primary.add_hba_entry("local replication all trust")
+    primary.add_hba_entry("host  all all 127.0.0.1/32 trust")
+    primary.add_hba_entry("host  replication all 127.0.0.1/32 trust")
+    primary.start()
+    tde = TdeManager(primary)
+    tde.create_extension()
+    tde.add_global_key_provider_file()
+    tde.set_global_principal_key()
+
+    repl = ReplicationManager(primary, standby)
+    repl.create_standby_from_backup(use_tde_basebackup=True)
+    standby.write_default_config("replica", extra_params=_TDE_PARAMS)
+    standby.start()
+    standby.wait_ready()
+
+    # wait_ready() only checks TCP; also wait for WAL sender to appear
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        count = primary.fetchone("SELECT COUNT(*) FROM pg_stat_replication")
+        if count and int(count) >= 1:
+            break
+        time.sleep(1)
+
+    yield primary, standby

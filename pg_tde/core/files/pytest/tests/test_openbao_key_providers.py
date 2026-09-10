@@ -1,0 +1,440 @@
+"""
+OpenBao key-provider scenarios (multi-provider lifecycle on OpenBao KV).
+
+Validates that OpenBao (vault-v2 with namespace) correctly backs the same
+pg_tde flows as HashiCorp Vault: multi-provider registration, key rotation,
+file-provider change, dump/restore migration, and safe provider deletion.
+Port of ``pg_tde_open_bao_tests.sh`` scenarios 4–12.
+
+Scenarios 1–3 and the mount-metadata warning test are in ``test_vault_providers.py``
+and ``test_external_key_provider_regressions.py``. Scenario 11 is in regressions.
+
+Prerequisites: ``scripts/install_openbao.sh``, ``scripts/setup_openbao_for_pytest.sh``,
+``docs/vault.md``. Full suite: ``./scripts/run_openbao_revalidation.sh``.
+"""
+from __future__ import annotations
+
+import shutil
+import subprocess
+import uuid
+from pathlib import Path
+
+import pytest
+
+from lib import PgCluster, TdeManager
+from lib.cluster import initdb_args_no_data_checksums
+from lib.kmip import KmipConfig
+from lib.vault import VaultConfig
+
+pytestmark = [pytest.mark.vault, pytest.mark.openbao, pytest.mark.encryption]
+
+
+def _uid() -> str:
+    """Unique suffix — Cosmian/OpenBao retain keys across io-method matrix runs."""
+    return uuid.uuid4().hex[:8]
+
+
+def _require_openbao(vault_config: VaultConfig) -> None:
+    if not vault_config.namespace.strip():
+        pytest.skip(
+            "OpenBao key-provider tests require VAULT_NAMESPACE — "
+            "source scripts/setup_openbao_for_pytest.sh"
+        )
+
+
+def _tde_cluster(pg_factory, tmp_path: Path, name: str) -> PgCluster:
+    cluster = pg_factory(name)
+    cluster.initdb(extra_args=initdb_args_no_data_checksums(cluster.install_dir))
+    cluster.write_default_config(extra_params={
+        "shared_preload_libraries": "'pg_tde'",
+        "default_table_access_method": "'tde_heap'",
+    })
+    cluster.add_hba_entry("local all all trust")
+    cluster.start()
+    TdeManager(cluster).create_extension()
+    return cluster
+
+
+def _add_global_vault(
+    tde: TdeManager, vault: VaultConfig, name: str, tmp_path: Path
+) -> None:
+    tde.add_global_key_provider_vault(
+        name,
+        vault_url=vault.addr,
+        secret_mount_point=vault.secret_mount,
+        token_path=vault.token_sql_arg(tmp_path),
+        ca_path=vault.ca_path,
+        namespace=vault.namespace,
+    )
+
+
+def _add_db_vault(
+    tde: TdeManager,
+    vault: VaultConfig,
+    name: str,
+    tmp_path: Path,
+    dbname: str,
+) -> None:
+    tde.add_database_key_provider_vault(
+        name,
+        vault_url=vault.addr,
+        secret_mount_point=vault.secret_mount,
+        token_path=vault.token_sql_arg(tmp_path),
+        ca_path=vault.ca_path,
+        namespace=vault.namespace,
+        dbname=dbname,
+    )
+
+
+def _add_global_kmip(tde: TdeManager, kmip: KmipConfig, name: str) -> None:
+    tde.add_global_key_provider_kmip(
+        name,
+        host=kmip.connect_host(),
+        port=kmip.port,
+        cert_path=kmip.client_cert,
+        key_path=kmip.client_key,
+        ca_path=kmip.server_ca,
+    )
+
+
+def _set_db_key(
+    cluster: PgCluster, key: str, ring: str, dbname: str
+) -> None:
+    """Create+set DB principal key; tolerate keys left on shared OpenBao/KMIP."""
+    TdeManager(cluster).set_database_principal_key(key, ring, dbname=dbname)
+
+
+@pytest.mark.vault
+@pytest.mark.openbao
+class TestOpenBaoKeyProviders:
+    """OpenBao-backed multi-provider key lifecycle (``pg_tde_open_bao_tests.sh``)."""
+
+    def test_openbao_scenario4_multi_provider_single_database(
+        self,
+        pg_factory,
+        tmp_path: Path,
+        vault_config: VaultConfig,
+        kmip_config: KmipConfig,
+    ):
+        """Scenario 4 — sbtest2: vault, kmip, and file DB providers."""
+        _require_openbao(vault_config)
+        keyfile = str(tmp_path / "bao_s4_file.per")
+        cluster = _tde_cluster(pg_factory, tmp_path, "bao_s4")
+        tde = TdeManager(cluster)
+        cluster.execute("CREATE DATABASE sbtest2")
+        cluster.execute("CREATE EXTENSION pg_tde", "sbtest2")
+
+        _add_db_vault(tde, vault_config, "vault_keyring4", tmp_path, "sbtest2")
+        u = _uid()
+        _set_db_key(cluster, f"vault_key4_{u}", "vault_keyring4", "sbtest2")
+        cluster.execute(
+            "CREATE TABLE t1(a INT, b TEXT) USING tde_heap; "
+            "INSERT INTO t1 VALUES (100,'a'); UPDATE t1 SET b='b' WHERE a=100",
+            "sbtest2",
+        )
+
+        tde.add_database_key_provider_kmip(
+            "kmip_keyring4",
+            host=kmip_config.connect_host(),
+            port=kmip_config.port,
+            cert_path=kmip_config.client_cert,
+            key_path=kmip_config.client_key,
+            ca_path=kmip_config.server_ca,
+            dbname="sbtest2",
+        )
+        _set_db_key(cluster, f"kmip_key4_{u}", "kmip_keyring4", "sbtest2")
+        cluster.execute(
+            "CREATE TABLE t2(a INT, b TEXT) USING tde_heap; "
+            "INSERT INTO t2 VALUES (100,'a')",
+            "sbtest2",
+        )
+
+        tde.add_database_key_provider_file(
+            "file_keyring", keyfile=keyfile, dbname="sbtest2"
+        )
+        _set_db_key(cluster, f"file_key1_{u}", "file_keyring", "sbtest2")
+        cluster.execute(
+            "CREATE TABLE t3(a INT, b TEXT) USING tde_heap; "
+            "INSERT INTO t3 VALUES (100,'a')",
+            "sbtest2",
+        )
+
+        cluster.restart()
+        cluster.wait_ready(timeout=90)
+        assert cluster.fetchone("SELECT a FROM t1 WHERE a=100", "sbtest2").strip() == "100"
+        assert cluster.fetchone("SELECT COUNT(*) FROM t2", "sbtest2") == "1"
+        assert cluster.fetchone("SELECT COUNT(*) FROM t3", "sbtest2") == "1"
+
+    def test_openbao_scenario5_global_file_provider_change(
+        self,
+        pg_factory,
+        tmp_path: Path,
+        vault_config: VaultConfig,
+        kmip_config: KmipConfig,
+    ):
+        """Scenario 5 — ``change_global_key_provider_file`` + data integrity."""
+        _require_openbao(vault_config)
+        cluster = _tde_cluster(pg_factory, tmp_path, "bao_s5")
+        tde = TdeManager(cluster)
+        key_old = str(tmp_path / "keyring5.per")
+        key_new = str(tmp_path / "keyring5_new.per")
+
+        cluster.execute("CREATE DATABASE sbtest5")
+        cluster.execute("CREATE EXTENSION pg_tde", "sbtest5")
+        tde.add_global_key_provider_file("file_keyring5", keyfile=key_old)
+        _add_global_kmip(tde, kmip_config, "kmip_keyring5")
+        _add_global_vault(tde, vault_config, "vault_keyring5", tmp_path)
+
+        tde.set_database_global_key(f"file_key5_{_uid()}", "file_keyring5", dbname="sbtest5")
+        cluster.execute(
+            "CREATE TABLE t1(a INT, b TEXT) USING tde_heap; "
+            "INSERT INTO t1 VALUES (100,'x')",
+            "sbtest5",
+        )
+        shutil.copy(key_old, key_new)
+        tde.change_global_key_provider_file("file_keyring5", key_new, dbname="sbtest5")
+        cluster.execute(
+            "CREATE TABLE t2(a INT, b TEXT) USING tde_heap; "
+            "INSERT INTO t2 VALUES (200,'y')",
+            "sbtest5",
+        )
+        cluster.restart()
+        cluster.wait_ready(timeout=90)
+        assert cluster.fetchone("SELECT * FROM t1", "sbtest5").strip() == "100|x"
+        assert cluster.fetchone("SELECT * FROM t2", "sbtest5").strip() == "200|y"
+
+    def test_openbao_scenario6_local_and_global_vault_providers(
+        self,
+        pg_factory,
+        tmp_path: Path,
+        vault_config: VaultConfig,
+        kmip_config: KmipConfig,
+    ):
+        """Scenario 6 — global kmip table t1, DB vault table t2 on postgres."""
+        _require_openbao(vault_config)
+        cluster = _tde_cluster(pg_factory, tmp_path, "bao_s6")
+        tde = TdeManager(cluster)
+        u = _uid()
+        _add_global_kmip(tde, kmip_config, "kmip_keyring6")
+        # Unique name + allow-duplicate path — shared Cosmian keeps keys across
+        # --io-method-matrix (worker/sync/io_uring) runs.
+        tde.set_global_principal_key(f"kmip_key6_{u}", "kmip_keyring6")
+        cluster.execute(
+            "CREATE TABLE t1(a INT, b TEXT) USING tde_heap; "
+            "INSERT INTO t1 VALUES (100,'a'),(200,'b')"
+        )
+        _add_db_vault(tde, vault_config, "vault_keyring6", tmp_path, "postgres")
+        _set_db_key(cluster, f"vault_key6_{u}", "vault_keyring6", "postgres")
+        cluster.execute(
+            "CREATE TABLE t2(a INT, b TEXT) USING tde_heap; "
+            "INSERT INTO t2 VALUES (100,'a'),(200,'b')"
+        )
+        cluster.restart()
+        cluster.wait_ready(timeout=90)
+        assert cluster.fetchone("SELECT COUNT(*) FROM t1") == "2"
+        assert cluster.fetchone("SELECT COUNT(*) FROM t2") == "2"
+
+    def test_openbao_scenario7_default_key_rotation(
+        self, pg_factory, tmp_path: Path, vault_config: VaultConfig, kmip_config: KmipConfig
+    ):
+        """Scenario 7 — rotate global default key across vault/kmip/file."""
+        _require_openbao(vault_config)
+        keyfile = str(tmp_path / "bao_s7_file.per")
+        cluster = _tde_cluster(pg_factory, tmp_path, "bao_s7")
+        tde = TdeManager(cluster)
+
+        _add_global_vault(tde, vault_config, "keyring_vault7", tmp_path)
+        u = _uid()
+        tde.set_global_default_principal_key(f"my_global_default_key1_{u}", "keyring_vault7")
+        cluster.execute(
+            "CREATE TABLE t1(a INT PRIMARY KEY, b VARCHAR) USING tde_heap; "
+            "INSERT INTO t1 VALUES (101, 'bond')"
+        )
+        tde.set_global_default_principal_key(f"my_global_default_key2_{u}", "keyring_vault7")
+        assert cluster.fetchone("SELECT b FROM t1 WHERE a=101").strip() == "bond"
+
+        _add_global_kmip(tde, kmip_config, "keyring_kmip7")
+        tde.set_global_default_principal_key(f"my_global_default_key3_{u}", "keyring_kmip7")
+        assert cluster.fetchone("SELECT b FROM t1 WHERE a=101").strip() == "bond"
+
+        tde.add_global_key_provider_file("keyring_file7", keyfile=keyfile)
+        tde.set_global_default_principal_key(f"my_global_default_key4_{u}", "keyring_file7")
+        cluster.restart()
+        cluster.wait_ready(timeout=90)
+        assert cluster.fetchone("SELECT b FROM t1 WHERE a=101").strip() == "bond"
+
+    @pytest.mark.slow
+    def test_openbao_scenario8_dump_restore_provider_migration(
+        self,
+        pg_factory,
+        tmp_path: Path,
+        install_dir: Path,
+        vault_config: VaultConfig,
+        kmip_config: KmipConfig,
+    ):
+        """Scenario 8 — pg_dump, restore, rotate keys, add KMIP provider."""
+        _require_openbao(vault_config)
+        keyfile = str(tmp_path / "bao_s8_file.per")
+        dump_path = tmp_path / "t1.sql"
+        cluster = _tde_cluster(pg_factory, tmp_path, "bao_s8")
+        tde = TdeManager(cluster)
+
+        cluster.execute("CREATE DATABASE db8")
+        cluster.execute("CREATE EXTENSION pg_tde", "db8")
+        u = _uid()
+        _add_db_vault(tde, vault_config, "keyring_vault", tmp_path, "db8")
+        _set_db_key(cluster, f"vault_key_{u}", "keyring_vault", "db8")
+        cluster.execute(
+            "CREATE TABLE t1(a INT PRIMARY KEY, b VARCHAR) USING tde_heap; "
+            "CREATE TABLE t2(a INT PRIMARY KEY, b VARCHAR) USING heap; "
+            "INSERT INTO t1 VALUES (101, 'bond'); INSERT INTO t2 VALUES (101, 'bond')",
+            "db8",
+        )
+
+        cluster.execute("CREATE DATABASE db8_new")
+        cluster.execute("CREATE EXTENSION pg_tde", "db8_new")
+        tde.add_database_key_provider_file("keyring_file", keyfile=keyfile, dbname="db8_new")
+        _set_db_key(cluster, f"file_key_{u}", "keyring_file", "db8_new")
+
+        subprocess.run(
+            [
+                str(install_dir / "bin" / "pg_dump"),
+                "-h", "127.0.0.1",
+                "-p", str(cluster.port),
+                "-d", "db8",
+                "-t", "t1",
+                "-t", "t2",
+                "-f", str(dump_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            [
+                str(install_dir / "bin" / "psql"),
+                "-h", "127.0.0.1",
+                "-p", str(cluster.port),
+                "-d", "db8_new",
+                "-f", str(dump_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        cluster.restart()
+        cluster.wait_ready(timeout=90)
+        assert cluster.fetchone("SELECT b FROM t1 WHERE a=101", "db8_new").strip() == "bond"
+
+        _set_db_key(cluster, f"file_key3_{u}", "keyring_file", "db8_new")
+        tde.add_database_key_provider_kmip(
+            "keyring_kmip",
+            host=kmip_config.connect_host(),
+            port=kmip_config.port,
+            cert_path=kmip_config.client_cert,
+            key_path=kmip_config.client_key,
+            ca_path=kmip_config.server_ca,
+            dbname="db8_new",
+        )
+        _set_db_key(cluster, f"file_key2_{u}", "keyring_kmip", "db8_new")
+        cluster.restart()
+        cluster.wait_ready(timeout=90)
+        assert cluster.fetchone("SELECT b FROM t1 WHERE a=101", "db8_new").strip() == "bond"
+        assert cluster.fetchone("SELECT b FROM t2 WHERE a=101", "db8_new").strip() == "bond"
+
+    def test_openbao_scenario9_default_and_local_keys(
+        self, pg_factory, tmp_path: Path, vault_config: VaultConfig
+    ):
+        """Scenario 9 — default global vault key + local file provider."""
+        _require_openbao(vault_config)
+        keyfile = str(tmp_path / "bao_s9_file.per")
+        cluster = _tde_cluster(pg_factory, tmp_path, "bao_s9")
+        tde = TdeManager(cluster)
+
+        _add_global_vault(tde, vault_config, "vault_keyring9", tmp_path)
+        u = _uid()
+        tde.set_global_default_principal_key(f"vault_key9_{u}", "vault_keyring9")
+
+        cluster.execute("CREATE DATABASE test9")
+        cluster.execute("CREATE EXTENSION pg_tde", "test9")
+        cluster.execute(
+            "CREATE TABLE t1(a INT PRIMARY KEY, b VARCHAR) USING tde_heap; "
+            "INSERT INTO t1 VALUES (101, 't1')",
+            "test9",
+        )
+        tde.set_global_default_principal_key(f"vault_key91_{u}", "vault_keyring9")
+        cluster.execute(
+            "CREATE TABLE t2(a INT PRIMARY KEY, b VARCHAR) USING tde_heap; "
+            "INSERT INTO t2 VALUES (101, 't2')",
+            "test9",
+        )
+        assert cluster.fetchone("SELECT b FROM t1 WHERE a=101", "test9").strip() == "t1"
+
+        tde.add_database_key_provider_file("keyring_file9", keyfile=keyfile, dbname="test9")
+        _set_db_key(cluster, f"file_key9_{u}", "keyring_file9", "test9")
+        cluster.execute(
+            "CREATE TABLE t3(a INT PRIMARY KEY, b VARCHAR) USING tde_heap; "
+            "INSERT INTO t3 VALUES (101, 't3')",
+            "test9",
+        )
+        tde.set_global_principal_key(f"vault_key92_{u}", "vault_keyring9", dbname="test9")
+        cluster.execute("SELECT pg_tde_delete_database_key_provider('keyring_file9')", "test9")
+        cluster.execute("SELECT pg_tde_delete_key()", "test9")
+        assert cluster.fetchone("SELECT COUNT(*) FROM t1", "test9") == "1"
+        assert cluster.fetchone("SELECT COUNT(*) FROM t2", "test9") == "1"
+        assert cluster.fetchone("SELECT COUNT(*) FROM t3", "test9") == "1"
+
+        cluster.restart()
+        cluster.wait_ready(timeout=90)
+        for table in ("t1", "t2", "t3"):
+            cluster.execute(f"DROP TABLE {table}", "test9")
+        cluster.execute("SELECT pg_tde_delete_default_key()", "test9")
+
+    def test_openbao_scenario10_delete_global_with_active_db_key(
+        self, pg_factory, tmp_path: Path, vault_config: VaultConfig
+    ):
+        """Scenario 10 — DB uses global vault provider; survives restart."""
+        _require_openbao(vault_config)
+        cluster = _tde_cluster(pg_factory, tmp_path, "bao_s10")
+        tde = TdeManager(cluster)
+        _add_global_vault(tde, vault_config, "vault_keyring10", tmp_path)
+
+        cluster.execute("CREATE DATABASE test10")
+        cluster.execute("CREATE EXTENSION pg_tde", "test10")
+        tde.set_database_global_key(
+            f"vault_key10_{_uid()}", "vault_keyring10", dbname="test10"
+        )
+        cluster.execute(
+            "CREATE TABLE t10(a INT) USING tde_heap; INSERT INTO t10 VALUES (10)",
+            "test10",
+        )
+        cluster.restart()
+        cluster.wait_ready(timeout=90)
+        assert cluster.fetchone("SELECT * FROM t10", "test10").strip() == "10"
+
+    def test_openbao_scenario12_delete_unused_global_provider(
+        self, pg_factory, tmp_path: Path, vault_config: VaultConfig
+    ):
+        """Scenario 12 — delete inactive vault global after default moves to file."""
+        _require_openbao(vault_config)
+        keyfile = str(tmp_path / "bao_s12_file.per")
+        cluster = _tde_cluster(pg_factory, tmp_path, "bao_s12")
+        tde = TdeManager(cluster)
+
+        _add_global_vault(tde, vault_config, "vault_keyring12", tmp_path)
+        u = _uid()
+        tde.set_global_default_principal_key(f"vault_key12_{u}", "vault_keyring12")
+        tde.add_global_key_provider_file("keyring_file12", keyfile=keyfile)
+        tde.set_global_default_principal_key(f"keyring_key12_{u}", "keyring_file12")
+
+        cluster.execute("SELECT pg_tde_delete_global_key_provider('vault_keyring12')")
+        names = [
+            ln.strip()
+            for ln in cluster.execute(
+                "SELECT name FROM pg_tde_list_all_global_key_providers()"
+            ).splitlines()
+            if ln.strip()
+        ]
+        assert "vault_keyring12" not in names
+        cluster.execute("SELECT pg_tde_delete_default_key()")
+        cluster.execute("SELECT pg_tde_delete_global_key_provider('keyring_file12')")

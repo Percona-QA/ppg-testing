@@ -14,8 +14,6 @@
       psp_branch: "{{ lookup('env', 'PSP_BRANCH') }}"
       tde_repo: "{{ lookup('env', 'TDE_REPO') }}"
       tde_branch: "{{ lookup('env', 'TDE_BRANCH') }}"
-      percona_qa_repo: "{{ lookup('env', 'PERCONA_QA_REPO') }}"
-      percona_qa_branch: "{{ lookup('env', 'PERCONA_QA_BRANCH') }}"
       # Which package source to install PSP/pg_tde from when install_from_packages
       # is set. 'percona-release' drives the existing tasks/enable_repo.yml
       # (REPO=testing/release/experimental). 'obs' is not wired up yet — see the
@@ -147,7 +145,7 @@
       file: "debian_tasks.yml"
     when: ansible_os_family == 'Debian'
 
-  # Docker is required on all platforms — percona-qa scripts use it for KMIP
+  # Docker is required on all platforms — the pytest suite uses it for KMIP
   # and other key provider services at test runtime.
   - name: Include Docker setup file
     include_tasks:
@@ -311,21 +309,19 @@
     when: install_from_packages and ansible_os_family == 'Debian'
 
   # =============================
-  # Clone Percona-qa sources
+  # Deploy the pg_tde pytest suite
   # =============================
+  # Vendored under files/pytest/ (copied from percona-qa's postgresql/pytest,
+  # py_framework branch) so this role no longer depends on a separate
+  # percona-qa clone/branch at test time.
 
-  - name: Clone Percona-qa sources
-    git:
-      repo: "{{ percona_qa_repo }}"
-      version: "{{ percona_qa_branch }}"
-      dest: /tmp/percona-qa
+  - name: Deploy pg_tde pytest suite
+    copy:
+      src: ../files/pytest/
+      dest: /tmp/pg_tde_pytest_src
+      mode: preserve
     become: true          # Required for become_user to work
     become_user: postgres
-    register: clone_results
-
-  - name: Debug git results
-    debug:
-      msg: "Cloned version: {{ clone_results.after | default('N/A') }}"
 
   - name: Prepare pytest environment (venv, deps, pg_tde smoke check)
     become: true
@@ -337,7 +333,7 @@
       --no-setup-external-key-providers
     args:
       executable: /bin/bash
-      chdir: "/tmp/percona-qa/postgresql/pytest"
+      chdir: "/tmp/pg_tde_pytest_src"
     environment:
       PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:/usr/local/go/bin:{{ ansible_env.PATH | default('/usr/local/bin:/usr/bin:/bin') }}"
       LD_LIBRARY_PATH: "{{ pg_lib_dir }}"
@@ -355,7 +351,7 @@
       var: pytest_env_setup.stdout_lines
 
   # =============================
-  # Run Percona-qa pytest suite
+  # Run the pg_tde pytest suite
   # =============================
   - name: Run pg_tde pytest suite
     become: true
@@ -370,7 +366,7 @@
       --html=/tmp/pg_tde_pytest_report.html --self-contained-html
     args:
       executable: /bin/bash
-      chdir: "/tmp/percona-qa/postgresql/pytest"
+      chdir: "/tmp/pg_tde_pytest_src"
     environment:
       PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:/usr/local/go/bin:{{ ansible_env.PATH | default('/usr/local/bin:/usr/bin:/bin') }}"
       LD_LIBRARY_PATH: "{{ pg_lib_dir }}"

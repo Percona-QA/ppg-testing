@@ -1,0 +1,268 @@
+"""Streaming and logical replication helpers."""
+import logging
+import os
+import shutil
+import time
+from typing import Optional
+
+from .cluster import PgCluster, libpq_superuser
+
+log = logging.getLogger(__name__)
+
+
+class ReplicationManager:
+    """Sets up and verifies streaming replication between a primary and standby."""
+
+    def __init__(self, primary: PgCluster, standby: PgCluster) -> None:
+        self.primary = primary
+        self.standby = standby
+
+    # ── setup ─────────────────────────────────────────────────────────────
+
+    def configure_primary(self) -> None:
+        self.primary.configure(
+            {
+                "wal_level": "replica",
+                "max_wal_senders": "5",
+                "hot_standby": "on",
+                "wal_log_hints": "on",
+            }
+        )
+        self.primary.add_hba_entry(
+            "local   replication   all                   trust"
+        )
+        self.primary.add_hba_entry(
+            "host    replication   all   127.0.0.1/32    trust"
+        )
+
+    def create_standby_from_backup(
+        self,
+        *,
+        use_tde_basebackup: bool = False,
+        extra_args=None,
+        encrypt_wal: Optional[bool] = None,
+    ) -> None:
+        """
+        Run ``pg_basebackup`` (or ``pg_tde_basebackup``) from primary into
+        ``self.standby.data_dir``.
+
+        ``encrypt_wal`` is forwarded to ``TdeManager.tde_basebackup``:
+          - ``None`` (default): auto-detect from primary's ``pg_tde.wal_encrypt``
+          - ``True`` / ``False``: force ``-E`` on or off
+
+        Only honoured when ``use_tde_basebackup=True`` (the plain
+        ``pg_basebackup`` path ignores it).
+        """
+        if self.standby.data_dir.exists():
+            shutil.rmtree(self.standby.data_dir)
+        if use_tde_basebackup:
+            from .tde import TdeManager
+            # pg_tde_basebackup -E auto-enables when primary has wal_encrypt on
+            # (encrypt_wal=None auto-detects). TdeManager seeds pg_tde/ only when
+            # -E is in effect.
+            bb_args = list(extra_args or [])
+            TdeManager(self.primary).tde_basebackup(
+                str(self.standby.data_dir),
+                bb_args,
+                encrypt_wal=encrypt_wal,
+            )
+        else:
+            self.primary.basebackup(str(self.standby.data_dir), extra_args)
+        # PostgreSQL 18+ refuses to start if PGDATA is not 0700 or 0750.
+        # pg_basebackup / pg_tde_basebackup can preserve a looser mode from umask.
+        os.chmod(self.standby.data_dir, 0o700)
+        # Basebackup copies the primary's server.log (log_directory=PGDATA). Drop it
+        # so post-start assertions do not see primary-side walsender noise such as
+        # "requested WAL segment … has already been removed".
+        for stale_log in (
+            self.standby.data_dir / "server.log",
+            self.standby.data_dir / "postgresql.log",
+        ):
+            stale_log.unlink(missing_ok=True)
+        self._write_standby_signal()
+        self._write_primary_conninfo()
+        log.info("Standby created at %s", self.standby.data_dir)
+
+    def _write_standby_signal(self) -> None:
+        (self.standby.data_dir / "standby.signal").touch()
+
+    def _primary_conninfo_line(self) -> str:
+        conninfo = (
+            f"host={self.primary.socket_dir} "
+            f"port={self.primary.port} "
+            f"user={libpq_superuser()} "
+            f"application_name=replica"
+        )
+        return f"primary_conninfo = '{conninfo}'"
+
+    def _write_primary_conninfo(self) -> None:
+        auto_conf = self.standby.data_dir / "postgresql.auto.conf"
+        with auto_conf.open("a") as f:
+            f.write(self._primary_conninfo_line() + "\n")
+
+    def rewire_standby_conninfo(self) -> None:
+        """
+        Point the standby at the current primary socket/port.
+
+        Required after copying ``$PGDATA`` to a persistent path: the saved
+        ``postgresql.auto.conf`` still references the ephemeral port from Setup.
+        """
+        auto_conf = self.standby.data_dir / "postgresql.auto.conf"
+        lines: list[str] = []
+        if auto_conf.exists():
+            lines = [
+                ln
+                for ln in auto_conf.read_text().splitlines()
+                if not ln.strip().startswith("primary_conninfo")
+            ]
+        lines.append(self._primary_conninfo_line())
+        auto_conf.write_text("\n".join(lines) + "\n")
+        (self.standby.data_dir / "standby.signal").touch(exist_ok=True)
+        log.info(
+            "Rewired standby %s -> primary port %s",
+            self.standby.data_dir,
+            self.primary.port,
+        )
+
+    def wait_for_streaming_connection(self, timeout: int = 60) -> bool:
+        """Wait until primary shows at least one streaming replication peer."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            n = self.primary.fetchone(
+                "SELECT COUNT(*) FROM pg_stat_replication "
+                "WHERE state = 'streaming'"
+            )
+            if n and int(n) >= 1:
+                return True
+            time.sleep(1)
+        return False
+
+    def assert_streaming_connected(self, timeout: int = 60) -> None:
+        if self.wait_for_streaming_connection(timeout):
+            return
+        senders = self.primary.fetchone(
+            "SELECT COUNT(*) FROM pg_stat_replication"
+        ) or "0"
+        in_recovery = self.standby.fetchone("SELECT pg_is_in_recovery()") or "?"
+        raise AssertionError(
+            f"No streaming replication within {timeout}s "
+            f"(pg_stat_replication={senders}, standby in_recovery={in_recovery})\n"
+            f"Primary log:\n{self.primary.read_log(20)}\n"
+            f"Standby log:\n{self.standby.read_log(20)}"
+        )
+
+    # ── catchup / lag ─────────────────────────────────────────────────────
+
+    def wait_for_catchup(self, timeout: int = 60) -> bool:
+        """Wait until standby replay_lsn has reached the primary's LSN at call time."""
+        # Snapshot once — standby must replay at least through this primary position.
+        target_lsn = self.primary.fetchone("SELECT pg_current_wal_lsn()")
+        if not target_lsn:
+            return False
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            # Compare in SQL on the standby — avoids pg_wal_lsn_diff edge cases where
+            # diff-based checks disagree with direct pg_lsn ordering (seen in logs).
+            ok = self.standby.fetchone(
+                "SELECT pg_last_wal_replay_lsn() IS NOT NULL "
+                f"AND pg_last_wal_replay_lsn() >= '{target_lsn}'::pg_lsn"
+            )
+            if ok and ok.lower() in ("t", "true"):
+                replay_lsn = self.standby.fetchone("SELECT pg_last_wal_replay_lsn()")
+                log.info("Standby caught up: replay=%s target=%s", replay_lsn, target_lsn)
+                return True
+            time.sleep(1)
+        log.warning("Standby did not reach %s within %ds", target_lsn, timeout)
+        return False
+
+    def assert_catchup(self, timeout: int = 60) -> None:
+        """Like wait_for_catchup() but raises AssertionError with full diagnostics on timeout."""
+        if self.wait_for_catchup(timeout):
+            return
+        primary_lsn  = self.primary.fetchone("SELECT pg_current_wal_lsn()") or "unknown"
+        receive_lsn  = self.standby.fetchone("SELECT pg_last_wal_receive_lsn()") or "None"
+        replay_lsn   = self.standby.fetchone("SELECT pg_last_wal_replay_lsn()") or "None"
+        senders      = self.primary.fetchone("SELECT COUNT(*) FROM pg_stat_replication") or "0"
+        in_recovery  = self.standby.fetchone("SELECT pg_is_in_recovery()") or "unknown"
+        raise AssertionError(
+            f"Standby did not catch up within {timeout}s\n"
+            f"  Primary LSN     : {primary_lsn}\n"
+            f"  Standby receive : {receive_lsn}\n"
+            f"  Standby replay  : {replay_lsn}\n"
+            f"  WAL senders     : {senders}\n"
+            f"  In recovery     : {in_recovery}\n"
+            f"\nPrimary log (last 20 lines):\n{self.primary.read_log(20)}"
+            f"\nStandby log (last 20 lines):\n{self.standby.read_log(20)}"
+        )
+
+    def replication_lag_bytes(self) -> Optional[int]:
+        row = self.primary.fetchone(
+            "SELECT sent_lsn - replay_lsn FROM pg_stat_replication LIMIT 1"
+        )
+        return int(row) if row else None
+
+    # ── consistency checks ────────────────────────────────────────────────
+
+    def assert_row_counts_match(self, table: str, dbname: str = "postgres") -> None:
+        primary_count = int(self.primary.fetchone(f"SELECT COUNT(*) FROM {table}", dbname))
+        standby_count = int(self.standby.fetchone(f"SELECT COUNT(*) FROM {table}", dbname))
+        assert primary_count == standby_count, (
+            f"Row count mismatch on {table}: primary={primary_count}, standby={standby_count}"
+        )
+        log.info("Row counts match for %s: %d rows", table, primary_count)
+
+    def assert_checksums_match(self, table: str, dbname: str = "postgres") -> None:
+        primary_sum = self.primary.fetchone(
+            f"SELECT md5(array_agg(t::text ORDER BY t)::text) FROM {table} t", dbname
+        )
+        standby_sum = self.standby.fetchone(
+            f"SELECT md5(array_agg(t::text ORDER BY t)::text) FROM {table} t", dbname
+        )
+        assert primary_sum == standby_sum, (
+            f"Checksum mismatch on {table}: primary={primary_sum}, standby={standby_sum}"
+        )
+
+    # ── logical replication ───────────────────────────────────────────────
+
+    def setup_logical_publication(
+        self, pub_name: str = "test_pub", tables: Optional[list] = None, dbname: str = "postgres"
+    ) -> None:
+        if tables:
+            table_list = ", ".join(tables)
+            self.primary.execute(
+                f"CREATE PUBLICATION {pub_name} FOR TABLE {table_list}", dbname
+            )
+        else:
+            self.primary.execute(
+                f"CREATE PUBLICATION {pub_name} FOR ALL TABLES", dbname
+            )
+
+    def setup_logical_subscription(
+        self,
+        sub_name: str = "test_sub",
+        pub_name: str = "test_pub",
+        dbname: str = "postgres",
+    ) -> None:
+        conninfo = (
+            f"host={self.primary.socket_dir} "
+            f"port={self.primary.port} "
+            f"user={libpq_superuser()} "
+            f"dbname={dbname}"
+        )
+        self.standby.execute(
+            f"CREATE SUBSCRIPTION {sub_name} "
+            f"CONNECTION '{conninfo}' "
+            f"PUBLICATION {pub_name}",
+            dbname,
+        )
+
+    def wait_for_subscription_sync(self, sub_name: str = "test_sub", timeout: int = 60) -> bool:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            status = self.standby.fetchone(
+                f"SELECT subenabled FROM pg_subscription WHERE subname = '{sub_name}'"
+            )
+            if status == "t":
+                return True
+            time.sleep(1)
+        return False
