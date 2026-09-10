@@ -1,0 +1,490 @@
+---
+  - name: Set Base Facts
+    set_fact:
+      major_version: "{{ lookup('env','VERSION') | regex_replace('ppg-(\\d+).*','\\1') }}"
+      install_from_packages: "{{ lookup('env', 'INSTALL_FROM_PACKAGES') | default('false') | bool }}"
+      full_version: "{{ lookup('env','VERSION') | regex_replace('ppg-','') }}"
+
+      # Convert "true"/"false" strings to actual Booleans
+      build_from_source: "{{ lookup('env', 'BUILD_FROM_SOURCE') | default('false') | bool }}"
+
+      # Direct mappings
+      io_method: "{{ lookup('env', 'IO_METHOD') | default('worker') }}"
+      psp_repo: "{{ lookup('env', 'PSP_REPO') }}"
+      psp_branch: "{{ lookup('env', 'PSP_BRANCH') }}"
+      tde_repo: "{{ lookup('env', 'TDE_REPO') }}"
+      tde_branch: "{{ lookup('env', 'TDE_BRANCH') }}"
+      # Which package source to install PSP/pg_tde from when install_from_packages
+      # is set. 'percona-release' drives the existing tasks/enable_repo.yml
+      # (REPO=testing/release/experimental). 'obs' is not wired up yet — see the
+      # "Configure repository" step below.
+      package_source: "{{ lookup('env', 'PACKAGE_SOURCE') | default('percona-release') }}"
+      obs_channel: "{{ lookup('env', 'OBS_CHANNEL') | default('devel') }}"
+      # percona-qa/postgresql/pytest sections to skip by default: upgrade
+      # coverage lives in the dedicated upgrade role, vault/kmip need external
+      # key-provider services this role doesn't set up, and slow tests don't
+      # belong in the core regression pass. Override via PYTEST_SKIP_SECTIONS.
+      pytest_skip_sections: "{{ lookup('env', 'PYTEST_SKIP_SECTIONS') | default('upgrade,minor_upgrade,slow,vault,kmip,openbao', true) }}"
+      # Captured for future use — not yet consumed anywhere in this role (see
+      # the TEST_SUITE mapping discussion: the pytest suite has no sanity/smoke
+      # markers or suite concept today, only --skip-sections).
+      test_suite: "{{ lookup('env', 'TEST_SUITE') | default('All') }}"
+      # ... include other env lookups here ...
+      go_version: "1.25.6"
+      go_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}"
+      artifact_filename: "tde-core-{{ lookup('env','VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.tar.gz"
+      cacheable: true
+
+  - name: End play on Ubuntu 26 if PostgreSQL version is not supported
+    meta: end_host
+    vars:
+      ubuntu26_min_versions:
+        '14': '14.23'
+        '15': '15.18'
+        '16': '16.14'
+        '17': '17.10'
+        '18': '18.4'
+      pg_major: "{{ full_version | string | split('.') | first }}"
+      min_ver: "{{ ubuntu26_min_versions[pg_major] | default('0.0') }}"
+    when:
+      - ansible_distribution == "Ubuntu"
+      - ansible_distribution_major_version == "26"
+      - min_ver != '0.0'
+      - full_version | string is version(min_ver, '<', strict=True)
+
+  - name: Set Dependent Facts
+    set_fact:
+      # Now that go_version is saved, we can use it here
+      go_tarball: "go{{ go_version }}.linux-{{ go_arch }}"
+      go_download_url: "https://go.dev/dl/go{{ go_version }}.linux-{{ go_arch }}.tar.gz"
+      go_install_dir: "/usr/local"
+      cacheable: true
+
+  - name: Set PostgreSQL config path for Debian/Ubuntu
+    set_fact:
+      pg_conf: "/etc/postgresql/{{ major_version }}/main/postgresql.conf"
+      pg_config_path: "/usr/lib/postgresql/{{ major_version }}/bin/pg_config"
+      pg_bin_dir: "/usr/lib/postgresql/{{ major_version }}/bin"
+      pg_lib_dir: "/usr/lib/postgresql/{{ major_version }}/lib"
+      pg_install_dir: "/usr/lib/postgresql/{{ major_version }}"
+    when: ansible_os_family == "Debian" and install_from_packages
+
+  - name: Set PostgreSQL config path for RHEL/CentOS/Rocky
+    set_fact:
+      pg_conf: "/var/lib/pgsql/{{ major_version }}/data/postgresql.conf"
+      pg_config_path: "/usr/pgsql-{{ major_version }}/bin/pg_config"
+      pg_bin_dir: "/usr/pgsql-{{ major_version }}/bin"
+      pg_lib_dir: "/usr/pgsql-{{ major_version }}/lib"
+      pg_install_dir: "/usr/pgsql-{{ major_version }}"
+    when: ansible_os_family == "RedHat" and install_from_packages
+
+  - name: Set PostgreSQL config path for build from sources
+    set_fact:
+      pg_conf: "/opt/pgsql/data/postgresql.conf"
+      pg_config_path: "/opt/pgsql/bin/pg_config"
+      pg_bin_dir: "/opt/pgsql/bin"
+      pg_lib_dir: "/opt/pgsql/lib"
+      pg_install_dir: "/opt/pgsql"
+    when: not install_from_packages
+
+  - name: End play on RHEL 8 and Rocky 8 for pg-18>= and io_uring, as uring not supported
+    meta: end_play
+    when:
+      - (major_version | int) >= 18
+      - io_method in ['io_uring']
+      - >
+        (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'Rocky' and ansible_facts['distribution_major_version'] | int == 8)
+        or
+        (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'RedHat' and ansible_facts['distribution_major_version'] | int == 8)
+
+  # On Debian 13 / Ubuntu 26 systemd mounts /tmp as a RAM-backed tmpfs (~16 GB,
+  # half of RAM). The test framework runs in /tmp/pgtest and the suite needs
+  # more than that on those distros, so /tmp fills (ENOSPC) and the host dies
+  # before packaging — even though the 100 GB root disk is ~85% free. Redirect
+  # /tmp onto the root disk (bind mount) where it is tmpfs, before the build or
+  # tests write anything there. Only acts where /tmp is actually tmpfs.
+  - name: Move /tmp off tmpfs onto the root disk where applicable
+    become: true
+    ansible.builtin.shell: |
+      set -e
+      if findmnt -no FSTYPE /tmp 2>/dev/null | grep -qx tmpfs; then
+        mkdir -p /var/tmp/disktmp
+        chmod 1777 /var/tmp/disktmp
+        mount --bind /var/tmp/disktmp /tmp
+        echo "REDIRECTED /tmp -> /var/tmp/disktmp (was tmpfs)"
+      else
+        echo "/tmp is not tmpfs; no change"
+      fi
+    register: tmp_redirect
+    changed_when: "'REDIRECTED' in tmp_redirect.stdout"
+
+  - name: Show /tmp redirect result
+    ansible.builtin.debug:
+      var: tmp_redirect.stdout
+
+  - name: Configure repository (percona-release)
+    ansible.builtin.include_tasks: ../../../../tasks/enable_repo.yml
+    when: install_from_packages and package_source == 'percona-release'
+
+  - name: Fail fast on unimplemented OBS package source
+    ansible.builtin.fail:
+      msg: >-
+        PACKAGE_SOURCE=obs (OBS_CHANNEL={{ obs_channel }}) has no repo-setup task
+        in this role yet. Add an OBS-equivalent of tasks/enable_repo.yml (repo
+        URL/GPG key per channel) before selecting this option, or use
+        PACKAGE_SOURCE=percona-release.
+    when: install_from_packages and package_source == 'obs'
+
+  - name: Include Redhat tasks file
+    include_tasks: 
+      file: "redhat_tasks.yml"
+    when: ansible_os_family == 'RedHat'
+
+  - name: Include Debian tasks file 
+    include_tasks: 
+      file: "debian_tasks.yml"
+    when: ansible_os_family == 'Debian'
+
+  # Docker is required on all platforms — the pytest suite uses it for KMIP
+  # and other key provider services at test runtime.
+  - name: Include Docker setup file
+    include_tasks:
+      file: "install_docker.yml"
+
+  - name: Verify Docker daemon is responsive
+    become: true
+    command: docker info
+    register: docker_info
+    retries: 3
+    delay: 5
+    until: docker_info.rc == 0
+
+  # ansible_swaptotal_mb is gathered automatically (setup module) — no need
+  # to shell out to swapon/parse its human-readable output (which was the
+  # bug here before: `swapon --show=SIZE` prints "4G", not bytes, so the old
+  # regex_findall/1048576 math always came out near-zero and re-ran mkswap
+  # against an already-active swapfile on every subsequent converge of the
+  # same host, failing with "swapfile is mounted; will not make swapspace").
+  - name: Ensure at least 4 GB swap is configured
+    become: true
+    block:
+      - name: Create 4G swap file if not present or too small
+        ansible.builtin.command: fallocate -l 4G /swapfile
+        args:
+          creates: /swapfile
+        when: ansible_swaptotal_mb < 3000
+
+      - name: Secure swap file permissions
+        ansible.builtin.file:
+          path: /swapfile
+          owner: root
+          group: root
+          mode: '0600'
+        when: ansible_swaptotal_mb < 3000
+
+      - name: Format swap file
+        ansible.builtin.command: mkswap /swapfile
+        when: ansible_swaptotal_mb < 3000
+
+      - name: Enable swap
+        ansible.builtin.command: swapon /swapfile
+        when: ansible_swaptotal_mb < 3000
+
+      - name: Persist swap in /etc/fstab
+        ansible.builtin.lineinfile:
+          path: /etc/fstab
+          line: '/swapfile none swap sw 0 0'
+          state: present
+        when: ansible_swaptotal_mb < 3000
+
+  - name: Set stack ulimit for a specific user
+    become: true
+    pam_limits:
+      domain: postgres  # Replace with the target username
+      limit_type: "-"         # Applies to both soft and hard limits
+      limit_item: stack
+      value: 102400            # Desired stack size in KB
+
+  - name: Check if io_uring is disabled
+    command: cat /proc/sys/kernel/io_uring_disabled
+    register: uring_disabled
+    ignore_errors: true
+    when:
+      - (major_version | int) >= 18
+      - io_method in ['io_uring']
+      - ansible_os_family == 'RedHat'
+
+  - name: Enable io_uring if possible
+    become: true
+    sysctl:
+      name: kernel.io_uring_disabled
+      value: 0
+      state: present
+    when:
+      - (major_version | int) >= 18
+      - io_method in ['io_uring']
+      - ansible_os_family == 'RedHat'
+      - uring_disabled.stdout is defined
+      - uring_disabled.stdout | int > 0
+
+  - name: Ensure postgres user has unlimited core dump limit
+    become: true
+    community.general.pam_limits:
+      domain: postgres
+      limit_item: core
+      limit_type: "{{ item }}"
+      value: unlimited
+    loop:
+      - soft
+      - hard
+
+  - name: Install OS-specific prerequisites
+    package:
+      name:
+        - curl
+        - tar
+      state: present
+
+  - name: Check if Go is already installed
+    shell: "/usr/local/go/bin/go version | grep -q 'go{{ go_version }}'"
+    register: go_exists
+    ignore_errors: true
+    changed_when: false
+
+  - name: Installation Block
+    when: go_exists.rc != 0
+    block:
+      - name: Download Go binary
+        get_url:
+          url: "{{ go_download_url }}"
+          dest: "/tmp/{{ go_tarball }}"
+          mode: '0644'
+
+      - name: Remove old Go installation
+        file:
+          path: "{{ go_install_dir }}/go"
+          state: absent
+
+      - name: Extract Go tarball
+        unarchive:
+          src: "/tmp/{{ go_tarball }}"
+          dest: "{{ go_install_dir }}"
+          remote_src: yes
+
+  - name: Add Go to system-wide PATH
+    copy:
+      dest: /etc/profile.d/golang.sh
+      content: |
+        export PATH=$PATH:/usr/local/go/bin
+        export GOPATH=$HOME/go
+        export PATH=$PATH:$GOPATH/bin
+      mode: '0644'
+
+  - name: Clean up tarball
+    file:
+      path: "/tmp/{{ go_tarball }}"
+      state: absent
+
+  # =================================================
+  # Clone,Build and install, Postgres/PSP with pg_tde
+  # =================================================
+
+  - name: Build from sources, PSP and TDE
+    include_tasks:
+      file: "build_from_source.yml"
+    when: not install_from_packages
+
+  # =================================================
+  # Install from packages, both Postgres/PSP and pg_tde
+  # =================================================
+
+  - name: Install on RHEL
+    include_tasks:
+      file: "install_from_packages_rhel.yml"
+    when: install_from_packages and ansible_os_family == 'RedHat'
+
+  - name: Install on Debian
+    include_tasks:
+      file: "install_from_packages_deb.yml"
+    when: install_from_packages and ansible_os_family == 'Debian'
+
+  # =============================
+  # Deploy the pg_tde pytest suite
+  # =============================
+  # Vendored under files/pytest/ (copied from percona-qa's postgresql/pytest,
+  # py_framework branch) so this role no longer depends on a separate
+  # percona-qa clone/branch at test time.
+
+  - name: Deploy pg_tde pytest suite
+    copy:
+      src: ../files/pytest/
+      dest: /tmp/pg_tde_pytest_src
+      mode: preserve
+    become: true          # Required for become_user to work
+    become_user: postgres
+
+  - name: Prepare pytest environment (venv, deps, pg_tde smoke check)
+    become: true
+    become_user: postgres
+    shell: >-
+      ./setup_test_env.sh
+      --install-dir {{ pg_install_dir }}
+      --pg-major {{ major_version }}
+      --no-setup-external-key-providers
+    args:
+      executable: /bin/bash
+      chdir: "/tmp/pg_tde_pytest_src"
+    environment:
+      PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:/usr/local/go/bin:{{ ansible_env.PATH | default('/usr/local/bin:/usr/bin:/bin') }}"
+      LD_LIBRARY_PATH: "{{ pg_lib_dir }}"
+      INSTALL_DIR: "{{ pg_install_dir }}"
+    register: pytest_env_setup
+
+  - name: Save pytest environment setup log
+    copy:
+      content: "{{ pytest_env_setup.stdout | default('') }}\n--- STDERR ---\n{{ pytest_env_setup.stderr | default('') }}"
+      dest: /tmp/pg_tde_pytest_env_setup.log
+    become: true
+
+  - name: Show pytest environment setup output
+    debug:
+      var: pytest_env_setup.stdout_lines
+
+  # =============================
+  # Run the pg_tde pytest suite
+  # =============================
+  - name: Run pg_tde pytest suite
+    become: true
+    become_user: postgres
+    shell: >-
+      set -o pipefail;
+      source .env.sh &&
+      pytest tests/
+      --skip-sections={{ pytest_skip_sections }}
+      --basetemp=/tmp/pg_tde_pytest_run
+      --junitxml=/tmp/pg_tde_pytest_junit.xml
+      --html=/tmp/pg_tde_pytest_report.html --self-contained-html
+    args:
+      executable: /bin/bash
+      chdir: "/tmp/pg_tde_pytest_src"
+    environment:
+      PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:/usr/local/go/bin:{{ ansible_env.PATH | default('/usr/local/bin:/usr/bin:/bin') }}"
+      LD_LIBRARY_PATH: "{{ pg_lib_dir }}"
+      INSTALL_DIR: "{{ pg_install_dir }}"
+      PG_MAJOR: "{{ major_version }}"
+      PG_TDE_SKIP_EXTERNAL_KEY_PROVIDERS: "1"
+    ignore_errors: true
+    register: regression
+
+  - name: Determine pytest failure status
+    set_fact:
+      pytest_failed: "{{ (regression.rc | default(1)) != 0 }}"
+
+  # Disk-usage report printed to the Jenkins console (survives a later host death
+  # at "Save test runner output"). Some hosts (debian13-x86, uresolute-x86) fill
+  # the volume during the run for an as-yet-unknown reason; this shows what ate it.
+  - name: Capture disk usage after test run
+    become: true
+    ansible.builtin.shell: |
+      set +e
+      echo "===== df -h ====="
+      df -h
+      echo "===== du -sh /tmp/pg_tde_pytest_run top-level (pytest --basetemp) ====="
+      du -sh /tmp/pg_tde_pytest_run 2>/dev/null
+      echo "===== du -sh /tmp/pg_tde_pytest_run/* ====="
+      du -sh /tmp/pg_tde_pytest_run/* 2>/dev/null | sort -rh | head -20
+      echo "===== largest files under /tmp/pg_tde_pytest_run ====="
+      find /tmp/pg_tde_pytest_run -type f -size +100M -exec du -h {} \; 2>/dev/null | sort -rh | head -20
+      echo "===== core dumps ====="
+      find / -maxdepth 4 -name "core*" -type f 2>/dev/null -exec du -h {} \; | head -20
+      ls -1 /proc/sys/kernel/core_pattern 2>/dev/null && cat /proc/sys/kernel/core_pattern 2>/dev/null
+    register: disk_report
+    changed_when: false
+    ignore_errors: true
+
+  - name: Show disk usage report
+    ansible.builtin.debug:
+      var: disk_report.stdout_lines
+
+  - name: Show pytest summary (tail of output)
+    debug:
+      msg: "{{ regression.stdout_lines[-80:] if regression.stdout_lines is defined else [] }}"
+
+  - name: Show stderr if pytest run failed
+    debug:
+      var: regression.stderr_lines
+    when: pytest_failed
+
+  - name: Save pytest run output to file
+    copy:
+      content: "{{ regression.stdout | default('') }}\n--- STDERR ---\n{{ regression.stderr | default('') }}"
+      dest: /tmp/pg_tde_pytest_output.log
+    become: true
+    when: regression is defined
+
+  - name: Package pg_tde pytest test artifacts
+    shell: |
+      set -uo pipefail
+      ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
+      ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
+      rm -rf "$ARTIFACT_DIR"
+      mkdir -p "$ARTIFACT_DIR"
+
+      TESTS_FAILED={{ '1' if pytest_failed else '0' }}
+
+      # Always included: pytest run output, HTML report, JUnit XML, and the
+      # environment-setup log (tiny; useful even on a pass).
+      cp /tmp/pg_tde_pytest_output.log     "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_tde_pytest_report.html    "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_tde_pytest_junit.xml      "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_tde_pytest_env_setup.log  "$ARTIFACT_DIR/" 2>/dev/null || true
+
+      if [ "$TESTS_FAILED" -eq 0 ]; then
+        # All tests passed — plus the server (PSP) and TDE build/install logs
+        # for provenance. Keeps the Jenkins artifact upload small; per-test
+        # data dirs add no value when everything passed.
+        echo "All tests passed — artifact contains pytest reports + build logs only."
+        cp /tmp/psp-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+        cp /tmp/tde-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+        cp /tmp/tde-install.log  "$ARTIFACT_DIR/" 2>/dev/null || true
+      else
+        # Failure — collect the full debug bundle.
+        mkdir -p "$ARTIFACT_DIR/logs"
+
+        cp /tmp/psp-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+        cp /tmp/tde-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+        cp /tmp/tde-install.log  "$ARTIFACT_DIR/" 2>/dev/null || true
+
+        # Per-test PGDATA + server.log live under the pytest --basetemp root,
+        # one directory per test (e.g. test_encryption0/, test_recovery3/, ...).
+        if [ -d /tmp/pg_tde_pytest_run ]; then
+          cp -r /tmp/pg_tde_pytest_run "$ARTIFACT_DIR/logs/pg_tde_pytest_run" 2>/dev/null || true
+        fi
+
+        # System PostgreSQL service log: RHEL (/var/lib/pgsql)
+        find /var/lib/pgsql -name "*.log" -type f 2>/dev/null \
+          -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+        # System PostgreSQL service log: Debian (/var/log/postgresql)
+        find /var/log/postgresql -name "*.log" -type f 2>/dev/null \
+          -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+        # PostgreSQL server log when built from source (/opt/pgsql/data)
+        find /opt/pgsql/data -name "*.log" -type f 2>/dev/null \
+          -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+      fi
+
+      tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
+    args:
+      executable: /bin/bash
+    become: true
+    ignore_errors: true
+
+  - name: Fetch pg_tde pytest test artifacts to controller
+    fetch:
+      src: "/tmp/{{ artifact_filename }}"
+      dest: "{{ playbook_dir }}/../artifacts/"
+      fail_on_missing: false
+
+  - name: Fail the playbook if pg_tde pytest tests failed
+    fail:
+      msg: "pg_tde pytest suite failed"
+    when: pytest_failed

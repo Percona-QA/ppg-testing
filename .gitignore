@@ -22,6 +22,8 @@ __pycache__/
 ### --- Ansible & Local Configs ---
 .ansible/
 .molecule/
+# Test-run artifacts fetched from remote hosts (e.g. pg_tde/core/artifacts/)
+artifacts/
 .pre-commit-config.yaml
 .yamllint
 .sqlfluff
