@@ -22,89 +22,55 @@
   - name: Map distro to OBS repository directory
     ansible.builtin.set_fact:
       obs_repo_dir: >-
-        {%- if ansible_distribution == 'Debian' and ansible_distribution_major_version == '13' -%}
-        Debian_13
-        {%- elif ansible_distribution == 'Ubuntu' and ansible_distribution_major_version == '24' -%}
-        Ubuntu_24.04
-        {%- elif (ansible_distribution == 'Rocky' or ansible_distribution == 'RedHat') and ansible_distribution_major_version == '9' -%}
-        RockyLinux_9
+        {%- if ansible_distribution == 'Debian' -%}
+        Debian_{{ ansible_distribution_major_version }}
+        {%- elif ansible_distribution == 'Ubuntu' -%}
+        Ubuntu_{{ ansible_distribution_version }}
+        {%- elif ansible_os_family == 'RedHat' -%}
+        RockyLinux_{{ ansible_distribution_major_version }}
         {%- else -%}
         UNSUPPORTED
         {%- endif -%}
 
-  - name: Fail when distro is not supported by OBS project {{ obs_project }}
+  - name: Fail when distro family is not recognized for OBS
     ansible.builtin.fail:
       msg: >-
-        OBS project {{ obs_project }} does not publish packages for
-        {{ ansible_distribution }} {{ ansible_distribution_major_version }}.
-        Supported targets: Debian 13, Ubuntu 24.04, Rocky/RHEL 9.
+        Don't know how to map {{ ansible_distribution }}
+        {{ ansible_distribution_version }} to an OBS repository directory
+        for project {{ obs_project }}. Recognized families: Debian, Ubuntu,
+        RedHat (RHEL/Rocky/OracleLinux).
     when: obs_repo_dir == "UNSUPPORTED"
 
-  - name: Detect PR project and derive base project name
+  - name: Compute OBS repo id and base URL
     ansible.builtin.set_fact:
-      obs_is_pr: "{{ obs_project is search(':PR:pr-\\d+:') }}"
-      obs_base_project: "{{ obs_project | regex_replace(':PR:pr-\\d+:', ':') }}"
+      obs_safe_id: "{{ obs_project | replace(':', '_') }}"
+      obs_base_url: "https://download.opensuse.org/repositories/{{ obs_project | regex_replace(':', ':/') }}/{{ obs_repo_dir }}"
 
-  - name: Build ordered OBS project list (PR first, base second)
-    ansible.builtin.set_fact:
-      obs_projects: >-
-        {%- if obs_is_pr -%}
-        [
-          {"name": "{{ obs_project }}",      "apt_priority": 1001, "yum_priority": 10},
-          {"name": "{{ obs_base_project }}", "apt_priority": 500,  "yum_priority": 20}
-        ]
-        {%- else -%}
-        [{"name": "{{ obs_project }}", "apt_priority": 500, "yum_priority": 99}]
-        {%- endif -%}
+  - name: Add OBS apt source (Debian/Ubuntu)
+    ansible.builtin.copy:
+      dest: "/etc/apt/sources.list.d/{{ obs_project }}.list"
+      mode: "0644"
+      content: |
+        deb {{ obs_base_url }}/ /
+    when: ansible_os_family == "Debian"
 
-  - name: Ensure /etc/apt/keyrings exists (Debian/Ubuntu)
-    ansible.builtin.file:
-      path: /etc/apt/keyrings
-      state: directory
-      mode: "0755"
+  - name: Ensure gnupg is present (Debian/Ubuntu)
+    ansible.builtin.apt:
+      name: gnupg
+      state: present
     when: ansible_os_family == "Debian"
 
   - name: Download OBS repo signing key (Debian/Ubuntu)
     ansible.builtin.get_url:
-      url: "{{ base_url }}/Release.key"
-      dest: "/etc/apt/keyrings/{{ safe_id }}.asc"
+      url: "{{ obs_base_url }}/Release.key"
+      dest: "/tmp/{{ obs_safe_id }}.key"
       mode: "0644"
       force: true
-    vars:
-      safe_id: "{{ item.name | replace(':', '-') }}"
-      base_url: "https://download.opensuse.org/repositories/{{ item.name | regex_replace(':', ':/') }}/{{ obs_repo_dir }}"
-    loop: "{{ obs_projects }}"
-    loop_control:
-      label: "{{ item.name }}"
     when: ansible_os_family == "Debian"
 
-  - name: Add OBS apt source (Debian/Ubuntu)
-    ansible.builtin.copy:
-      dest: "/etc/apt/sources.list.d/{{ safe_id }}.list"
-      mode: "0644"
-      content: |
-        deb [signed-by=/etc/apt/keyrings/{{ safe_id }}.asc] {{ base_url }}/ ./
-    vars:
-      safe_id: "{{ item.name | replace(':', '-') }}"
-      base_url: "https://download.opensuse.org/repositories/{{ item.name | regex_replace(':', ':/') }}/{{ obs_repo_dir }}"
-    loop: "{{ obs_projects }}"
-    loop_control:
-      label: "{{ item.name }}"
-    when: ansible_os_family == "Debian"
-
-  - name: Pin OBS apt repo priority (Debian/Ubuntu)
-    ansible.builtin.copy:
-      dest: "/etc/apt/preferences.d/{{ safe_id }}"
-      mode: "0644"
-      content: |
-        Package: *
-        Pin: release l={{ item.name }}
-        Pin-Priority: {{ item.apt_priority }}
-    vars:
-      safe_id: "{{ item.name | replace(':', '-') }}"
-    loop: "{{ obs_projects }}"
-    loop_control:
-      label: "{{ item.name }}"
+  - name: Dearmor and install OBS repo signing key (Debian/Ubuntu)
+    ansible.builtin.shell: |
+      gpg --batch --yes --dearmor -o /etc/apt/trusted.gpg.d/{{ obs_safe_id }}.gpg /tmp/{{ obs_safe_id }}.key
     when: ansible_os_family == "Debian"
 
   - name: Update apt cache (Debian/Ubuntu)
@@ -112,26 +78,22 @@
       update_cache: true
     when: ansible_os_family == "Debian"
 
+  - name: Import OBS repo signing key (RHEL/Rocky)
+    ansible.builtin.rpm_key:
+      key: "{{ obs_base_url }}/repodata/repomd.xml.key"
+      state: present
+    when: ansible_os_family == "RedHat"
+
   - name: Add OBS yum repository (RHEL/Rocky)
     ansible.builtin.copy:
-      dest: "/etc/yum.repos.d/{{ safe_id }}.repo"
+      dest: "/etc/yum.repos.d/{{ obs_safe_id }}.repo"
       mode: "0644"
       content: |
-        [{{ section_id }}]
-        name=OBS {{ item.name }} ({{ obs_repo_dir }})
-        type=rpm-md
-        baseurl={{ base_url }}/
-        gpgcheck=1
-        gpgkey={{ base_url }}/repodata/repomd.xml.key
+        [{{ obs_project }}]
+        name={{ obs_project }} - {{ obs_repo_dir }}
+        baseurl={{ obs_base_url }}/
         enabled=1
-        priority={{ item.yum_priority }}
-    vars:
-      safe_id: "{{ item.name | replace(':', '-') }}"
-      section_id: "{{ item.name | replace(':', '_') }}"
-      base_url: "https://download.opensuse.org/repositories/{{ item.name | regex_replace(':', ':/') }}/{{ obs_repo_dir }}"
-    loop: "{{ obs_projects }}"
-    loop_control:
-      label: "{{ item.name }}"
+        gpgcheck=0
     when: ansible_os_family == "RedHat"
 
   - name: Refresh dnf cache (RHEL/Rocky)
