@@ -103,7 +103,7 @@ def test_deb_package_is_installed(host, package):
         pytest.skip("Skipping for Q2-2025 releses and moving forward.")
     pkg = host.package(package)
     assert pkg.is_installed
-    assert pkg.version in pg_versions['deb_pkg_ver']
+    assert settings.strip_obs_release_suffix(pkg.version) in pg_versions['deb_pkg_ver']
 
 
 @pytest.mark.upgrade
