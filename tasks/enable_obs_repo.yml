@@ -79,9 +79,11 @@
     when: ansible_os_family == "Debian"
 
   - name: Import OBS repo signing key (RHEL/Rocky)
-    ansible.builtin.rpm_key:
-      key: "{{ obs_base_url }}/repodata/repomd.xml.key"
-      state: present
+    # rpm has its own OpenPGP parser and doesn't shell out to the system gpg/gpg2,
+    # unlike ansible.builtin.rpm_key — which failed on RHEL10 (couldn't parse the
+    # key's OpenPGP v6 packet) and OL10 (no gpg2 binary present at all).
+    ansible.builtin.command: "rpm --import {{ obs_base_url }}/repodata/repomd.xml.key"
+    changed_when: true
     when: ansible_os_family == "RedHat"
 
   - name: Add OBS yum repository (RHEL/Rocky)
