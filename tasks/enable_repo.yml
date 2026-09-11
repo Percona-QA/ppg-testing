@@ -1,34 +1,12 @@
-  - name: Install percona repository package
-    apt:
-     deb: https://repo.percona.com/apt/percona-release_latest.generic_all.deb
-    when: ansible_os_family == "Debian"
+---
+  - name: Detect whether to use the OBS repo
+    ansible.builtin.set_fact:
+      use_obs_repo: "{{ (lookup('env', 'USE_OBS_REPO') | default('false', true) | lower) in ['true', '1', 'yes'] }}"
 
-  - name: Install percona-release
-    command: yum -y install https://repo.percona.com/yum/percona-release-latest.noarch.rpm
-    when: ansible_os_family == "RedHat"
+  - name: Configure repository (OBS)
+    include_tasks: "{{ role_path }}/../../tasks/enable_obs_repo.yml"
+    when: use_obs_repo
 
-  - name: clean and update yum cache
-    shell: |
-      yum clean all
-      yum makecache
-    when: ansible_os_family == "RedHat"
-
-  - set_fact:
-      major_repo: "{{ lookup('env', 'MAJOR_REPO') }}"
-
-  - name: setup repo with percona-release {{ version }} with minor prefix
-    command: percona-release enable-only {{ version }} {{ repo }}
-    vars:
-      repo: "{{ lookup('env', 'REPO') }}"
-      # psp only ships one repo per major version (psp-16), no psp-16.xx minor
-      # repos exist, unlike ppg (ppg-16.14 etc.) — trim the minor for psp only.
-      version: "{{ lookup('env', 'VERSION').split('.')[0] if lookup('env', 'VERSION').startswith('psp-') else lookup('env', 'VERSION') }}"
-    when: not major_repo
-
-  - name: setup repo with percona-release {{ version }}
-    command: percona-release enable-only {{ prefix }}-{{ version }} {{ repo }}
-    vars:
-      repo: "{{ lookup('env', 'REPO') }}"
-      prefix: "{{ lookup('env', 'VERSION').split('-')[0] }}"
-      version: "{{ lookup('env', 'VERSION').split('.')[0].split('-')[1] }}"
-    when: major_repo
+  - name: Configure repository (percona-release)
+    include_tasks: "{{ role_path }}/../../tasks/enable_percona_release_repo.yml"
+    when: not use_obs_repo

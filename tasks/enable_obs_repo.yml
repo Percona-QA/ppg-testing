@@ -1,0 +1,141 @@
+---
+  - name: Map REPO selection to OBS repository channel
+    ansible.builtin.set_fact:
+      obs_repo_channel_map:
+        testing: staging
+        release: release
+        experimental: devel
+
+  - name: Fail when REPO has no OBS channel mapping
+    ansible.builtin.fail:
+      msg: >-
+        REPO={{ lookup('env', 'REPO') }} has no OBS channel mapping. Known
+        values: {{ obs_repo_channel_map.keys() | list }}.
+    when: lookup('env', 'REPO') not in obs_repo_channel_map
+
+  - name: Build OBS project string from REPO and VERSION
+    ansible.builtin.set_fact:
+      obs_project: >-
+        isv:percona:ppg:{{ obs_repo_channel_map[lookup('env', 'REPO')] }}:{{
+        (lookup('env', 'VERSION') | replace('ppg-', '')).split('.')[0] }}
+
+  - name: Map distro to OBS repository directory
+    ansible.builtin.set_fact:
+      obs_repo_dir: >-
+        {%- if ansible_distribution == 'Debian' and ansible_distribution_major_version == '13' -%}
+        Debian_13
+        {%- elif ansible_distribution == 'Ubuntu' and ansible_distribution_major_version == '24' -%}
+        Ubuntu_24.04
+        {%- elif (ansible_distribution == 'Rocky' or ansible_distribution == 'RedHat') and ansible_distribution_major_version == '9' -%}
+        RockyLinux_9
+        {%- else -%}
+        UNSUPPORTED
+        {%- endif -%}
+
+  - name: Fail when distro is not supported by OBS project {{ obs_project }}
+    ansible.builtin.fail:
+      msg: >-
+        OBS project {{ obs_project }} does not publish packages for
+        {{ ansible_distribution }} {{ ansible_distribution_major_version }}.
+        Supported targets: Debian 13, Ubuntu 24.04, Rocky/RHEL 9.
+    when: obs_repo_dir == "UNSUPPORTED"
+
+  - name: Detect PR project and derive base project name
+    ansible.builtin.set_fact:
+      obs_is_pr: "{{ obs_project is search(':PR:pr-\\d+:') }}"
+      obs_base_project: "{{ obs_project | regex_replace(':PR:pr-\\d+:', ':') }}"
+
+  - name: Build ordered OBS project list (PR first, base second)
+    ansible.builtin.set_fact:
+      obs_projects: >-
+        {%- if obs_is_pr -%}
+        [
+          {"name": "{{ obs_project }}",      "apt_priority": 1001, "yum_priority": 10},
+          {"name": "{{ obs_base_project }}", "apt_priority": 500,  "yum_priority": 20}
+        ]
+        {%- else -%}
+        [{"name": "{{ obs_project }}", "apt_priority": 500, "yum_priority": 99}]
+        {%- endif -%}
+
+  - name: Ensure /etc/apt/keyrings exists (Debian/Ubuntu)
+    ansible.builtin.file:
+      path: /etc/apt/keyrings
+      state: directory
+      mode: "0755"
+    when: ansible_os_family == "Debian"
+
+  - name: Download OBS repo signing key (Debian/Ubuntu)
+    ansible.builtin.get_url:
+      url: "{{ base_url }}/Release.key"
+      dest: "/etc/apt/keyrings/{{ safe_id }}.asc"
+      mode: "0644"
+      force: true
+    vars:
+      safe_id: "{{ item.name | replace(':', '-') }}"
+      base_url: "https://download.opensuse.org/repositories/{{ item.name | regex_replace(':', ':/') }}/{{ obs_repo_dir }}"
+    loop: "{{ obs_projects }}"
+    loop_control:
+      label: "{{ item.name }}"
+    when: ansible_os_family == "Debian"
+
+  - name: Add OBS apt source (Debian/Ubuntu)
+    ansible.builtin.copy:
+      dest: "/etc/apt/sources.list.d/{{ safe_id }}.list"
+      mode: "0644"
+      content: |
+        deb [signed-by=/etc/apt/keyrings/{{ safe_id }}.asc] {{ base_url }}/ ./
+    vars:
+      safe_id: "{{ item.name | replace(':', '-') }}"
+      base_url: "https://download.opensuse.org/repositories/{{ item.name | regex_replace(':', ':/') }}/{{ obs_repo_dir }}"
+    loop: "{{ obs_projects }}"
+    loop_control:
+      label: "{{ item.name }}"
+    when: ansible_os_family == "Debian"
+
+  - name: Pin OBS apt repo priority (Debian/Ubuntu)
+    ansible.builtin.copy:
+      dest: "/etc/apt/preferences.d/{{ safe_id }}"
+      mode: "0644"
+      content: |
+        Package: *
+        Pin: release l={{ item.name }}
+        Pin-Priority: {{ item.apt_priority }}
+    vars:
+      safe_id: "{{ item.name | replace(':', '-') }}"
+    loop: "{{ obs_projects }}"
+    loop_control:
+      label: "{{ item.name }}"
+    when: ansible_os_family == "Debian"
+
+  - name: Update apt cache (Debian/Ubuntu)
+    ansible.builtin.apt:
+      update_cache: true
+    when: ansible_os_family == "Debian"
+
+  - name: Add OBS yum repository (RHEL/Rocky)
+    ansible.builtin.copy:
+      dest: "/etc/yum.repos.d/{{ safe_id }}.repo"
+      mode: "0644"
+      content: |
+        [{{ section_id }}]
+        name=OBS {{ item.name }} ({{ obs_repo_dir }})
+        type=rpm-md
+        baseurl={{ base_url }}/
+        gpgcheck=1
+        gpgkey={{ base_url }}/repodata/repomd.xml.key
+        enabled=1
+        priority={{ item.yum_priority }}
+    vars:
+      safe_id: "{{ item.name | replace(':', '-') }}"
+      section_id: "{{ item.name | replace(':', '_') }}"
+      base_url: "https://download.opensuse.org/repositories/{{ item.name | regex_replace(':', ':/') }}/{{ obs_repo_dir }}"
+    loop: "{{ obs_projects }}"
+    loop_control:
+      label: "{{ item.name }}"
+    when: ansible_os_family == "RedHat"
+
+  - name: Refresh dnf cache (RHEL/Rocky)
+    ansible.builtin.shell: |
+      dnf clean all
+      dnf makecache
+    when: ansible_os_family == "RedHat"
