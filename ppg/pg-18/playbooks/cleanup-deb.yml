@@ -8,7 +8,6 @@
       apt:
         name: "{{ packages }}"
         state: absent
-      ignore_errors: true
       vars:
         packages:
           - percona-postgresql-18-pgaudit
@@ -49,7 +48,6 @@
       apt:
         name: "{{ packages }}"
         state: absent
-      ignore_errors: true
       vars:
         packages:
           - percona-postgresql-18
@@ -74,7 +72,6 @@
       apt:
         name: "{{ packages }}"
         state: absent
-      ignore_errors: true
       vars:
         packages:
         - libecpg-compat3
