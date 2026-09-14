@@ -4,11 +4,11 @@ dependency:
 driver:
   name: ${driver}
 platforms:
-  - name: tde-auxiliary-ol8-arm-${BUILD_NUMBER}
+  - name: tde-core-ol8-arm-${BUILD_NUMBER}
     region: ${region}
     image: ${ami_ol8_arm64}
     vpc_subnet_id: ${vpc_subnet_id_aws2}
-    instance_type: m7g.2xlarge
+    instance_type: m7g.xlarge
     volume_size: 100
     ssh_user: ec2-user
     root_device_name: /dev/sda1
