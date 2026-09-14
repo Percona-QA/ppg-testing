@@ -4,7 +4,7 @@ dependency:
 driver:
   name: ${driver}
 platforms:
-  - name: tde-auxiliary-debian13-${BUILD_NUMBER}
+  - name: tde-core-debian13-${BUILD_NUMBER}
     region: ${region}
     image: ${ami_debian13_x86_64}
     vpc_subnet_id: ${vpc_subnet_id_aws2}
