@@ -1,0 +1,121 @@
+---
+# Configure the isv:percona:ppg OBS (Open Build Service) repository as an
+# alternate package source to the percona-release repos enabled by
+# ../../../../tasks/enable_repo.yml. Package *names* are identical between
+# the two sources (verified against the live Debian_12 and RockyLinux_10
+# repo indexes for PG 19) — install_from_packages_deb.yml/_rhel.yml are
+# reused unchanged; only the repo/key setup here differs.
+#
+# Platform coverage and exact URLs come from https://ppg-obs.cancellar.info
+# ("REPOSITORY SETUP" panel per platform) — obs_project/obs_os_path below
+# reproduce that same URL shape.
+#
+# obs_channel (devel/staging/release) matches the Jenkins job's OBS_CHANNEL
+# choices, which are the semantic equivalents of percona-release's REPO
+# tiers: devel ≈ experimental, staging ≈ testing, release ≈ release.
+
+  - name: Compute OBS project + platform path facts
+    set_fact:
+      obs_project: "isv:percona:ppg:{{ obs_channel_map[obs_channel] }}{{ major_version }}"
+      # OBS only builds RockyLinux/UBI/Ubuntu/Debian today — no Oracle Linux,
+      # matching this role's other supported distros only partially.
+      obs_os_path: >-
+        {%- if ansible_distribution == 'Rocky' -%}
+        RockyLinux_{{ ansible_distribution_major_version }}
+        {%- elif ansible_distribution == 'RedHat' -%}
+        UBI_{{ ansible_distribution_major_version }}
+        {%- elif ansible_distribution == 'Ubuntu' -%}
+        Ubuntu_{{ ansible_distribution_version }}
+        {%- elif ansible_distribution == 'Debian' -%}
+        Debian_{{ ansible_distribution_major_version }}
+        {%- else -%}
+        UNSUPPORTED_OBS_PLATFORM_{{ ansible_distribution }}
+        {%- endif -%}
+      cacheable: true
+    vars:
+      obs_channel_map:
+        devel: "devel:"
+        staging: ""
+        release: "releases:"
+
+  - name: Fail fast if this platform has no known OBS repo mapping
+    ansible.builtin.assert:
+      that:
+        - not obs_os_path.startswith('UNSUPPORTED_OBS_PLATFORM')
+      fail_msg: >-
+        No OBS repository mapping for {{ ansible_distribution }}
+        {{ ansible_distribution_version }}. OBS (isv:percona:ppg) currently
+        publishes for RockyLinux/UBI/Ubuntu/Debian only — check the current
+        platform matrix at https://ppg-obs.cancellar.info before adding one
+        here.
+
+  - name: Set OBS repo URL facts
+    set_fact:
+      obs_baseurl: "https://download.opensuse.org/repositories/{{ obs_project | replace(':', ':/') }}/{{ obs_os_path }}/"
+      obs_repo_id: "{{ obs_project | replace(':', '_') }}"
+      cacheable: true
+
+  - name: Show OBS repo being configured
+    ansible.builtin.debug:
+      msg: "OBS repo: {{ obs_project }}  platform: {{ obs_os_path }}  url: {{ obs_baseurl }}"
+
+  # =============================
+  # RHEL family (RockyLinux, RedHat/UBI)
+  # =============================
+
+  - name: Import OBS GPG key (RHEL)
+    become: true
+    ansible.builtin.rpm_key:
+      key: "{{ obs_baseurl }}repodata/repomd.xml.key"
+      state: present
+    when: ansible_os_family == 'RedHat'
+
+  - name: Add OBS yum repo (RHEL)
+    become: true
+    ansible.builtin.yum_repository:
+      name: "{{ obs_project }}"
+      description: "{{ obs_project }} - {{ obs_os_path }}"
+      baseurl: "{{ obs_baseurl }}"
+      # The dashboard's own repo-setup snippet ships gpgcheck=0 (devel/beta
+      # builds aren't signed the way percona-release's repos are).
+      gpgcheck: false
+      enabled: true
+    when: ansible_os_family == 'RedHat'
+
+  - name: Refresh yum/dnf cache after adding OBS repo (RHEL)
+    become: true
+    ansible.builtin.shell: |
+      set -e
+      {{ 'dnf' if ansible_distribution_major_version | int >= 8 else 'yum' }} clean all
+      {{ 'dnf' if ansible_distribution_major_version | int >= 8 else 'yum' }} makecache
+    args:
+      executable: /bin/bash
+    when: ansible_os_family == 'RedHat'
+
+  # =============================
+  # Debian family (Ubuntu, Debian)
+  # =============================
+
+  - name: Add OBS apt GPG key (Debian)
+    become: true
+    ansible.builtin.shell: |
+      set -euo pipefail
+      curl -fsSL "{{ obs_baseurl }}Release.key" | gpg --dearmor > "/etc/apt/trusted.gpg.d/{{ obs_repo_id }}.gpg"
+    args:
+      executable: /bin/bash
+      creates: "/etc/apt/trusted.gpg.d/{{ obs_repo_id }}.gpg"
+    when: ansible_os_family == 'Debian'
+
+  - name: Add OBS apt source list (Debian)
+    become: true
+    ansible.builtin.copy:
+      dest: "/etc/apt/sources.list.d/{{ obs_repo_id }}.list"
+      content: "deb {{ obs_baseurl }} /\n"
+      mode: '0644'
+    when: ansible_os_family == 'Debian'
+
+  - name: Update apt cache after adding OBS repo (Debian)
+    become: true
+    ansible.builtin.apt:
+      update_cache: true
+    when: ansible_os_family == 'Debian'

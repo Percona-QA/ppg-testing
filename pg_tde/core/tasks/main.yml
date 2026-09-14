@@ -15,9 +15,10 @@
       tde_repo: "{{ lookup('env', 'TDE_REPO') }}"
       tde_branch: "{{ lookup('env', 'TDE_BRANCH') }}"
       # Which package source to install PSP/pg_tde from when install_from_packages
-      # is set. 'percona-release' drives the existing tasks/enable_repo.yml
-      # (REPO=testing/release/experimental). 'obs' is not wired up yet — see the
-      # "Configure repository" step below.
+      # is set. 'percona-release' drives ../../../../tasks/enable_repo.yml
+      # (REPO=testing/release/experimental). 'obs' drives enable_obs_repo.yml
+      # (OBS_CHANNEL=devel/staging/release — the semantic equivalents of
+      # REPO's experimental/testing/release tiers).
       package_source: "{{ lookup('env', 'PACKAGE_SOURCE') | default('percona-release') }}"
       obs_channel: "{{ lookup('env', 'OBS_CHANNEL') | default('devel') }}"
       # percona-qa/postgresql/pytest sections to skip by default: upgrade
@@ -25,10 +26,16 @@
       # key-provider services this role doesn't set up, and slow tests don't
       # belong in the core regression pass. Override via PYTEST_SKIP_SECTIONS.
       pytest_skip_sections: "{{ lookup('env', 'PYTEST_SKIP_SECTIONS') | default('upgrade,minor_upgrade,slow,vault,kmip,openbao', true) }}"
-      # Captured for future use — not yet consumed anywhere in this role (see
-      # the TEST_SUITE mapping discussion: the pytest suite has no sanity/smoke
-      # markers or suite concept today, only --skip-sections).
-      test_suite: "{{ lookup('env', 'TEST_SUITE') | default('All') }}"
+      # 'Sanity' (default — preserves prior behavior for callers not yet
+      # passing TEST_SUITE): pytest_skip_sections applies, external key
+      # providers are not set up — same as every run to date. 'All': every
+      # test case runs, including slow/vault/kmip/openbao — pytest_skip_sections
+      # is ignored and setup_test_env.sh installs Cosmian KMS + OpenBao so
+      # those sections actually exercise something instead of self-skipping.
+      # Note even in 'All', upgrade/minor_upgrade tests still self-skip: they
+      # need --old-install-dir, which this role (unlike the dedicated upgrade
+      # role) doesn't provision.
+      test_suite: "{{ lookup('env', 'TEST_SUITE') | default('Sanity', true) }}"
       # ... include other env lookups here ...
       go_version: "1.25.6"
       go_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}"
@@ -126,13 +133,8 @@
     ansible.builtin.include_tasks: ../../../../tasks/enable_repo.yml
     when: install_from_packages and package_source == 'percona-release'
 
-  - name: Fail fast on unimplemented OBS package source
-    ansible.builtin.fail:
-      msg: >-
-        PACKAGE_SOURCE=obs (OBS_CHANNEL={{ obs_channel }}) has no repo-setup task
-        in this role yet. Add an OBS-equivalent of tasks/enable_repo.yml (repo
-        URL/GPG key per channel) before selecting this option, or use
-        PACKAGE_SOURCE=percona-release.
+  - name: Configure repository (OBS)
+    ansible.builtin.include_tasks: enable_obs_repo.yml
     when: install_from_packages and package_source == 'obs'
 
   - name: Include Redhat tasks file
@@ -245,6 +247,20 @@
         - tar
       state: present
 
+  # Needed for the pgbackrest-marked pytest tests (TestPgBackRest is always
+  # included in Sanity; the full pgbackrest matrix runs under TEST_SUITE=All).
+  # When install_from_packages is set, a Percona repo is already enabled by
+  # this point (see "Configure repository (percona-release)" above), so use
+  # the Percona-branded package. In build-from-source mode no Percona repo is
+  # enabled, so fall back to the plain OS-packaged binary: Debian/Ubuntu ship
+  # pgbackrest directly, RHEL family gets it via EPEL (already enabled by
+  # redhat_tasks.yml above).
+  - name: Install pgbackrest
+    become: true
+    package:
+      name: "{{ 'percona-pgbackrest' if install_from_packages else 'pgbackrest' }}"
+      state: present
+
   - name: Check if Go is already installed
     shell: "/usr/local/go/bin/go version | grep -q 'go{{ go_version }}'"
     register: go_exists
@@ -326,11 +342,14 @@
   - name: Prepare pytest environment (venv, deps, pg_tde smoke check)
     become: true
     become_user: postgres
+    # TEST_SUITE=All installs Cosmian KMS + OpenBao so kmip/vault/openbao
+    # tests actually run instead of self-skipping; Sanity skips that setup,
+    # same as every run to date.
     shell: >-
       ./setup_test_env.sh
       --install-dir {{ pg_install_dir }}
       --pg-major {{ major_version }}
-      --no-setup-external-key-providers
+      {{ '' if test_suite == 'All' else '--no-setup-external-key-providers' }}
     args:
       executable: /bin/bash
       chdir: "/tmp/pg_tde_pytest_src"
@@ -356,11 +375,14 @@
   - name: Run pg_tde pytest suite
     become: true
     become_user: postgres
+    # TEST_SUITE=All runs every test case (no --skip-sections at all — slow/
+    # vault/kmip/openbao all run for real). Sanity keeps the proven default:
+    # pytest_skip_sections applies (upgrade,minor_upgrade,slow,vault,kmip,openbao).
     shell: >-
       set -o pipefail;
       source .env.sh &&
       pytest tests/
-      --skip-sections={{ pytest_skip_sections }}
+      {{ '' if test_suite == 'All' else '--skip-sections=' ~ pytest_skip_sections }}
       --basetemp=/tmp/pg_tde_pytest_run
       --junitxml=/tmp/pg_tde_pytest_junit.xml
       --html=/tmp/pg_tde_pytest_report.html --self-contained-html
@@ -372,7 +394,7 @@
       LD_LIBRARY_PATH: "{{ pg_lib_dir }}"
       INSTALL_DIR: "{{ pg_install_dir }}"
       PG_MAJOR: "{{ major_version }}"
-      PG_TDE_SKIP_EXTERNAL_KEY_PROVIDERS: "1"
+      PG_TDE_SKIP_EXTERNAL_KEY_PROVIDERS: "{{ '0' if test_suite == 'All' else '1' }}"
     ignore_errors: true
     register: regression
 
@@ -482,6 +504,25 @@
     fetch:
       src: "/tmp/{{ artifact_filename }}"
       dest: "{{ playbook_dir }}/../artifacts/"
+      fail_on_missing: false
+
+  # Plain, uncompressed copies alongside the tarball above so CI can point
+  # Jenkins' JUnit / HTML Publisher plugins straight at them without having
+  # to unpack anything first. fail_on_missing: false — a run that died
+  # before producing them shouldn't break the fetch step itself; pass/fail
+  # signal for the build still comes from "Fail the playbook..." below.
+  - name: Fetch pytest JUnit XML to controller
+    fetch:
+      src: /tmp/pg_tde_pytest_junit.xml
+      dest: "{{ playbook_dir }}/../artifacts/{{ inventory_hostname }}/pg_tde_pytest_junit.xml"
+      flat: true
+      fail_on_missing: false
+
+  - name: Fetch pytest HTML report to controller
+    fetch:
+      src: /tmp/pg_tde_pytest_report.html
+      dest: "{{ playbook_dir }}/../artifacts/{{ inventory_hostname }}/pg_tde_pytest_report.html"
+      flat: true
       fail_on_missing: false
 
   - name: Fail the playbook if pg_tde pytest tests failed
