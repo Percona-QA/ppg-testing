@@ -8,7 +8,10 @@
 #
 # Platform coverage and exact URLs come from https://ppg-obs.cancellar.info
 # ("REPOSITORY SETUP" panel per platform) — obs_project/obs_os_path below
-# reproduce that same URL shape.
+# reproduce that same URL shape: isv:percona:ppg:<channel>:<major>, e.g.
+# isv:percona:ppg:staging:18. Re-verify against the live dashboard before
+# changing obs_channel_map — this project layout has shifted before (the
+# "staging" segment didn't exist in an earlier iteration of this same repo).
 #
 # obs_channel (devel/staging/release) matches the Jenkins job's OBS_CHANNEL
 # choices, which are the semantic equivalents of percona-release's REPO
@@ -35,7 +38,7 @@
     vars:
       obs_channel_map:
         devel: "devel:"
-        staging: ""
+        staging: "staging:"
         release: "releases:"
 
   - name: Fail fast if this platform has no known OBS repo mapping
