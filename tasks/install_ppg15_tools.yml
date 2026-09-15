@@ -555,6 +555,21 @@
       etcd_pin_version: "3.4.45"
     when: pg_version_to_install | string is version('15.19', '>=', strict=True)
 
+  # The Debian etcd package carries an epoch (e.g. "1:3.4.45-1.noble") that
+  # varies by codename, unlike the RPM build which has none -- "etcd=3.4.45"
+  # matches no candidate under apt, so discover the exact madison string
+  # apt actually needs instead of guessing the epoch/revision.
+  - name: Discover exact etcd package version for pin (Debian)
+    ansible.builtin.shell: |
+      set -o pipefail
+      apt-cache madison etcd | awk '{print $3}' | grep -E "(^|:){{ etcd_pin_version }}-" | head -n1
+    args:
+      executable: /bin/bash
+    register: etcd_pin_version_deb
+    changed_when: false
+    failed_when: etcd_pin_version_deb.stdout | length == 0
+    when: ansible_os_family == "Debian" and etcd_pin_version is defined
+
   - name: Install etcd packages RHEL (pinned version)
     yum:
       name: "{{ packages }}"
@@ -607,9 +622,12 @@
       name: "{{ packages }}"
       state: present
       update_cache: yes
+      allow_downgrade: true
     vars:
       packages:
-        - "etcd={{ etcd_pin_version }}"
+        - "etcd={{ etcd_pin_version_deb.stdout }}"
+        - "etcd-client={{ etcd_pin_version_deb.stdout }}"
+        - "etcd-server={{ etcd_pin_version_deb.stdout }}"
         - percona-haproxy
     when: >
       etcd_pin_version is defined and (
@@ -651,9 +669,12 @@
       name: "{{ packages }}"
       state: present
       update_cache: yes
+      allow_downgrade: true
     vars:
       packages:
-        - "etcd={{ etcd_pin_version }}"
+        - "etcd={{ etcd_pin_version_deb.stdout }}"
+        - "etcd-client={{ etcd_pin_version_deb.stdout }}"
+        - "etcd-server={{ etcd_pin_version_deb.stdout }}"
         - percona-haproxy
     when: ansible_os_family == "Debian" and etcd_pin_version is defined
 
