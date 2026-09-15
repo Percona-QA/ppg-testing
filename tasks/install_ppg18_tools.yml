@@ -641,7 +641,24 @@
     when: ansible_os_family == "Debian"
 
 
-  - name: Install etcd packages RHEL
+  - name: Set etcd pinned version fact
+    set_fact:
+      etcd_pin_version: "3.4.45"
+    when: pg_version_to_install | string is version('18.6', '>=', strict=True)
+
+  - name: Install etcd packages RHEL (pinned version)
+    yum:
+      name: "{{ packages }}"
+      state: present
+      update_cache: yes
+    vars:
+      packages:
+      - "etcd-{{ etcd_pin_version }}"
+      - percona-haproxy
+      - python3-etcd
+    when: ansible_os_family == "RedHat" and etcd_pin_version is defined
+
+  - name: Install etcd packages RHEL (latest)
     yum:
       name: "{{ packages }}"
       state: latest
@@ -651,7 +668,7 @@
       - etcd
       - percona-haproxy
       - python3-etcd
-    when: ansible_os_family == "RedHat"
+    when: ansible_os_family == "RedHat" and etcd_pin_version is not defined
 
   - name: Restart etcd RHEL
     include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
@@ -660,7 +677,18 @@
       svc_state: restarted
     when: ansible_os_family == "RedHat"
 
-  - name: Install patroni related packages Debian
+  - name: Install patroni related packages Debian (pinned etcd version)
+    apt:
+      name: "{{ packages }}"
+      state: present
+      update_cache: yes
+    vars:
+      packages:
+        - "etcd={{ etcd_pin_version }}"
+        - percona-haproxy
+    when: ansible_os_family == "Debian" and etcd_pin_version is defined
+
+  - name: Install patroni related packages Debian (latest etcd version)
     apt:
       name: "{{ packages }}"
       state: latest
@@ -669,7 +697,7 @@
       packages:
         - etcd
         - percona-haproxy
-    when: ansible_os_family == "Debian"
+    when: ansible_os_family == "Debian" and etcd_pin_version is not defined
 
   - name: Create /etc/patroni directory
     file:

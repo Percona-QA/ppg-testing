@@ -550,7 +550,24 @@
       svc_state: restarted
     when: ansible_os_family == "Debian"
 
-  - name: Install etcd packages RHEL
+  - name: Set etcd pinned version fact
+    set_fact:
+      etcd_pin_version: "3.4.45"
+    when: pg_version_to_install | string is version('15.19', '>=', strict=True)
+
+  - name: Install etcd packages RHEL (pinned version)
+    yum:
+      name: "{{ packages }}"
+      state: present
+      update_cache: yes
+    vars:
+      packages:
+      - "etcd-{{ etcd_pin_version }}"
+      - percona-haproxy
+      - python3-etcd
+    when: ansible_os_family == "RedHat" and etcd_pin_version is defined
+
+  - name: Install etcd packages RHEL (latest)
     yum:
       name: "{{ packages }}"
       state: latest
@@ -560,7 +577,7 @@
       - etcd
       - percona-haproxy
       - python3-etcd
-    when: ansible_os_family == "RedHat"
+    when: ansible_os_family == "RedHat" and etcd_pin_version is not defined
 
   - name: Install pgvector packages RHEL
     yum:
@@ -585,7 +602,22 @@
       - percona-postgresql-15-pgvector
     when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('15.10', '>=', strict=True))
 
-  - name: Install patroni related packages Debian
+  - name: Install patroni related packages Debian (pinned etcd version)
+    apt:
+      name: "{{ packages }}"
+      state: present
+      update_cache: yes
+    vars:
+      packages:
+        - "etcd={{ etcd_pin_version }}"
+        - percona-haproxy
+    when: >
+      etcd_pin_version is defined and (
+      (ansible_distribution == "Ubuntu") or
+      (ansible_os_family == "Debian" and ansible_lsb.major_release|int <= 11) or
+      (ansible_os_family == "Debian" and pg_version_to_install | string is version('15.7', '>=', strict=True)) )
+
+  - name: Install patroni related packages Debian (latest etcd version)
     apt:
       name: "{{ packages }}"
       state: latest
@@ -594,9 +626,11 @@
       packages:
         - etcd
         - percona-haproxy
-    when: (ansible_distribution == "Ubuntu") or
+    when: >
+      etcd_pin_version is not defined and (
+      (ansible_distribution == "Ubuntu") or
       (ansible_os_family == "Debian" and ansible_lsb.major_release|int <= 11) or
-      (ansible_os_family == "Debian" and pg_version_to_install | string is version('15.7', '>=', strict=True))
+      (ansible_os_family == "Debian" and pg_version_to_install | string is version('15.7', '>=', strict=True)) )
 
 
   # - name: Install patroni related packages Debian 12
@@ -612,7 +646,18 @@
   #   when: (ansible_os_family == "Debian" and ansible_lsb.major_release|int == 12) and
   #     pg_version_to_install | string is version('16.2', '<=', strict=True)
 
-  - name: Install patroni related packages Debian
+  - name: Install patroni related packages Debian (pinned etcd version)
+    apt:
+      name: "{{ packages }}"
+      state: present
+      update_cache: yes
+    vars:
+      packages:
+        - "etcd={{ etcd_pin_version }}"
+        - percona-haproxy
+    when: ansible_os_family == "Debian" and etcd_pin_version is defined
+
+  - name: Install patroni related packages Debian (latest etcd version)
     apt:
       name: "{{ packages }}"
       state: latest
@@ -621,7 +666,7 @@
       packages:
         - etcd
         - percona-haproxy
-    when: ansible_os_family == "Debian"
+    when: ansible_os_family == "Debian" and etcd_pin_version is not defined
 
   - name: Create /etc/patroni directory
     file:
