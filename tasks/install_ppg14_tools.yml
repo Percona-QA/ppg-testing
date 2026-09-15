@@ -897,11 +897,31 @@
       mode: 0644
     when: ansible_os_family == "RedHat"
 
+  # etcd 3.4.x ships with its HTTP/JSON grpc-gateway disabled by default
+  # (etcd 3.5.x has it enabled by default). Patroni's etcd3 DCS client
+  # depends entirely on that gateway (e.g. POST /v3/cluster/member/list);
+  # without it every v3 HTTP call 404s with a plain-text body, which
+  # Patroni's JSON parser then mis-parses (json.raw_decode greedily reads
+  # the leading "404" as an int) and crashes with an unrelated-looking
+  # "AttributeError: 'int' object has no attribute 'get'" instead of a
+  # clear connection error -- reproduced and confirmed on rocky-8/9/10.
+  - name: Enable etcd grpc-gateway for the pinned 3.4.x track
+    ansible.builtin.lineinfile:
+      path: /etc/etcd/etcd.conf.yaml
+      regexp: '^#?\s*enable-grpc-gateway:'
+      line: 'enable-grpc-gateway: true'
+      create: yes
+    when: etcd_pin_version is defined
+
+  # If etcd was already started earlier in this file (the RHEL "Restart
+  # etcd RHEL" task, right after install), state: started here is a
+  # no-op and never picks up the grpc-gateway config change above --
+  # force a restart on the pinned 3.4.x track so it actually takes effect.
   - name: Start etcd
     include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
     vars:
       svc_name: etcd
-      svc_state: started
+      svc_state: "{{ 'restarted' if etcd_pin_version is defined else 'started' }}"
 
   - name: Start patroni0
     include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
