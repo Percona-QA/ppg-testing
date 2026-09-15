@@ -428,9 +428,16 @@
     ansible.builtin.debug:
       var: disk_report.stdout_lines
 
-  - name: Show pytest summary (tail of output)
+  # Full output, not a tail: this task's result only appears in the Jenkins
+  # console once the whole pytest run finishes (ansible's shell module
+  # captures remote stdout and returns it as one blob — it doesn't stream
+  # partial output during the run), so a short tail here would hide most of
+  # the individual PASSED/FAILED lines that already exist in the captured
+  # output (pyproject.toml's addopts includes -v for exactly that per-test
+  # detail).
+  - name: Show pytest output
     debug:
-      msg: "{{ regression.stdout_lines[-80:] if regression.stdout_lines is defined else [] }}"
+      msg: "{{ regression.stdout_lines if regression.stdout_lines is defined else [] }}"
 
   - name: Show stderr if pytest run failed
     debug:
