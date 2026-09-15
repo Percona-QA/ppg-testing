@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "percona-pg-automation"
+version = "0.1.0"
+requires-python = ">=3.9"
+dependencies = [
+    "pytest>=7.4",
+    "pytest-xdist>=3.0",     # parallel execution
+    "pytest-timeout>=2.1",   # per-test timeouts
+    "pytest-html>=4.0",      # HTML reports
+    "psutil>=5.9",           # process management
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=long --strict-markers -ra"
+
+# Logging policy:
+#   * ``log_cli`` is OFF so passing tests don't stream "live log call"
+#     blocks into the terminal between PASSED/FAILED lines.
+#   * Logs are still **captured** per-test at INFO level and pytest will
+#     dump the captured log automatically when a test fails (via the
+#     "Captured log call" section of the failure report). That means we
+#     keep all the diagnostic value for debugging without polluting the
+#     happy-path output.
+#   * To re-enable live streaming for a single debug run, override on
+#     the command line: ``pytest -o log_cli=true --log-cli-level=INFO``.
+log_cli = false
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+log_level = "INFO"
+log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+timeout = 600   # 10-minute default per test
+
+markers = [
+    "encryption: pg_tde table and WAL encryption tests",
+    "replication: streaming and logical replication tests",
+    "backup: backup and PITR tests (including pg_basebackup)",
+    "pgbackrest: tests that require the pgbackrest CLI",
+    "upgrade: pg_upgrade major-version upgrade tests",
+    "minor_upgrade: staged in-place pg_tde minor upgrade (Setup/Verify; needs --upgrade-data-dir)",
+    "migration: Percona Distribution migration doc scenarios (community to PDG)",
+    "recovery: crash recovery and WAL tests (not pg_rewind; use section rewind)",
+    "rewind: pg_rewind / pg_tde_rewind tests (skip via --skip-sections rewind)",
+    "bug: bug reproduction tests (PG-XXXX)",
+    "slow: tests that take more than 5 minutes",
+    "vault: tests that require a running HashiCorp Vault or OpenBao server",
+    "openbao: OpenBao namespace + pg_tde mount tests (also needs vault addr/token)",
+    "kmip: tests that require a running KMIP server",
+    "kmip_build: pg_tde.so C++ kmipclient link check (no KMIP server required)",
+    "cosmian: tests requiring local cosmian_kms (pg_tde t/kmip.pl parity)",
+    "kmip_revalidation: parametrized KMIP server matrix (full checklist)",
+    "kmip_matrix: shared KMIP scenarios for every configured profile",
+    "vault_kv_matrix: shared Vault KV v2 scenarios per profile",
+    "file_keyring: shared local file keyring scenarios",
+    "vault_kmip: HashiCorp Vault KMIP engine server-specific (not Vault KV v2)",
+    "waldump: pg_waldump / pg_tde_waldump diagnostic-tool tests",
+    "docker: tests that require Docker",
+    "pg16: tests that require PostgreSQL 16+",
+    "pg17: tests that require PostgreSQL 17+",
+    "pg18: tests that require PostgreSQL 18+",
+    "smoke: fast subset for OBS build-acceptance gating",
+]

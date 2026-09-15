@@ -46,6 +46,11 @@ artifacts/
 .yamllint
 .sqlfluff
 pyproject.toml
+# ...except the vendored pg_tde pytest suite's own pyproject.toml (pytest
+# config + marker registrations) — the bare rule above silently dropped it
+# when the suite was vendored in, and every custom pytest.mark.* then showed
+# up as "unknown" since pytest had no markers/addopts to read.
+!pg_tde/core/files/pytest/pyproject.toml
 FORMATTING.md
 Makefile
 .cursor/
