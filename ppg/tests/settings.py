@@ -1,4 +1,5 @@
 import os
+import re
 
 from .versions.patroni import patroni
 from .versions.pgbadger import pgbadger
@@ -18,6 +19,20 @@ from .versions.pgvector import pgvector
 # VERSION is "<product>-<major>.<minor>" where product is ppg or psp
 # (e.g. ppg-16.14, psp-16.14) — take the major regardless of product.
 MAJOR_VER = os.getenv("VERSION").split(".")[0].split("-")[1]
+
+# OBS (openSUSE Build Service) appends its own build-revision counter
+# (e.g. "+1.2") into the debian_revision field of every package it builds,
+# on top of whatever revision Percona's own packaging declares — confirmed
+# against the OBS source history: Percona's debian.dsc only ever declares
+# the bare upstream version (e.g. "3:18.6"), and OBS's counter increments
+# on its own rebuild cadence, independent of package content. Strip it
+# before matching against the expected version list rather than pinning an
+# exact value that will drift on the next OBS rebuild.
+_OBS_RELEASE_SUFFIX_RE = re.compile(r"\+\d+\.\d+")
+
+
+def strip_obs_release_suffix(version):
+    return _OBS_RELEASE_SUFFIX_RE.sub("", version)
 
 
 def _merge_expected_deb_versions(base_versions, distro_overrides):

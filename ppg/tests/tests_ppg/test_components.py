@@ -91,7 +91,7 @@ def test_deb_package_is_installed(host, package):
         pytest.skip("This test only for Debian based platforms")
     pkg = host.package(package)
     assert pkg.is_installed
-    assert pkg.version in pg_versions['deb_pkg_ver'],\
+    assert settings.strip_obs_release_suffix(pkg.version) in pg_versions['deb_pkg_ver'],\
         f"Expected version {pg_versions['deb_pkg_ver']}. Actual version {pkg.version}"
 
 
