@@ -34,8 +34,10 @@
         state: absent
       vars:
         packages:
+          - percona-postgresql
           - percona-postgresql-15
           - percona-postgresql-all
+          - percona-postgresql-client
           - percona-postgresql-client-15
           - percona-postgresql-contrib
           - percona-postgresql-doc
