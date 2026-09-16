@@ -859,8 +859,8 @@ def get_settings(distro_type):
             "postgis_package_version": "3.5.7",
             "pg_telemetry_version": "1.2",
             "pg_telemetry_package_version": "1.2.0",
-            "PG_CRON_version": "1.6.7",
-            "PG_CRON_package_version": "1.6.7",
+            "PG_CRON_version": "1.6.8",
+            "PG_CRON_package_version": "1.6.8",
             "PG_CRON_sql_version": "1.6",
         },
         "ppg-15.0": {
@@ -1510,8 +1510,8 @@ def get_settings(distro_type):
             "postgis_package_version": "3.5.7",
             "pg_telemetry_version": "1.2",
             "pg_telemetry_package_version": "1.2.0",
-            "PG_CRON_version": "1.6.7",
-            "PG_CRON_package_version": "1.6.7",
+            "PG_CRON_version": "1.6.8",
+            "PG_CRON_package_version": "1.6.8",
             "PG_CRON_sql_version": "1.6",
         },
         "ppg-16.0": {
@@ -2029,8 +2029,8 @@ def get_settings(distro_type):
             "postgis_package_version": "3.5.7",
             "pg_telemetry_version": "1.2",
             "pg_telemetry_package_version": "1.2.0",
-            "PG_CRON_version": "1.6.7",
-            "PG_CRON_package_version": "1.6.7",
+            "PG_CRON_version": "1.6.8",
+            "PG_CRON_package_version": "1.6.8",
             "PG_CRON_sql_version": "1.6",
         },
         "ppg-17.0": {
@@ -2423,8 +2423,8 @@ def get_settings(distro_type):
             "PG_TDE_version": "pg_tde 2.2.2",
             "PG_TDE_package_version": "2.2.2",
             "PG_TDE_sql_version": "2.2",
-            "PG_CRON_version": "1.6.7",
-            "PG_CRON_package_version": "1.6.7",
+            "PG_CRON_version": "1.6.8",
+            "PG_CRON_package_version": "1.6.8",
             "PG_CRON_sql_version": "1.6",
         },
         "ppg-18.1": {
@@ -2622,8 +2622,8 @@ def get_settings(distro_type):
             "PG_TDE_sql_version": "2.2",
             "PG_OIDC_VALIDATOR_version": "1.1.0",
             "PG_OIDC_VALIDATOR_package_version": "1.1.0",
-            "PG_CRON_version": "1.6.7",
-            "PG_CRON_package_version": "1.6.7",
+            "PG_CRON_version": "1.6.8",
+            "PG_CRON_package_version": "1.6.8",
             "PG_CRON_sql_version": "1.6",
         },
     }
@@ -2662,9 +2662,8 @@ def get_settings(distro_type):
         "PG_TDE_version": "pg_tde 2.2.2",
         "PG_TDE_package_version": "2.2.2",
         "PG_TDE_sql_version": "2.2",
-        # psp-16.15 builds pgbackrest separately from ppg-16.15 and ships a
-        # newer version for the same PG minor: confirmed 2.59.1 here (vs
-        # 2.59.0 inherited from ppg-16.15 above).
+        # psp-16.15 builds pgbackrest separately from ppg-16.15; confirmed
+        # to currently match at 2.59.1.
         "pgbackrest": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
         "percona-version": "16.15.1",
     }
