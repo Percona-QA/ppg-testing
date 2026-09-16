@@ -36,6 +36,20 @@
       # need --old-install-dir, which this role (unlike the dedicated upgrade
       # role) doesn't provision.
       test_suite: "{{ lookup('env', 'TEST_SUITE') | default('Sanity', true) }}"
+      # Opt-in pytest-xdist parallelism (pytest -n <N>). Empty/unset = serial
+      # (unchanged default behavior). The suite's own run_tests.sh already
+      # exposes --workers N -> -n N, so this isn't new territory for the
+      # suite itself — but conftest.py's allocate_port() uses a module-level
+      # counter + lock that's process-local, giving no cross-process
+      # coordination between xdist workers (each worker is a separate
+      # process). The bind-check before returning a port gives reasonable,
+      # not airtight, collision protection under concurrent workers.
+      # Validated clean on multiple live "All" + 4-worker runs, so this is
+      # now the default. default(_, true) also treats an unset/empty env
+      # var the same way (lookup('env', ...) returns '' when unset, which
+      # a bare default() would NOT replace). Pass PYTEST_WORKERS=0 to
+      # disable xdist distribution and run serially.
+      pytest_workers: "{{ lookup('env', 'PYTEST_WORKERS') | default('4', true) }}"
       # ... include other env lookups here ...
       go_version: "1.25.6"
       go_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}"
@@ -369,6 +383,21 @@
     debug:
       var: pytest_env_setup.stdout_lines
 
+  # A stale --basetemp from a previous run on a reused host can make pytest's
+  # own startup cleanup fail outright rather than just being ignored: xdist's
+  # nodemanager calls getbasetemp() during pytest_sessionstart, and if the
+  # prior rm_rf left anything behind (e.g. a worker subdir it couldn't fully
+  # clear), mkdir(basetemp) raises FileExistsError as an INTERNALERROR before
+  # a single test runs (rc=3, whole run gone). `rm -rf` as root succeeds
+  # regardless of whether a leftover/orphaned postgres process from a
+  # previous run still has files under here open — Linux allows removing an
+  # open file, the process just keeps its own handle to the unlinked inode.
+  - name: Clear stale pytest --basetemp from a previous run
+    become: true
+    ansible.builtin.file:
+      path: /tmp/pg_tde_pytest_run
+      state: absent
+
   # =============================
   # Run the pg_tde pytest suite
   # =============================
@@ -393,6 +422,7 @@
       source .env.sh &&
       pytest tests/
       {{ '' if test_suite == 'All' else '--skip-sections=' ~ pytest_skip_sections }}
+      {{ '-n ' ~ pytest_workers if pytest_workers | length > 0 else '' }}
       --basetemp=/tmp/pg_tde_pytest_run
       --junitxml=/tmp/pg_tde_pytest_junit.xml
       --html=/tmp/pg_tde_pytest_report.html --self-contained-html
