@@ -618,6 +618,41 @@
     failed_when: etcd_pin_version_deb.stdout | length == 0
     when: ansible_os_family == "Debian" and etcd_pin_version is defined
 
+  # etcd 3.4.x's own checkSupportArch() (server/etcdmain/etcd.go) only
+  # allows amd64/ppc64le without an explicit opt-in -- arm64 was left
+  # "// TODO qualify arm64" for the entire 3.4.x branch and was only
+  # added to the supported list in 3.5.x. Without this, etcd refuses to
+  # start at all: "etcd on unsupported platform without
+  # ETCD_UNSUPPORTED_ARCH=arm64 set". On Debian this even breaks the
+  # package install itself, since etcd-server's postinst auto-starts the
+  # service -- so this override must exist before etcd is ever
+  # installed/started, not just before our own later restart.
+  - name: Create etcd systemd override directory for arm64 unsupported-arch opt-in
+    ansible.builtin.file:
+      path: /etc/systemd/system/etcd.service.d
+      state: directory
+      mode: '0755'
+    when:
+      - etcd_pin_version is defined
+      - ansible_architecture in ['aarch64', 'arm64']
+
+  - name: Allow etcd to run on arm64 (unsupported but functional in 3.4.x)
+    ansible.builtin.copy:
+      dest: /etc/systemd/system/etcd.service.d/override.conf
+      content: |
+        [Service]
+        Environment=ETCD_UNSUPPORTED_ARCH=arm64
+      mode: '0644'
+    register: etcd_arm_override
+    when:
+      - etcd_pin_version is defined
+      - ansible_architecture in ['aarch64', 'arm64']
+
+  - name: Reload systemd daemon after etcd arm64 override
+    ansible.builtin.systemd:
+      daemon_reload: true
+    when: etcd_arm_override is changed
+
   - name: Install etcd packages RHEL (pinned version)
     yum:
       name: "{{ packages }}"
