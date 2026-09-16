@@ -2172,7 +2172,10 @@ class TestTdeRewindRandomized:
         rewound former primary. ``source_only`` is created only on the old primary
         (rewind **target**) after divergence and must be **dropped** by rewind.
         """
-        seed = abs(hash(request.node.nodeid)) % (2**31 - 1) or 1
+        seed = int(hashlib.md5(request.node.nodeid.encode()).hexdigest(), 16) % (2**31 - 1) or 1
+        # Printed so a failure is reproducible: pytest shows captured stdout
+        # for failed tests automatically, no -s needed.
+        print(f"chaos seed for {request.node.nodeid}: {seed}")
         rng = random.Random(seed)
 
         def flip() -> bool:
@@ -2968,7 +2971,10 @@ class TestTdeRewindEncryptedWalChaosLoop:
             )
 
         n_iter = int(os.environ.get("PG_TDE_REWIND_CHAOS_LOOP_ITERATIONS", "3"))
-        seed = abs(hash(request.node.nodeid)) % (2**31 - 1) or 1
+        seed = int(hashlib.md5(request.node.nodeid.encode()).hexdigest(), 16) % (2**31 - 1) or 1
+        # Printed so a failure is reproducible: pytest shows captured stdout
+        # for failed tests automatically, no -s needed.
+        print(f"chaos seed for {request.node.nodeid}: {seed}")
         rng = random.Random(seed)
 
         sysbench_bin = shutil.which("sysbench")

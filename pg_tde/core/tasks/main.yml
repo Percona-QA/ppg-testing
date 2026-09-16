@@ -378,6 +378,16 @@
     # TEST_SUITE=All runs every test case (no --skip-sections at all — slow/
     # vault/kmip/openbao all run for real). Sanity keeps the proven default:
     # pytest_skip_sections applies (upgrade,minor_upgrade,slow,vault,kmip,openbao).
+    # NOTE: do not add --tb=line/--tb=short here to shrink console output.
+    # --tb is a single global setting — it collapses the failure repr
+    # everywhere pytest writes it, including the JUnit XML <failure> text and
+    # the HTML report, not just stdout. Verified: a 3-frame failure
+    # (test -> helper_1 -> helper_2) under --tb=line shows only the raised
+    # exception's one line in the JUnit XML too — the entire call chain and
+    # per-frame line numbers are gone, not just hidden from the console.
+    # Keep pyproject.toml's default --tb=long so the saved artifacts (used
+    # for actual debugging) stay complete; console-output size is a separate
+    # concern from artifact completeness.
     shell: >-
       set -o pipefail;
       source .env.sh &&
@@ -428,16 +438,23 @@
     ansible.builtin.debug:
       var: disk_report.stdout_lines
 
-  # Full output, not a tail: this task's result only appears in the Jenkins
-  # console once the whole pytest run finishes (ansible's shell module
-  # captures remote stdout and returns it as one blob — it doesn't stream
-  # partial output during the run), so a short tail here would hide most of
-  # the individual PASSED/FAILED lines that already exist in the captured
-  # output (pyproject.toml's addopts includes -v for exactly that per-test
-  # detail).
-  - name: Show pytest output
+  # Console display is decoupled from artifact content (the JUnit XML/HTML/
+  # .log file always have the complete run regardless of what's echoed
+  # here — see git history for why --tb isn't touched to "shrink" that data).
+  # On a pass, the full -v listing (hundreds of PASSED lines for the All
+  # suite) is just noise — show the one-line pytest summary instead. On a
+  # failure, dump everything: the individual PASSED/FAILED lines plus full
+  # tracebacks (pyproject.toml's addopts: -v --tb=long) are exactly what's
+  # needed to diagnose without leaving Jenkins for the artifact.
+  - name: Show pytest summary (pass — one line, not the full listing)
+    debug:
+      msg: "{{ regression.stdout_lines[-1] if (regression.stdout_lines | default([]) | length > 0) else 'no pytest output captured' }}"
+    when: not pytest_failed
+
+  - name: Show pytest output (failure — full listing + tracebacks)
     debug:
       msg: "{{ regression.stdout_lines if regression.stdout_lines is defined else [] }}"
+    when: pytest_failed
 
   - name: Show stderr if pytest run failed
     debug:

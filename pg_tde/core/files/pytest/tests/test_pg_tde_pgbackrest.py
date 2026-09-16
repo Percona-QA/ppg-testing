@@ -524,7 +524,7 @@ class TestPgBackRestMatrix:
             "INSERT INTO matrix_t1 VALUES (10001, 'pre_target', 'kept')"
         )
         bm.wait_for_wal_archive(tde_primary)
-        target_time = _pitr_timestamp(tde_primary)
+        target_time = _pitr_timestamp_after_backup(tde_primary, bm)
         time.sleep(2)
         tde_primary.execute(
             "INSERT INTO matrix_t1 VALUES (10002, 'post_target', 'discarded')"
@@ -1610,7 +1610,7 @@ class TestPgBackRestPitrScenarios:
             "INSERT INTO matrix_t1 VALUES (40002, 'post_diff', 'kept')"
         )
         bm.wait_for_wal_archive(tde_primary)
-        target_time = _pitr_timestamp(tde_primary)
+        target_time = _pitr_timestamp_after_backup(tde_primary, bm)
         time.sleep(2)
         tde_primary.execute(
             "INSERT INTO matrix_t1 VALUES (40003, 'after_target', 'discarded')"
@@ -1772,7 +1772,7 @@ class TestPgBackRestPitrScenarios:
             dbname="matrix_db",
         )
         bm.wait_for_wal_archive(tde_primary)
-        target_time = _pitr_timestamp(tde_primary)
+        target_time = _pitr_timestamp_after_backup(tde_primary, bm)
         time.sleep(2)
         tde_primary.execute(
             "INSERT INTO matrix_t1 VALUES (50002, 'post_target', 'discarded')"
@@ -1983,7 +1983,7 @@ class TestPgBackRestPitrScenarios:
         tde.rotate_principal_key("pitr_rot_key2")
         tde_primary.execute("INSERT INTO pitr_rot VALUES (2, 'key2')")
         bm.wait_for_wal_archive(tde_primary)
-        target_time = _pitr_timestamp(tde_primary)
+        target_time = _pitr_timestamp_after_backup(tde_primary, bm)
         time.sleep(2)
         tde_primary.execute("INSERT INTO pitr_rot VALUES (3, 'after_target')")
         bm.wait_for_wal_archive(tde_primary)
@@ -2080,7 +2080,7 @@ class TestPgBackRestPitrScenarios:
 
         tde_primary.execute("INSERT INTO pitr_excl_t VALUES (2, 'at_time')")
         # Capture time *after* the commit so exclusive stop is at/after this xact.
-        target_time = _pitr_timestamp(tde_primary)
+        target_time = _pitr_timestamp_after_backup(tde_primary, bm)
         time.sleep(2)
         tde_primary.execute("INSERT INTO pitr_excl_t VALUES (3, 'after_time')")
         bm.wait_for_wal_archive(tde_primary)
@@ -2676,7 +2676,7 @@ class TestPgBackRestPitrNegative:
         bm.wait_for_wal_archive(primary, timeout=60)
         primary.execute("INSERT INTO pitr_nk VALUES (2, 'post')")
         bm.wait_for_wal_archive(primary, timeout=60)
-        target_time = _pitr_timestamp(primary)
+        target_time = _pitr_timestamp_after_backup(primary, bm)
 
         restore_dir = tmp_path / "restore_pitr_neg_nokey"
         bm.restore(
@@ -2738,7 +2738,7 @@ class TestEncryptedInRepoBackupRestorePitr:
             "INSERT INTO pitr_t VALUES (9001, 'pre_target', 'kept')"
         )
         bm.wait_for_wal_archive(primary, timeout=60)
-        target_time = _pitr_timestamp(primary)
+        target_time = _pitr_timestamp_after_backup(primary, bm)
         time.sleep(2)
         primary.execute(
             "INSERT INTO pitr_t VALUES (9002, 'post_target', 'discarded')"
@@ -2904,7 +2904,7 @@ class TestEncryptedInRepoBackupRestorePitr:
         tde.rotate_principal_key("enc_pitr_rot_key2")
         primary.execute("INSERT INTO enc_rot_t VALUES (2, 'key2')")
         bm.wait_for_wal_archive(primary, timeout=60)
-        target_time = _pitr_timestamp(primary)
+        target_time = _pitr_timestamp_after_backup(primary, bm)
         time.sleep(2)
         primary.execute("INSERT INTO enc_rot_t VALUES (3, 'after')")
         bm.wait_for_wal_archive(primary, timeout=60)
@@ -3096,7 +3096,7 @@ class TestEncryptedInRepoBackupRestorePitr:
             "INSERT INTO enc_nk_t VALUES (8001, 'pre', 'kept')"
         )
         bm.wait_for_wal_archive(primary, timeout=60)
-        target_time = _pitr_timestamp(primary)
+        target_time = _pitr_timestamp_after_backup(primary, bm)
         time.sleep(2)
         primary.execute(
             "INSERT INTO enc_nk_t VALUES (8002, 'post', 'x')"
