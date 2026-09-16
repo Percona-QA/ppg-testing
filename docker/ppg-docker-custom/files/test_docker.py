@@ -2431,25 +2431,42 @@ def test_pg_cron_schedule_job(host):
 
 # --- anon: static masking ---
 # anon.start_dynamic_masking() was removed in pg_anonymizer 3.0.
-# Static anonymization (anon.anonymize_table) works without shared_preload_libraries.
+# anon >= 3.2 refuses to run static or dynamic masking as a superuser when
+# anon.nosuperuser is true (the default), closing a superuser masking-bypass
+# hole. Masking is exercised here through a dedicated non-superuser role that
+# owns the table, matching anon's own documented recommendation, rather than
+# the connecting superuser.
 
 
+@pytest.mark.needs_preload
 def test_anon_static_masking(host):
-    # 1. Setup
+    # 1. Setup — the superuser creates the table and data, then hands ownership
+    #    to a dedicated role. No extra grants needed: table ownership alone is
+    #    what SECURITY LABEL and anon.anonymize_table require.
     host.run("psql -c 'DROP TABLE IF EXISTS public.test_anon_people CASCADE;'")
+    host.run("psql -c 'DROP ROLE IF EXISTS anon_masked_user;'")
     host.run("psql -c 'DROP EXTENSION IF EXISTS anon CASCADE;'")
     host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS anon CASCADE;'")
+    host.run("psql -c \"CREATE ROLE anon_masked_user LOGIN PASSWORD 'anon_test_pw';\"")
+    host.run(
+        "psql -q -t -A -c \""
+        "CREATE TABLE public.test_anon_people (id int, name text, phone text);"
+        "INSERT INTO public.test_anon_people VALUES (1, 'Alice', '555-1234');"
+        "ALTER TABLE public.test_anon_people OWNER TO anon_masked_user;"
+        '"'
+    )
 
-    # 2. Create table, insert data, apply a column masking rule via SECURITY LABEL
+    # 2. Apply a column masking rule via SECURITY LABEL and run the masking
+    #    itself as anon_masked_user (not the superuser)
     setup_sql = """
-    CREATE TABLE public.test_anon_people (id int, name text, phone text);
-    INSERT INTO public.test_anon_people VALUES (1, 'Alice', '555-1234');
     SECURITY LABEL FOR anon ON COLUMN public.test_anon_people.phone
         IS 'MASKED WITH FUNCTION anon.partial(phone, 2, ''****'', 2)';
     SELECT anon.anonymize_table('public.test_anon_people');
     SELECT phone FROM public.test_anon_people WHERE id = 1;
     """
-    result = host.run(f'psql -q -t -A -c "{setup_sql}"')
+    result = host.run(
+        f'PGPASSWORD=anon_test_pw psql -U anon_masked_user -d postgres -q -t -A -c "{setup_sql}"'
+    )
 
     # 3. Validation — partial(phone=555-1234, prefix=2, padding=****,suffix=2) → 55****34
     assert result.rc == 0, f"anon static masking failed: {result.stderr}"
@@ -2457,6 +2474,7 @@ def test_anon_static_masking(host):
 
     # 4. Cleanup
     host.run("psql -c 'DROP TABLE IF EXISTS public.test_anon_people CASCADE;'")
+    host.run("psql -c 'DROP ROLE IF EXISTS anon_masked_user;'")
     host.run("psql -c 'DROP EXTENSION IF EXISTS anon CASCADE;'")
 
 
