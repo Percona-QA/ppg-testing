@@ -15,17 +15,21 @@
   <on_reboot>restart</on_reboot>
   <on_crash>destroy</on_crash>
   <devices>
-    <disk type='volume' device='disk'>
+    <!-- type='file' with a resolved absolute path, not type='volume': on
+         AppArmor hosts (Debian/Ubuntu) virt-aa-helper doesn't generate the
+         per-domain .files allow-list for pool+volume disk sources, which
+         silently denies qemu access to the whole backing chain at start. -->
+    <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2'/>
-      <source pool='{{ libvirt_pool }}' volume='{{ domain_name }}.qcow2'/>
+      <source file='{{ overlay_path }}'/>
       <target dev='vda' bus='virtio'/>
     </disk>
     <!-- virtio, not a sata cdrom: the debian 11/12 genericcloud cloud kernel
          has no ahci driver, so a sata seed is invisible there and cloud-init
          finds no datasource. NoCloud probes by the cidata label, any bus. -->
-    <disk type='volume' device='disk'>
+    <disk type='file' device='disk'>
       <driver name='qemu' type='raw'/>
-      <source pool='{{ libvirt_pool }}' volume='{{ domain_name }}-seed.iso'/>
+      <source file='{{ seed_path }}'/>
       <target dev='vdb' bus='virtio'/>
       <readonly/>
     </disk>

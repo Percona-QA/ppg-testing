@@ -73,6 +73,21 @@
     --backing-vol {{ base_vol }} --backing-vol-format qcow2
   no_log: false
 
+# AppArmor's virt-aa-helper doesn't generate the per-domain .files allow-list
+# for type='volume' (pool+volume) disk sources, so qemu gets a silent EACCES
+# opening the backing chain on any AppArmor host (Debian/Ubuntu). Resolving to
+# a plain absolute path and using type='file' in domain.xml.j2 sidesteps that;
+# virt-aa-helper walks the backing chain correctly for file-type sources.
+- name: Resolve overlay volume path for {{ domain_name }}
+  command: virsh -c {{ libvirt_uri }} vol-path --pool {{ libvirt_pool }} {{ domain_name }}.qcow2
+  register: overlay_path_result
+  changed_when: false
+  no_log: false
+
+- name: Set overlay path fact
+  set_fact:
+    overlay_path: "{{ overlay_path_result.stdout | trim }}"
+
 # prepare.yml expects the aws ami user (e.g. admin on debian), which can
 # differ from the cloud image default user, so create it as well.
 - name: Write cloud-init user-data
@@ -125,6 +140,16 @@
     virsh -c {{ libvirt_uri }} vol-upload --pool {{ libvirt_pool }} {{ domain_name }}-seed.iso
     {{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/{{ domain_name }}-seed.iso
   no_log: false
+
+- name: Resolve seed volume path for {{ domain_name }}
+  command: virsh -c {{ libvirt_uri }} vol-path --pool {{ libvirt_pool }} {{ domain_name }}-seed.iso
+  register: seed_path_result
+  changed_when: false
+  no_log: false
+
+- name: Set seed path fact
+  set_fact:
+    seed_path: "{{ seed_path_result.stdout | trim }}"
 
 - name: Render domain xml
   template:
