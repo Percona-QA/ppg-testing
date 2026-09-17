@@ -1,0 +1,90 @@
+---
+- name: Cleanup
+  hosts: all
+  become: true
+  become_method: sudo
+  tasks:
+    - name: Remove extension and add-on packages first
+      apt:
+        name: "{{ packages }}"
+        state: absent
+      vars:
+        packages:
+          - percona-postgresql-19-pgaudit
+          - percona-postgresql-19-repack
+          - percona-postgresql-19-repack-dbgsym
+          - percona-pgaudit19-set-user
+          - percona-pgaudit19-set-user-dbgsym
+          - percona-postgresql-19-wal2json
+          - percona-postgresql-19-wal2json-dbgsym
+          - percona-pg-stat-monitor19
+          - percona-pg-stat-monitor19-dbgsym
+          - percona-pg-tde19
+          - percona-pg-tde19-client
+          - percona-pg-tde19-dbgsym
+          - percona-pgpool2
+          - percona-pgpool2-dbgsym
+          - libpgpool2
+          - percona-postgresql-19-cron
+          - percona-postgresql-19-pgvector
+          - percona-postgresql-19-pgvector-dbgsym
+          - percona-pg-oidc-validator19
+          - percona-pg-oidc-validator19-dbgsym
+          - percona-postgis
+          - percona-postgresql-postgis-scripts
+          - percona-postgresql-19-postgis-3-scripts
+          - percona-pg-gather
+          - percona-pgbackrest
+          - percona-pgbackrest-doc
+          - percona-patroni
+          - percona-patroni-dbgsym
+          - percona-patroni-doc
+          - percona-pgbadger
+          - percona-pgbouncer
+          - percona-pgbouncer-dbgsym
+      when: ansible_os_family == "Debian"
+
+    - name: Remove core PostgreSQL deb packages
+      apt:
+        name: "{{ packages }}"
+        state: absent
+      vars:
+        packages:
+          - percona-postgresql
+          - percona-postgresql-19
+          - percona-postgresql-all
+          - percona-postgresql-client
+          - percona-postgresql-client-19
+          - percona-postgresql-contrib
+          - percona-postgresql-doc
+          - percona-postgresql-doc-19
+          - percona-postgresql-plperl-19
+          - percona-postgresql-plpython3-19
+          - percona-postgresql-pltcl-19
+          - percona-postgresql-server-dev-19
+          - percona-postgresql-server-dev-all
+          - percona-postgresql-19-dbgsym
+          - percona-postgresql-client-19-dbgsym
+          - percona-postgresql-plperl-19-dbgsym
+          - percona-postgresql-plpython3-19-dbgsym
+          - percona-postgresql-pltcl-19-dbgsym
+      when: ansible_os_family == "Debian"
+
+    - name: Remove postgresql Debian developer packages
+      apt:
+        name: "{{ packages }}"
+        state: absent
+      vars:
+        packages:
+        - libecpg-compat3
+        - libecpg-compat3-dbgsym
+        - libecpg-dev-dbgsym
+        - libecpg-dev
+        - libecpg6-dbgsym
+        - libecpg6
+        - libpgtypes3
+        - libpgtypes3-dbgsym
+        - libpq-dev
+        - libpq5-dbgsym
+        - libpq5
+      when: ansible_os_family == "Debian"

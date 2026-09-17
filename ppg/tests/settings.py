@@ -16,9 +16,10 @@ from .versions.pg_gather import pg_gather
 from .versions.etcd import etcd
 from .versions.pgvector import pgvector
 
-# VERSION is "<product>-<major>.<minor>" where product is ppg or psp
-# (e.g. ppg-16.14, psp-16.14) — take the major regardless of product.
-MAJOR_VER = os.getenv("VERSION").split(".")[0].split("-")[1]
+# VERSION is "<product>-<major>[.<minor>|<prerelease tag>]" where product is
+# ppg or psp (e.g. ppg-16.14, psp-16.14, ppg-19.0) -- take the leading
+# digits of the major regardless of product or what follows it.
+MAJOR_VER = re.match(r"\d+", os.getenv("VERSION").split("-", 1)[1]).group()
 
 # OBS (openSUSE Build Service) appends its own build-revision counter
 # (e.g. "+1.2") into the debian_revision field of every package it builds,
@@ -2615,6 +2616,57 @@ def get_settings(distro_type):
             "postgis_major_version": "3.5",
             "postgis_version": "3.5.7",
             "postgis_package_version": "3.5.7",
+            "pg_telemetry_version": "1.2",
+            "pg_telemetry_package_version": "1.2.0",
+            "PG_TDE_version": "pg_tde 2.2.2",
+            "PG_TDE_package_version": "2.2.2",
+            "PG_TDE_sql_version": "2.2",
+            "PG_OIDC_VALIDATOR_version": "1.1.0",
+            "PG_OIDC_VALIDATOR_package_version": "1.1.0",
+            "PG_CRON_version": "1.6.8",
+            "PG_CRON_package_version": "1.6.8",
+            "PG_CRON_sql_version": "1.6",
+        },
+        "ppg-19.0": {
+            "version": "19.0",
+            "percona-version": "19.0.1",
+            "deb_pkg_ver": ppg_versions["ppg-19.0"]["deb_pkg_ver"],
+            "deb_packages": ppg_versions["ppg-19.0"]["deb_packages"],
+            "percona-postgresql-common": "293",
+            "percona-postgresql-client-common": "293",
+            "libpq_version": "190000",
+            "pgaudit": pgaudit["ppg-19.0"],
+            "pgbackrest": pgbackrest["ppg-19.0"],
+            "patroni": patroni["ppg-19.0"],
+            "pgrepack": pgrepack["ppg-19.0"],
+            "pgbadger": pgbadger["19.0"],
+            "pgbouncer": pgbouncer["19.0"],
+            "pgpool": pgpool["19.0"],
+            "wal2json": wal2json["19.0"],
+            "set_user": set_user["19.0"],
+            "haproxy": haproxy["19.0"],
+            "pg_gather": pg_gather["19.0"],
+            "etcd": etcd["19.0"],
+            "pgvector": pgvector["19.0"],
+            "pgrepack_package_rpm": "percona-pg_repack19",
+            "pgrepack_package_deb": "percona-postgresql-19-repack",
+            "libpq": "Version of libpq: 190000",
+            "deb_provides": ppg_versions["ppg-19.0"]["deb_provides"],
+            "rpm7_provides": ppg_versions["ppg-19.0"]["rpm7_provides"],
+            "rpm_provides": ppg_versions["ppg-19.0"]["rpm_provides"],
+            "rpm_packages": ppg_versions["ppg-19.0"]["rpm_packages"],
+            "rpm7_packages": ppg_versions["ppg-19.0"]["rpm7_packages"],
+            "rhel_files": ppg_versions["ppg-19.0"]["rhel_files"],
+            "deb_files": ppg_versions["ppg-19.0"]["deb_files"],
+            "extensions": ppg_versions["ppg-19.0"]["extensions"],
+            "languages": ppg_versions["ppg-19.0"]["languages"],
+            "binaries": ppg_versions["ppg-19.0"]["binaries"],
+            "PGSM_version": "2.4.0",
+            "PGSM_package_version": "2.4.0",
+            "PGSM_sql_version": "2.4.0",
+            "postgis_major_version": "3.7",
+            "postgis_version": "3.7.0rc2",
+            "postgis_package_version": "3.7.0rc2",
             "pg_telemetry_version": "1.2",
             "pg_telemetry_package_version": "1.2.0",
             "PG_TDE_version": "pg_tde 2.2.2",
