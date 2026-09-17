@@ -5,326 +5,58 @@
   gather_facts: false
   no_log: "{{ not (lookup('env', 'MOLECULE_DEBUG') | bool or molecule_yml.provisioner.log|default(false) | bool) }}"
   vars:
-    ssh_user: ubuntu
-    ssh_port: 22
-    default_region: "{{ lookup('env', 'AWS_DEFAULT_REGION') | default('us-east-1', true) }}"
-    security_group_name_prefix: molecule
-    security_group_description: Security group for testing Molecule
-    security_group_rules:
-      - proto: tcp
-        from_port: "{{ ssh_port }}"
-        to_port: "{{ ssh_port }}"
-        cidr_ip: '0.0.0.0/0'
-      - proto: icmp
-        from_port: 8
-        to_port: -1
-        cidr_ip: '0.0.0.0/0'
-    security_group_rules_egress:
-      - proto: -1
-        from_port: 0
-        to_port: 0
-        cidr_ip: '0.0.0.0/0'
-    keypair_name: "molecule-pkg-tests"
-    keypair_path: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/ssh_key"
-    # Every ec2_instance/ec2_security_group/ec2_vpc_subnet_info call below makes
-    # its own DescribeSecurityGroups/DescribeSubnets lookup internally, and those
-    # calls use the client's plain botocore retry policy (not AWSRetry), which
-    # gives up after ~5 attempts. With many molecule pipelines launching in
-    # parallel against the same AWS account, that budget is exhausted by
-    # RequestLimitExceeded before backoff has a chance to help. Raise it and use
-    # adaptive mode's client-side rate limiting instead.
-    aws_retry_config:
-      retries:
-        mode: adaptive
-        max_attempts: 15
-    # All known AZ subnets, so a capacity-driven fallback (see create_instance_retry.yml)
-    # always has a subnet_dict entry and pre-created security group to launch into,
-    # regardless of which one a platform originally pinned.
-    az_fallback_subnet_ids: "{{ [
-        lookup('env', 'vpc_subnet_id_aws1'),
-        lookup('env', 'vpc_subnet_id_aws2'),
-        lookup('env', 'vpc_subnet_id_aws3')
-      ] | select | unique | list }}"
-
+    backend_driver: "{{ lookup('env', 'driver') }}"
   tasks:
-    - name: Check subnet
-      amazon.aws.ec2_vpc_subnet_info:
-        region: "{{ item.region|default(default_region) }}"
-        filters:
-          subnet-id: "{{ item.vpc_subnet_id }}"
-        aws_config: "{{ aws_retry_config }}"
-      with_items: "{{ molecule_yml.platforms }}"
-      register: subnet_facts
-
-    - name: Populate subnet vpc
-      set_fact:
-        subnet_dict: "{{ subnet_dict|default({}) | combine({ item.subnets[0].id: item.subnets[0].vpc_id }) }}"
-      with_items: "{{ subnet_facts.results }}"
-
-    - name: Create security group
-      amazon.aws.ec2_security_group:
-        name: "{{ security_group_name_prefix }}-{{ subnet_dict[item.vpc_subnet_id] }}"
-        description: "{{ security_group_description }}"
-        rules: "{{ security_group_rules }}"
-        rules_egress: "{{ security_group_rules_egress }}"
-        vpc_id: "{{ subnet_dict[item.vpc_subnet_id] }}"
-        region: "{{ item.region|default(default_region) }}"
-        aws_config: "{{ aws_retry_config }}"
-      with_items: "{{ molecule_yml.platforms }}"
-
-    # AZ-fallback subnets are resolved lazily, only inside create_instance_retry.yml,
-    # so a normal (non-capacity-failure) run makes zero extra EC2 API calls. Doing
-    # this unconditionally here previously doubled DescribeSubnets/security-group
-    # calls on every parallel molecule run and contributed to RequestLimitExceeded
-    # throttling under psp-check-parallel.
-
-#    - name: Delete remote keypair
-#      ec2_key:
-#        name: "{{ keypair_name }}"
-#        state: absent
-#        region: "{{ item.item.region|default(default_region) }}"
-#      with_items: "{{ keypair_local.results}}"
-#      when: not item.stat.exists
-
-#    - name: Create keypair
-#      ec2_key:
-#        name: "{{ keypair_name }}"
-#        region: "{{ item.region|default(default_region) }}"
-#      with_items: "{{ molecule_yml.platforms }}"
-#      register: keypair
-
-    - name: Setup keypair for molecule ec2
-      copy:
-        dest: "{{ keypair_path }}-{{ item.region|default(default_region) }}"
-        src: "{{ lookup('env', 'MOLECULE_AWS_PRIVATE_KEY') }}"
-        mode: 0600
-      no_log: True
-      with_items: "{{ molecule_yml.platforms }}"
-
-#    - name: Get the ec2 ami(s) by owner and name, if image not set
-#      ec2_ami_facts:
-#        owners: "{{ item.image_owner }}"
-#        filters:
-#          name: "{{ item.image_name }}"
-#        region: "{{ item.region|default(default_region) }}"
-#      loop: "{{ molecule_yml.platforms }}"
-#      when: item.image is not defined
-#      register: ami_facts
-
-    - name: Create molecule instance(s)
-      amazon.aws.ec2_instance:
-        key_name: "{{ keypair_name }}"
-        image_id: "{{ item.image }}"
-        instance_type: "{{ item.instance_type }}"
-        vpc_subnet_id: "{{ item.vpc_subnet_id }}"
-        security_group: "{{ security_group_name_prefix }}-{{ subnet_dict[item.vpc_subnet_id] }}"
-        tags: "{{
-            item.instance_tags | combine({
-              'Name': item.name,
-              'ssh_user': item.ssh_user|default(ssh_user)
-            })
-            if item.instance_tags is defined
-            else {
-                'Name': item.name,
-                'ssh_user': item.ssh_user|default(ssh_user)
-            }
-          }}"
-        wait: true
-        network:
-          assign_public_ip: true
-        exact_count: 1
-        # tags:
-        #   Name: "{{ item.name }}"
-        region: "{{ item.region|default(default_region) }}"
-        volumes:
-          - device_name: "{{ item.root_device_name }}"
-            ebs:
-              volume_type: gp3
-              volume_size: "{{ item.volume_size | default(30) }}"
-              delete_on_termination: true
-        aws_config: "{{ aws_retry_config }}"
-      #with_items: "{{ molecule_yml.platforms }}"
-      register: server
-      loop: "{{ molecule_yml.platforms }}"
-      loop_control:
-        index_var: index
-      async: 7200
-      poll: 0
-
-    - name: Print Server info
-      debug:
-        msg: "Server Info : {{ server.results }}"
-
-    - name: Wait for instance(s) creation to complete
-      async_status:
-        jid: "{{ item.ansible_job_id }}"
-      register: ec2_jobs
-      until: ec2_jobs.finished
-      retries: 300
-      with_items: "{{ server.results }}"
-      ignore_errors: true
-
-    # Mandatory configuration for Molecule to function.
-    - name: ec2_job info
-      debug:
-        msg: "ec2_jobs Info : {{ ec2_jobs.results }}"
-
-    - name: Identify launches that failed on InsufficientInstanceCapacity
-      set_fact:
-        capacity_failed_launches: "{{ ec2_jobs.results
-          | select('failed')
-          | selectattr('msg', 'defined')
-          | selectattr('msg', 'search', 'Insufficient(Instance|Host)Capacity')
-          | list }}"
-
-    - name: Fail immediately on any non-capacity launch error
+    - name: Check driver selection
       fail:
-        msg: "{{ item.msg }}"
-      loop: "{{ ec2_jobs.results | select('failed') | list }}"
-      when: item not in capacity_failed_launches
+        msg: "driver env var must be ec2, delegated or default, got '{{ backend_driver }}'. Source local/env.sh or the CI env first."
+      when: backend_driver not in ['ec2', 'delegated', 'default']
 
-    - name: Retry capacity-exhausted launches in the next available AZ
-      include_tasks: create_instance_retry.yml
+    - name: Create instances on AWS
+      include_tasks: aws/create_tasks.yml
+      when: backend_driver == 'ec2'
       vars:
-        retry_platform: "{{ item.item.item }}"
-        retry_candidates: "{{ az_fallback_subnet_ids | reject('equalto', item.item.item.vpc_subnet_id) | list }}"
-      loop: "{{ capacity_failed_launches }}"
-      loop_control:
-        label: "{{ item.item.item.name }}"
+        ssh_user: ubuntu
+        ssh_port: 22
+        default_region: "{{ lookup('env', 'AWS_DEFAULT_REGION') | default('us-east-1', true) }}"
+        security_group_name_prefix: molecule
+        security_group_description: Security group for testing Molecule
+        security_group_rules:
+          - proto: tcp
+            from_port: "{{ ssh_port }}"
+            to_port: "{{ ssh_port }}"
+            cidr_ip: '0.0.0.0/0'
+          - proto: icmp
+            from_port: 8
+            to_port: -1
+            cidr_ip: '0.0.0.0/0'
+        security_group_rules_egress:
+          - proto: -1
+            from_port: 0
+            to_port: 0
+            cidr_ip: '0.0.0.0/0'
+        keypair_name: "molecule-pkg-tests"
+        keypair_path: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/ssh_key"
+        # Every ec2_instance/ec2_security_group/ec2_vpc_subnet_info call in the
+        # aws tasks makes its own DescribeSecurityGroups/DescribeSubnets lookup
+        # internally, and those calls use the client's plain botocore retry policy
+        # (not AWSRetry), which gives up after ~5 attempts. With many molecule
+        # pipelines launching in parallel against the same AWS account, that
+        # budget is exhausted by RequestLimitExceeded before backoff has a chance
+        # to help. Raise it and use adaptive mode's client-side rate limiting.
+        aws_retry_config:
+          retries:
+            mode: adaptive
+            max_attempts: 15
+        # All known AZ subnets, so a capacity-driven fallback (see aws/create_instance_retry.yml)
+        # always has a subnet_dict entry and pre-created security group to launch into,
+        # regardless of which one a platform originally pinned.
+        az_fallback_subnet_ids: "{{ [
+            lookup('env', 'vpc_subnet_id_aws1'),
+            lookup('env', 'vpc_subnet_id_aws2'),
+            lookup('env', 'vpc_subnet_id_aws3')
+          ] | select | unique | list }}"
 
-    - name: Build merged results list (splice in AZ-fallback launches)
-      set_fact:
-        merged_ec2_results: "{{ (merged_ec2_results | default([])) + [
-            (retried_instances | default({}))[item.item.item.name]
-            if item.item.item.name in (retried_instances | default({}))
-            else item
-          ] }}"
-      loop: "{{ ec2_jobs.results }}"
-      loop_control:
-        label: "{{ item.item.item.name }}"
-
-    - name: Replace ec2_jobs.results with AZ-fallback-aware results
-      set_fact:
-        ec2_jobs: "{{ ec2_jobs | combine({'results': merged_ec2_results}) }}"
-
-    - name: Populate minimal instance config dict for destroy safety
-      set_fact:
-        instance_conf_minimal_dict: {
-          'instance': "{{ item.instances[0].tags.Name }}",
-          'address': "",
-          'user': "{{ item.instances[0].tags.ssh_user }}",
-          'port': "{{ ssh_port }}",
-          'identity_file': "{{ keypair_path }}-{{ item.invocation.module_args.region }}",
-          'instance_id': "{{ item.instances[0].instance_id }}",
-          'region': "{{ item.invocation.module_args.region }}",
-        }
-      with_items: "{{ ec2_jobs.results }}"
-      register: instance_config_minimal_dict
-      when: server.changed | bool
-
-    - name: Convert minimal instance config dict to a list
-      set_fact:
-        instance_conf_minimal: "{{ instance_config_minimal_dict.results | map(attribute='ansible_facts.instance_conf_minimal_dict') | list }}"
-      when: server.changed | bool
-
-    - name: Dump minimal instance config
-      copy:
-        content: "{{ instance_conf_minimal | to_json | from_json | to_yaml }}"
-        dest: "{{ molecule_instance_config }}"
-      when: server.changed | bool
-
-    - name: Wait for public IP to be assigned
-      amazon.aws.ec2_instance_info:
-        instance_ids: "{{ item.instance_ids }}"
-        region: "{{ item.invocation.module_args.region }}"
-      register: instance_ip_wait
-      until: >
-        instance_ip_wait.instances | length > 0 and
-        instance_ip_wait.instances[0].public_ip_address is defined and
-        instance_ip_wait.instances[0].public_ip_address | length > 0
-      retries: 30
-      delay: 10
-      with_items: "{{ ec2_jobs.results }}"
-      when: server.changed | bool
-
-    # Following commented (Display Section) are only for debugging purposes
-    # - name: Display Tag Names
-    #   debug:
-    #     msg:
-    #       'instance': "{{ item.instances[0].tags.Name }}"
-    #   with_items: "{{ ec2_jobs.results }}"
-    #   ignore_errors: true
-
-    # - name: Display IP Address
-    #   debug:
-    #     msg:
-    #       'address': "{{ item.instances[0].public_ip_address }}"
-    #   with_items: "{{ ec2_jobs.results }}"
-    #   ignore_errors: true
-
-    # - name: Display ssh user
-    #   debug:
-    #     msg:
-    #       'user': "{{ item.instances[0].tags.ssh_user }}"
-    #   with_items: "{{ ec2_jobs.results }}"
-    #   ignore_errors: true
-
-    # - name: Display port
-    #   debug:
-    #     msg:
-    #       'port': "{{ ssh_port }}"
-    #   with_items: "{{ ec2_jobs.results }}"
-    #   ignore_errors: true
-
-    # - name: Display Instance ID
-    #   debug:
-    #     msg:
-    #       'instance_id': "{{ item.instances[0].instance_id }}"
-    #   with_items: "{{ ec2_jobs.results }}"
-    #   ignore_errors: true
-
-    # - name: Display Region
-    #   debug:
-    #     msg:
-    #       'region': "{{ item.invocation.module_args.region }}"
-    #   with_items: "{{ ec2_jobs.results }}"
-    #   ignore_errors: true
-
-    - name: Populate instance config dict
-      set_fact:
-        instance_conf_dict: {
-          'instance': "{{ item.instances[0].tags.Name }}",
-          'address': "{{ item.instances[0].public_ip_address }}",
-          'user': "{{ item.instances[0].tags.ssh_user }}",
-          'port': "{{ ssh_port }}",
-          'identity_file': "{{ keypair_path }}-{{ item.item.invocation.module_args.region }}",
-          'instance_id': "{{ item.instances[0].instance_id }}",
-          'region': "{{ item.item.invocation.module_args.region }}",
-        }
-      with_items: "{{ instance_ip_wait.results | default([]) }}"
-      register: instance_config_dict
-      when: server.changed | bool
-
-    - name: Convert instance config dict to a list
-      set_fact:
-        instance_conf: "{{ instance_config_dict.results | map(attribute='ansible_facts.instance_conf_dict') | list }}"
-      when: server.changed | bool
-
-    - name: Dump instance config
-      copy:
-        content: "{{ instance_conf | to_json | from_json | to_yaml }}"
-        dest: "{{ molecule_instance_config }}"
-      when: server.changed | bool
-
-    - name: Wait for SSH
-      wait_for:
-        port: "{{ ssh_port }}"
-        host: "{{ item.address }}"
-        search_regex: SSH
-        delay: 10
-        timeout: 320
-      with_items: "{{ lookup('file', molecule_instance_config) | from_yaml }}"
-
-    - name: Wait for boot process to finish
-      pause:
-        minutes: 2
+    - name: Create instances on libvirt
+      include_tasks: libvirt/create_tasks.yml
+      when: backend_driver in ['delegated', 'default']
