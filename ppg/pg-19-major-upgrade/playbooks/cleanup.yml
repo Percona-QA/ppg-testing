@@ -1,0 +1,123 @@
+---
+- name: Fix broken
+  hosts: all
+  become: true
+  become_method: sudo
+  tasks:
+    - name: Fix Postgresql-18 deb packages
+      apt:
+        name: "{{ packages }}"
+        state: fixed
+        update_cache: true
+      vars:
+        packages:
+          - percona-postgresql-18
+          - percona-postgresql-18-dbgsym
+          - percona-postgresql-client-18
+          - percona-postgresql-doc-18
+          - percona-postgresql-plperl-18
+          - percona-postgresql-plpython3-18
+          - percona-postgresql-pltcl-18
+          - percona-postgresql-server-dev-18
+          - percona-postgresql-client-18-dbgsym
+          - percona-postgresql-plperl-18-dbgsym
+          - percona-postgresql-plpython3-18-dbgsym
+          - percona-postgresql-pltcl-18-dbgsym
+          - percona-pg-stat-monitor18
+          - percona-pgaudit18-set-user
+          - percona-postgresql-18-wal2json
+      ignore_errors: true
+      when: ansible_os_family == "Debian"
+
+- name: Cleanup
+  hosts: all
+  become: true
+  become_method: sudo
+  tasks:
+    - name: Remove PG18 extension and add-on packages first
+      apt:
+        name: "{{ packages }}"
+        state: absent
+        update_cache: true
+      ignore_errors: true
+      vars:
+        packages:
+          - percona-postgresql-18-pgaudit
+          - percona-postgresql-18-pgaudit-dbgsym
+          - percona-postgresql-18-repack
+          - percona-postgresql-18-repack-dbgsym
+          - percona-postgresql-18-postgis-3
+          - percona-postgresql-18-wal2json
+          - percona-postgresql-18-wal2json-dbgsym
+          - percona-pg-stat-monitor18
+          - percona-pg-stat-monitor18-dbgsym
+          - percona-pgaudit18-set-user
+          - percona-pgaudit18-set-user-dbgsym
+          - percona-pg-telemetry18
+          - percona-postgresql-postgis
+          - percona-postgresql-postgis-scripts
+      when: ansible_os_family == "Debian"
+
+    - name: Remove core PG18 deb packages
+      apt:
+        name: "{{ packages }}"
+        state: absent
+      ignore_errors: true
+      vars:
+        packages:
+          - percona-postgresql-18
+          - percona-postgresql-18-dbgsym
+          - percona-postgresql-client-18
+          - percona-postgresql-doc-18
+          - percona-postgresql-plperl-18
+          - percona-postgresql-plpython3-18
+          - percona-postgresql-pltcl-18
+          - percona-postgresql-server-dev-18
+          - percona-postgresql-client-18-dbgsym
+          - percona-postgresql-plperl-18-dbgsym
+          - percona-postgresql-plpython3-18-dbgsym
+          - percona-postgresql-pltcl-18-dbgsym
+      when: ansible_os_family == "Debian"
+
+    - name: Fix any remaining broken packages after PG18 removal
+      shell: apt-get -f install -y
+      args:
+        executable: /bin/bash
+      ignore_errors: true
+      when: ansible_os_family == "Debian"
+
+    - name: remove Postgresql rpm packages
+      yum:
+        name: "{{ packages }}"
+        state: absent
+      vars:
+        packages:
+          - percona-postgresql18
+          - percona-postgresql18-contrib
+          - percona-postgresql18-debuginfo
+          - percona-postgresql18-devel
+          - percona-postgresql18-docs
+          - percona-postgresql18-libs
+          - percona-postgresql18-llvmjit
+          - percona-postgresql18-plperl
+          - percona-postgresql18-plpython
+          - percona-postgresql18-pltcl
+          - percona-postgresql18-server
+          - percona-postgresql18-test
+          - percona-postgresql18-debugsource
+          - percona-postgresql18-devel-debuginfo
+          - percona-postgresql18-libs-debuginfo
+          - percona-postgresql18-plperl-debuginfo
+          - percona-postgresql18-plpython-debuginfo
+          - percona-postgresql18-plpython3-debuginfo
+          - percona-postgresql18-pltcl-debuginfo
+          - percona-postgresql18-server-debuginfo
+      ignore_errors: true
+      when: ansible_os_family == "RedHat"
+
+    - name: remove pg_repack rpm packages
+      yum:
+        name: percona-pg_repack18
+        state: absent
+      ignore_errors: true
+      when: ansible_os_family == "RedHat"

@@ -1,0 +1,247 @@
+---
+- name: Configure repository
+  include_tasks: ../../../tasks/install_percona_release.yml
+
+- name: Setting facts so that they will be persisted in the fact cache
+  ansible.builtin.set_fact:
+    pg_version_to_install: "{{ lookup('env', 'FROM_VERSION') | replace('ppg-','') }}"
+    upgrade_to_pg_version: "{{ lookup('env', 'VERSION') | replace('ppg-','') }}"
+
+# Unlike pg-18 (which skipped Ubuntu 26 below 18.4), ppg-19 supports
+# Ubuntu 26 from its first release, so no end_host gate is needed here.
+
+- name: Setup initial (old) repository
+  command: percona-release enable {{ pg_version }} {{ repo }}
+  vars:
+    repo: "{{ lookup('env', 'FROM_REPO') }}"
+    pg_version: "{{ lookup('env', 'FROM_VERSION') }}"
+
+- name: install Percona Platform for PostgreSQL 19 packages
+  include_tasks: ../../../../tasks/install_ppg19.yml
+
+- name: Initialize Postgres RHEL
+  command: /usr/pgsql-19/bin/postgresql-19-setup initdb
+  environment:
+    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  when: ansible_os_family == "RedHat"
+
+- name: Install PPG tools
+  include_tasks: ../../../../tasks/install_ppg19_tools.yml
+
+- name: Start Postgres RHEL
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql-19
+    svc_state: started
+  when: ansible_os_family == "RedHat"
+
+- name: Start postgresql service for Debian based
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: started
+  when: ansible_os_family == "Debian"
+
+- name: Seed data-integrity baseline before upgrade
+  include_tasks: ../../../../tasks/seed_data_integrity.yml
+
+- name: Disable old repository
+  command: percona-release disable {{ pg_version }} {{ repo }}
+  vars:
+    repo: "{{ lookup('env', 'FROM_REPO') }}"
+    pg_version: "{{ lookup('env', 'FROM_VERSION') }}"
+
+- name: Setup new repository
+  command: percona-release enable {{ pg_version }} {{ repo }}
+  vars:
+    repo: "{{ lookup('env', 'TO_REPO') }}"
+    pg_version: "{{ lookup('env', 'VERSION') }}"
+
+- name: install Percona Platform for PostgreSQL deb packages
+  apt:
+    name: "{{ packages }}"
+    update_cache: yes
+    state: latest
+  vars:
+    packages:
+      - percona-postgresql
+      - percona-postgresql-19
+      - percona-postgresql-all
+      - percona-postgresql-client
+      - percona-postgresql-client-19
+      - percona-postgresql-common
+      - percona-postgresql-contrib
+      - percona-postgresql-doc
+      - percona-postgresql-doc-19
+      - percona-postgresql-plperl-19
+      - percona-postgresql-plpython3-19
+      - percona-postgresql-pltcl-19
+      - percona-postgresql-server-dev-19
+      - percona-postgresql-server-dev-all
+      - percona-postgresql-19-dbgsym
+      - percona-postgresql-client-19-dbgsym
+      - percona-postgresql-plperl-19-dbgsym
+      - percona-postgresql-plpython3-19-dbgsym
+      - percona-postgresql-pltcl-19-dbgsym
+      - postgresql-client-common
+      - postgresql-common
+
+  when: ansible_os_family == "Debian"
+  environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+- name: install Percona Platform for PostgreSQL deb packages
+  apt:
+    name: "{{ packages }}"
+    update_cache: yes
+    state: latest
+  vars:
+    packages:
+    - percona-postgresql-plpython3-19
+    - percona-postgresql-plpython3-19-dbgsym
+  when:
+    - ansible_os_family == "Debian"
+
+- name: Install pg_tde packages RHEL
+  yum:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+    - percona-pg_tde19
+    - percona-pg_tde19-devel
+    - percona-pg_tde19-debugsource
+    - percona-pg_tde19-debuginfo
+  when: ansible_os_family == "RedHat"
+
+- name: Install pg_tde packages Debian
+  apt:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+    - percona-pg-tde19
+    - percona-pg-tde19-client
+    - percona-pg-tde19-dbgsym
+  when: ansible_os_family == "Debian"
+
+# pg-18's version of this file only removed the conflicting package for
+# FROM_VERSION >= 18.5 (earlier 18.x had a different RHEL common-dev
+# packaging scheme). Per the "everything available from 19.0" assumption
+# for ppg-19, no such split is assumed to exist across 19.x, so this
+# removal is unconditional (RHEL only) instead of guessing an equivalent
+# 19.x cutoff.
+- name: Remove conflicting percona-postgresql-common-dev
+  ansible.builtin.package:
+    name: percona-postgresql-common-dev
+    state: absent
+  when: ansible_os_family == "RedHat"
+
+- name: install Percona Platform for PostgreSQL rpm packages for RHEL
+  yum:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: yes
+  vars:
+    packages:
+        - percona-postgresql-client-common
+        - percona-postgresql-common
+        - percona-postgresql19
+        - percona-postgresql19-contrib
+        - percona-postgresql19-debuginfo
+        - percona-postgresql19-devel
+        - percona-postgresql19-docs
+        - percona-postgresql19-libs
+        - percona-postgresql19-llvmjit
+        - percona-postgresql19-plpython3
+        - percona-postgresql19-plperl
+        - percona-postgresql19-pltcl
+        - percona-postgresql19-server
+        - percona-postgresql19-test
+        - percona-postgresql19-contrib-debuginfo
+        - percona-postgresql19-debuginfo
+        - percona-postgresql19-debugsource
+        - percona-postgresql19-devel-debuginfo
+        - percona-postgresql19-libs-debuginfo
+        - percona-postgresql19-plperl-debuginfo
+        - percona-postgresql19-pltcl-debuginfo
+        - percona-postgresql19-plpython3-debuginfo
+        - percona-postgresql19-server-debuginfo
+        - percona-postgresql-common-dev
+  when: ansible_os_family == "RedHat"
+  environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+# - name: Determine required PostgreSQL dev package for RHEL
+#   set_fact:
+#     pg_dev_package: >-
+#       {{ 'percona-postgresql-server-dev-all'
+#          if (upgrade_to_pg_version | string is version('19.1', '<=', strict=True))
+#          else 'percona-postgresql-common-dev' }}
+#   when: ansible_os_family == "RedHat"
+
+# - name: Install PostgreSQL dev package on RHEL
+#   yum:
+#     name: "{{ pg_dev_package }}"
+#     state: latest
+#     update_cache: yes
+#   when: ansible_os_family == "RedHat"
+
+# - name: Install postgresql-server-dev-all RHEL
+#   yum:
+#     name: "{{ packages }}"
+#     state: latest
+#     update_cache: yes
+#   vars:
+#     packages:
+#     - percona-postgresql-server-dev-all
+#   when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('19.4', '<=', strict=True))
+
+# - name: Install postgresql-common-dev RHEL
+#   yum:
+#     name: "{{ packages }}"
+#     state: latest
+#     update_cache: yes
+#   vars:
+#     packages:
+#     - percona-postgresql-common-dev
+#   when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('19.5', '>=', strict=True))
+
+- name: Stop postgresql service for RHEL based
+  service:
+    name: postgresql-19
+    state: stopped
+  when: ansible_os_family == "RedHat"
+
+- name: Stop postgresql service for Debian based
+  service:
+    name: postgresql
+    state: stopped
+  when: ansible_os_family == "Debian"
+
+- pause:
+    minutes: 1
+
+- name: Start postgresql service for RHEL based
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql-19
+    svc_state: started
+  when: ansible_os_family == "RedHat"
+
+- name: Start postgresql service for Debian based
+  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
+  vars:
+    svc_name: postgresql
+    svc_state: started
+  when: ansible_os_family == "Debian"
+
+- name: Display ppg version
+  become_user: postgres
+  shell: psql -c "select version()"
+  register: results
+
+- debug: var=results.stdout_lines
+
