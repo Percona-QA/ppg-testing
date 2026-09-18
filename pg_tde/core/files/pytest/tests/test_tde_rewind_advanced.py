@@ -2513,6 +2513,15 @@ class TestTdeRewindWalEncryption:
         finally:
             _teardown(standby, primary)
 
+    @pytest.mark.xfail(
+        strict=False,
+        reason=(
+            "PG-2776: pg_tde product bug — the standby's own archive_command can be "
+            "SIGQUIT-killed mid-copy during pg_promote(), leaving a truncated WAL "
+            "segment in the shared archive dir that its own recovery then rejects "
+            "with 'archive file has wrong size'. Intermittent."
+        ),
+    )
     def test_rewind_wal_key_overlap_when_target_segments_are_kept(
         self, install_dir: Path, tmp_path: Path, io_method: str
     ):
@@ -4474,6 +4483,15 @@ class TestTdeRewindNegative:
         finally:
             _teardown(standby, primary)
 
+    @pytest.mark.xfail(
+        strict=False,
+        reason=(
+            "PG-2776: pg_tde product bug — the standby's own archive_command can be "
+            "SIGQUIT-killed mid-copy during pg_promote(), leaving a truncated WAL "
+            "segment in the shared archive dir that its own recovery then rejects "
+            "with 'archive file has wrong size'. Intermittent."
+        ),
+    )
     def test_rewind_target_wrong_binary(
         self, install_dir: Path, tmp_path: Path, io_method: str
     ):

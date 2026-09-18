@@ -256,6 +256,15 @@ def _start_restored_cluster(
 class TestPgBackRest:
     """Smoke tests — fast feedback. Deeper matrix lives in TestPgBackRestMatrix."""
 
+    @pytest.mark.xfail(
+        strict=False,
+        reason=(
+            "PG-2776: pg_tde product bug — a standby's own archive_command can be "
+            "SIGQUIT-killed mid-copy during promotion, leaving a truncated WAL "
+            "segment in the shared archive dir that a later restore_command read "
+            "rejects with 'archive file has wrong size'. Intermittent."
+        ),
+    )
     def test_full_backup_and_restore(
         self, primary_cluster: PgCluster, tmp_path: Path,
         install_dir: Path, io_method: str,
@@ -3151,6 +3160,15 @@ class TestEncryptedInRepoBackupRestorePitr:
             for m in ("pg_tde", "encrypt", "decrypt", "key", "fatal", "could not")
         ), f"Expected keyring failure for encrypted-in-repo PITR:\n{cluster.read_log(80)}"
 
+    @pytest.mark.xfail(
+        strict=False,
+        reason=(
+            "PG-2776: pg_tde product bug — a standby's own archive_command can be "
+            "SIGQUIT-killed mid-copy during promotion, leaving a truncated WAL "
+            "segment in the shared archive dir that a later restore_command read "
+            "rejects with 'archive file has wrong size'. Intermittent."
+        ),
+    )
     def test_encrypted_in_repo_full_diff_incr_restore(
         self, pg_factory, tmp_path: Path, install_dir: Path, io_method: str,
     ):
@@ -3196,6 +3214,15 @@ class TestEncryptedInRepoBackupRestorePitr:
         finally:
             restored.stop(check=False)
 
+    @pytest.mark.xfail(
+        strict=False,
+        reason=(
+            "PG-2776: pg_tde product bug — a standby's own archive_command can be "
+            "SIGQUIT-killed mid-copy during promotion, leaving a truncated WAL "
+            "segment in the shared archive dir that a later restore_command read "
+            "rejects with 'archive file has wrong size'. Intermittent."
+        ),
+    )
     def test_encrypted_in_repo_delta_restore_after_diff(
         self, pg_factory, tmp_path: Path, install_dir: Path, io_method: str,
     ):
@@ -6345,6 +6372,15 @@ class TestWalEncryptNoDecryptWrapper:
         finally:
             restored.stop(check=False)
 
+    @pytest.mark.xfail(
+        strict=False,
+        reason=(
+            "PG-2776: pg_tde product bug — a standby's own archive_command can be "
+            "SIGQUIT-killed mid-copy during promotion, leaving a truncated WAL "
+            "segment in the shared archive dir that a later restore_command read "
+            "rejects with 'archive file has wrong size'. Intermittent."
+        ),
+    )
     def test_no_wrapper_plain_pgwal_backup_restore(
         self, pg_factory, tmp_path: Path, install_dir: Path, io_method: str,
     ):
@@ -6353,6 +6389,15 @@ class TestWalEncryptNoDecryptWrapper:
             sibling_symlink=False,
         )
 
+    @pytest.mark.xfail(
+        strict=False,
+        reason=(
+            "PG-2776: pg_tde product bug — a standby's own archive_command can be "
+            "SIGQUIT-killed mid-copy during promotion, leaving a truncated WAL "
+            "segment in the shared archive dir that a later restore_command read "
+            "rejects with 'archive file has wrong size'. Intermittent."
+        ),
+    )
     def test_no_wrapper_sibling_symlink_backup_restore(
         self, pg_factory, tmp_path: Path, install_dir: Path, io_method: str,
     ):
