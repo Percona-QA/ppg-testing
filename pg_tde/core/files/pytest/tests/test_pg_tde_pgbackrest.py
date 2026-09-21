@@ -3880,7 +3880,20 @@ def _chk_start_restored(
     cluster.start()
     cluster.wait_ready(timeout=timeout)
     if cluster.fetchone("SELECT pg_is_in_recovery()") == "t":
-        cluster.execute("SELECT pg_promote(wait := true, wait_seconds := 60)")
+        # Recovery can finish on its own between the check above and this
+        # call (no standby.signal, so PostgreSQL auto-promotes once it runs
+        # out of WAL to replay). Treat that race as success rather than a
+        # failure: the desired end state (out of recovery) is already met.
+        result = cluster.execute_allow_error(
+            "SELECT pg_promote(wait := true, wait_seconds := 60)"
+        )
+        if result.returncode != 0 and "recovery is not in progress" not in result.stderr:
+            raise RuntimeError(
+                f"psql failed (port={cluster.port}, db=postgres)\n"
+                "SQL : SELECT pg_promote(wait := true, wait_seconds := 60)\n"
+                f"OUT : {result.stdout.strip()}\n"
+                f"ERR : {result.stderr.strip()}"
+            )
     deadline = time.time() + 60
     while time.time() < deadline:
         if cluster.fetchone("SELECT pg_is_in_recovery()") == "f":
