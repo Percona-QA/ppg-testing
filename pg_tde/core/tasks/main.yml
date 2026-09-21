@@ -175,6 +175,27 @@
     delay: 5
     until: docker_info.rc == 0
 
+  # cosmian_kms is a Rust binary linked against glibc 2.33/2.34. RHEL8-family
+  # (rhel8/rocky8/ol8) ships glibc 2.28, so the native binary exits
+  # immediately with "GLIBC_2.3x not found" and crashes pytest_configure
+  # (ensure_external_key_providers runs at collection time, before any test).
+  # Only matters when TEST_SUITE=All actually starts kmip/vault/openbao —
+  # otherwise external key providers are skipped entirely and this is a
+  # no-op. Default cosmian_kmip_env to {} so the pytest run task's
+  # environment stays unchanged when the Docker route isn't used.
+  - name: Default Cosmian KMIP env (no-op unless Docker route runs)
+    set_fact:
+      cosmian_kmip_env: {}
+
+  - name: Determine whether Cosmian KMS needs to run in Docker (RHEL8-family glibc mismatch)
+    set_fact:
+      cosmian_needs_docker: "{{ test_suite == 'All' and ansible_os_family == 'RedHat' and ansible_distribution_major_version == '8' }}"
+
+  - name: Run Cosmian KMS in Docker (RHEL8-family only)
+    include_tasks:
+      file: "run_cosmian_docker.yml"
+    when: cosmian_needs_docker
+
   # ansible_swaptotal_mb is gathered automatically (setup module) — no need
   # to shell out to swapon/parse its human-readable output (which was the
   # bug here before: `swapon --show=SIZE` prints "4G", not bytes, so the old
@@ -419,12 +440,18 @@
     args:
       executable: /bin/bash
       chdir: "/tmp/pg_tde_pytest_src"
-    environment:
-      PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:/usr/local/go/bin:{{ ansible_env.PATH | default('/usr/local/bin:/usr/bin:/bin') }}"
-      LD_LIBRARY_PATH: "{{ pg_lib_dir }}"
-      INSTALL_DIR: "{{ pg_install_dir }}"
-      PG_MAJOR: "{{ major_version }}"
-      PG_TDE_SKIP_EXTERNAL_KEY_PROVIDERS: "{{ '0' if test_suite == 'All' else '1' }}"
+    # cosmian_kmip_env is {} unless the RHEL8-family Docker-Cosmian route ran
+    # above; when it did, this merges in KMIP_SERVER_ADDRESS/PORT and the
+    # client/CA cert paths so pytest finds the already-running container via
+    # kmip_pytest_env_ready() instead of trying (and failing) to spawn the
+    # native cosmian_kms binary.
+    environment: "{{ {
+        'PATH': pg_bin_dir ~ ':' ~ pg_lib_dir ~ ':/usr/local/go/bin:' ~ (ansible_env.PATH | default('/usr/local/bin:/usr/bin:/bin')),
+        'LD_LIBRARY_PATH': pg_lib_dir,
+        'INSTALL_DIR': pg_install_dir,
+        'PG_MAJOR': major_version,
+        'PG_TDE_SKIP_EXTERNAL_KEY_PROVIDERS': ('0' if test_suite == 'All' else '1'),
+      } | combine(cosmian_kmip_env | default({})) }}"
     ignore_errors: true
     register: regression
 
