@@ -62,10 +62,16 @@ def gen_certs(cert_dir: Path) -> None:
         "-keyout", str(server_key), "-out", str(server_csr),
         "-subj", "/CN=127.0.0.1", "-addext", "subjectAltName=IP:127.0.0.1",
     ])
+    # ``-copy_extensions copy`` (carries the CSR's subjectAltName onto the
+    # signed cert) is OpenSSL 3.0+ only; RHEL8-family systems (rhel8/rocky8/
+    # ol8) ship OpenSSL 1.1.1, which rejects the flag outright. Pass the same
+    # extension explicitly via -extfile instead, which both versions support.
+    server_extfile = cert_dir / "server.ext"
+    server_extfile.write_text("subjectAltName=IP:127.0.0.1\n")
     _run_openssl([
         "openssl", "x509", "-req", "-in", str(server_csr),
         "-CA", str(ca_pem), "-CAkey", str(ca_key), "-CAcreateserial",
-        "-days", "1", "-out", str(server_pem), "-copy_extensions", "copy",
+        "-days", "1", "-out", str(server_pem), "-extfile", str(server_extfile),
     ])
     _run_openssl([
         "openssl", "pkcs12", "-export", "-out", str(cert_dir / "server.p12"),
