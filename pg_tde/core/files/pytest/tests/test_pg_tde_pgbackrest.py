@@ -234,9 +234,25 @@ def _start_restored_cluster(
 
     if promote == "auto":
         # Only request promotion if recovery is still in progress; calling
-        # pg_promote() on an already-promoted cluster raises an error.
+        # pg_promote() on an already-promoted cluster raises an error. But
+        # recovery can also finish on its own (no standby.signal, so postgres
+        # auto-promotes once it runs out of WAL to replay) in the window
+        # between this check and the call below — treat that race as
+        # success too, since the desired end state is already reached.
         if cluster.fetchone("SELECT pg_is_in_recovery()") == "t":
-            cluster.execute("SELECT pg_promote(wait := true, wait_seconds := 60)")
+            result = cluster.execute_allow_error(
+                "SELECT pg_promote(wait := true, wait_seconds := 60)"
+            )
+            if (
+                result.returncode != 0
+                and "recovery is not in progress" not in result.stderr
+            ):
+                raise RuntimeError(
+                    f"psql failed (port={cluster.port}, db=postgres)\n"
+                    "SQL : SELECT pg_promote(wait := true, wait_seconds := 60)\n"
+                    f"OUT : {result.stdout.strip()}\n"
+                    f"ERR : {result.stderr.strip()}"
+                )
     elif promote != "wait":
         raise ValueError(f"unknown promote mode: {promote!r}")
 
@@ -2381,7 +2397,21 @@ def _assert_pitr_did_not_reach_target(cluster: PgCluster) -> None:
             f"Log:\n{cluster.read_log(100)}"
         )
         return
-    in_recovery = cluster.fetchone("SELECT pg_is_in_recovery()")
+    try:
+        in_recovery = cluster.fetchone("SELECT pg_is_in_recovery()")
+    except RuntimeError:
+        # is_ready() and this query are separate connections — the server
+        # can crash/exit in between (an unreachable target with
+        # target_action=promote is a hard startup failure once postgres
+        # runs out of WAL without finding it). That's still "did not reach
+        # target", so require the same log marker rather than letting the
+        # connection error itself fail the test.
+        assert hit, (
+            "Negative PITR: server exited between readiness probe and query, "
+            "without a recovery/WAL failure marker in the log.\n"
+            f"Log:\n{cluster.read_log(100)}"
+        )
+        return
     assert in_recovery == "t" or hit, (
         "Negative PITR must stay in recovery or log a recovery/WAL failure.\n"
         f"Log:\n{cluster.read_log(100)}"
