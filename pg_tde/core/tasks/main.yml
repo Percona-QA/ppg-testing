@@ -455,11 +455,21 @@
     # client/CA cert paths so pytest finds the already-running container via
     # kmip_pytest_env_ready() instead of trying (and failing) to spawn the
     # native cosmian_kms binary.
+    # IO_METHOD: conftest.py's --io-method CLI option defaults from this env
+    # var (os.environ.get("IO_METHOD", "worker")) — without it here, the
+    # Jenkins IO_METHOD parameter (fact set at the top of this file) never
+    # actually reaches pytest, and every run silently uses "worker". The
+    # io_method GUC only exists on PG 18+ (see PG_IO_METHOD_MIN_MAJOR in
+    # lib/cluster.py); conftest.py hard pytest.exit()s if a non-"worker"
+    # value is requested against an older major, so force "worker" here on
+    # <18 rather than letting a leftover/mismatched Jenkins selection fail
+    # the whole run outright.
     environment: "{{ {
         'PATH': pg_bin_dir ~ ':' ~ pg_lib_dir ~ ':/usr/local/go/bin:' ~ (ansible_env.PATH | default('/usr/local/bin:/usr/bin:/bin')),
         'LD_LIBRARY_PATH': pg_lib_dir,
         'INSTALL_DIR': pg_install_dir,
         'PG_MAJOR': major_version,
+        'IO_METHOD': (io_method if (major_version | int) >= 18 else 'worker'),
         'PG_TDE_SKIP_EXTERNAL_KEY_PROVIDERS': ('0' if test_suite == 'All' else '1'),
       } | combine(cosmian_kmip_env | default({})) }}"
     ignore_errors: true
