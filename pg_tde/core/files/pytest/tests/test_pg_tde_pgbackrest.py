@@ -935,12 +935,18 @@ class TestPgBackRestAdvancedAndNegative:
         # Generate WAL and capture LSN
         tde_primary.execute("INSERT INTO missing_wal_t VALUES (1); CHECKPOINT;")
         target_lsn = tde_primary.fetchone("SELECT pg_current_wal_lsn()")
+        target_wal_file = (
+            tde_primary.fetchone(f"SELECT pg_walfile_name('{target_lsn}')") or ""
+        ).strip()
         tde_primary.execute("SELECT pg_switch_wal();")
         bm.wait_for_wal_archive(tde_primary)
 
-        # Sabotage the repository: Delete ONLY the most recent WAL file.
-        # This leaves the base backup's WAL intact so Postgres can reach
-        # consistency and open for read-only connections, but fails to reach the target.
+        # Sabotage the repository: Delete the WAL segment that actually
+        # contains target_lsn, not just "the newest" — extra archiving
+        # activity (checkpoints, background autovacuum) can land a later
+        # segment as newest while target_lsn's own segment sits earlier,
+        # which would let recovery reach the target and pass cleanly (an
+        # intermittent false pass on this negative-PITR test).
         repo_archive_dir = tmp_path / "repo" / "archive" / "missing_wal"
         wal_pattern = re.compile(r"^[0-9A-F]{24}.*$")
 
@@ -948,8 +954,10 @@ class TestPgBackRestAdvancedAndNegative:
         wal_files = sorted([f for f in repo_archive_dir.rglob("*") if f.is_file() and wal_pattern.match(f.name)])
         assert wal_files, "Failed to sabotage repo: No WAL files found!"
 
-        # Delete only the newest WAL file
-        wal_files[-1].unlink()
+        victim = next(
+            (p for p in wal_files if p.name == target_wal_file), wal_files[-1]
+        )
+        victim.unlink()
 
         restore_dir = tmp_path / "restore_missing_wal"
         bm.restore(
@@ -2413,7 +2421,18 @@ def _assert_pitr_did_not_reach_target(cluster: PgCluster) -> None:
         "invalid permissions",
     )
     hit = any(m in log_l for m in markers)
-    if not cluster.is_ready():
+    ready = cluster.is_ready()
+    if not ready:
+        # A single pg_isready probe can transiently fail under load even
+        # though the server is genuinely up (it may have already passed the
+        # caller's own wait_ready() moments earlier) — retry briefly before
+        # concluding "did not start" and demanding a failure marker.
+        for _ in range(5):
+            time.sleep(1)
+            if cluster.is_ready():
+                ready = True
+                break
+    if not ready:
         assert hit, (
             "Negative PITR start failed without a recovery/WAL failure marker.\n"
             f"Log:\n{cluster.read_log(100)}"
@@ -2461,13 +2480,23 @@ class TestPgBackRestPitrNegative:
 
         tde_primary.execute("INSERT INTO pitr_neg_c VALUES (2); CHECKPOINT;")
         target_lsn = tde_primary.fetchone("SELECT pg_current_wal_lsn()")
+        target_wal_file = (
+            tde_primary.fetchone(f"SELECT pg_walfile_name('{target_lsn}')") or ""
+        ).strip()
         tde_primary.execute("SELECT pg_switch_wal()")
         bm.wait_for_wal_archive(tde_primary)
 
         wal_files = _repo_wal_files(tmp_path / "repo", "pitr_neg_corrupt")
         assert wal_files, "expected archived WAL to corrupt"
-        # Overwrite newest segment with garbage (keep size so archive-get succeeds).
-        victim = wal_files[-1]
+        # Corrupt the segment that actually contains target_lsn, not just
+        # "the newest archived one": extra archiving activity (checkpoints,
+        # background autovacuum) can land a later segment as "newest" while
+        # target_lsn's own segment sits earlier — corrupting an irrelevant
+        # later segment lets recovery reach the target and exit recovery
+        # cleanly, an intermittent false pass on this negative-PITR test.
+        victim = next(
+            (p for p in wal_files if p.name == target_wal_file), wal_files[-1]
+        )
         size = victim.stat().st_size
         victim.write_bytes(b"\x00" * min(size, 8192) + os.urandom(max(0, size - 8192)))
 
@@ -3058,12 +3087,20 @@ class TestEncryptedInRepoBackupRestorePitr:
             "INSERT INTO enc_miss_t VALUES (7001, 'target', 'x'); CHECKPOINT;"
         )
         target_lsn = primary.fetchone("SELECT pg_current_wal_lsn()")
+        target_wal_file = (
+            primary.fetchone(f"SELECT pg_walfile_name('{target_lsn}')") or ""
+        ).strip()
         primary.execute("SELECT pg_switch_wal()")
         bm.wait_for_wal_archive(primary, timeout=60)
 
         wal_files = _repo_wal_files(tmp_path / "repo", "enc_pitr_miss")
         assert wal_files, "expected archived WAL"
-        wal_files[-1].unlink()
+        # See test_negative_pitr_missing_wal: delete the segment that
+        # actually contains target_lsn, not just "the newest archived one".
+        victim = next(
+            (p for p in wal_files if p.name == target_wal_file), wal_files[-1]
+        )
+        victim.unlink()
 
         restore_dir = tmp_path / "restore_enc_miss"
         bm.restore(
@@ -3098,12 +3135,19 @@ class TestEncryptedInRepoBackupRestorePitr:
 
         primary.execute("INSERT INTO enc_c_t VALUES (2); CHECKPOINT;")
         target_lsn = primary.fetchone("SELECT pg_current_wal_lsn()")
+        target_wal_file = (
+            primary.fetchone(f"SELECT pg_walfile_name('{target_lsn}')") or ""
+        ).strip()
         primary.execute("SELECT pg_switch_wal()")
         bm.wait_for_wal_archive(primary, timeout=60)
 
         wal_files = _repo_wal_files(tmp_path / "repo", "enc_pitr_corrupt")
         assert wal_files
-        victim = wal_files[-1]
+        # See test_negative_pitr_missing_wal: corrupt the segment that
+        # actually contains target_lsn, not just "the newest archived one".
+        victim = next(
+            (p for p in wal_files if p.name == target_wal_file), wal_files[-1]
+        )
         size = victim.stat().st_size
         victim.write_bytes(b"\xff" * size)
 

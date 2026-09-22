@@ -509,7 +509,18 @@ def _assert_pitr_failed_or_stuck(cluster: PgCluster) -> None:
         "invalid permissions",
     )
     hit = any(m in log_l for m in markers)
-    if not cluster.is_ready():
+    ready = cluster.is_ready()
+    if not ready:
+        # A single pg_isready probe can transiently fail under load even
+        # though the server is genuinely up (it may have already passed the
+        # caller's own wait_ready() moments earlier) — retry briefly before
+        # concluding "did not start" and demanding a failure marker.
+        for _ in range(5):
+            time.sleep(1)
+            if cluster.is_ready():
+                ready = True
+                break
+    if not ready:
         assert hit, (
             "Negative PITR start failed without a recovery/WAL failure marker.\n"
             f"Log:\n{cluster.read_log(100)}"
