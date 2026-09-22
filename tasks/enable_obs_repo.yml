@@ -1,0 +1,105 @@
+---
+  - name: Map REPO selection to OBS repository channel
+    ansible.builtin.set_fact:
+      obs_repo_channel_map:
+        testing: staging
+        release: release
+        experimental: devel
+
+  - name: Fail when REPO has no OBS channel mapping
+    ansible.builtin.fail:
+      msg: >-
+        REPO={{ lookup('env', 'REPO') }} has no OBS channel mapping. Known
+        values: {{ obs_repo_channel_map.keys() | list }}.
+    when: lookup('env', 'REPO') not in obs_repo_channel_map
+
+  - name: Build OBS project string from REPO and VERSION
+    ansible.builtin.set_fact:
+      obs_project: >-
+        isv:percona:ppg:{{ obs_repo_channel_map[lookup('env', 'REPO')] }}:{{
+        (lookup('env', 'VERSION') | replace('ppg-', '')).split('.')[0] }}
+
+  - name: Map distro to OBS repository directory
+    ansible.builtin.set_fact:
+      obs_repo_dir: >-
+        {%- if ansible_distribution == 'Debian' -%}
+        Debian_{{ ansible_distribution_major_version }}
+        {%- elif ansible_distribution == 'Ubuntu' -%}
+        Ubuntu_{{ ansible_distribution_version }}
+        {%- elif ansible_os_family == 'RedHat' -%}
+        RockyLinux_{{ ansible_distribution_major_version }}
+        {%- else -%}
+        UNSUPPORTED
+        {%- endif -%}
+
+  - name: Fail when distro family is not recognized for OBS
+    ansible.builtin.fail:
+      msg: >-
+        Don't know how to map {{ ansible_distribution }}
+        {{ ansible_distribution_version }} to an OBS repository directory
+        for project {{ obs_project }}. Recognized families: Debian, Ubuntu,
+        RedHat (RHEL/Rocky/OracleLinux).
+    when: obs_repo_dir == "UNSUPPORTED"
+
+  - name: Compute OBS repo id and base URL
+    ansible.builtin.set_fact:
+      obs_safe_id: "{{ obs_project | replace(':', '_') }}"
+      obs_base_url: "https://download.opensuse.org/repositories/{{ obs_project | regex_replace(':', ':/') }}/{{ obs_repo_dir }}"
+
+  - name: Add OBS apt source (Debian/Ubuntu)
+    ansible.builtin.copy:
+      dest: "/etc/apt/sources.list.d/{{ obs_project }}.list"
+      mode: "0644"
+      content: |
+        deb {{ obs_base_url }}/ /
+    when: ansible_os_family == "Debian"
+
+  - name: Ensure gnupg is present (Debian/Ubuntu)
+    ansible.builtin.apt:
+      name: gnupg
+      state: present
+    when: ansible_os_family == "Debian"
+
+  - name: Download OBS repo signing key (Debian/Ubuntu)
+    ansible.builtin.get_url:
+      url: "{{ obs_base_url }}/Release.key"
+      dest: "/tmp/{{ obs_safe_id }}.key"
+      mode: "0644"
+      force: true
+    when: ansible_os_family == "Debian"
+
+  - name: Dearmor and install OBS repo signing key (Debian/Ubuntu)
+    ansible.builtin.shell: |
+      gpg --batch --yes --dearmor -o /etc/apt/trusted.gpg.d/{{ obs_safe_id }}.gpg /tmp/{{ obs_safe_id }}.key
+    when: ansible_os_family == "Debian"
+
+  - name: Update apt cache (Debian/Ubuntu)
+    ansible.builtin.apt:
+      update_cache: true
+    when: ansible_os_family == "Debian"
+
+  - name: Import OBS repo signing key (RHEL/Rocky)
+    # rpm has its own OpenPGP parser and doesn't shell out to the system gpg/gpg2,
+    # unlike ansible.builtin.rpm_key — which failed on RHEL10 (couldn't parse the
+    # key's OpenPGP v6 packet) and OL10 (no gpg2 binary present at all).
+    ansible.builtin.command: "rpm --import {{ obs_base_url }}/repodata/repomd.xml.key"
+    changed_when: true
+    when: ansible_os_family == "RedHat"
+
+  - name: Add OBS yum repository (RHEL/Rocky)
+    ansible.builtin.copy:
+      dest: "/etc/yum.repos.d/{{ obs_safe_id }}.repo"
+      mode: "0644"
+      content: |
+        [{{ obs_project }}]
+        name={{ obs_project }} - {{ obs_repo_dir }}
+        baseurl={{ obs_base_url }}/
+        enabled=1
+        gpgcheck=0
+    when: ansible_os_family == "RedHat"
+
+  - name: Refresh dnf cache (RHEL/Rocky)
+    ansible.builtin.shell: |
+      dnf clean all
+      dnf makecache
+    when: ansible_os_family == "RedHat"

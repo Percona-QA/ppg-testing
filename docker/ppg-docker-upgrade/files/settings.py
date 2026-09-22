@@ -45,11 +45,11 @@ pg_stat_monitor = {
     "16.14": {"version": "2.3.2"},
     "17.10": {"version": "2.3.2"},
     "18.4": {"version": "2.3.2"},
-    "14.24": {"version": "2.3.2"},
-    "15.19": {"version": "2.3.2"},
-    "16.15": {"version": "2.3.2"},
-    "17.11": {"version": "2.3.2"},
-    "18.6": {"version": "2.3.2"},
+    "14.24": {"version": "2.4.0"},
+    "15.19": {"version": "2.4.0"},
+    "16.15": {"version": "2.4.0"},
+    "17.11": {"version": "2.4.0"},
+    "18.6": {"version": "2.4.0"},
 }
 
 set_user = {
@@ -117,11 +117,11 @@ pgbackrest = {
     "16.14": {"version": "2.58.0", "binary_version": "pgBackRest 2.58.0"},
     "17.10": {"version": "2.58.0", "binary_version": "pgBackRest 2.58.0"},
     "18.4": {"version": "2.58.0", "binary_version": "pgBackRest 2.58.0"},
-    "14.24": {"version": "2.59.0", "binary_version": "pgBackRest 2.59.0"},
-    "15.19": {"version": "2.59.0", "binary_version": "pgBackRest 2.59.0"},
-    "16.15": {"version": "2.59.0", "binary_version": "pgBackRest 2.59.0"},
-    "17.11": {"version": "2.59.0", "binary_version": "pgBackRest 2.59.0"},
-    "18.6": {"version": "2.59.0", "binary_version": "pgBackRest 2.59.0"},
+    "14.24": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
+    "15.19": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
+    "16.15": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
+    "17.11": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
+    "18.6": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
 }
 
 # Some packages/fields are built or reported separately for psp-<major> images
@@ -166,11 +166,11 @@ pg_cron = {
     "16.14": {"version": "1.6.7", "extension_version": "1.6"},
     "17.10": {"version": "1.6.7", "extension_version": "1.6"},
     "18.4": {"version": "1.6.7", "extension_version": "1.6"},
-    "14.24": {"version": "1.6.7", "extension_version": "1.6"},
-    "15.19": {"version": "1.6.7", "extension_version": "1.6"},
-    "16.15": {"version": "1.6.7", "extension_version": "1.6"},
-    "17.11": {"version": "1.6.7", "extension_version": "1.6"},
-    "18.6": {"version": "1.6.7", "extension_version": "1.6"},
+    "14.24": {"version": "1.6.8", "extension_version": "1.6"},
+    "15.19": {"version": "1.6.8", "extension_version": "1.6"},
+    "16.15": {"version": "1.6.8", "extension_version": "1.6"},
+    "17.11": {"version": "1.6.8", "extension_version": "1.6"},
+    "18.6": {"version": "1.6.8", "extension_version": "1.6"},
 }
 
 postgis = {

@@ -29,9 +29,9 @@ pg_stat_monitor = {
     "16.14": {"version": "2.3.2"},
     "17.10": {"version": "2.3.2"},
     "18.4": {"version": "2.3.2"},
-    "16.15": {"version": "2.3.2"},
-    "17.11": {"version": "2.3.2"},
-    "18.6": {"version": "2.3.2"},
+    "16.15": {"version": "2.4.0"},
+    "17.11": {"version": "2.4.0"},
+    "18.6": {"version": "2.4.0"},
 }
 
 set_user = {
@@ -77,9 +77,9 @@ pgbackrest = {
     "16.14": {"version": "2.58.0", "binary_version": "pgBackRest 2.58.0"},
     "17.10": {"version": "2.58.0", "binary_version": "pgBackRest 2.58.0"},
     "18.4": {"version": "2.58.0", "binary_version": "pgBackRest 2.58.0"},
-    "16.15": {"version": "2.59.0", "binary_version": "pgBackRest 2.59.0"},
-    "17.11": {"version": "2.59.0", "binary_version": "pgBackRest 2.59.0"},
-    "18.6": {"version": "2.59.0", "binary_version": "pgBackRest 2.59.0"},
+    "16.15": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
+    "17.11": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
+    "18.6": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
 }
 
 pgvector = {
@@ -150,9 +150,9 @@ timescaledb = {
     "16.14": {"version": "2.28.2"},
     "17.10": {"version": "2.28.2"},
     "18.4": {"version": "2.28.2"},
-    "16.15": {"version": "2.29.2"},
-    "17.11": {"version": "2.29.2"},
-    "18.6": {"version": "2.29.2"},
+    "16.15": {"version": "2.30.0"},
+    "17.11": {"version": "2.30.0"},
+    "18.6": {"version": "2.30.0"},
 }
 
 h3 = {
@@ -174,9 +174,9 @@ pgrouting = {
     "16.14": {"version": "4.0.1"},
     "17.10": {"version": "4.0.1"},
     "18.4": {"version": "4.0.1"},
-    "16.15": {"version": "4.0.1"},
-    "17.11": {"version": "4.0.1"},
-    "18.6": {"version": "4.0.1"},
+    "16.15": {"version": "4.0.2"},
+    "17.11": {"version": "4.0.2"},
+    "18.6": {"version": "4.0.2"},
 }
 
 pg_oidc_validator = {
@@ -216,9 +216,9 @@ pg_cron = {
     "16.14": {"version": "1.6.7", "extension_version": "1.6"},
     "17.10": {"version": "1.6.7", "extension_version": "1.6"},
     "18.4": {"version": "1.6.7", "extension_version": "1.6"},
-    "16.15": {"version": "1.6.7", "extension_version": "1.6"},
-    "17.11": {"version": "1.6.7", "extension_version": "1.6"},
-    "18.6": {"version": "1.6.7", "extension_version": "1.6"},
+    "16.15": {"version": "1.6.8", "extension_version": "1.6"},
+    "17.11": {"version": "1.6.8", "extension_version": "1.6"},
+    "18.6": {"version": "1.6.8", "extension_version": "1.6"},
 }
 
 pg_partman = {
@@ -252,9 +252,9 @@ pgvectorscale = {
     "16.14": {"version": "0.9.0"},
     "17.10": {"version": "0.9.0"},
     "18.4": {"version": "0.9.0"},
-    "16.15": {"version": "0.9.0"},
-    "17.11": {"version": "0.9.0"},
-    "18.6": {"version": "0.9.0"},
+    "16.15": {"version": "0.9.1"},
+    "17.11": {"version": "0.9.1"},
+    "18.6": {"version": "0.9.1"},
 }
 
 rum = {
@@ -288,9 +288,9 @@ anonymizer = {
     "16.14": {"version": "3.1.3"},
     "17.10": {"version": "3.1.3"},
     "18.4": {"version": "3.1.3"},
-    "16.15": {"version": "3.1.3"},
-    "17.11": {"version": "3.1.3"},
-    "18.6": {"version": "3.1.3"},
+    "16.15": {"version": "3.2.2"},
+    "17.11": {"version": "3.2.2"},
+    "18.6": {"version": "3.2.2"},
 }
 
 # Base extension list — common across all supported major versions.

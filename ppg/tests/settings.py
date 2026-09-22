@@ -1,4 +1,5 @@
 import os
+import re
 
 from .versions.patroni import patroni
 from .versions.pgbadger import pgbadger
@@ -18,6 +19,20 @@ from .versions.pgvector import pgvector
 # VERSION is "<product>-<major>.<minor>" where product is ppg or psp
 # (e.g. ppg-16.14, psp-16.14) — take the major regardless of product.
 MAJOR_VER = os.getenv("VERSION").split(".")[0].split("-")[1]
+
+# OBS (openSUSE Build Service) appends its own build-revision counter
+# (e.g. "+1.2") into the debian_revision field of every package it builds,
+# on top of whatever revision Percona's own packaging declares — confirmed
+# against the OBS source history: Percona's debian.dsc only ever declares
+# the bare upstream version (e.g. "3:18.6"), and OBS's counter increments
+# on its own rebuild cadence, independent of package content. Strip it
+# before matching against the expected version list rather than pinning an
+# exact value that will drift on the next OBS rebuild.
+_OBS_RELEASE_SUFFIX_RE = re.compile(r"\+\d+\.\d+")
+
+
+def strip_obs_release_suffix(version):
+    return _OBS_RELEASE_SUFFIX_RE.sub("", version)
 
 
 def _merge_expected_deb_versions(base_versions, distro_overrides):
@@ -844,8 +859,8 @@ def get_settings(distro_type):
             "postgis_package_version": "3.5.7",
             "pg_telemetry_version": "1.2",
             "pg_telemetry_package_version": "1.2.0",
-            "PG_CRON_version": "1.6.7",
-            "PG_CRON_package_version": "1.6.7",
+            "PG_CRON_version": "1.6.8",
+            "PG_CRON_package_version": "1.6.8",
             "PG_CRON_sql_version": "1.6",
         },
         "ppg-15.0": {
@@ -1495,8 +1510,8 @@ def get_settings(distro_type):
             "postgis_package_version": "3.5.7",
             "pg_telemetry_version": "1.2",
             "pg_telemetry_package_version": "1.2.0",
-            "PG_CRON_version": "1.6.7",
-            "PG_CRON_package_version": "1.6.7",
+            "PG_CRON_version": "1.6.8",
+            "PG_CRON_package_version": "1.6.8",
             "PG_CRON_sql_version": "1.6",
         },
         "ppg-16.0": {
@@ -2014,8 +2029,8 @@ def get_settings(distro_type):
             "postgis_package_version": "3.5.7",
             "pg_telemetry_version": "1.2",
             "pg_telemetry_package_version": "1.2.0",
-            "PG_CRON_version": "1.6.7",
-            "PG_CRON_package_version": "1.6.7",
+            "PG_CRON_version": "1.6.8",
+            "PG_CRON_package_version": "1.6.8",
             "PG_CRON_sql_version": "1.6",
         },
         "ppg-17.0": {
@@ -2408,8 +2423,8 @@ def get_settings(distro_type):
             "PG_TDE_version": "pg_tde 2.2.2",
             "PG_TDE_package_version": "2.2.2",
             "PG_TDE_sql_version": "2.2",
-            "PG_CRON_version": "1.6.7",
-            "PG_CRON_package_version": "1.6.7",
+            "PG_CRON_version": "1.6.8",
+            "PG_CRON_package_version": "1.6.8",
             "PG_CRON_sql_version": "1.6",
         },
         "ppg-18.1": {
@@ -2607,8 +2622,8 @@ def get_settings(distro_type):
             "PG_TDE_sql_version": "2.2",
             "PG_OIDC_VALIDATOR_version": "1.1.0",
             "PG_OIDC_VALIDATOR_package_version": "1.1.0",
-            "PG_CRON_version": "1.6.7",
-            "PG_CRON_package_version": "1.6.7",
+            "PG_CRON_version": "1.6.8",
+            "PG_CRON_package_version": "1.6.8",
             "PG_CRON_sql_version": "1.6",
         },
     }
@@ -2647,9 +2662,8 @@ def get_settings(distro_type):
         "PG_TDE_version": "pg_tde 2.2.2",
         "PG_TDE_package_version": "2.2.2",
         "PG_TDE_sql_version": "2.2",
-        # psp-16.15 builds pgbackrest separately from ppg-16.15 and ships a
-        # newer version for the same PG minor: confirmed 2.59.1 here (vs
-        # 2.59.0 inherited from ppg-16.15 above).
+        # psp-16.15 builds pgbackrest separately from ppg-16.15; confirmed
+        # to currently match at 2.59.1.
         "pgbackrest": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
         "percona-version": "16.15.1",
     }
