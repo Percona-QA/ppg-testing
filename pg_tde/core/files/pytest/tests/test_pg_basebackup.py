@@ -1412,6 +1412,16 @@ class TestPitrWithPgBasebackupNegative:
         victim = next(
             (p for p in wal_files if p.name == target_wal_file), wal_files[-1]
         )
+        # The two _force_archive_segment() calls above can leave segments
+        # archived *after* the victim. recovery_target_lsn is satisfied by
+        # any later record whose LSN >= target, not specifically by the
+        # target's own record, so an intact later segment is an escape
+        # hatch: recovery can skip past the zeroed victim (which looks like
+        # "nothing recorded here yet", not corruption, to the WAL reader)
+        # and reach the target anyway. Remove anything archived after it.
+        for f in wal_files:
+            if f.name > victim.name:
+                f.unlink()
         size = victim.stat().st_size
         victim.write_bytes(b"\x00" * size)
 

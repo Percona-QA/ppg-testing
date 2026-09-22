@@ -1529,7 +1529,7 @@ def _run_tde_rewind_live(
         cmd.append("--write-recovery-conf")
     env = os.environ.copy()
     env["PATH"] = f"{install_dir / 'bin'}:{env.get('PATH', '')}"
-    return subprocess.run(cmd, capture_output=True, text=True, env=env)
+    return _run_tde_rewind_cmd(cmd, env)
 
 
 def _run_tde_rewind_offline(
@@ -1551,7 +1551,33 @@ def _run_tde_rewind_offline(
         cmd.append("-c")
     env = os.environ.copy()
     env["PATH"] = f"{install_dir / 'bin'}:{env.get('PATH', '')}"
-    return subprocess.run(cmd, capture_output=True, text=True, env=env)
+    return _run_tde_rewind_cmd(cmd, env)
+
+
+def _run_tde_rewind_cmd(
+    cmd: List[str], env: Dict[str, str]
+) -> subprocess.CompletedProcess:
+    """
+    Run a pg_tde_rewind command, retrying once on a known transient race.
+
+    Both nodes are typically stop()-ed (or the source is left running as a
+    live server) immediately before the caller invokes this — pg_ctl stop -w
+    only waits for the postmaster's own pidfile to disappear, so the logging
+    collector child can still be flushing/closing server.log a moment
+    later. server.log lives inside PGDATA in this suite, and pg_tde_rewind's
+    file-copy step aborts (a real safety check, not a bug) if a source
+    file's size changes mid-copy. See test_tde_rewind_advanced.py's
+    _run_rewind_pgdata_ex for the original fix.
+    """
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    if (
+        result.returncode != 0
+        and "changed concurrently" in result.stderr
+        and "server.log" in result.stderr
+    ):
+        time.sleep(1)
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    return result
 
 
 def _repair_rewind_identity(cluster: PgCluster) -> None:
@@ -2497,6 +2523,19 @@ class TestPgBackRestPitrNegative:
         victim = next(
             (p for p in wal_files if p.name == target_wal_file), wal_files[-1]
         )
+        # wait_for_wal_archive() above always forces its own extra
+        # CHECKPOINT + pg_switch_wal() to detect archiver progress, so by
+        # this point the repo can already hold one (or more) segments
+        # archived *after* the victim. Since recovery_target_lsn is
+        # satisfied by any later record whose LSN >= target — not
+        # specifically by the target's own record — those later segments
+        # are an escape hatch: recovery can skip straight past the
+        # corrupted victim and reach the target anyway via them. Remove
+        # anything archived after the victim so the corruption can't be
+        # bypassed.
+        for f in wal_files:
+            if f.name > victim.name:
+                f.unlink()
         size = victim.stat().st_size
         victim.write_bytes(b"\x00" * min(size, 8192) + os.urandom(max(0, size - 8192)))
 
@@ -3148,6 +3187,16 @@ class TestEncryptedInRepoBackupRestorePitr:
         victim = next(
             (p for p in wal_files if p.name == target_wal_file), wal_files[-1]
         )
+        # See test_negative_pitr_corrupt_archived_wal: wait_for_wal_archive()
+        # above always forces its own extra CHECKPOINT + pg_switch_wal(), so
+        # the repo can hold a segment archived *after* the victim. An intact
+        # later segment is an escape hatch — recovery_target_lsn is
+        # satisfied by any later record whose LSN >= target, so recovery can
+        # skip past the corrupted victim via it. Remove anything archived
+        # after the victim.
+        for f in wal_files:
+            if f.name > victim.name:
+                f.unlink()
         size = victim.stat().st_size
         victim.write_bytes(b"\xff" * size)
 
@@ -5302,6 +5351,18 @@ class TestPgBackRestPatroniEncryptedBackupRestore:
                 ) == "1"
                 log_l = standby.read_log(80).lower()
                 for marker in _hae_REPLICA_FAIL_MARKERS:
+                    if marker == "has already been removed":
+                        # A fresh basebackup-driven standby's walreceiver can
+                        # transiently lose a race against the primary
+                        # recycling the backup's start WAL segment right as
+                        # streaming begins — it auto-reconnects and resumes
+                        # from a later segment. assert_catchup + the row
+                        # check above already proved this replica is fully
+                        # healthy, so a transient instance of this message
+                        # earlier in the log isn't a real failure here
+                        # (unlike the other markers, which indicate the
+                        # replica never recovered at all).
+                        continue
                     assert marker not in log_l, (
                         f"reinitialized replica must not log {marker!r}:\n"
                         f"{standby.read_log(80)}"
