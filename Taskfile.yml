@@ -80,3 +80,23 @@ tasks:
     cmds:
       - task: run
         vars: { GROUP: 'ppg/{{.SCENARIO}}', OS: '{{.OS}}', SEQ: '{{.SEQ}}', CLI_ARGS: '{{.CLI_ARGS}}' }
+
+  bot-setup:
+    desc: one time host setup for the local buildbot, .env and hypervisor ssh key
+    cmds:
+      - sh local/buildbot/setup.sh
+
+  bot-up:
+    desc: start the local buildbot stack, see local/buildbot/README.md
+    cmds:
+      - docker compose -f local/buildbot/docker-compose.yml up -d --build
+
+  bot-down:
+    desc: stop the local buildbot stack
+    cmds:
+      - docker compose -f local/buildbot/docker-compose.yml down
+
+  bot-logs:
+    desc: tail buildbot stack logs
+    cmds:
+      - docker compose -f local/buildbot/docker-compose.yml logs -f

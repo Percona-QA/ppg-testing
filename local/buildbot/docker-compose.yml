@@ -1,0 +1,54 @@
+services:
+  master:
+    build: .
+    command: start-master.sh
+    # selinux-enforcing hosts with selinux-enabled docker confine containers
+    # as container_t, which cannot read the bind-mounted checkout (EACCES on
+    # /repo even as root). Disable label separation for these containers
+    # instead of :z-relabeling the whole working tree; no-op without selinux.
+    security_opt: ["label=disable"]
+    # no auth in front of it, keep it off the network
+    ports: ["127.0.0.1:8010:8010"]
+    environment:
+      - PPG_LOCAL_SLOTS=${PPG_LOCAL_SLOTS:-4}
+      - PPG_WORKER_PASS=${PPG_WORKER_PASS:-ppg-local}
+      # not /repo: master.cfg materializes the generated groups, needs a
+      # writable tree, start-master.sh rsyncs the read-only mount here
+      - PPG_TESTING_DIR=/work
+      - PPG_TESTING_REPO=/repo
+      - PPG_TESTING_BRANCH=${PPG_TESTING_BRANCH:-main}
+      - PPG_BUILDBOT_URL=${PPG_BUILDBOT_URL:-http://localhost:8010/}
+    volumes:
+      - ../..:/repo:ro
+      - ./master.cfg:/cfg/master.cfg:ro
+      - master-state:/bb
+      - artifacts:/artifacts
+
+  worker:
+    build: .
+    command: start-worker.sh
+    # same selinux story as the master, see above
+    security_opt: ["label=disable"]
+    depends_on: [master]
+    environment:
+      - PPG_LOCAL_SLOTS=${PPG_LOCAL_SLOTS:-4}
+      - PPG_WORKER_PASS=${PPG_WORKER_PASS:-ppg-local}
+      # unset means the hypervisor is this machine: ssh back to the docker
+      # host as the user running compose. needs sshd here, bot-setup checks
+      - PPG_HYPERVISOR_SSH=${PPG_HYPERVISOR_SSH:-${USER}@host.docker.internal}
+    # docker desktop has the alias built in, docker engine on linux needs it
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    volumes:
+      # only the git source for the checkout step, builds never run from it
+      - ../..:/repo:ro
+      - worker-state:/bbw
+      - artifacts:/artifacts
+      # staged, not mounted at its final path: start-worker.sh validates it is
+      # a regular file (docker silently creates a directory for a missing bind
+      # source) and installs it with 600 perms, which ssh insists on
+      - ${PPG_SSH_KEY:-~/.ssh/ppg-buildbot}:/run/ppg-ssh-key:ro
+
+volumes:
+  master-state:
+  worker-state:
+  artifacts:
