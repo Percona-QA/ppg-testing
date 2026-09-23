@@ -3,7 +3,7 @@ import pathlib
 import pytest
 
 from tools import catalog, render
-from tools.migrate_check import substituted_original
+from tools.migrate_check import snapshot_original, snapshot_pairs
 
 REPO = pathlib.Path(__file__).resolve().parent.parent.parent
 
@@ -24,9 +24,20 @@ scenarios:
 
 
 @pytest.mark.parametrize("os_key", ["debian-13", "debian-13-arm", "rocky-9", "ubuntu-jammy"])
-def test_tde_render_matches_git(os_key):
+def test_tde_render_matches_snapshot(os_key):
     rendered = render.render_one(REPO / "pg_tde/tde", os_key)
-    assert rendered == substituted_original("pg_tde/tde", os_key)
+    assert rendered == snapshot_original("pg_tde__tde", os_key)
+
+
+def test_full_snapshot_renders_byte_identical():
+    pairs = snapshot_pairs()
+    assert len(pairs) == 82
+    mismatches = []
+    for rel, key, scenario in pairs:
+        rendered = render.render_one(REPO / rel, scenario)
+        if rendered != snapshot_original(key, scenario):
+            mismatches.append("%s/%s" % (rel, scenario))
+    assert not mismatches
 
 
 def test_apply_overrides_rejects_unknown_key():
@@ -115,17 +126,17 @@ def test_render_cmd_scenario_filter(tmp_path):
     assert not (group_dir / "molecule" / "rocky-9").exists()
 
 
-def test_render_cmd_keeps_hand_written_file(tmp_path, capsys):
+def test_render_cmd_refuses_clobber_and_writes_nothing(tmp_path):
     group_dir = _make_group(tmp_path)
     handwritten = group_dir / "molecule" / "debian-13" / "molecule.yml"
     handwritten.parent.mkdir(parents=True)
     handwritten.write_text("dependency:\n  name: galaxy\n")
 
     rc = render.main(["--group", str(group_dir)])
-    assert rc == 0
+    assert rc == 2
     assert handwritten.read_text() == "dependency:\n  name: galaxy\n"
-    assert (group_dir / "molecule" / "rocky-9" / "molecule.yml").exists()
-    assert "kept 1 hand-written" in capsys.readouterr().err
+    # check-all-before-write: the clean sibling is not written either
+    assert not (group_dir / "molecule" / "rocky-9").exists()
 
 
 def test_render_cmd_overwrites_previously_generated_file(tmp_path):

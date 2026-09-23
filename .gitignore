@@ -19,6 +19,10 @@ __pycache__/
 # Ignore all Cursor files except your specific settings
 .cursor/*
 
+### --- Rendered molecule.yml output (tools/render.py, see local/README.md) ---
+*/molecule/
+*/*/molecule/
+
 ### --- Ansible & Local Configs ---
 .ansible/
 .molecule/

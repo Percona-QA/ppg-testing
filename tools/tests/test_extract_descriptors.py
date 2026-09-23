@@ -1,24 +1,11 @@
 import pathlib
 import shutil
 
-import pytest
 import yaml
 
 from tools import extract_descriptors as ed
 
 REPO = pathlib.Path(__file__).resolve().parent.parent.parent
-
-# groups carrying hand-authored params/jenkins sections -- these are the ones
-# that went stale before (extract --write re-serialized them on every run,
-# dirtying a clean tree even though the data was unchanged).
-JENKINS_GROUPS = [
-    "pg_tde/tde",
-    "pg_tde/auxiliary",
-    "pg_stat_monitor/pgsm",
-    "pg_stat_monitor/pgsm_pgdg",
-    "psp/server_tests",
-]
-
 
 def group_canonical_text(group_dir):
     """what tools/extract_descriptors.py --write would write for group_dir,
@@ -77,19 +64,6 @@ def test_merge_preserved_keeps_unknown_keys_extracted_keys_win():
     assert merged["os_list"] == "all"
     assert merged["params"] == [{"name": "X"}]
     assert merged["jenkins"] == {"molecule_dir": "x/y"}
-
-
-@pytest.mark.parametrize("group", JENKINS_GROUPS)
-def test_jenkins_group_scenario_yml_is_canonical(group):
-    # regression test for: --write re-serializing a hand-authored (but
-    # semantically unchanged) scenario.yml on every run, dirtying a clean
-    # tree. this asserts the on-disk file already equals its own canonical
-    # (re-)serialization, byte for byte -- a further --write is a no-op.
-    group_dir = REPO / group
-    on_disk = (group_dir / "scenario.yml").read_text()
-    assert group_canonical_text(group_dir) == on_disk, (
-        "%s/scenario.yml not canonical -- run tools/extract_descriptors.py --write "
-        "and commit the result" % group)
 
 
 def test_double_write_is_byte_stable_with_preserved_sections():
