@@ -23,6 +23,17 @@ __pycache__/
 */molecule/
 */*/molecule/
 
+### --- Generated versioned ppg roles (tools/gen_groups.py + ppg/versions.yml) ---
+/ppg/pg-1[0-9]/
+/ppg/pg-1[0-9]-*/
+/ppg/pg-2[0-9]/
+/ppg/pg-2[0-9]-*/
+/ppg/psp-*/
+/tasks/install_ppg1[0-9].yml
+/tasks/install_ppg1[0-9]_tools.yml
+/tasks/install_ppg2[0-9].yml
+/tasks/install_ppg2[0-9]_tools.yml
+
 ### --- Ansible & Local Configs ---
 .ansible/
 .molecule/

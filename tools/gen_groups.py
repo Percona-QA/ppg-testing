@@ -1,16 +1,15 @@
 """Generate the versioned ppg role groups (ppg/pg-14..18*, ppg/psp-16*)
 from templates/groups/ + ppg/versions.yml.
 
+The groups and tasks/install_ppgXX*.yml are not in git, render.py and
+migrate_check.py materialize them through ensure() before they run.
+
 Usage:
   gen_groups.py --write          -- materialize all groups into ppg/
-  gen_groups.py --check-legacy   -- diff rendered output against the files in
-                                    the working tree (transition check), exit 1
-                                    on any difference
   gen_groups.py --clean          -- remove materialized groups (header check)
   gen_groups.py --list           -- list group dir names
 """
 import argparse
-import difflib
 import pathlib
 import sys
 
@@ -144,71 +143,6 @@ def render_shared_tasks(data):
     return out
 
 
-def strip_header(text):
-    if text.startswith(HEADER):
-        return text[len(HEADER):]
-    return text
-
-
-def check_legacy(data):
-    """Diff rendered output against the current working tree files (the
-    generated-file header, if present, is ignored)."""
-    failed = 0
-    for instance, type_name in all_groups(data):
-        gdir = REPO / "ppg" / group_name(instance, type_name)
-        files = render_group(data, instance, type_name)
-        for rel, content in sorted(files.items()):
-            path = gdir / rel
-            if not path.exists():
-                print("MISSING %s" % path)
-                failed += 1
-                continue
-            original = strip_header(path.read_text())
-            if original != content:
-                failed += 1
-                print("DIFF %s" % path)
-                sys.stdout.writelines(
-                    difflib.unified_diff(
-                        original.splitlines(True),
-                        content.splitlines(True),
-                        fromfile=str(path),
-                        tofile="rendered",
-                    )
-                )
-        # legacy files the templates do not cover. molecule/ is rendered by
-        # tools/render.py from the scenario.yml checked above, not ours
-        for p in sorted(gdir.rglob("*")):
-            if p.is_dir():
-                continue
-            rel = str(p.relative_to(gdir))
-            if rel.startswith("molecule/"):
-                continue
-            if rel not in files:
-                print("EXTRA %s (not covered by templates)" % p)
-                failed += 1
-    for rel, content in sorted(render_shared_tasks(data).items()):
-        path = REPO / rel
-        if not path.exists():
-            print("MISSING %s" % path)
-            failed += 1
-        elif strip_header(path.read_text()) != content:
-            failed += 1
-            print("DIFF %s" % path)
-            sys.stdout.writelines(
-                difflib.unified_diff(
-                    path.read_text().splitlines(True),
-                    content.splitlines(True),
-                    fromfile=str(path),
-                    tofile="rendered",
-                )
-            )
-    if failed:
-        print("%d file(s) differ" % failed, file=sys.stderr)
-        return 1
-    print("all generated groups match the working tree")
-    return 0
-
-
 def is_generated(path):
     if path.name == "__init__.py":
         return path.stat().st_size == 0
@@ -276,11 +210,17 @@ def clean_groups(data):
     return 0
 
 
+def ensure():
+    """Materialize all generated groups; render/migrate_check/tests call it."""
+    rc = write_groups(load_versions())
+    if rc:
+        raise RuntimeError("gen_groups.ensure() failed, see stderr")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--write", action="store_true")
-    mode.add_argument("--check-legacy", action="store_true")
     mode.add_argument("--clean", action="store_true")
     mode.add_argument("--list", action="store_true")
     args = ap.parse_args(argv)
@@ -289,8 +229,6 @@ def main(argv=None):
         for instance, type_name in all_groups(data):
             print(group_name(instance, type_name))
         return 0
-    if args.check_legacy:
-        return check_legacy(data)
     if args.clean:
         return clean_groups(data)
     return write_groups(data)
