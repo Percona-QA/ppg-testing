@@ -105,7 +105,7 @@ def _make_group(tmp_path, scenario_yml=SMALL_SCENARIO_YML):
     return group_dir
 
 
-def test_render_cmd_writes_header(tmp_path):
+def test_render_cmd_writes_header_and_playbook(tmp_path):
     group_dir = _make_group(tmp_path)
     rc = render.main(["--group", str(group_dir)])
     assert rc == 0
@@ -116,6 +116,21 @@ def test_render_cmd_writes_header(tmp_path):
 
     assert not (group_dir / "molecule" / "__init__.py").exists()
     assert (group_dir / "molecule" / "rocky-9" / "molecule.yml").exists()
+    pb = group_dir / "playbooks" / "playbook.yml"
+    assert pb.read_text() == render.HEADER + render.DEFAULT_PLAYBOOK
+
+
+def test_render_cmd_keeps_custom_playbook(tmp_path):
+    group_dir = _make_group(tmp_path)
+    pb = group_dir / "playbooks" / "playbook.yml"
+    pb.parent.mkdir()
+    pb.write_text("---\n- hosts: all\n  roles: [custom]\n")
+
+    assert render.main(["--group", str(group_dir)]) == 0
+    assert pb.read_text() == "---\n- hosts: all\n  roles: [custom]\n"
+    # not ours, clean leaves it alone too
+    assert render.main(["--group", str(group_dir), "--clean"]) == 0
+    assert pb.exists()
 
 
 def test_render_cmd_scenario_filter(tmp_path):
@@ -174,6 +189,7 @@ def test_clean_removes_group_dir_when_fully_empty(tmp_path):
     assert render.main(["--group", str(group_dir)]) == 0
     assert render.main(["--group", str(group_dir), "--clean"]) == 0
     assert not (group_dir / "molecule").exists()
+    assert not (group_dir / "playbooks").exists()
 
 
 def test_clean_honors_scenario_filter(tmp_path):
