@@ -34,6 +34,9 @@ __pycache__/
 /tasks/install_ppg2[0-9].yml
 /tasks/install_ppg2[0-9]_tools.yml
 
+### --- Default converge playbooks synthesized by tools/render.py (git add -f a custom one) ---
+*/setup/playbooks/playbook.yml
+
 ### --- Ansible & Local Configs ---
 .ansible/
 .molecule/
