@@ -1,0 +1,96 @@
+# Package + upload pg_tde pytest artifacts to the Jenkins controller.
+#
+# Called from the "always:" section of main.yml's wrapping block, so it
+# runs regardless of WHERE in the run a failure happened — a setup/build
+# failure before the pytest run ever started still produces a debuggable
+# artifact instead of Jenkins showing nothing for that platform.
+#
+# Requires: artifact_filename and pytest_failed facts already set (main.yml
+# sets artifact_filename in "Set Base Facts", and guarantees pytest_failed
+# is defined — true on any pre-pytest failure — before including this file).
+
+- name: Package pg_tde pytest test artifacts
+  shell: |
+    set -uo pipefail
+    ARTIFACT_BASENAME="{{ artifact_filename | replace('.tar.gz', '') }}"
+    ARTIFACT_DIR="/tmp/$ARTIFACT_BASENAME"
+    rm -rf "$ARTIFACT_DIR"
+    mkdir -p "$ARTIFACT_DIR"
+
+    TESTS_FAILED={{ '1' if pytest_failed else '0' }}
+
+    # Always included: pytest run output, HTML report, JUnit XML, and the
+    # environment-setup log (tiny; useful even on a pass). All may be
+    # missing if the run failed before the pytest step — that's fine.
+    cp /tmp/pg_tde_pytest_output.log     "$ARTIFACT_DIR/" 2>/dev/null || true
+    cp /tmp/pg_tde_pytest_report.html    "$ARTIFACT_DIR/" 2>/dev/null || true
+    cp /tmp/pg_tde_pytest_junit.xml      "$ARTIFACT_DIR/" 2>/dev/null || true
+    cp /tmp/pg_tde_pytest_env_setup.log  "$ARTIFACT_DIR/" 2>/dev/null || true
+
+    if [ "$TESTS_FAILED" -eq 0 ]; then
+      # All tests passed — plus the server (PSP) and TDE build/install logs
+      # for provenance. Keeps the Jenkins artifact upload small; per-test
+      # data dirs add no value when everything passed.
+      echo "All tests passed — artifact contains pytest reports + build logs only."
+      cp /tmp/psp-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-install.log  "$ARTIFACT_DIR/" 2>/dev/null || true
+    else
+      # Failure — collect the full debug bundle. This also covers a failure
+      # before the pytest run ever started (e.g. Docker/Cosmian setup,
+      # package install, build_from_source): whichever of these logs made
+      # it to disk before the failure gets picked up here.
+      mkdir -p "$ARTIFACT_DIR/logs"
+
+      cp /tmp/psp-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/tde-install.log  "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/cosmian-server-build.log "$ARTIFACT_DIR/" 2>/dev/null || true
+
+      # Per-test PGDATA + server.log live under the pytest --basetemp root,
+      # one directory per test (e.g. test_encryption0/, test_recovery3/, ...).
+      if [ -d /tmp/pg_tde_pytest_run ]; then
+        cp -r /tmp/pg_tde_pytest_run "$ARTIFACT_DIR/logs/pg_tde_pytest_run" 2>/dev/null || true
+      fi
+
+      # System PostgreSQL service log: RHEL (/var/lib/pgsql)
+      find /var/lib/pgsql -name "*.log" -type f 2>/dev/null \
+        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+      # System PostgreSQL service log: Debian (/var/log/postgresql)
+      find /var/log/postgresql -name "*.log" -type f 2>/dev/null \
+        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+      # PostgreSQL server log when built from source (/opt/pgsql/data)
+      find /opt/pgsql/data -name "*.log" -type f 2>/dev/null \
+        -exec cp {} "$ARTIFACT_DIR/logs/" \; || true
+    fi
+
+    tar -czf "/tmp/{{ artifact_filename }}" -C /tmp "$ARTIFACT_BASENAME"
+  args:
+    executable: /bin/bash
+  become: true
+  ignore_errors: true
+
+- name: Fetch pg_tde pytest test artifacts to controller
+  fetch:
+    src: "/tmp/{{ artifact_filename }}"
+    dest: "{{ playbook_dir }}/../artifacts/"
+    fail_on_missing: false
+
+# Plain, uncompressed copies alongside the tarball above so CI can point
+# Jenkins' JUnit / HTML Publisher plugins straight at them without having
+# to unpack anything first. fail_on_missing: false — a run that died
+# before producing them shouldn't break the fetch step itself; pass/fail
+# signal for the build still comes from "Fail the playbook..." in main.yml.
+- name: Fetch pytest JUnit XML to controller
+  fetch:
+    src: /tmp/pg_tde_pytest_junit.xml
+    dest: "{{ playbook_dir }}/../artifacts/{{ inventory_hostname }}/pg_tde_pytest_junit.xml"
+    flat: true
+    fail_on_missing: false
+
+- name: Fetch pytest HTML report to controller
+  fetch:
+    src: /tmp/pg_tde_pytest_report.html
+    dest: "{{ playbook_dir }}/../artifacts/{{ inventory_hostname }}/pg_tde_pytest_report.html"
+    flat: true
+    fail_on_missing: false
