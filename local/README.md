@@ -107,3 +107,5 @@ task destroy GROUP=pg_tde/tde OS=ol-9
 `OS` can list several scenarios, space separated, run sequentially; the first failure stops the loop.
 `SEQ` is the molecule subcommand (default `test`), anything after `--` is passed straight through to molecule.
 `task list GROUP=...` hides the `-arm` and `rhel-*` scenarios since those are not supported locally.
+
+The `molecule/<os>/molecule.yml` files are not in git. `task run` renders them from the group's `scenario.yml` with `tools/render.py` before calling molecule, the same way the jenkins jobs do. `python tools/render.py --group pg_tde/tde` does it by hand, `--clean` removes the output again.

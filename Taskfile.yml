@@ -38,9 +38,9 @@ tasks:
     cmds:
       - |
         if [ -n "{{.GROUP}}" ]; then
-          ls -1 {{.GROUP}}/molecule | grep -v '^__' | grep -v -- '-arm$' | grep -v '^rhel-' | tr '\n' ' '; echo
+          {{.VENV}}/bin/python -c 'import sys; from tools import render; print(" ".join(n for n in render.expand_scenarios(render.load_desc(render.resolve_group(sys.argv[1]))) if not n.endswith("-arm") and not n.startswith("rhel-")))' {{.GROUP}}
         else
-          ls -d */*/molecule | sed 's|/molecule$||'
+          ls -d */*/scenario.yml | sed 's|/scenario.yml$||'
         fi
 
   run:
@@ -48,12 +48,13 @@ tasks:
     preconditions:
       - sh: test -n "{{.GROUP}}" && test -n "{{.OS}}"
         msg: "GROUP and OS are required"
-      - sh: test -d {{.GROUP}}/molecule
-        msg: "no molecule dir in {{.GROUP}}, see: task list"
+      - sh: test -f {{.GROUP}}/scenario.yml
+        msg: "no scenario.yml in {{.GROUP}}, see: task list"
     cmds:
       - |
         . local/env.sh
         export PATH="{{.VENV}}/bin:$PATH"
+        python tools/render.py --group {{.GROUP}}
         cd {{.GROUP}}
         for os in {{.OS}}; do
           echo ">>> {{.GROUP}} $os: molecule {{.SEQ}} {{.CLI_ARGS}}"

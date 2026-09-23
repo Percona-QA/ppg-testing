@@ -150,18 +150,30 @@ def collect_targets(groups, scenario_filter=None):
     return targets
 
 
+def check_target(path):
+    """Error string if writing path would clobber a hand-written file, else None."""
+    if not path.exists():
+        return None
+    if path.name == "molecule.yml":
+        if not has_header(path):
+            return ("refusing to overwrite hand-written file: %s "
+                    "(no generated-file header)" % path)
+        return None
+    if path.stat().st_size != 0:
+        return "refusing to overwrite non-empty file: %s" % path
+    return None
+
+
 def render_cmd(groups, scenario_filter=None):
-    kept = 0
-    for path, content in collect_targets(groups, scenario_filter):
-        if path.exists() and not has_header(path):
-            # a committed hand-written file is the source of truth as long as
-            # the repo carries it, tools/migrate_check.py keeps it in sync
-            kept += 1
-            continue
+    targets = collect_targets(groups, scenario_filter)
+    errors = [e for e in (check_target(p) for p, _ in targets) if e]
+    if errors:
+        for e in errors:
+            print("error: " + e, file=sys.stderr)
+        return 2
+    for path, content in targets:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
-    if kept:
-        print("kept %d hand-written molecule.yml file(s)" % kept, file=sys.stderr)
     return 0
 
 
@@ -212,10 +224,10 @@ def build_argparser():
     ap = argparse.ArgumentParser(
         description="Render molecule.yml scenario files from scenario.yml descriptors.",
         epilog=(
-            "Hand-written molecule/<scenario>/molecule.yml files (no generated "
-            "header) are left alone: while the repo still commits them they "
-            "are the source of truth, tools/migrate_check.py verifies they "
-            "match what would be rendered."
+            "molecule/<scenario>/molecule.yml files are not in git, render "
+            "them before running molecule. A hand-written file (no generated "
+            "header) in the way aborts the whole run with exit 2, nothing is "
+            "written."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

@@ -9,7 +9,6 @@ on:
       - 'ppg/**'
       - 'tasks/install_ppg*'
       - '**/scenario.yml'
-      - '**/molecule/**'
   pull_request:
     paths:
       - 'catalog/**'
@@ -18,7 +17,6 @@ on:
       - 'ppg/**'
       - 'tasks/install_ppg*'
       - '**/scenario.yml'
-      - '**/molecule/**'
 
 jobs:
   test:
@@ -45,8 +43,8 @@ jobs:
       - name: run unit tests
         run: python3 -m pytest tools/tests/ -v
 
-      - name: rendered molecule.yml files match the committed ones
-        run: python3 tools/migrate_check.py
+      - name: rendered molecule.yml files match the snapshot
+        run: python3 tools/migrate_check.py --snapshot
 
       - name: rendered ppg groups match the committed ones
         run: python3 tools/gen_groups.py --check-legacy
