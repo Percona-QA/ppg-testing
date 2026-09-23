@@ -33,18 +33,13 @@ tasks:
       - . local/env.sh && virsh -c "$LIBVIRT_URI" pool-info "${LIBVIRT_POOL:-default}" | grep -q 'State:.*running' || { echo "libvirt pool not running"; exit 1; }
 
   list:
-    desc: list molecule groups (or GROUP=... for its scenarios)
+    desc: list molecule groups (or GROUP=... for its oses, sequences and params)
     silent: true
     cmds:
-      - |
-        if [ -n "{{.GROUP}}" ]; then
-          {{.VENV}}/bin/python -c 'import sys; from tools import render; print(" ".join(n for n in render.expand_scenarios(render.load_desc(render.resolve_group(sys.argv[1]))) if not n.endswith("-arm") and not n.startswith("rhel-")))' {{.GROUP}}
-        else
-          ls -d */*/scenario.yml | sed 's|/scenario.yml$||'
-        fi
+      - '{{.VENV}}/bin/python tools/run.py --list {{if .GROUP}}--group {{.GROUP}}{{end}}'
 
   run:
-    desc: 'task run GROUP=pg_tde/tde OS="ol-9 debian-13" [SEQ=converge] [-- molecule args]'
+    desc: 'task run GROUP=pg_tde/tde OS="ol-9 debian-13" [SEQ=converge] [-- --param NAME=VALUE --keep]'
     preconditions:
       - sh: test -n "{{.GROUP}}" && test -n "{{.OS}}"
         msg: "GROUP and OS are required"
@@ -54,12 +49,7 @@ tasks:
       - |
         . local/env.sh
         export PATH="{{.VENV}}/bin:$PATH"
-        python tools/render.py --group {{.GROUP}}
-        cd {{.GROUP}}
-        for os in {{.OS}}; do
-          echo ">>> {{.GROUP}} $os: molecule {{.SEQ}} {{.CLI_ARGS}}"
-          molecule {{.SEQ}} -s "$os" {{.CLI_ARGS}} || exit 1
-        done
+        python tools/run.py --group {{.GROUP}} --os {{.OS}} --sequence {{.SEQ}} {{.CLI_ARGS}}
 
   destroy:
     desc: 'task destroy GROUP=... OS=... -- mop up leftover guests'
@@ -68,25 +58,25 @@ tasks:
         vars: { GROUP: '{{.GROUP}}', OS: '{{.OS}}', SEQ: destroy }
 
   tde:
-    desc: 'task tde OS=ol-9 [SEQ=...] [-- molecule args]'
+    desc: 'task tde OS=ol-9 [SEQ=...] [-- --param NAME=VALUE]'
     cmds:
       - task: run
         vars: { GROUP: pg_tde/tde, OS: '{{.OS}}', SEQ: '{{.SEQ}}', CLI_ARGS: '{{.CLI_ARGS}}' }
 
   pgsm:
-    desc: 'task pgsm OS=ol-9 [SEQ=...] [-- molecule args]'
+    desc: 'task pgsm OS=ol-9 [SEQ=...] [-- --param NAME=VALUE]'
     cmds:
       - task: run
         vars: { GROUP: pg_stat_monitor/pgsm, OS: '{{.OS}}', SEQ: '{{.SEQ}}', CLI_ARGS: '{{.CLI_ARGS}}' }
 
   psp:
-    desc: 'task psp OS=ol-9 [SEQ=...] [-- molecule args]'
+    desc: 'task psp OS=ol-9 [SEQ=...] [-- --param NAME=VALUE]'
     cmds:
       - task: run
         vars: { GROUP: psp/server_tests, OS: '{{.OS}}', SEQ: '{{.SEQ}}', CLI_ARGS: '{{.CLI_ARGS}}' }
 
   ppg:
-    desc: 'task ppg SCENARIO=pg-17 OS=ol-9 [SEQ=...] [-- molecule args]'
+    desc: 'task ppg SCENARIO=pg-17 OS=ol-9 [SEQ=...] [-- --param NAME=VALUE]'
     cmds:
       - task: run
         vars: { GROUP: 'ppg/{{.SCENARIO}}', OS: '{{.OS}}', SEQ: '{{.SEQ}}', CLI_ARGS: '{{.CLI_ARGS}}' }
