@@ -8,6 +8,7 @@ on:
       - 'tools/**'
       - 'ppg/versions.yml'
       - '**/scenario.yml'
+      - 'local/buildbot/**'
   pull_request:
     paths:
       - 'catalog/**'
@@ -15,6 +16,7 @@ on:
       - 'tools/**'
       - 'ppg/versions.yml'
       - '**/scenario.yml'
+      - 'local/buildbot/**'
 
 jobs:
   test:
@@ -33,7 +35,7 @@ jobs:
           python-version: '3.x'
 
       - name: install deps
-        run: pip install pytest jinja2 pyyaml
+        run: pip install pytest jinja2 pyyaml "buildbot==4.3.0" "buildbot-worker==4.3.0"
 
       - name: clone jenkins-pipelines
         run: git clone --depth 1 https://github.com/Percona-Lab/jenkins-pipelines.git /tmp/jp
