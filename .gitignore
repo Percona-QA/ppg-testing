@@ -23,6 +23,9 @@ __pycache__/
 */molecule/
 */*/molecule/
 
+### --- Local run artifacts (tools/run.py default --artifacts-dir) ---
+/local/runs/
+
 ### --- Generated versioned ppg roles (tools/gen_groups.py + ppg/versions.yml) ---
 /ppg/pg-1[0-9]/
 /ppg/pg-1[0-9]-*/
