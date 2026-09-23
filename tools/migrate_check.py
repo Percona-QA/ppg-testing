@@ -16,7 +16,7 @@ if str(REPO) not in sys.path:
 
 import yaml
 
-from tools import render
+from tools import gen_groups, render
 from tools.catalog import find_groups, scenario_dirs
 
 SNAPSHOT_DIR = REPO / "tools" / "tests" / "snapshot"
@@ -152,6 +152,7 @@ def run_default():
 
 
 def main():
+    gen_groups.ensure()
     ap = argparse.ArgumentParser()
     ap.add_argument("--show", nargs=2, metavar=("GROUP", "SCENARIO"))
     ap.add_argument("--snapshot", action="store_true",
