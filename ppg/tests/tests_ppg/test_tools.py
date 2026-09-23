@@ -16,6 +16,22 @@ MAJOR_VER = settings.MAJOR_VER
 
 POSTGIS_VERSION_LIMIT = version.parse("3.3.99")  # Run only for ≤3.3.x tarballs
 
+# TEMPORARILY DISABLED: these components are not yet published on OBS for
+# ppg-19 (isv:percona:ppg:staging:19), confirmed directly against the repo.
+# Their installation is disabled to match (see tasks/install_ppg19_tools.yml
+# and the pg-19-*-upgrade roles). Remove "19" from the relevant set(s) below
+# once a component is published and its installation is re-enabled.
+PGBACKREST_UNAVAILABLE_MAJOR_VERSIONS = {"19"}
+PG_TDE_UNAVAILABLE_MAJOR_VERSIONS = {"19"}
+WAL2JSON_UNAVAILABLE_MAJOR_VERSIONS = {"19"}
+
+skip_pgbackrest_unavailable = pytest.mark.skipif(
+    MAJOR_VER in PGBACKREST_UNAVAILABLE_MAJOR_VERSIONS,
+    reason=f"percona-pgbackrest not yet published on OBS for PG {MAJOR_VER}")
+skip_wal2json_unavailable = pytest.mark.skipif(
+    MAJOR_VER in WAL2JSON_UNAVAILABLE_MAJOR_VERSIONS,
+    reason=f"wal2json package not yet published on OBS for PG {MAJOR_VER}")
+
 # List of expected PG-18 TDE binaries
 TDE_BINARIES = [
     "pg_tde_archive_decrypt",
@@ -425,6 +441,7 @@ def test_pg_repack_dry_run(pg_repack_dry_run):
     assert 'INFO: repacking table "public.pgbench_tellers"' in messages
 
 
+@skip_pgbackrest_unavailable
 def test_pgbackrest_package(host):
     with host.sudo():
         os = host.system_info.distribution
@@ -448,22 +465,27 @@ def test_pgbackrest_package(host):
         assert pg_versions['pgbackrest']['version'] in pkg.version
 
 
+@skip_pgbackrest_unavailable
 def test_pgbackrest_version(pgbackrest_version):
     assert pgbackrest_version == pg_versions['pgbackrest']['binary_version']
 
 
+@skip_pgbackrest_unavailable
 def test_pgbackrest_create_stanza(create_stanza):
     assert "INFO: stanza-create command end: completed successfully" in create_stanza.stdout
 
 
+@skip_pgbackrest_unavailable
 def test_pgbackrest_check(pgbackrest_check):
     assert "check command end: completed successfully" in pgbackrest_check[-1]
 
 
+@skip_pgbackrest_unavailable
 def test_pgbackrest_full_backup(pgbackrest_full_backup):
     assert "expire command end: completed successfully" in pgbackrest_full_backup[-1]
 
 
+@skip_pgbackrest_unavailable
 def test_pgbackrest_restore(host):
     os = host.system_info.distribution
     if os.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
@@ -790,6 +812,7 @@ def test_package_version(host, package):
     assert pg_versions[package]['version'] in pkg.version, pkg.version
 
 
+@skip_wal2json_unavailable
 def test_wal2json_version(host):
     dist = host.system_info.distribution
     if dist.lower() in ["ubuntu", "debian"]:
@@ -1306,16 +1329,15 @@ def test_pg_telemetry_agent_state_after_upgrade(host):
         )
 
 
+@pytest.mark.skipif(int(MAJOR_VER) < 17, reason=f"pg_tde not supported on {MAJOR_VER}")
+@pytest.mark.skipif(MAJOR_VER in PG_TDE_UNAVAILABLE_MAJOR_VERSIONS,
+                     reason=f"pg_tde not yet published on OBS for PG {MAJOR_VER}")
 @pytest.mark.parametrize("binary", TDE_BINARIES)
 def test_tde_binaries_present(host, binary):
     """
     Verify all PG-18/17 TDE binaries exist in the correct PostgreSQL 18 bin directory
     depending on OS type (Debian/Ubuntu vs RHEL/CentOS/Rocky).
     """
-    # pg_tde only exists on PG-17 and above.
-    if int(settings.MAJOR_VER) < 17:
-        pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
-
     # pg_tde_upgrade was introduced in 17.10 / 18.4.
     if binary == "pg_tde_upgrade":
         current_ver = version.parse(pg_versions.get("version", "0.0"))
@@ -1341,14 +1363,14 @@ def test_tde_binaries_present(host, binary):
     assert file.mode & 0o111, f"{binary} exists but is not executable at {bin_path}"
 
 
+@pytest.mark.skipif(int(MAJOR_VER) < 17, reason=f"pg_tde not supported on {MAJOR_VER}")
+@pytest.mark.skipif(MAJOR_VER in PG_TDE_UNAVAILABLE_MAJOR_VERSIONS,
+                     reason=f"pg_tde not yet published on OBS for PG {MAJOR_VER}")
 def test_tde_perl_test_module_present(host):
     """
     Ensure the TDE Perl test module TdeCluster.pm is present in the pgxs directory
     on both Debian/Ubuntu and RHEL-based systems.
     """
-    # pg_tde Perl module only exists on PG-17 and above.
-    if int(settings.MAJOR_VER) < 17:
-        pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
 
     dist = host.system_info.distribution.lower()
 
@@ -1420,6 +1442,8 @@ def test_pgxs_perl_modules_present(host):
 
 
 @pytest.mark.skipif(int(MAJOR_VER) < 17, reason=f"pg_tde requires PG 17+, found {MAJOR_VER}")
+@pytest.mark.skipif(MAJOR_VER in PG_TDE_UNAVAILABLE_MAJOR_VERSIONS,
+                     reason=f"pg_tde not yet published on OBS for PG {MAJOR_VER}")
 def test_pg_tde_extension(host):
     # Use -t (tuples only) and -A (unaligned) for bulletproof parsing
     psql_base = "psql -t -A -c"
@@ -1455,6 +1479,8 @@ def test_pg_tde_extension(host):
 
 
 @pytest.mark.skipif(int(MAJOR_VER) < 17, reason=f"pg_tde is only supported on PostgreSQL 17+, current version: {MAJOR_VER}")
+@pytest.mark.skipif(MAJOR_VER in PG_TDE_UNAVAILABLE_MAJOR_VERSIONS,
+                     reason=f"pg_tde not yet published on OBS for PG {MAJOR_VER}")
 def test_pg_tde_package_version(host):
     dist = host.system_info.distribution.lower()
     expected_version = pg_versions.get('PG_TDE_package_version')

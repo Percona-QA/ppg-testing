@@ -167,6 +167,8 @@
   environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
+# TEMPORARILY DISABLED: percona-pg_tde19 is not yet published on OBS for
+# ppg-19. Revert (remove `and false`) once it's available.
 - name: Install pg_tde packages RHEL
   yum:
     name: "{{ packages }}"
@@ -178,7 +180,7 @@
     - percona-pg_tde19-devel
     - percona-pg_tde19-debugsource
     - percona-pg_tde19-debuginfo
-  when: ansible_os_family == "RedHat"
+  when: ansible_os_family == "RedHat" and false
 
 - name: Install pg_tde packages Debian
   apt:
@@ -190,7 +192,7 @@
     - percona-pg-tde19
     - percona-pg-tde19-client
     - percona-pg-tde19-dbgsym
-  when: ansible_os_family == "Debian"
+  when: ansible_os_family == "Debian" and false
 
 - name: Install pg-stat-monitor RHEL
   yum:

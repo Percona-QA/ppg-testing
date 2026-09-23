@@ -78,6 +78,10 @@
       update_cache: yes
     when: ansible_os_family == "RedHat"
 
+  # TEMPORARILY DISABLED: percona-pgbackrest is not yet published on OBS for
+  # ppg-19 (isv:percona:ppg:staging:19 has zero pgbackrest packages, confirmed
+  # directly against the repo). Revert this whole pgbackrest block (remove
+  # the `and false` from each `when`) once it's available.
   - name: Install pgbackrest Debian
     apt:
       name: "{{ packages }}"
@@ -88,19 +92,20 @@
         - percona-pgbackrest
         - percona-pgbackrest-doc
         - percona-pgbackrest-dbgsym
-    when: ansible_os_family == "Debian"
+    when: ansible_os_family == "Debian" and false
 
   - name: Install pgbackrest RHEL
     yum:
       name: percona-pgbackrest
       state: latest
       update_cache: yes
-    when: ansible_os_family == "RedHat"
+    when: ansible_os_family == "RedHat" and false
 
   - name: Create pgbackrest directory
     file:
       path: /etc/pgbackrest/
       state: directory
+    when: false
 
   - name: Create pgbackrest configuration Debian
     blockinfile:
@@ -113,7 +118,7 @@
         [testing]
         pg1-path=/var/lib/postgresql/19/main
         pg1-port=5432
-    when: ansible_os_family == "Debian"
+    when: ansible_os_family == "Debian" and false
 
   - name: Create pgbackrest configuration RHEL
     blockinfile:
@@ -126,7 +131,7 @@
         [testing]
         pg1-path=/var/lib/pgsql/19/data
         pg1-port=5432
-    when: ansible_os_family == "RedHat"
+    when: ansible_os_family == "RedHat" and false
 
   - name: Configure backup config for Debian
     blockinfile:
@@ -136,7 +141,7 @@
         archive_command = 'pgbackrest --stanza=testing archive-push %p'
         max_wal_senders = 10
         wal_level = logical
-    when: ansible_os_family == "Debian"
+    when: ansible_os_family == "Debian" and false
 
   - name: Configure backup config for RHEL
     blockinfile:
@@ -146,7 +151,7 @@
         archive_command = 'pgbackrest --stanza=testing archive-push %p'
         max_wal_senders = 10
         wal_level = logical
-    when: ansible_os_family == "RedHat"
+    when: ansible_os_family == "RedHat" and false
 
   - name: Restart Postgres RHEL
     include_tasks: "{{ role_path }}/../../tasks/start_postgres_with_diagnostics.yml"
@@ -391,12 +396,14 @@
         - percona-postgis
     when: ansible_os_family == "Debian"
 
+  # TEMPORARILY DISABLED: percona-wal2json19 is not yet published on OBS for
+  # ppg-19. Revert (remove `and false`) once it's available.
   - name: Install percona-wal2json19 RHEL
     yum:
       name: percona-wal2json19
       state: latest
       update_cache: yes
-    when: ansible_os_family == "RedHat"
+    when: ansible_os_family == "RedHat" and false
 
   - name: Install percona-wal2json19 Debian
     apt:
@@ -407,7 +414,7 @@
       packages:
         - percona-postgresql-19-wal2json
         - percona-postgresql-19-wal2json-dbgsym
-    when: ansible_os_family == "Debian"
+    when: ansible_os_family == "Debian" and false
 
   - name: Install percona-pg_gather RHEL
     yum:
@@ -449,6 +456,9 @@
       - percona-postgresql-19-pgvector
     when: ansible_os_family == "Debian"
 
+  # TEMPORARILY DISABLED: percona-pg_tde19 is not yet published on OBS for
+  # ppg-19. Revert (remove `and false`) once it's available -- and also
+  # add 'pg_tde' back to final_extensions below at the same time.
   - name: Install pg_tde packages RHEL
     yum:
       name: "{{ packages }}"
@@ -460,7 +470,7 @@
       - percona-pg_tde19-devel
       - percona-pg_tde19-debugsource
       - percona-pg_tde19-debuginfo
-    when: ansible_os_family == "RedHat"
+    when: ansible_os_family == "RedHat" and false
 
   - name: Install pg_tde packages Debian
     apt:
@@ -472,7 +482,7 @@
       - percona-pg-tde19
       - percona-pg-tde19-client
       - percona-pg-tde19-dbgsym
-    when: ansible_os_family == "Debian"
+    when: ansible_os_family == "Debian" and false
 
   # Unlike pg-18 (which gated pg_oidc_validator and pg_cron behind
   # minor-version cutoffs, since they were backported mid-cycle), ppg-19
@@ -522,7 +532,11 @@
       # 1. Define base extensions
       # pg_oidc_validator is NOT preloaded; it is tested as a regular extension via CREATE EXTENSION
       # pg_cron is available from 19.0 onwards, so no version gate is needed here.
-      final_extensions: ['pg_stat_monitor', 'pgaudit', 'set_user', 'pg_tde', 'pg_cron']
+      # pg_tde TEMPORARILY REMOVED: its package isn't installed (see the
+      # disabled "Install pg_tde packages" tasks above) -- listing it here
+      # while uninstalled would make postgres fail to start outright. Add
+      # it back here at the same time pg_tde installation is re-enabled.
+      final_extensions: ['pg_stat_monitor', 'pgaudit', 'set_user', 'pg_cron']
 
       # 3. Handle OS-specific paths dynamically
       pg_conf_path: "{{ '/etc/postgresql/19/main/postgresql.conf' if ansible_os_family == 'Debian' else '/var/lib/pgsql/19/data/postgresql.conf' }}"
