@@ -105,3 +105,8 @@ task destroy GROUP=pg_tde/tde OS=ol-9
 `rhel-*` and `*-arm` are listed but not supported locally, see above.
 
 `tools/run.py` renders the group's `molecule/<os>/molecule.yml` files from `scenario.yml` first (they are not in git, `tools/render.py` does it, `--clean` removes them), runs the sequence, always destroys the guests afterwards unless `--keep` is given, and collects `molecule.log`, `report.xml` and a `summary.json` per run under `local/runs/`.
+
+## Local buildbot
+
+`local/buildbot/` is a two-container buildbot that runs the same `tools/run.py` on the hypervisor from a web UI, one force scheduler per group with the params as form fields, plus release and destroy sweeps over many groups.
+`task bot-setup` once, then `task bot-up`, `task bot-down` and `task bot-logs` drive the compose stack, see `local/buildbot/README.md`.
