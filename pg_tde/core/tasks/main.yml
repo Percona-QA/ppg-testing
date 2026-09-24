@@ -376,9 +376,9 @@
     ansible.builtin.debug:
       var: disk_report.stdout_lines
 
-  - name: Show pytest summary (tail of output)
+  - name: Show pytest output
     debug:
-      msg: "{{ regression.stdout_lines[-80:] if regression.stdout_lines is defined else [] }}"
+      msg: "{{ regression.stdout_lines if regression.stdout_lines is defined else [] }}"
 
   - name: Show stderr if pytest run failed
     debug:
