@@ -161,21 +161,8 @@
 {% endif %}
       ignore_errors: true
       when: ansible_os_family == "Debian"
+{% if major < 15 %}
 
-{% if major >= 15 %}
-    # - name: Remove Percona Platform for PostgreSQL deb packages
-    #   apt:
-    #     name: "{{ v }} packages {{ w }}"
-    #     state: absent
-    #   vars:
-    #     packages:
-    #     - percona-postgresql-plpython-{{ prev }}
-    #     - percona-postgresql-plpython-{{ prev }}-dbgsym
-    #     - percona-postgresql-server-dev-{{ prev }}-dbgsym
-    #   when:
-    #     - ansible_os_family == "Debian"
-    #     - lookup('env', 'PG_VERSION') == "ppg-{{ prev }}.5"
-{% else %}
     - name: Remove Percona Platform for PostgreSQL deb packages
       apt:
         name: "{{ v }} packages {{ w }}"
@@ -222,24 +209,8 @@
       ignore_errors: true
 {% endif %}
       when: ansible_os_family == "RedHat"
+{% if major < 15 %}
 
-{% if major >= 15 %}
-    # - name: remove pgaudit deb packages
-    #   apt:
-    #     name: percona-postgresql-{{ prev }}-pgaudit
-    #     state: absent
-    #   when: ansible_os_family == "Debian"
-
-    # - name: remove pg_repack deb packages
-    #   apt:
-    #     name: "{{ v }} packages {{ w }}"
-    #     state: absent
-    #   vars:
-    #     packages:
-    #       - percona-postgresql-{{ prev }}-repack
-    #       - percona-postgresql-{{ prev }}-repack-dbgsym
-    #   when: ansible_os_family == "Debian"
-{% else %}
     - name: remove pgaudit deb packages
       apt:
         name: percona-postgresql-{{ prev }}-pgaudit

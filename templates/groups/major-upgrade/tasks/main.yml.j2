@@ -197,27 +197,6 @@
   environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-{% if commented_plpython | default(false) %}
-# - name: install Percona Platform for PostgreSQL deb packages
-#   apt:
-#     name: "{{ v }} packages {{ w }}"
-#     update_cache: yes
-#     state: latest
-#   vars:
-#     packages:
-#     - percona-postgresql-plpython3-{{ major }}
-#     - percona-postgresql-plpython3-{{ major }}-dbgsym
-#   when:
-#     - ansible_os_family == "Debian"
-
-{% endif %}
-{% if commented_llvm | default(false) %}
-# - name: Disable llvm-toolset dnf module for RHEL8
-#   become: true
-#   command: dnf module disable llvm-toolset -y
-#   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
-
-{% endif %}
 #Remove conflicting package to make installation move on
 - name: Remove conflicting percona-postgresql-common-dev
   ansible.builtin.package:
@@ -599,15 +578,6 @@
 
 - debug:
     var: results.stdout_lines
-
-# - name: show running process for postgres
-#   command: ps -ef | grep -i postgres
-#   become: true
-#   when: ansible_os_family == "Debian"
-#   register: results
-
-# - debug:
-#     var: results.stdout_lines
 
 - pause:
     minutes: 1

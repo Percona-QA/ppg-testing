@@ -112,8 +112,6 @@ instances:
         version: '13.14'
         op: <=
       enable_only: false
-      commented_plpython: true
-      commented_llvm: false
       remove_conflicting_dev: '13.21'
       dev_switch_cutoff: '14.17'
       legacy_tail: true
@@ -232,8 +230,6 @@ instances:
         os_version: '24'
         version: '14.11'
         op: <=
-      commented_plpython: true
-      commented_llvm: false
       dev_pkg_deb: percona-postgresql-server-dev-all
       remove_conflicting_dev: '14.18'
       dev_switch_cutoff: '15.12'
@@ -342,8 +338,6 @@ instances:
         os_version: '24'
         version: '15.6'
         op: <=
-      commented_plpython: true
-      commented_llvm: true
       remove_conflicting_dev: '15.13'
       dev_switch_cutoff: '16.8'
       legacy_tail: true
@@ -450,8 +444,6 @@ instances:
         version: '16.9'
         op: <=
       psp_from: true
-      commented_plpython: true
-      commented_llvm: true
       remove_conflicting_dev: '16.9'
       dev_switch_cutoff: '17.4'
     install:
@@ -608,8 +600,6 @@ instances:
         os_version: '24'
         version: '15.6'
         op: <=
-      commented_plpython: true
-      commented_llvm: true
       remove_conflicting_dev: '15.13'
       dev_switch_cutoff: '16.8'
       legacy_tail: true
