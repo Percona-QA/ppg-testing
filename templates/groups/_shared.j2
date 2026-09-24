@@ -94,3 +94,20 @@
     svc_state: started
   when: ansible_os_family == "RedHat"
 {%- endmacro %}
+{% macro os_overrides() %}
+overrides:
+{% for os in ['debian-12', 'debian-12-arm', 'debian-13', 'debian-13-arm'] %}
+  {{ os }}:
+    aws:
+      size: small
+{% endfor %}
+{% for os in ['rhel-10', 'rhel-10-arm', 'rhel-8', 'rhel-8-arm', 'rhel-9', 'rhel-9-arm'] %}
+  {{ os }}:
+    billing_tag: jenkins-pg-molecule-rhel
+{% endfor %}
+{% for os in ['ubuntu-jammy', 'ubuntu-jammy-arm', 'ubuntu-noble', 'ubuntu-noble-arm', 'ubuntu-resolute', 'ubuntu-resolute-arm'] %}
+  {{ os }}:
+    aws:
+      size: small
+{% endfor %}
+{%- endmacro %}
