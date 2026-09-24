@@ -78,7 +78,6 @@ instances:
         os_version: '24'
         version: '14.11'
         op: <=
-      telemetry_comment: extended
       dev_switch_cutoff: '14.17'
     major-upgrade:
       gates:
@@ -514,10 +513,8 @@ instances:
         os_version: '26'
         version: '18.4'
         op: <
-      telemetry_comment: none
       remove_conflicting_dev: '18.5'
       dev_switch_cutoff: '18.1'
-      telemetry_upgrade_verify: false
     major-upgrade:
       gates:
       - name: End play on Ubuntu 26 and versions older than 17.10
