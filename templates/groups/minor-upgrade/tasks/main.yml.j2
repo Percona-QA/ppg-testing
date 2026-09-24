@@ -74,18 +74,6 @@
     pg_version: "{{ v }} lookup('env', 'VERSION') {{ w }}"
 {% endif %}
 
-{% if extra_repo_refresh | default(false) %}
-- name: Update apt cache
-  apt:
-    update_cache: yes
-  when: ansible_os_family == "Debian"
-
-- name: Disable postgresql DNF module on RHEL/Rocky/OL
-  command: dnf module disable postgresql -y
-  ignore_errors: true
-  when: ansible_os_family == "RedHat"
-
-{% endif %}
 {% if telemetry_comment | default('short') != 'none' %}
 # percona-pg-telemetry{{ major }} is listed explicitly (it's otherwise only pulled in
 # as a weak dependency/Recommends of the server package) so that this
