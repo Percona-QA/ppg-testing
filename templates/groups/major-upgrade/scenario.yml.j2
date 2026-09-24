@@ -1,3 +1,4 @@
+{% import '_shared.j2' as s %}
 os_list: all
 name_pattern: '{token}-{build}-{job}'
 aws:
@@ -22,6 +23,7 @@ sequences:
   - destroy
   cleanup:
   - cleanup
+{{ s.upgrade_params(default_from_version, default_version) }}
 overrides:
   debian-12:
     aws:

@@ -56,8 +56,34 @@ _task_env = jinja2.Environment(
 )
 
 
+# types whose scenario.yml params need a FROM_VERSION default
+FROM_VERSION_TYPES = ("minor-upgrade", "major-upgrade")
+
+
+def validate(data):
+    """The param defaults are load-bearing on release day, so a missing one
+    fails here instead of rendering a param with no default at all."""
+    for name, inst in data["instances"].items():
+        if not inst.get("default_version"):
+            raise ValueError(
+                "ppg/versions.yml: instance %s has no default_version -- add "
+                "'default_version: %s-%s.<minor>' (the VERSION param default, "
+                "the newest minor with fixtures in ppg/tests/versions/ppg.py)"
+                % (name, inst.get("flavor", "ppg"), inst.get("major", "??")))
+        for type_name in FROM_VERSION_TYPES:
+            section = inst.get(type_name) or {}
+            if not section.get("default_from_version"):
+                raise ValueError(
+                    "ppg/versions.yml: instance %s has no "
+                    "default_from_version in its %s section -- add it there "
+                    "(the FROM_VERSION param default: the previous minor for "
+                    "minor-upgrade, the previous major's default_version for "
+                    "major-upgrade)" % (name, type_name))
+    return data
+
+
 def load_versions():
-    return yaml.safe_load((REPO / "ppg" / "versions.yml").read_text())
+    return validate(yaml.safe_load((REPO / "ppg" / "versions.yml").read_text()))
 
 
 def render_gate(g):
@@ -83,6 +109,19 @@ def render_gates(gates):
     return "\n\n".join(render_gate(g) for g in gates)
 
 
+def from_instance(data, instance):
+    """The instance a major-upgrade of `instance` starts from: the previous
+    PostgreSQL major, always in the ppg flavor -- psp-16-major-upgrade goes
+    ppg-15 -> psp-16, there is no psp-15. None once that major is dropped from
+    the file (13 and older are EOL), which is why the FROM default cannot
+    simply be derived and is checked by a test instead."""
+    want = data["instances"][instance]["major"] - 1
+    for name, inst in data["instances"].items():
+        if inst["flavor"] == "ppg" and inst["major"] == want:
+            return name
+    return None
+
+
 def group_name(instance, type_name):
     return instance + TYPES[type_name]
 
@@ -103,6 +142,7 @@ def render_context(data, instance, type_name):
         major=inst["major"],
         prev=inst["major"] - 1,
         flavor=inst["flavor"],
+        default_version=inst["default_version"],
         name=group_name(instance, type_name),
         gates_text=render_gates(ctx.get("gates", [])),
     )
