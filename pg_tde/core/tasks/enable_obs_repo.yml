@@ -1,0 +1,109 @@
+---
+# obs_project/obs_os_path build the isv:percona:ppg:<channel>:<major> URL
+# published at https://ppg-obs.cancellar.info ("REPOSITORY SETUP" panel per
+# platform). check there before editing obs_channel_map, the project
+# layout has changed before.
+# obs_channel (devel/staging/release) maps to percona-release's REPO tiers:
+# devel = experimental, staging = testing, release = release.
+
+  - name: Compute OBS project + platform path facts
+    set_fact:
+      obs_project: "isv:percona:ppg:{{ obs_channel_map[obs_channel] }}{{ major_version }}"
+      obs_os_path: >-
+        {%- if ansible_distribution == 'Rocky' -%}
+        RockyLinux_{{ ansible_distribution_major_version }}
+        {%- elif ansible_distribution == 'RedHat' -%}
+        UBI_{{ ansible_distribution_major_version }}
+        {%- elif ansible_distribution == 'Ubuntu' -%}
+        Ubuntu_{{ ansible_distribution_version }}
+        {%- elif ansible_distribution == 'Debian' -%}
+        Debian_{{ ansible_distribution_major_version }}
+        {%- else -%}
+        UNSUPPORTED_OBS_PLATFORM_{{ ansible_distribution }}
+        {%- endif -%}
+      cacheable: true
+    vars:
+      obs_channel_map:
+        devel: "devel:"
+        staging: "staging:"
+        release: "releases:"
+
+  - name: Fail fast if this platform has no known OBS repo mapping
+    ansible.builtin.assert:
+      that:
+        - not obs_os_path.startswith('UNSUPPORTED_OBS_PLATFORM')
+      fail_msg: >-
+        No OBS repository mapping for {{ ansible_distribution }}
+        {{ ansible_distribution_version }}. OBS publishes for
+        RockyLinux/UBI/Ubuntu/Debian only — see https://ppg-obs.cancellar.info
+        for the current platform matrix.
+
+  - name: Set OBS repo URL facts
+    set_fact:
+      obs_baseurl: "https://download.opensuse.org/repositories/{{ obs_project | replace(':', ':/') }}/{{ obs_os_path }}/"
+      obs_repo_id: "{{ obs_project | replace(':', '_') }}"
+      cacheable: true
+
+  - name: Show OBS repo being configured
+    ansible.builtin.debug:
+      msg: "OBS repo: {{ obs_project }}  platform: {{ obs_os_path }}  url: {{ obs_baseurl }}"
+
+  # =============================
+  # RHEL family (RockyLinux, RedHat/UBI)
+  # =============================
+
+  - name: Import OBS GPG key (RHEL)
+    become: true
+    ansible.builtin.rpm_key:
+      key: "{{ obs_baseurl }}repodata/repomd.xml.key"
+      state: present
+    when: ansible_os_family == 'RedHat'
+
+  - name: Add OBS yum repo (RHEL)
+    become: true
+    ansible.builtin.yum_repository:
+      name: "{{ obs_project }}"
+      description: "{{ obs_project }} - {{ obs_os_path }}"
+      baseurl: "{{ obs_baseurl }}"
+      # The dashboard's own repo-setup snippet ships gpgcheck=0
+      gpgcheck: false
+      enabled: true
+    when: ansible_os_family == 'RedHat'
+
+  - name: Refresh yum/dnf cache after adding OBS repo (RHEL)
+    become: true
+    ansible.builtin.shell: |
+      set -e
+      {{ 'dnf' if ansible_distribution_major_version | int >= 8 else 'yum' }} clean all
+      {{ 'dnf' if ansible_distribution_major_version | int >= 8 else 'yum' }} makecache
+    args:
+      executable: /bin/bash
+    when: ansible_os_family == 'RedHat'
+
+  # =============================
+  # Debian family (Ubuntu, Debian)
+  # =============================
+
+  - name: Add OBS apt GPG key (Debian)
+    become: true
+    ansible.builtin.shell: |
+      set -euo pipefail
+      curl -fsSL "{{ obs_baseurl }}Release.key" | gpg --dearmor > "/etc/apt/trusted.gpg.d/{{ obs_repo_id }}.gpg"
+    args:
+      executable: /bin/bash
+      creates: "/etc/apt/trusted.gpg.d/{{ obs_repo_id }}.gpg"
+    when: ansible_os_family == 'Debian'
+
+  - name: Add OBS apt source list (Debian)
+    become: true
+    ansible.builtin.copy:
+      dest: "/etc/apt/sources.list.d/{{ obs_repo_id }}.list"
+      content: "deb {{ obs_baseurl }} /\n"
+      mode: '0644'
+    when: ansible_os_family == 'Debian'
+
+  - name: Update apt cache after adding OBS repo (Debian)
+    become: true
+    ansible.builtin.apt:
+      update_cache: true
+    when: ansible_os_family == 'Debian'

@@ -104,13 +104,8 @@
     ansible.builtin.include_tasks: ../../../../tasks/enable_repo.yml
     when: install_from_packages and package_source == 'percona-release'
 
-  - name: Fail fast on unimplemented OBS package source
-    ansible.builtin.fail:
-      msg: >-
-        PACKAGE_SOURCE=obs (OBS_CHANNEL={{ obs_channel }}) has no repo-setup task
-        in this role yet. Add an OBS-equivalent of tasks/enable_repo.yml (repo
-        URL/GPG key per channel) before selecting this option, or use
-        PACKAGE_SOURCE=percona-release.
+  - name: Configure repository (OBS)
+    ansible.builtin.include_tasks: enable_obs_repo.yml
     when: install_from_packages and package_source == 'obs'
 
   - name: Include Redhat tasks file
