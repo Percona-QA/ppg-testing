@@ -465,7 +465,6 @@ instances:
         os_version: '10'
         version: '16.9'
         op: <=
-      psp_from: true
       remove_conflicting_dev: '16.9'
       dev_switch_cutoff: '17.4'
     install:
