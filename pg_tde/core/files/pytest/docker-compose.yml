@@ -43,9 +43,9 @@
 
 x-common-test-env: &common-env
   # Picked up by conftest.py as CLI defaults; see conftest.pytest_addoption
-  IO_METHOD: worker          # worker | sync | io_uring (PG 18+; io_uring needs liburing)
-  VAULT_ADDR: ""             # override: http://vault:8200
-  VAULT_TOKEN: ""
+  IO_METHOD: ${IO_METHOD:-worker}   # worker | sync | io_uring (PG 18+; io_uring needs liburing)
+  VAULT_ADDR: ${VAULT_ADDR:-}       # override: http://vault:8200
+  VAULT_TOKEN: ${VAULT_TOKEN:-}
 
 x-common-volumes: &common-volumes
   - type: bind
