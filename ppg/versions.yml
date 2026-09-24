@@ -199,7 +199,6 @@ instances:
         os_version: '24'
         version: '15.6'
         op: <=
-      dev_pkg_deb: percona-postgresql-common-dev
       remove_conflicting_dev: '15.13'
       dev_switch_cutoff: '15.12'
     major-upgrade:
@@ -310,7 +309,6 @@ instances:
         os_version: '13'
         version: '16.10'
         op: <=
-      dev_pkg_deb: percona-postgresql-common-dev
       remove_conflicting_dev: '16.9'
       dev_switch_cutoff: '16.8'
     major-upgrade:
@@ -592,7 +590,6 @@ instances:
         os_version: '13'
         version: '16.10'
         op: <=
-      dev_pkg_deb: percona-postgresql-common-dev
       remove_conflicting_dev: '16.9'
       dev_switch_cutoff: '16.8'
     major-upgrade:
