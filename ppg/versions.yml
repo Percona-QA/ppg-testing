@@ -447,7 +447,6 @@ instances:
         version: '18.4'
         op: <
       subnet: aws2
-      telemetry_verify: false
     meta-server:
       gates:
       - name: End play on Ubuntu 26 and versions older than 18.4
