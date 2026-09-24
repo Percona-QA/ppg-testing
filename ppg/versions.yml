@@ -120,7 +120,6 @@ instances:
         op: <=
       remove_conflicting_dev: '13.21'
       dev_switch_cutoff: '14.17'
-      legacy_tail: true
     install:
       dev_switch_cutoff: '14.17'
       plpython_extra: false
@@ -241,7 +240,6 @@ instances:
         op: <=
       remove_conflicting_dev: '14.18'
       dev_switch_cutoff: '15.12'
-      legacy_tail: true
     install:
       dev_switch_cutoff: '15.12'
     install_tools:
@@ -350,7 +348,6 @@ instances:
         op: <=
       remove_conflicting_dev: '15.13'
       dev_switch_cutoff: '16.8'
-      legacy_tail: true
     install:
       dev_switch_cutoff: '16.8'
     install_tools:
@@ -633,4 +630,3 @@ instances:
         op: <=
       remove_conflicting_dev: '15.13'
       dev_switch_cutoff: '16.8'
-      legacy_tail: true
