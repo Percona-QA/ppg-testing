@@ -498,28 +498,6 @@
     svc_state: restarted
   when: ansible_os_family == "RedHat"
 
-{% if legacy_tail | default(false) %}
-- name: list /var/run/postgresql
-  command: ls -la /var/run/postgresql
-  become: true
-  when: ansible_os_family == "Debian"
-  register: results
-
-- debug:
-    var: results.stdout_lines
-
-- name: list pg_lsclsuters
-  command: pg_lsclusters
-  become: true
-  become_method: sudo
-  become_user: postgres
-  when: ansible_os_family == "Debian"
-  register: results
-
-- debug:
-    var: results.stdout_lines
-
-{% endif %}
 - name: Drop pg_dropcluster for version {{ prev }}
   command: /usr/bin/pg_dropcluster {{ prev }} main
   become: true
@@ -548,49 +526,6 @@
   when: ansible_os_family == "Debian"
   register: results
 
-{% if legacy_tail | default(false) %}
-- debug:
-    var: results.stdout_lines
-
-- name: list /var/run/postgresql
-  command: ls -la /var/run/postgresql/
-  become: true
-  when: ansible_os_family == "Debian"
-  register: results
-
-- debug:
-    var: results.stdout_lines
-
-- name: Restart postgresql service for Debian based
-  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
-  vars:
-    svc_name: postgresql@{{ major }}-main.service
-    svc_state: started
-  when: ansible_os_family == "Debian"
-
-- name: list pg_lsclsuters
-  command: pg_lsclusters
-  become: true
-  become_method: sudo
-  become_user: postgres
-  when: ansible_os_family == "Debian"
-  register: results
-
-- debug:
-    var: results.stdout_lines
-
-- pause:
-    minutes: 1
-
-- name: Display ppg version
-  ignore_errors: true
-  become_user: postgres
-  shell: psql -c "select version();"
-  register: results
-
-- debug:
-    var: results.stdout_lines
-{% else %}
 - name: Restart postgresql service for Debian based
   include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
   vars:
@@ -604,7 +539,6 @@
   register: results
 
 - debug: var=results.stdout_lines
-{% endif %}
 {% if telemetry_upgrade_verify | default(true) %}
 
 # =========Telemetry weak-dependency upgrade verification
