@@ -435,7 +435,29 @@ class BackupManager:
                 + _pg_settings_file_string_literal(restore_cmd)
             )
         args.append("restore")
-        self._run(*args)
+        try:
+            self._run(*args)
+        except RuntimeError as exc:
+            # Transient pgBackRest race (archive-async): restore's spool-path
+            # cleanup and a not-yet-exited async archive-get worker from a
+            # just-stopped recovery both touch the same queued spool entries
+            # (ENOENT on unlink or ENOTEMPTY on rmdir, depending on timing).
+            # Retry once the orphaned worker has had a moment to exit.
+            msg = str(exc)
+            transient = (
+                "unable to remove file" in msg and "pgbackrest.tmp" in msg
+            ) or (
+                "unable to remove path" in msg and "/archive/" in msg
+            )
+            if transient:
+                log.warning(
+                    "pgBackRest restore hit a transient spool-cleanup race; "
+                    "retrying once: %s", msg,
+                )
+                time.sleep(2)
+                self._run(*args)
+            else:
+                raise
         if restore_cmd is not None:
             _rewrite_restore_command_in_auto_conf(dest, restore_cmd)
         log.info(
