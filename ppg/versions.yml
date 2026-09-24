@@ -78,12 +78,10 @@ instances:
         os_version: '24'
         version: '14.11'
         op: <=
-      upgrade_to_fact: false
       extra_repo_refresh: true
       telemetry_comment: extended
       tde: false
       dev_switch_cutoff: '14.17'
-      dev_switch_var: pg_version_to_install
       stop_pause: false
     major-upgrade:
       gates:

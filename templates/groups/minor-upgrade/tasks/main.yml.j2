@@ -24,9 +24,7 @@
     to_repo_version: "{{ v }} lookup('env', 'VERSION').split('.')[0] if lookup('env', 'VERSION').startswith('psp-') else lookup('env', 'VERSION') {{ w }}"
 {% else %}
     pg_version_to_install: "{{ v }} lookup('env', 'FROM_VERSION') | replace('ppg-','') {{ w }}"
-{% if upgrade_to_fact | default(true) %}
     upgrade_to_pg_version: "{{ v }} lookup('env', 'VERSION') | replace('ppg-','') {{ w }}"
-{% endif %}
 {% endif %}
 
 {{ gates_text }}
@@ -218,7 +216,7 @@
   set_fact:
     pg_dev_package: >-
       {{ v }} 'percona-postgresql-server-dev-all'
-         if ({{ dev_switch_var | default('upgrade_to_pg_version') }} | string is version('{{ dev_switch_cutoff }}', '<=', strict=True))
+         if (upgrade_to_pg_version | string is version('{{ dev_switch_cutoff }}', '<=', strict=True))
          else 'percona-postgresql-common-dev' {{ w }}
   when: ansible_os_family == "RedHat"
 
