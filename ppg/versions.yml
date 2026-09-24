@@ -26,7 +26,6 @@ instances:
         version: '14.19'
         op: <=
       subnet: aws2
-      legacy_debian_overrides: true
     meta-server:
       gates:
       - name: End play on Ubuntu 26 and versions older than 14.23
@@ -143,7 +142,6 @@ instances:
         version: '15.14'
         op: <=
       subnet: aws1
-      legacy_debian_overrides: true
     meta-server:
       gates:
       - name: End play on Ubuntu 26 and versions older than 15.18
@@ -258,7 +256,6 @@ instances:
         version: '16.10'
         op: <=
       subnet: aws2
-      legacy_debian_overrides: true
     meta-server:
       gates:
       - name: End play on Ubuntu 26 and versions older than 16.14
