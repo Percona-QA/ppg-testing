@@ -403,7 +403,10 @@ def _start_cosmian_if_needed(run_dir: Path) -> Optional[str]:
     if find_cosmian_binary() is None:
         return "cosmian_kms not installed (run scripts/install_cosmian_kms.sh)"
     work = run_dir / "cosmian_session"
-    server = CosmianKmsServer.start(work)
+    try:
+        server = CosmianKmsServer.start(work)
+    except RuntimeError as exc:
+        return str(exc)
     if server is None:
         return "failed to start cosmian_kms"
     _export_kmip_config(server.to_kmip_config())

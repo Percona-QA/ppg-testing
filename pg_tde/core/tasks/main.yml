@@ -139,6 +139,19 @@
     delay: 5
     until: docker_info.rc == 0
 
+  - name: Default Cosmian KMIP env (no-op unless Docker route runs)
+    set_fact:
+      cosmian_kmip_env: {}
+
+  - name: Determine whether Cosmian KMS needs to run in Docker (RHEL8-family glibc mismatch)
+    set_fact:
+      cosmian_needs_docker: "{{ test_suite == 'all' and ansible_os_family == 'RedHat' and ansible_distribution_major_version == '8' }}"
+
+  - name: Run Cosmian KMS in Docker (RHEL8-family only)
+    include_tasks:
+      file: "run_cosmian_docker.yml"
+    when: cosmian_needs_docker
+
   - name: Ensure at least 4 GB swap is configured
     become: true
     block:
@@ -342,12 +355,13 @@
     args:
       executable: /bin/bash
       chdir: "/tmp/pg_tde_pytest_src"
-    environment:
-      PATH: "{{ pg_bin_dir }}:{{ pg_lib_dir }}:/usr/local/go/bin:{{ ansible_env.PATH | default('/usr/local/bin:/usr/bin:/bin') }}"
-      LD_LIBRARY_PATH: "{{ pg_lib_dir }}"
-      INSTALL_DIR: "{{ pg_install_dir }}"
-      PG_MAJOR: "{{ major_version }}"
-      PG_TDE_SKIP_EXTERNAL_KEY_PROVIDERS: "{{ '0' if test_suite == 'all' else '1' }}"
+    environment: "{{ {
+        'PATH': pg_bin_dir ~ ':' ~ pg_lib_dir ~ ':/usr/local/go/bin:' ~ (ansible_env.PATH | default('/usr/local/bin:/usr/bin:/bin')),
+        'LD_LIBRARY_PATH': pg_lib_dir,
+        'INSTALL_DIR': pg_install_dir,
+        'PG_MAJOR': major_version,
+        'PG_TDE_SKIP_EXTERNAL_KEY_PROVIDERS': ('0' if test_suite == 'all' else '1'),
+      } | combine(cosmian_kmip_env | default({})) }}"
     ignore_errors: true
     register: regression
 

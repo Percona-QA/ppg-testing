@@ -88,7 +88,14 @@ def cosmian_kms_server(tmp_path_factory):
         yield None
         return
     work = tmp_path_factory.mktemp("cosmian_kms_adv")
-    server = CosmianKmsServer.start(work)
+    try:
+        server = CosmianKmsServer.start(work)
+    except RuntimeError:
+        # Installed but unable to run (e.g. RHEL8-family: glibc 2.28 vs. the
+        # 2.33/2.34 cosmian_kms needs). Same "not available" outcome as the
+        # binary-not-found case above — let dependent tests self-skip.
+        yield None
+        return
     yield server
     if server is not None:
         server.stop()

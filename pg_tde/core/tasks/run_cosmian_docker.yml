@@ -1,5 +1,6 @@
 # Runs cosmian_kms inside a Ubuntu Jammy Docker container on platforms that
-# ship OpenSSL 1.x or an incompatible glibc (RHEL/Rocky/OL 8, Debian 11).
+# ship an incompatible glibc for the native binary (RHEL/Rocky/OL 8 ship
+# glibc 2.28; cosmian_kms needs 2.33/2.34).
 #
 # Precondition: install_docker.yml has already run and Docker is available.
 #
@@ -8,8 +9,12 @@
 #   - exposes KMIP on 127.0.0.1:5556 and HTTP on 127.0.0.1:9998
 #   - writes certs to /tmp/cosmian_certs/ on the host via a volume mount
 #
-# setup_kmip.sh detects /tmp/cosmian_certs/ca.pem at test runtime and skips
-# the native cosmian_kms startup, using the pre-started container instead.
+# The final task below exposes those cert paths as ``cosmian_kmip_env``,
+# which the caller merges into the pytest run task's environment as
+# KMIP_SERVER_ADDRESS/PORT + KMIP_CLIENT_CA/KEY + KMIP_SERVER_CA. pytest's
+# kmip_pytest_env_ready() (lib/external_key_providers.py) then sees a
+# reachable KMIP server up front and never attempts to start the native
+# cosmian_kms binary.
 
 - name: Create cosmian server build directory
   ansible.builtin.file:
@@ -120,10 +125,26 @@
 
 - name: Verify certs were generated in /tmp/cosmian_certs
   ansible.builtin.stat:
-    path: /tmp/cosmian_certs/ca.pem
-  register: ca_pem_stat
+    path: "/tmp/cosmian_certs/{{ item }}"
+  register: cosmian_cert_stats
+  loop:
+    - ca.pem
+    - client.pem
+    - client.key
 
-- name: Fail if cosmian container did not produce ca.pem
+- name: Fail if cosmian container did not produce all expected certs
   ansible.builtin.fail:
-    msg: "cosmian-server container did not produce /tmp/cosmian_certs/ca.pem"
-  when: not ca_pem_stat.stat.exists
+    msg: "cosmian-server container did not produce /tmp/cosmian_certs/{{ item.item }}"
+  when: not item.stat.exists
+  loop: "{{ cosmian_cert_stats.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Expose Cosmian KMIP connection details for the pytest run task
+  set_fact:
+    cosmian_kmip_env:
+      KMIP_SERVER_ADDRESS: "127.0.0.1"
+      KMIP_SERVER_PORT: "5556"
+      KMIP_CLIENT_CA: "/tmp/cosmian_certs/client.pem"
+      KMIP_CLIENT_KEY: "/tmp/cosmian_certs/client.key"
+      KMIP_SERVER_CA: "/tmp/cosmian_certs/ca.pem"
