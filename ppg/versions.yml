@@ -124,8 +124,6 @@ instances:
       pgvector_gate: '14.15'
       cron_gate: '14.22'
       base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'']'
-      legacy_layout: true
-      patroni_deb_gate: '14.12'
       pgpool_start_gate: '14.7'
   pg-15:
     major: 15
@@ -241,9 +239,6 @@ instances:
       pgvector_gate: '15.10'
       cron_gate: '15.17'
       base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'', ''percona_pg_telemetry'']'
-      legacy_layout: true
-      etcd_restart: false
-      patroni_deb_gate: '15.7'
       pgpool_start_gate: '15.2'
   pg-16:
     major: 16
@@ -344,8 +339,6 @@ instances:
       pgvector_gate: '16.6'
       cron_gate: '16.13'
       base_extensions: '[''percona_pg_telemetry'', ''pg_stat_monitor'', ''pgaudit'', ''set_user'']'
-      legacy_layout: true
-      patroni_deb_gate: '16.3'
   pg-17:
     major: 17
     flavor: ppg
@@ -443,7 +436,6 @@ instances:
     install:
       dev_switch_cutoff: '17.4'
     install_tools:
-      vars_gate: '17.0'
       pgpool_switch: '17.10'
       pgvector_gate: '17.2'
       tde_gate: '17.7'
@@ -505,10 +497,8 @@ instances:
       remove_conflicting_dev: '17.9'
     install: {}
     install_tools:
-      vars_gate: '18.0'
       pgpool_switch: '18.4'
       cron_gate: '18.3'
-      oidc: true
       base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'', ''pg_tde'']'
   psp-16:
     major: 16
