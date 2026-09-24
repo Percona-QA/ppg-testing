@@ -491,7 +491,8 @@
   register: results
 
 - debug: var=results.stdout_lines
-{% if telemetry_upgrade_verify | default(true) %}
+{# ppg 18 ships no percona-pg-telemetry package #}
+{% if major < 18 %}
 
 # =========Telemetry weak-dependency upgrade verification
 - name: Verify telemetry weak-dependency survived the upgrade
