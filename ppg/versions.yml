@@ -81,7 +81,6 @@ instances:
       upgrade_to_fact: false
       extra_repo_refresh: true
       telemetry_comment: extended
-      plpython3_extra: false
       tde: false
       dev_switch_cutoff: '14.17'
       dev_switch_var: pg_version_to_install
@@ -126,7 +125,6 @@ instances:
       legacy_tail: true
     install:
       dev_switch_cutoff: '14.17'
-      plpython_extra: false
     install_tools:
       vars_gate: '14.10'
       pgpool_low_gate: '14.7'
