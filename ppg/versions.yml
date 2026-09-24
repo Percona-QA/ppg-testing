@@ -43,9 +43,6 @@ instances:
         os_version: '26'
         version: '14.23'
         op: <
-      cleanup_extra_rpm:
-      - etcd
-      - percona-haproxy
     minor-upgrade:
       gates:
       - name: End play on Ubuntu 26 and versions older than 14.23

@@ -11,8 +11,7 @@
       vars:
         packages:
           - percona-postgresql{{ major }}
-{% for p in cleanup_extra_rpm | default([]) %}
-          - {{ p }}
-{% endfor %}
+          - etcd
+          - percona-haproxy
           - percona-patroni
       when: ansible_os_family == "RedHat"
