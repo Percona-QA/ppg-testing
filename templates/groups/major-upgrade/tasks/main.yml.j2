@@ -241,7 +241,7 @@
   environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-{% if dev_switch_active | default(true) %}
+{% if major < 18 %}
 - name: Determine required PostgreSQL dev package for RHEL
   set_fact:
     pg_dev_package: >-

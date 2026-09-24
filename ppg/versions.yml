@@ -541,7 +541,6 @@ instances:
         version: '17.6'
         op: <=
       remove_conflicting_dev: '17.9'
-      dev_switch_active: false
       telemetry_upgrade_verify: false
     install: {}
     install_tools:
