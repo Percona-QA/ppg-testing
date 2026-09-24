@@ -414,24 +414,11 @@ instances:
         os_version: '26'
         version: '17.10'
         op: <
-      - name: End play on Ubuntu 24
-        action: end_play
-        distribution: Ubuntu
-        os_version: '24'
-        version: '16.2'
-        op: <=
       - name: End play on Debian 13
         action: end_play
         distribution: Debian
         os_version: '13'
         version: '17.6'
-        op: <=
-      - name: End play on RedHat 10 and 16.9 and older versions
-        action: fail
-        msg: Stopping execution on rhel 10 because 16.9 and below are not supported.
-        family: RedHat
-        os_version: '10'
-        version: '16.9'
         op: <=
       remove_conflicting_dev: '17.5'
       dev_switch_cutoff: '17.4'
