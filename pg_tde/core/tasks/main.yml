@@ -8,35 +8,16 @@
       # Convert "true"/"false" strings to actual Booleans
       build_from_source: "{{ lookup('env', 'BUILD_FROM_SOURCE') | default('false') | bool }}"
 
-      # Direct mappings
       io_method: "{{ lookup('env', 'IO_METHOD') | default('worker') }}"
       psp_repo: "{{ lookup('env', 'PSP_REPO') }}"
       psp_branch: "{{ lookup('env', 'PSP_BRANCH') }}"
       tde_repo: "{{ lookup('env', 'TDE_REPO') }}"
       tde_branch: "{{ lookup('env', 'TDE_BRANCH') }}"
-      # Which package source to install PSP/pg_tde from when install_from_packages
-      # is set. 'percona-release' drives ../../../../tasks/enable_repo.yml
-      # (REPO=testing/release/experimental). 'obs' drives enable_obs_repo.yml
-      # (OBS_CHANNEL=devel/staging/release — the semantic equivalents of
-      # REPO's experimental/testing/release tiers).
       package_source: "{{ lookup('env', 'PACKAGE_SOURCE') | default('percona-release') }}"
       obs_channel: "{{ lookup('env', 'OBS_CHANNEL') | default('devel') }}"
-      # percona-qa/postgresql/pytest sections to skip by default: upgrade
-      # coverage lives in the dedicated upgrade role, vault/kmip need external
-      # key-provider services this role doesn't set up, and slow tests don't
-      # belong in the core regression pass. Override via PYTEST_SKIP_SECTIONS.
       pytest_skip_sections: "{{ lookup('env', 'PYTEST_SKIP_SECTIONS') | default('upgrade,minor_upgrade,slow,vault,kmip,openbao', true) }}"
-      # 'Sanity' (default): pytest_skip_sections applies, external key
-      # providers are not set up. 'All': every test case runs (Cosmian KMS +
-      # OpenBao get installed so kmip/vault/openbao exercise something
-      # instead of self-skipping). upgrade/minor_upgrade self-skip either
-      # way — they need --old-install-dir, which this role doesn't provision.
       test_suite: "{{ lookup('env', 'TEST_SUITE') | default('Sanity', true) }}"
-      # pytest-xdist parallelism (-n <N>); PYTEST_WORKERS=0 runs serially.
-      # default(_, true) also treats an empty env var as unset (a bare
-      # default() would not).
       pytest_workers: "{{ lookup('env', 'PYTEST_WORKERS') | default('4', true) }}"
-      # ... include other env lookups here ...
       go_version: "1.25.6"
       go_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}"
       artifact_filename: "tde-core-{{ lookup('env','VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.tar.gz"
@@ -59,9 +40,6 @@
       - min_ver != '0.0'
       - full_version | string is version(min_ver, '<', strict=True)
 
-  # Kept outside the block below: this is a deliberate "platform not
-  # tested" skip, not a failure, and meta: end_play's interaction with an
-  # enclosing block's rescue/always is inconsistent across Ansible versions.
   - name: End play on RHEL 8 and Rocky 8 for pg-18>= and io_uring, as uring not supported
     meta: end_play
     when:
@@ -74,16 +52,12 @@
 
   # ====================================================================
   # Setup, build/install, and the pytest run are wrapped in one block so
-  # a failure anywhere still collects and uploads a debug artifact via
-  # always: — without this, a hard failure in an early setup step (e.g.
-  # Docker/Cosmian bring-up, package install) aborted the play immediately,
-  # skipping packaging/fetch entirely and leaving Jenkins with nothing.
+  # a failure anywhere still collects and uploads a debug artifact via always:
   # ====================================================================
   - name: Run pg_tde core setup, build, and pytest suite
     block:
       - name: Set Dependent Facts
         set_fact:
-          # Now that go_version is saved, we can use it here
           go_tarball: "go{{ go_version }}.linux-{{ go_arch }}"
           go_download_url: "https://go.dev/dl/go{{ go_version }}.linux-{{ go_arch }}.tar.gz"
           go_install_dir: "/usr/local"
@@ -116,12 +90,10 @@
           pg_install_dir: "/opt/pgsql"
         when: not install_from_packages
 
+      # ====================================================================
       # On Debian 13 / Ubuntu 26 systemd mounts /tmp as a RAM-backed tmpfs (~16 GB,
-      # half of RAM). The test framework runs in /tmp/pgtest and the suite needs
-      # more than that on those distros, so /tmp fills (ENOSPC) and the host dies
-      # before packaging — even though the 100 GB root disk is ~85% free. Redirect
-      # /tmp onto the root disk (bind mount) where it is tmpfs, before the build or
-      # tests write anything there. Only acts where /tmp is actually tmpfs.
+      # half of RAM). Redirect /tmp onto the root disk (bind mount)
+      # ====================================================================
       - name: Move /tmp off tmpfs onto the root disk where applicable
         become: true
         ansible.builtin.shell: |
@@ -159,8 +131,6 @@
           file: "debian_tasks.yml"
         when: ansible_os_family == 'Debian'
 
-      # Docker is required on all platforms — the pytest suite uses it for KMIP
-      # and other key provider services at test runtime.
       - name: Include Docker setup file
         include_tasks:
           file: "install_docker.yml"
@@ -173,10 +143,6 @@
         delay: 5
         until: docker_info.rc == 0
 
-      # cosmian_kms needs glibc 2.33/2.34; RHEL8-family ships 2.28, so the native
-      # binary crashes pytest_configure before any test runs. Only relevant when
-      # TEST_SUITE=All starts kmip/vault/openbao. cosmian_kmip_env defaults to
-      # {} so the pytest run task's environment is unchanged otherwise.
       - name: Default Cosmian KMIP env (no-op unless Docker route runs)
         set_fact:
           cosmian_kmip_env: {}
@@ -190,12 +156,6 @@
           file: "run_cosmian_docker.yml"
         when: cosmian_needs_docker
 
-      # ansible_swaptotal_mb is gathered automatically (setup module) — no need
-      # to shell out to swapon/parse its human-readable output (which was the
-      # bug here before: `swapon --show=SIZE` prints "4G", not bytes, so the old
-      # regex_findall/1048576 math always came out near-zero and re-ran mkswap
-      # against an already-active swapfile on every subsequent converge of the
-      # same host, failing with "swapfile is mounted; will not make swapspace").
       - name: Ensure at least 4 GB swap is configured
         become: true
         block:
@@ -276,9 +236,6 @@
             - tar
           state: present
 
-      # TestPgBackRest runs even under Sanity. Use the Percona package when a
-      # Percona repo is already enabled (install_from_packages); otherwise the
-      # plain OS package (Debian/Ubuntu ship it directly, RHEL via EPEL).
       - name: Install pgbackrest
         become: true
         package:
@@ -351,10 +308,6 @@
       # =============================
       # Deploy the pg_tde pytest suite
       # =============================
-      # Vendored under files/pytest/ (copied from percona-qa's postgresql/pytest,
-      # py_framework branch) so this role no longer depends on a separate
-      # percona-qa clone/branch at test time.
-
       - name: Deploy pg_tde pytest suite
         copy:
           src: ../files/pytest/
@@ -366,9 +319,6 @@
       - name: Prepare pytest environment (venv, deps, pg_tde smoke check)
         become: true
         become_user: postgres
-        # TEST_SUITE=All installs Cosmian KMS + OpenBao so kmip/vault/openbao
-        # tests actually run instead of self-skipping; Sanity skips that setup,
-        # same as every run to date.
         shell: >-
           ./setup_test_env.sh
           --install-dir {{ pg_install_dir }}
@@ -393,15 +343,6 @@
         debug:
           var: pytest_env_setup.stdout_lines
 
-      # A stale --basetemp from a previous run on a reused host can make pytest's
-      # own startup cleanup fail outright rather than just being ignored: xdist's
-      # nodemanager calls getbasetemp() during pytest_sessionstart, and if the
-      # prior rm_rf left anything behind (e.g. a worker subdir it couldn't fully
-      # clear), mkdir(basetemp) raises FileExistsError as an INTERNALERROR before
-      # a single test runs (rc=3, whole run gone). `rm -rf` as root succeeds
-      # regardless of whether a leftover/orphaned postgres process from a
-      # previous run still has files under here open — Linux allows removing an
-      # open file, the process just keeps its own handle to the unlinked inode.
       - name: Clear stale pytest --basetemp from a previous run
         become: true
         ansible.builtin.file:
@@ -414,12 +355,6 @@
       - name: Run pg_tde pytest suite
         become: true
         become_user: postgres
-        # TEST_SUITE=All runs every test case (no --skip-sections at all — slow/
-        # vault/kmip/openbao all run for real). Sanity keeps the proven default:
-        # pytest_skip_sections applies (upgrade,minor_upgrade,slow,vault,kmip,openbao).
-        # Don't add --tb=line/short to shrink console output: --tb is global and
-        # also collapses the JUnit XML/HTML failure text, not just stdout. Keep
-        # pyproject.toml's --tb=long so the saved artifacts stay complete.
         shell: >-
           set -o pipefail;
           source .env.sh &&
@@ -432,15 +367,6 @@
         args:
           executable: /bin/bash
           chdir: "/tmp/pg_tde_pytest_src"
-        # cosmian_kmip_env is {} unless the RHEL8-family Docker-Cosmian route ran
-        # above; when it did, this merges in the KMIP_* env vars so pytest finds
-        # the already-running container via kmip_pytest_env_ready() instead of
-        # spawning the native cosmian_kms binary.
-        # IO_METHOD must be passed explicitly or the Jenkins parameter never
-        # reaches pytest (conftest.py defaults IO_METHOD to "worker"). The
-        # io_method GUC only exists on PG 18+ (PG_IO_METHOD_MIN_MAJOR in
-        # lib/cluster.py), so force "worker" below that instead of letting a
-        # mismatched selection hard-fail the run.
         environment: "{{ {
             'PATH': pg_bin_dir ~ ':' ~ pg_lib_dir ~ ':/usr/local/go/bin:' ~ (ansible_env.PATH | default('/usr/local/bin:/usr/bin:/bin')),
             'LD_LIBRARY_PATH': pg_lib_dir,
@@ -456,9 +382,6 @@
         set_fact:
           pytest_failed: "{{ (regression.rc | default(1)) != 0 }}"
 
-      # Disk-usage report printed to the Jenkins console (survives a later host death
-      # at "Save test runner output"). Some hosts (debian13-x86, uresolute-x86) fill
-      # the volume during the run for an as-yet-unknown reason; this shows what ate it.
       - name: Capture disk usage after test run
         become: true
         ansible.builtin.shell: |
@@ -482,10 +405,6 @@
         ansible.builtin.debug:
           var: disk_report.stdout_lines
 
-      # Console display only — the JUnit XML/HTML/.log artifacts always have
-      # the complete run regardless. On a pass, the full -v listing is just
-      # noise; on a failure, show everything (PASSED/FAILED + tracebacks) so
-      # Jenkins console alone is enough to diagnose.
       - name: Show pytest summary (pass — one line, not the full listing)
         debug:
           msg: "{{ regression.stdout_lines[-1] if (regression.stdout_lines | default([]) | length > 0) else 'no pytest output captured' }}"
@@ -509,9 +428,6 @@
         when: regression is defined
 
     rescue:
-      # Reached only on a hard failure not already tolerated by
-      # ignore_errors (i.e. before/outside the pytest run itself).
-      # pytest_failed isn't set yet in that case, so default it here.
       - name: Mark this run failed (setup/build failure before or during the pytest run)
         set_fact:
           pytest_failed: true
@@ -524,7 +440,6 @@
             {{ ansible_failed_result.msg | default(ansible_failed_result.stderr | default('see console output above')) }}
 
     always:
-      # Guarantee pytest_failed exists even if rescue itself never ran.
       - name: Ensure pytest_failed is always defined before artifact packaging
         set_fact:
           pytest_failed: "{{ pytest_failed | default(true) }}"
