@@ -111,7 +111,6 @@ instances:
         os_version: '24'
         version: '13.14'
         op: <=
-      enable_only: false
       remove_conflicting_dev: '13.21'
       dev_switch_cutoff: '14.17'
       legacy_tail: true

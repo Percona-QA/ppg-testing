@@ -159,7 +159,7 @@
     repo: "{{ v }} lookup('env', 'TO_REPO') {{ w }}"
 {% else %}
 - name: Setup new repository
-  command: percona-release {{ 'enable-only' if enable_only | default(true) else 'enable' }} {{ v }} pg_version {{ w }} {{ v }} repo {{ w }}
+  command: percona-release enable-only {{ v }} pg_version {{ w }} {{ v }} repo {{ w }}
   vars:
     repo: "{{ v }} lookup('env', 'TO_REPO') {{ w }}"
     pg_version: "{{ v }} lookup('env', 'VERSION') {{ w }}"
