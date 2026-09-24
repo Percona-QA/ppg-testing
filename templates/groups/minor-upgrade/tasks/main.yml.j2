@@ -123,33 +123,6 @@
   environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-{% if tde | default(false) and major >= 18 %}
-- name: Install pg_tde packages RHEL
-  yum:
-    name: "{{ v }} packages {{ w }}"
-    state: latest
-    update_cache: yes
-  vars:
-    packages:
-    - percona-pg_tde{{ major }}
-    - percona-pg_tde{{ major }}-devel
-    - percona-pg_tde{{ major }}-debugsource
-    - percona-pg_tde{{ major }}-debuginfo
-  when: ansible_os_family == "RedHat"
-
-- name: Install pg_tde packages Debian
-  apt:
-    name: "{{ v }} packages {{ w }}"
-    state: latest
-    update_cache: yes
-  vars:
-    packages:
-    - percona-pg-tde{{ major }}
-    - percona-pg-tde{{ major }}-client
-    - percona-pg-tde{{ major }}-dbgsym
-  when: ansible_os_family == "Debian"
-
-{% endif %}
 {% if remove_conflicting_dev | default(none) %}
 #Remove conflicting package to make installation move on
 - name: Remove conflicting percona-postgresql-common-dev
@@ -199,7 +172,7 @@
   environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-{% if dev_switch_active | default(true) %}
+{% if major < 18 %}
 - name: Determine required PostgreSQL dev package for RHEL
   set_fact:
     pg_dev_package: >-
@@ -216,7 +189,7 @@
   when: ansible_os_family == "RedHat"
 
 {% endif %}
-{% if tde | default(false) and major < 18 %}
+{% if major >= 17 %}
 - name: Install pg_tde packages RHEL
   yum:
     name: "{{ v }} packages {{ w }}"

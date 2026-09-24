@@ -79,7 +79,6 @@ instances:
         version: '14.11'
         op: <=
       telemetry_comment: extended
-      tde: false
       dev_switch_cutoff: '14.17'
     major-upgrade:
       gates:
@@ -201,7 +200,6 @@ instances:
         version: '15.6'
         op: <=
       dev_pkg_deb: percona-postgresql-common-dev
-      tde: false
       remove_conflicting_dev: '15.13'
       dev_switch_cutoff: '15.12'
     major-upgrade:
@@ -313,7 +311,6 @@ instances:
         version: '16.10'
         op: <=
       dev_pkg_deb: percona-postgresql-common-dev
-      tde: false
       remove_conflicting_dev: '16.9'
       dev_switch_cutoff: '16.8'
     major-upgrade:
@@ -439,7 +436,6 @@ instances:
         os_version: '10'
         version: '16.9'
         op: <=
-      tde: true
       remove_conflicting_dev: '17.5'
       dev_switch_cutoff: '17.4'
     major-upgrade:
@@ -521,9 +517,7 @@ instances:
         version: '18.4'
         op: <
       telemetry_comment: none
-      tde: true
       remove_conflicting_dev: '18.5'
-      dev_switch_active: false
       dev_switch_cutoff: '18.1'
       telemetry_upgrade_verify: false
     major-upgrade:
@@ -599,7 +593,6 @@ instances:
         version: '16.10'
         op: <=
       dev_pkg_deb: percona-postgresql-common-dev
-      tde: false
       remove_conflicting_dev: '16.9'
       dev_switch_cutoff: '16.8'
     major-upgrade:
