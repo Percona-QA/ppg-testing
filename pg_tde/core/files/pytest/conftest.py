@@ -35,9 +35,24 @@ from lib.cluster import (
 from lib.os_env import resolve_install_dir_default, env_pg_major, SUPPORTED_PG_MAJORS
 
 # ── port allocator ──────────────────────────────────────────────────────────
+# Under pytest-xdist each worker is a separate process, re-importing this
+# module fresh — without a per-worker offset, every worker's counter starts
+# at the same value and hands out duplicate ports. PYTEST_XDIST_WORKER
+# ("gw0", "gw1", ...; "master" outside xdist) gives each worker a disjoint
+# 2000-port range.
+def _worker_port_base() -> int:
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
+    if worker_id == "master":
+        return 15432
+    try:
+        idx = int(worker_id.removeprefix("gw"))
+    except ValueError:
+        idx = 0
+    return 15432 + idx * 2000
+
 
 _port_lock = threading.Lock()
-_next_port = 15432
+_next_port = _worker_port_base()
 
 
 def allocate_port() -> int:

@@ -88,10 +88,17 @@ class TdeManager:
     def add_global_key_provider_file(
         self,
         provider_name: str = "file_provider",
-        keyfile: str = "/tmp/pg_tde_test.per",
+        keyfile: Optional[str] = None,
         *,
         in_place: bool = True,
     ) -> None:
+        # Previously a fixed "/tmp/pg_tde_test.per" shared by every caller,
+        # which xdist workers raced on (one worker's key material overwritten
+        # by another mid-test). Default under tmp_path instead — kept outside
+        # data_dir since pg_rewind/pg_tde_rewind can drop non-standard files
+        # it finds there that aren't part of the source's file set.
+        if keyfile is None:
+            keyfile = str(self.cluster.data_dir.parent / "pg_tde_test.per")
         fn = self._first_func([
             "pg_tde_add_global_key_provider_file",
             "pg_tde_add_key_provider_file",

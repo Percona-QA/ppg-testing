@@ -11,6 +11,7 @@
       tde_repo: "{{ lookup('env', 'TDE_REPO') }}"
       tde_branch: "{{ lookup('env', 'TDE_BRANCH') }}"
       test_suite: "{{ lookup('env', 'TEST_SUITE') | default('sanity', true) | lower }}"
+      pytest_workers: "{{ lookup('env', 'PYTEST_WORKERS') | default('4', true) }}"
       go_version: "1.25.6"
       go_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}"
       artifact_filename: "tde-core-{{ lookup('env','VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.tar.gz"
@@ -334,6 +335,7 @@
       source .env.sh &&
       pytest tests/
       --skip-sections={{ pytest_skip_sections }}
+      {{ '-n ' ~ pytest_workers if pytest_workers | length > 0 else '' }}
       --basetemp=/tmp/pg_tde_pytest_run
       --junitxml=/tmp/pg_tde_pytest_junit.xml
       --html=/tmp/pg_tde_pytest_report.html --self-contained-html

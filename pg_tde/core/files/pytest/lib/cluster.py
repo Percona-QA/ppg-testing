@@ -486,7 +486,7 @@ class PgCluster:
         while time.time() < deadline:
             if self.is_ready():
                 return
-            time.sleep(1)
+            time.sleep(0.3)
         raise TimeoutError(
             f"PostgreSQL on port {self.port} did not become ready in {timeout}s\n"
             f"Data dir : {self.data_dir}\n"

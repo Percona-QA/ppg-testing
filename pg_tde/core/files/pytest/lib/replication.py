@@ -134,7 +134,7 @@ class ReplicationManager:
             )
             if n and int(n) >= 1:
                 return True
-            time.sleep(1)
+            time.sleep(0.3)
         return False
 
     def assert_streaming_connected(self, timeout: int = 60) -> None:
@@ -171,7 +171,7 @@ class ReplicationManager:
                 replay_lsn = self.standby.fetchone("SELECT pg_last_wal_replay_lsn()")
                 log.info("Standby caught up: replay=%s target=%s", replay_lsn, target_lsn)
                 return True
-            time.sleep(1)
+            time.sleep(0.3)
         log.warning("Standby did not reach %s within %ds", target_lsn, timeout)
         return False
 
@@ -264,5 +264,5 @@ class ReplicationManager:
             )
             if status == "t":
                 return True
-            time.sleep(1)
+            time.sleep(0.3)
         return False
