@@ -115,10 +115,6 @@ jenkins:
   molecule_dir: pg_stat_monitor/pgsm
   artifacts: pg_stat_monitor/pgsm/artifacts/**/*.tar.gz
   jobs:
-    single:
-      job_name: ppg
-      file: pgsm
-      display_name: ${env.BUILD_NUMBER}-${env.VERSION}-${env.PLATFORM}
     parallel:
       job_name: pgsm-parallel
       file: pgsm-parallel
