@@ -49,20 +49,7 @@
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-<% if plpython_extra | default(true) %>
-  - name: install Percona Platform for PostgreSQL deb packages
-    apt:
-      name: "{{ packages }}"
-      update_cache: yes
-      state: latest
-    vars:
-      packages:
-      - percona-postgresql-plpython3-<< major >>
-      - percona-postgresql-plpython3-<< major >>-dbgsym
-    when:
-      - ansible_os_family == "Debian"
-
-<% endif %>  - name: install Percona Platform for PostgreSQL rpm packages for RHEL
+  - name: install Percona Platform for PostgreSQL rpm packages for RHEL
     yum:
       name: "{{ packages }}"
       state: latest

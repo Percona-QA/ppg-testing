@@ -137,20 +137,6 @@
   environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-{% if plpython3_extra | default(true) %}
-- name: install Percona Platform for PostgreSQL deb packages
-  apt:
-    name: "{{ v }} packages {{ w }}"
-    update_cache: yes
-    state: latest
-  vars:
-    packages:
-    - percona-postgresql-plpython3-{{ major }}
-    - percona-postgresql-plpython3-{{ major }}-dbgsym
-  when:
-    - ansible_os_family == "Debian"
-
-{% endif %}
 {% if tde | default(false) and major >= 18 %}
 - name: Install pg_tde packages RHEL
   yum:
