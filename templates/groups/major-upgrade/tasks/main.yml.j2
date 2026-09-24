@@ -1,24 +1,14 @@
 {% set v = '{{' %}{% set w = '}}' %}
 ---
-{% if psp_from | default(false) %}
-# Tasks for test major upgrade for PPG {{ major }} packages.
+# Major upgrade test: {{ prev }} -> {{ 'PSP' if flavor == 'psp' else 'PPG' }}-{{ major }}.
 #
-# FROM_VERSION also accepts psp-{{ prev }}.14 (scenario: PSP-{{ prev }} -> PPG-{{ major }}) — the FROM
-# side just gets pg_tde installed on top of the identical ppg-{{ prev }} package set
-# (psp-{{ prev }} ships the same postgresql{{ prev }} packages, from a different repo
-# channel); the pg_upgrade/port-swap/restart mechanics below are unchanged
-# either way since the TO side is always plain ppg-{{ major }}.
-{% elif flavor == 'psp' %}
-# Major upgrade test: PPG-{{ prev }} -> PSP-{{ major }}.
-#
-# Same PostgreSQL major-version bump ({{ prev }} -> {{ major }}) as pg-{{ major }}-major-upgrade, plus
-# the one PSP delta: install pg_tde and fold it into shared_preload_libraries
-# alongside pg_stat_monitor before the final restart. Package names are
-# unchanged from ppg-{{ major }} — psp-{{ major }} ships the same postgresql{{ major }} packages, just
-# from a different repo channel (to_repo_version below trims the minor for
-# that repo since psp-{{ major }} has no per-minor variant, unlike ppg-{{ major }}.14).
-{% else %}
-# Tasks for test major upgrade for PPG {{ major }} packages
+# FROM_VERSION and VERSION take either prefix, ppg-N.x or psp-N.x: psp ships
+# the same postgresqlN packages from a different repo channel plus pg_tde, so a
+# psp FROM side only gets pg_tde installed on top. psp has one repo per major
+# (psp-N, no psp-N.x minor repos), the *_repo_version facts trim the minor for psp.
+{% if flavor == 'psp' %}
+# The PSP TO side installs pg_tde and folds it into shared_preload_libraries
+# alongside pg_stat_monitor before the final restart.
 {% endif %}
 
 - name: Configure repository
@@ -33,37 +23,17 @@
 
 - name: Setting facts so that they will be persisted in the fact cache
   ansible.builtin.set_fact:
-{% if psp_from | default(false) %}
     pg_version_to_install: "{{ v }} lookup('env', 'FROM_VERSION') | regex_replace('^(?:ppg|psp)-', '') {{ w }}"
     upgrade_to_pg_version: "{{ v }} lookup('env', 'VERSION') | regex_replace('^(?:ppg|psp)-', '') {{ w }}"
-    # psp only ships one repo per major version (psp-{{ prev }}), no psp-{{ prev }}.xx minor
-    # repos exist, unlike ppg (ppg-{{ prev }}.14 etc.) — trim the minor for psp only.
     from_repo_version: "{{ v }} lookup('env', 'FROM_VERSION').split('.')[0] if lookup('env', 'FROM_VERSION').startswith('psp-') else lookup('env', 'FROM_VERSION') {{ w }}"
-{% elif flavor == 'psp' %}
-    pg_version_to_install: "{{ v }} lookup('env', 'FROM_VERSION') | regex_replace('^(?:ppg|psp)-', '') {{ w }}"
-    upgrade_to_pg_version: "{{ v }} lookup('env', 'VERSION') | regex_replace('^(?:ppg|psp)-', '') {{ w }}"
-    # psp only ships one repo per major version (psp-{{ major }}), no psp-{{ major }}.xx minor
-    # repos exist, unlike ppg (ppg-{{ major }}.14 etc.) — trim the minor for psp only.
     to_repo_version: "{{ v }} lookup('env', 'VERSION').split('.')[0] if lookup('env', 'VERSION').startswith('psp-') else lookup('env', 'VERSION') {{ w }}"
-{% else %}
-    pg_version_to_install: "{{ v }} lookup('env', 'FROM_VERSION') | replace('ppg-','') {{ w }}"
-    upgrade_to_pg_version: "{{ v }} lookup('env', 'VERSION') | replace('ppg-','') {{ w }}"
-{% endif %}
 
 {{ gates_text }}
 
-{% if psp_from | default(false) %}
 - name: Setup initial (old) repository
   command: percona-release enable {{ v }} from_repo_version {{ w }} {{ v }} repo {{ w }}
   vars:
     repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
-{% else %}
-- name: Setup initial (old) repository
-  command: percona-release enable {{ v }} pg_version {{ w }} {{ v }} repo {{ w }}
-  vars:
-    repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
-    pg_version: "{{ v }} lookup('env', 'FROM_VERSION') {{ w }}"
-{% endif %}
 
 - name: install Percona Platform for PostgreSQL {{ prev }} packages
   include_tasks: ../../../../tasks/install_ppg{{ prev }}.yml
@@ -91,7 +61,6 @@
 - name: Install PPG tools
   include_tasks: ../../../../tasks/install_ppg{{ prev }}_tools.yml
 
-{% if psp_from | default(false) %}
 - name: Install pg_tde packages RHEL (PSP-{{ prev }} FROM version only)
   yum:
     name: "{{ v }} packages {{ w }}"
@@ -121,7 +90,6 @@
     - ansible_os_family == "Debian"
     - lookup('env', 'FROM_VERSION').startswith('psp-')
 
-{% endif %}
 - name: Start Postgres RHEL
   include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
   vars:
@@ -139,31 +107,15 @@
 - name: Seed data-integrity baseline before upgrade
   include_tasks: ../../../../tasks/seed_data_integrity.yml
 
-{% if psp_from | default(false) %}
 - name: Disable old repository
   command: percona-release disable {{ v }} from_repo_version {{ w }} {{ v }} repo {{ w }}
   vars:
     repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
-{% else %}
-- name: Disable old repository
-  command: percona-release disable {{ v }} pg_version {{ w }} {{ v }} repo {{ w }}
-  vars:
-    repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
-    pg_version: "{{ v }} lookup('env', 'FROM_VERSION') {{ w }}"
-{% endif %}
 
-{% if flavor == 'psp' %}
 - name: Setup new repository
   command: percona-release enable-only {{ v }} to_repo_version {{ w }} {{ v }} repo {{ w }}
   vars:
     repo: "{{ v }} lookup('env', 'TO_REPO') {{ w }}"
-{% else %}
-- name: Setup new repository
-  command: percona-release enable-only {{ v }} pg_version {{ w }} {{ v }} repo {{ w }}
-  vars:
-    repo: "{{ v }} lookup('env', 'TO_REPO') {{ w }}"
-    pg_version: "{{ v }} lookup('env', 'VERSION') {{ w }}"
-{% endif %}
 
 - name: install Percona Platform for PostgreSQL deb packages
   apt:
