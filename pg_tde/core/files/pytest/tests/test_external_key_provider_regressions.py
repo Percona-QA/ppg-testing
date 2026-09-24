@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -70,7 +71,18 @@ def _add_global_vault(
 
 
 def _assert_postgres_alive(cluster: PgCluster) -> None:
-    assert cluster.is_ready(), "PostgreSQL backend died (KMIP/Vault regression)"
+    # is_ready() is a single one-shot pg_isready probe (5s subprocess
+    # timeout, no internal retry) — under parallel-suite load it can
+    # transiently fail even though the backend is perfectly fine, which
+    # would misreport a false "died" here. Retry briefly before concluding
+    # the backend is actually down.
+    if cluster.is_ready():
+        return
+    for _ in range(5):
+        time.sleep(1)
+        if cluster.is_ready():
+            return
+    assert False, "PostgreSQL backend died (KMIP/Vault regression)"
 
 
 def _assert_add_rejects_without_crash(

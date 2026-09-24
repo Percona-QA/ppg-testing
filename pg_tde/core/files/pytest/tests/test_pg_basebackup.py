@@ -509,13 +509,38 @@ def _assert_pitr_failed_or_stuck(cluster: PgCluster) -> None:
         "invalid permissions",
     )
     hit = any(m in log_l for m in markers)
-    if not cluster.is_ready():
+    ready = cluster.is_ready()
+    if not ready:
+        # A single pg_isready probe can transiently fail under load even
+        # though the server is genuinely up (it may have already passed the
+        # caller's own wait_ready() moments earlier) — retry briefly before
+        # concluding "did not start" and demanding a failure marker.
+        for _ in range(5):
+            time.sleep(1)
+            if cluster.is_ready():
+                ready = True
+                break
+    if not ready:
         assert hit, (
             "Negative PITR start failed without a recovery/WAL failure marker.\n"
             f"Log:\n{cluster.read_log(100)}"
         )
         return
-    in_recovery = cluster.fetchone("SELECT pg_is_in_recovery()")
+    try:
+        in_recovery = cluster.fetchone("SELECT pg_is_in_recovery()")
+    except RuntimeError:
+        # is_ready() and this query are separate connections — the server
+        # can crash/exit in between (an unreachable/missing target with
+        # target_action=promote is a hard startup failure once postgres
+        # runs out of WAL without finding it). That's still "did not reach
+        # target", so require the same log marker rather than letting the
+        # connection error itself fail the test.
+        assert hit, (
+            "Negative PITR: server exited between readiness probe and query, "
+            "without a recovery/WAL failure marker in the log.\n"
+            f"Log:\n{cluster.read_log(100)}"
+        )
+        return
     assert in_recovery == "t" or hit, (
         "Negative PITR must stay in recovery or log a recovery/WAL failure.\n"
         f"Log:\n{cluster.read_log(100)}"
@@ -1306,13 +1331,25 @@ class TestPitrWithPgBasebackupNegative:
         target_lsn = (
             tde_primary.fetchone("SELECT pg_current_wal_lsn()") or ""
         ).strip()
+        target_wal_file = (
+            tde_primary.fetchone(f"SELECT pg_walfile_name('{target_lsn}')") or ""
+        ).strip()
         _force_archive_segment(tde_primary, archive_dir)
         _force_archive_segment(tde_primary, archive_dir)
         tde_primary.stop()
 
         wal_files = _archive_wal_files(archive_dir)
         assert wal_files, "expected archived WAL"
-        wal_files[-1].unlink()
+        # Delete the segment that actually contains target_lsn, not just "the
+        # last archived one": target_lsn is captured before the two forced
+        # switches above, so it can land in an earlier segment than the last
+        # one archived (segment-boundary timing is platform/arch dependent).
+        # Deleting an irrelevant later segment lets recovery reach the target
+        # and promote cleanly — an intermittent false pass, not a real one.
+        victim = next(
+            (p for p in wal_files if p.name == target_wal_file), wal_files[-1]
+        )
+        victim.unlink()
 
         restore_dir = tmp_path / "bb_miss_restore"
         shutil.copytree(backup_dir, restore_dir)
@@ -1361,13 +1398,30 @@ class TestPitrWithPgBasebackupNegative:
         target_lsn = (
             tde_primary.fetchone("SELECT pg_current_wal_lsn()") or ""
         ).strip()
+        target_wal_file = (
+            tde_primary.fetchone(f"SELECT pg_walfile_name('{target_lsn}')") or ""
+        ).strip()
         _force_archive_segment(tde_primary, archive_dir)
         _force_archive_segment(tde_primary, archive_dir)
         tde_primary.stop()
 
         wal_files = _archive_wal_files(archive_dir)
         assert wal_files
-        victim = wal_files[-1]
+        # See test_negative_pitr_missing_wal: corrupt the segment that
+        # actually contains target_lsn, not just "the last archived one".
+        victim = next(
+            (p for p in wal_files if p.name == target_wal_file), wal_files[-1]
+        )
+        # The two _force_archive_segment() calls above can leave segments
+        # archived *after* the victim. recovery_target_lsn is satisfied by
+        # any later record whose LSN >= target, not specifically by the
+        # target's own record, so an intact later segment is an escape
+        # hatch: recovery can skip past the zeroed victim (which looks like
+        # "nothing recorded here yet", not corruption, to the WAL reader)
+        # and reach the target anyway. Remove anything archived after it.
+        for f in wal_files:
+            if f.name > victim.name:
+                f.unlink()
         size = victim.stat().st_size
         victim.write_bytes(b"\x00" * size)
 
