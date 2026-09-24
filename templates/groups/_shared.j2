@@ -5,7 +5,7 @@
     pg_version_to_install: "{{ '{{' }} lookup('env', 'VERSION') | replace('{{ flavor }}-','') {{ '}}' }}"
 {%- endmacro %}
 {% macro io_method_fact() %}
-    io_method: "{{ '{{' }} lookup('env', 'IO_METHOD') | default('worker') {{ '}}' }}"
+    io_method: "{{ '{{' }} lookup('env', 'IO_METHOD') | default('worker', true) {{ '}}' }}"
 
 - name: Fall back to worker io_method on RHEL 8, Rocky 8 and OracleLinux 8, as uring not supported
   ansible.builtin.set_fact:
