@@ -243,22 +243,6 @@
     update_cache: yes
   when: ansible_os_family == "RedHat"
 
-{% else %}
-# - name: Determine required PostgreSQL dev package for RHEL
-#   set_fact:
-#     pg_dev_package: >-
-#       {{ v }} 'percona-postgresql-server-dev-all'
-#          if (upgrade_to_pg_version | string is version('{{ dev_switch_cutoff }}', '<=', strict=True))
-#          else 'percona-postgresql-common-dev' {{ w }}
-#   when: ansible_os_family == "RedHat"
-
-# - name: Install PostgreSQL dev package on RHEL
-#   yum:
-#     name: "{{ v }} pg_dev_package {{ w }}"
-#     state: latest
-#     update_cache: yes
-#   when: ansible_os_family == "RedHat"
-
 {% endif %}
 {% if tde | default(false) and major < 18 %}
 - name: Install pg_tde packages RHEL
@@ -285,28 +269,6 @@
     - percona-pg-tde{{ major }}-client
     - percona-pg-tde{{ major }}-dbgsym
   when: ansible_os_family == "Debian"
-
-{% endif %}
-{% if dev_singles_commented | default(false) %}
-# - name: Install postgresql-server-dev-all RHEL
-#   yum:
-#     name: "{{ v }} packages {{ w }}"
-#     state: latest
-#     update_cache: yes
-#   vars:
-#     packages:
-#     - percona-postgresql-server-dev-all
-#   when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('{{ major }}.4', '<=', strict=True))
-
-# - name: Install postgresql-common-dev RHEL
-#   yum:
-#     name: "{{ v }} packages {{ w }}"
-#     state: latest
-#     update_cache: yes
-#   vars:
-#     packages:
-#     - percona-postgresql-common-dev
-#   when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('{{ major }}.5', '>=', strict=True))
 
 {% endif %}
 {% if stop_pause | default(true) %}

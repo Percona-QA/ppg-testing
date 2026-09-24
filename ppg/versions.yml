@@ -448,7 +448,6 @@ instances:
       tde: true
       remove_conflicting_dev: '17.5'
       dev_switch_cutoff: '17.4'
-      dev_singles_commented: true
     major-upgrade:
       gates:
       - name: End play on Ubuntu 26 and versions older than 16.14
@@ -532,7 +531,6 @@ instances:
       remove_conflicting_dev: '18.5'
       dev_switch_active: false
       dev_switch_cutoff: '18.1'
-      dev_singles_commented: true
       telemetry_upgrade_verify: false
     major-upgrade:
       gates:
