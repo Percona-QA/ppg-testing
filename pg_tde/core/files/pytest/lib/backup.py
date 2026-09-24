@@ -439,16 +439,10 @@ class BackupManager:
             self._run(*args)
         except RuntimeError as exc:
             # Transient pgBackRest race (archive-async): restore's spool-path
-            # cleanup and a not-yet-exited async archive-get "local" worker
-            # from a just-stopped recovery both touch the same queued spool
-            # entries. Depending on timing this shows up as either:
-            #   - unlink loses: "unable to remove file ...pgbackrest.tmp"
-            #     (ENOENT — the worker already removed it)
-            #   - rmdir loses:  "unable to remove path .../archive/<stanza>/in"
-            #     (ENOTEMPTY — the worker wrote a new file just after the
-            #     directory was listed as empty)
-            # Neither means anything is actually wrong — retry once the
-            # orphaned worker has had a moment to finish exiting.
+            # cleanup and a not-yet-exited async archive-get worker from a
+            # just-stopped recovery both touch the same queued spool entries
+            # (ENOENT on unlink or ENOTEMPTY on rmdir, depending on timing).
+            # Retry once the orphaned worker has had a moment to exit.
             msg = str(exc)
             transient = (
                 "unable to remove file" in msg and "pgbackrest.tmp" in msg

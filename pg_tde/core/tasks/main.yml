@@ -26,29 +26,15 @@
       # key-provider services this role doesn't set up, and slow tests don't
       # belong in the core regression pass. Override via PYTEST_SKIP_SECTIONS.
       pytest_skip_sections: "{{ lookup('env', 'PYTEST_SKIP_SECTIONS') | default('upgrade,minor_upgrade,slow,vault,kmip,openbao', true) }}"
-      # 'Sanity' (default — preserves prior behavior for callers not yet
-      # passing TEST_SUITE): pytest_skip_sections applies, external key
-      # providers are not set up — same as every run to date. 'All': every
-      # test case runs, including slow/vault/kmip/openbao — pytest_skip_sections
-      # is ignored and setup_test_env.sh installs Cosmian KMS + OpenBao so
-      # those sections actually exercise something instead of self-skipping.
-      # Note even in 'All', upgrade/minor_upgrade tests still self-skip: they
-      # need --old-install-dir, which this role (unlike the dedicated upgrade
-      # role) doesn't provision.
+      # 'Sanity' (default): pytest_skip_sections applies, external key
+      # providers are not set up. 'All': every test case runs (Cosmian KMS +
+      # OpenBao get installed so kmip/vault/openbao exercise something
+      # instead of self-skipping). upgrade/minor_upgrade self-skip either
+      # way — they need --old-install-dir, which this role doesn't provision.
       test_suite: "{{ lookup('env', 'TEST_SUITE') | default('Sanity', true) }}"
-      # Opt-in pytest-xdist parallelism (pytest -n <N>). Empty/unset = serial
-      # (unchanged default behavior). The suite's own run_tests.sh already
-      # exposes --workers N -> -n N, so this isn't new territory for the
-      # suite itself — but conftest.py's allocate_port() uses a module-level
-      # counter + lock that's process-local, giving no cross-process
-      # coordination between xdist workers (each worker is a separate
-      # process). The bind-check before returning a port gives reasonable,
-      # not airtight, collision protection under concurrent workers.
-      # Validated clean on multiple live "All" + 4-worker runs, so this is
-      # now the default. default(_, true) also treats an unset/empty env
-      # var the same way (lookup('env', ...) returns '' when unset, which
-      # a bare default() would NOT replace). Pass PYTEST_WORKERS=0 to
-      # disable xdist distribution and run serially.
+      # pytest-xdist parallelism (-n <N>); PYTEST_WORKERS=0 runs serially.
+      # default(_, true) also treats an empty env var as unset (a bare
+      # default() would not).
       pytest_workers: "{{ lookup('env', 'PYTEST_WORKERS') | default('4', true) }}"
       # ... include other env lookups here ...
       go_version: "1.25.6"
@@ -73,12 +59,9 @@
       - min_ver != '0.0'
       - full_version | string is version(min_ver, '<', strict=True)
 
-  # Kept outside the block below (which owns artifact collection via its
-  # always:) since this is a deliberate "this platform combo isn't tested"
-  # short-circuit, not a failure — no artifact is expected for it, and
-  # meta: end_play's interaction with an enclosing block's rescue/always is
-  # inconsistent across Ansible versions, so it's safest run before entering
-  # that block at all. Only depends on facts already set above.
+  # Kept outside the block below: this is a deliberate "platform not
+  # tested" skip, not a failure, and meta: end_play's interaction with an
+  # enclosing block's rescue/always is inconsistent across Ansible versions.
   - name: End play on RHEL 8 and Rocky 8 for pg-18>= and io_uring, as uring not supported
     meta: end_play
     when:
@@ -90,14 +73,11 @@
         (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'RedHat' and ansible_facts['distribution_major_version'] | int == 8)
 
   # ====================================================================
-  # Everything below — setup, build/install, and the pytest run itself —
-  # is wrapped in one block so a failure ANYWHERE (not just a pytest test
-  # failure) still collects and uploads a debug artifact to Jenkins via
-  # always:. Before this wrapper existed, a hard failure in an early setup
-  # step (Docker/Cosmian bring-up, package install, build_from_source,
-  # setup_test_env.sh, ...) aborted the play for that host immediately —
-  # skipping the packaging/fetch tasks entirely, so Jenkins showed nothing
-  # for that platform even though it had genuinely failed.
+  # Setup, build/install, and the pytest run are wrapped in one block so
+  # a failure anywhere still collects and uploads a debug artifact via
+  # always: — without this, a hard failure in an early setup step (e.g.
+  # Docker/Cosmian bring-up, package install) aborted the play immediately,
+  # skipping packaging/fetch entirely and leaving Jenkins with nothing.
   # ====================================================================
   - name: Run pg_tde core setup, build, and pytest suite
     block:
@@ -193,14 +173,10 @@
         delay: 5
         until: docker_info.rc == 0
 
-      # cosmian_kms is a Rust binary linked against glibc 2.33/2.34. RHEL8-family
-      # (rhel8/rocky8/ol8) ships glibc 2.28, so the native binary exits
-      # immediately with "GLIBC_2.3x not found" and crashes pytest_configure
-      # (ensure_external_key_providers runs at collection time, before any test).
-      # Only matters when TEST_SUITE=All actually starts kmip/vault/openbao —
-      # otherwise external key providers are skipped entirely and this is a
-      # no-op. Default cosmian_kmip_env to {} so the pytest run task's
-      # environment stays unchanged when the Docker route isn't used.
+      # cosmian_kms needs glibc 2.33/2.34; RHEL8-family ships 2.28, so the native
+      # binary crashes pytest_configure before any test runs. Only relevant when
+      # TEST_SUITE=All starts kmip/vault/openbao. cosmian_kmip_env defaults to
+      # {} so the pytest run task's environment is unchanged otherwise.
       - name: Default Cosmian KMIP env (no-op unless Docker route runs)
         set_fact:
           cosmian_kmip_env: {}
@@ -300,14 +276,9 @@
             - tar
           state: present
 
-      # Needed for the pgbackrest-marked pytest tests (TestPgBackRest is always
-      # included in Sanity; the full pgbackrest matrix runs under TEST_SUITE=All).
-      # When install_from_packages is set, a Percona repo is already enabled by
-      # this point (see "Configure repository (percona-release)" above), so use
-      # the Percona-branded package. In build-from-source mode no Percona repo is
-      # enabled, so fall back to the plain OS-packaged binary: Debian/Ubuntu ship
-      # pgbackrest directly, RHEL family gets it via EPEL (already enabled by
-      # redhat_tasks.yml above).
+      # TestPgBackRest runs even under Sanity. Use the Percona package when a
+      # Percona repo is already enabled (install_from_packages); otherwise the
+      # plain OS package (Debian/Ubuntu ship it directly, RHEL via EPEL).
       - name: Install pgbackrest
         become: true
         package:
@@ -446,16 +417,9 @@
         # TEST_SUITE=All runs every test case (no --skip-sections at all — slow/
         # vault/kmip/openbao all run for real). Sanity keeps the proven default:
         # pytest_skip_sections applies (upgrade,minor_upgrade,slow,vault,kmip,openbao).
-        # NOTE: do not add --tb=line/--tb=short here to shrink console output.
-        # --tb is a single global setting — it collapses the failure repr
-        # everywhere pytest writes it, including the JUnit XML <failure> text and
-        # the HTML report, not just stdout. Verified: a 3-frame failure
-        # (test -> helper_1 -> helper_2) under --tb=line shows only the raised
-        # exception's one line in the JUnit XML too — the entire call chain and
-        # per-frame line numbers are gone, not just hidden from the console.
-        # Keep pyproject.toml's default --tb=long so the saved artifacts (used
-        # for actual debugging) stay complete; console-output size is a separate
-        # concern from artifact completeness.
+        # Don't add --tb=line/short to shrink console output: --tb is global and
+        # also collapses the JUnit XML/HTML failure text, not just stdout. Keep
+        # pyproject.toml's --tb=long so the saved artifacts stay complete.
         shell: >-
           set -o pipefail;
           source .env.sh &&
@@ -469,19 +433,14 @@
           executable: /bin/bash
           chdir: "/tmp/pg_tde_pytest_src"
         # cosmian_kmip_env is {} unless the RHEL8-family Docker-Cosmian route ran
-        # above; when it did, this merges in KMIP_SERVER_ADDRESS/PORT and the
-        # client/CA cert paths so pytest finds the already-running container via
-        # kmip_pytest_env_ready() instead of trying (and failing) to spawn the
-        # native cosmian_kms binary.
-        # IO_METHOD: conftest.py's --io-method CLI option defaults from this env
-        # var (os.environ.get("IO_METHOD", "worker")) — without it here, the
-        # Jenkins IO_METHOD parameter (fact set at the top of this file) never
-        # actually reaches pytest, and every run silently uses "worker". The
-        # io_method GUC only exists on PG 18+ (see PG_IO_METHOD_MIN_MAJOR in
-        # lib/cluster.py); conftest.py hard pytest.exit()s if a non-"worker"
-        # value is requested against an older major, so force "worker" here on
-        # <18 rather than letting a leftover/mismatched Jenkins selection fail
-        # the whole run outright.
+        # above; when it did, this merges in the KMIP_* env vars so pytest finds
+        # the already-running container via kmip_pytest_env_ready() instead of
+        # spawning the native cosmian_kms binary.
+        # IO_METHOD must be passed explicitly or the Jenkins parameter never
+        # reaches pytest (conftest.py defaults IO_METHOD to "worker"). The
+        # io_method GUC only exists on PG 18+ (PG_IO_METHOD_MIN_MAJOR in
+        # lib/cluster.py), so force "worker" below that instead of letting a
+        # mismatched selection hard-fail the run.
         environment: "{{ {
             'PATH': pg_bin_dir ~ ':' ~ pg_lib_dir ~ ':/usr/local/go/bin:' ~ (ansible_env.PATH | default('/usr/local/bin:/usr/bin:/bin')),
             'LD_LIBRARY_PATH': pg_lib_dir,
@@ -523,14 +482,10 @@
         ansible.builtin.debug:
           var: disk_report.stdout_lines
 
-      # Console display is decoupled from artifact content (the JUnit XML/HTML/
-      # .log file always have the complete run regardless of what's echoed
-      # here — see git history for why --tb isn't touched to "shrink" that data).
-      # On a pass, the full -v listing (hundreds of PASSED lines for the All
-      # suite) is just noise — show the one-line pytest summary instead. On a
-      # failure, dump everything: the individual PASSED/FAILED lines plus full
-      # tracebacks (pyproject.toml's addopts: -v --tb=long) are exactly what's
-      # needed to diagnose without leaving Jenkins for the artifact.
+      # Console display only — the JUnit XML/HTML/.log artifacts always have
+      # the complete run regardless. On a pass, the full -v listing is just
+      # noise; on a failure, show everything (PASSED/FAILED + tracebacks) so
+      # Jenkins console alone is enough to diagnose.
       - name: Show pytest summary (pass — one line, not the full listing)
         debug:
           msg: "{{ regression.stdout_lines[-1] if (regression.stdout_lines | default([]) | length > 0) else 'no pytest output captured' }}"
@@ -554,13 +509,9 @@
         when: regression is defined
 
     rescue:
-      # Reached only on a hard failure in the block above that ISN'T already
-      # tolerated by ignore_errors (i.e. something before or outside the
-      # pytest run itself — Docker/Cosmian setup, package install,
-      # build_from_source, setup_test_env.sh, ...). pytest_failed won't be
-      # set yet in that case (the "Determine pytest failure status" task
-      # never ran), so default it to true before always: packages the
-      # artifact as a failure bundle.
+      # Reached only on a hard failure not already tolerated by
+      # ignore_errors (i.e. before/outside the pytest run itself).
+      # pytest_failed isn't set yet in that case, so default it here.
       - name: Mark this run failed (setup/build failure before or during the pytest run)
         set_fact:
           pytest_failed: true
@@ -573,9 +524,7 @@
             {{ ansible_failed_result.msg | default(ansible_failed_result.stderr | default('see console output above')) }}
 
     always:
-      # Belt-and-braces: guarantee pytest_failed exists even if rescue itself
-      # never ran (e.g. a failure so early "Set Base Facts" is fine but this
-      # whole block's very first task fails before pytest_failed is set).
+      # Guarantee pytest_failed exists even if rescue itself never ran.
       - name: Ensure pytest_failed is always defined before artifact packaging
         set_fact:
           pytest_failed: "{{ pytest_failed | default(true) }}"

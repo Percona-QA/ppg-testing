@@ -124,9 +124,7 @@
       update_cache: yes
     vars:
       postgres_version: "{{ major_version }}"
-      # OBS (isv:percona:ppg) doesn't publish -debugsource/-debuginfo RPMs
-      # for pg_tde yet (checked the live RockyLinux_10 repo index) — only
-      # request them from percona-release, which does.
+      # OBS doesn't publish -debugsource/-debuginfo RPMs for pg_tde yet.
       packages: >-
         {{
           ['percona-pg_tde' ~ postgres_version, 'percona-pg_tde' ~ postgres_version ~ '-devel']

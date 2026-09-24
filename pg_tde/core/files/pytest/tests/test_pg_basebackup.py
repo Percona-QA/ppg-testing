@@ -512,9 +512,7 @@ def _assert_pitr_failed_or_stuck(cluster: PgCluster) -> None:
     ready = cluster.is_ready()
     if not ready:
         # A single pg_isready probe can transiently fail under load even
-        # though the server is genuinely up (it may have already passed the
-        # caller's own wait_ready() moments earlier) — retry briefly before
-        # concluding "did not start" and demanding a failure marker.
+        # though the server is up — retry before demanding a failure marker.
         for _ in range(5):
             time.sleep(1)
             if cluster.is_ready():
@@ -529,12 +527,10 @@ def _assert_pitr_failed_or_stuck(cluster: PgCluster) -> None:
     try:
         in_recovery = cluster.fetchone("SELECT pg_is_in_recovery()")
     except RuntimeError:
-        # is_ready() and this query are separate connections — the server
-        # can crash/exit in between (an unreachable/missing target with
-        # target_action=promote is a hard startup failure once postgres
-        # runs out of WAL without finding it). That's still "did not reach
-        # target", so require the same log marker rather than letting the
-        # connection error itself fail the test.
+        # is_ready() and this query are separate connections — the server can
+        # crash/exit in between (an unreachable/missing target with
+        # target_action=promote is a hard startup failure). Still "did not
+        # reach target", so require the same marker instead of failing here.
         assert hit, (
             "Negative PITR: server exited between readiness probe and query, "
             "without a recovery/WAL failure marker in the log.\n"
@@ -1341,11 +1337,8 @@ class TestPitrWithPgBasebackupNegative:
         wal_files = _archive_wal_files(archive_dir)
         assert wal_files, "expected archived WAL"
         # Delete the segment that actually contains target_lsn, not just "the
-        # last archived one": target_lsn is captured before the two forced
-        # switches above, so it can land in an earlier segment than the last
-        # one archived (segment-boundary timing is platform/arch dependent).
-        # Deleting an irrelevant later segment lets recovery reach the target
-        # and promote cleanly — an intermittent false pass, not a real one.
+        # last archived one" — target_lsn is captured before the two forced
+        # switches above, so it can land in an earlier segment than the last.
         victim = next(
             (p for p in wal_files if p.name == target_wal_file), wal_files[-1]
         )
@@ -1412,13 +1405,9 @@ class TestPitrWithPgBasebackupNegative:
         victim = next(
             (p for p in wal_files if p.name == target_wal_file), wal_files[-1]
         )
-        # The two _force_archive_segment() calls above can leave segments
-        # archived *after* the victim. recovery_target_lsn is satisfied by
-        # any later record whose LSN >= target, not specifically by the
-        # target's own record, so an intact later segment is an escape
-        # hatch: recovery can skip past the zeroed victim (which looks like
-        # "nothing recorded here yet", not corruption, to the WAL reader)
-        # and reach the target anyway. Remove anything archived after it.
+        # The two _force_archive_segment() calls can leave segments archived
+        # after the victim — an escape hatch, since recovery_target_lsn is
+        # satisfied by any later record >= target. Remove them too.
         for f in wal_files:
             if f.name > victim.name:
                 f.unlink()

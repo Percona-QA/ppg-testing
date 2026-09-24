@@ -1,21 +1,15 @@
 ---
-# Configure the isv:percona:ppg OBS (Open Build Service) repository as an
-# alternate package source to the percona-release repos enabled by
-# ../../../../tasks/enable_repo.yml. Package *names* are identical between
-# the two sources (verified against the live Debian_12 and RockyLinux_10
-# repo indexes for PG 19) — install_from_packages_deb.yml/_rhel.yml are
-# reused unchanged; only the repo/key setup here differs.
+# Alternate package source to percona-release (../../../../tasks/enable_repo.yml):
+# same package names, only the repo/key setup differs, so
+# install_from_packages_deb.yml/_rhel.yml are reused unchanged.
 #
-# Platform coverage and exact URLs come from https://ppg-obs.cancellar.info
-# ("REPOSITORY SETUP" panel per platform) — obs_project/obs_os_path below
-# reproduce that same URL shape: isv:percona:ppg:<channel>:<major>, e.g.
-# isv:percona:ppg:staging:18. Re-verify against the live dashboard before
-# changing obs_channel_map — this project layout has shifted before (the
-# "staging" segment didn't exist in an earlier iteration of this same repo).
+# obs_project/obs_os_path build the isv:percona:ppg:<channel>:<major> URL
+# published at https://ppg-obs.cancellar.info ("REPOSITORY SETUP" panel per
+# platform) — check there before editing obs_channel_map, the project
+# layout has changed before.
 #
-# obs_channel (devel/staging/release) matches the Jenkins job's OBS_CHANNEL
-# choices, which are the semantic equivalents of percona-release's REPO
-# tiers: devel ≈ experimental, staging ≈ testing, release ≈ release.
+# obs_channel (devel/staging/release) maps to percona-release's REPO tiers:
+# devel = experimental, staging = testing, release = release.
 
   - name: Compute OBS project + platform path facts
     set_fact:
@@ -47,10 +41,9 @@
         - not obs_os_path.startswith('UNSUPPORTED_OBS_PLATFORM')
       fail_msg: >-
         No OBS repository mapping for {{ ansible_distribution }}
-        {{ ansible_distribution_version }}. OBS (isv:percona:ppg) currently
-        publishes for RockyLinux/UBI/Ubuntu/Debian only — check the current
-        platform matrix at https://ppg-obs.cancellar.info before adding one
-        here.
+        {{ ansible_distribution_version }}. OBS publishes for
+        RockyLinux/UBI/Ubuntu/Debian only — see https://ppg-obs.cancellar.info
+        for the current platform matrix.
 
   - name: Set OBS repo URL facts
     set_fact:

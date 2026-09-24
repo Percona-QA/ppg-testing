@@ -123,12 +123,10 @@ def _run_rewind_pgdata_ex(
         and "changed concurrently" in result.stderr
         and "server.log" in result.stderr
     ):
-        # server.log lives inside PGDATA in this suite. pg_ctl stop -w only
-        # waits for the postmaster's own pidfile to disappear — the logging
-        # collector child can still be flushing/closing that file a moment
-        # later, and pg_tde_rewind's file-copy step (a real safety check,
-        # not a bug) aborts if a source file's size changes mid-copy. Retry
-        # once the collector's had a moment to finish exiting.
+        # server.log lives inside PGDATA; pg_ctl stop -w returns once the
+        # pidfile is gone, but the logging collector can still be
+        # flushing/closing that file a moment later, tripping rewind's
+        # changed-mid-copy safety check. Retry once it's had time to exit.
         time.sleep(1)
         result = subprocess.run(cmd, capture_output=True, text=True, env=env)
     return result

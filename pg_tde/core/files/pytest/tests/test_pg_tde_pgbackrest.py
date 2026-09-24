@@ -233,26 +233,7 @@ def _start_restored_cluster(
         return cluster
 
     if promote == "auto":
-        # Only request promotion if recovery is still in progress; calling
-        # pg_promote() on an already-promoted cluster raises an error. But
-        # recovery can also finish on its own (no standby.signal, so postgres
-        # auto-promotes once it runs out of WAL to replay) in the window
-        # between this check and the call below — treat that race as
-        # success too, since the desired end state is already reached.
-        if cluster.fetchone("SELECT pg_is_in_recovery()") == "t":
-            result = cluster.execute_allow_error(
-                "SELECT pg_promote(wait := true, wait_seconds := 60)"
-            )
-            if (
-                result.returncode != 0
-                and "recovery is not in progress" not in result.stderr
-            ):
-                raise RuntimeError(
-                    f"psql failed (port={cluster.port}, db=postgres)\n"
-                    "SQL : SELECT pg_promote(wait := true, wait_seconds := 60)\n"
-                    f"OUT : {result.stdout.strip()}\n"
-                    f"ERR : {result.stderr.strip()}"
-                )
+        _promote_if_in_recovery(cluster, wait_seconds=60)
     elif promote != "wait":
         raise ValueError(f"unknown promote mode: {promote!r}")
 
@@ -1560,13 +1541,10 @@ def _run_tde_rewind_cmd(
     """
     Run a pg_tde_rewind command, retrying once on a known transient race.
 
-    Both nodes are typically stop()-ed (or the source is left running as a
-    live server) immediately before the caller invokes this — pg_ctl stop -w
-    only waits for the postmaster's own pidfile to disappear, so the logging
-    collector child can still be flushing/closing server.log a moment
-    later. server.log lives inside PGDATA in this suite, and pg_tde_rewind's
-    file-copy step aborts (a real safety check, not a bug) if a source
-    file's size changes mid-copy. See test_tde_rewind_advanced.py's
+    server.log lives inside PGDATA; pg_ctl stop -w returns once the
+    postmaster's pidfile is gone, but the logging collector can still be
+    flushing/closing that file a moment later, tripping rewind's
+    changed-mid-copy safety check. See test_tde_rewind_advanced.py's
     _run_rewind_pgdata_ex for the original fix.
     """
     result = subprocess.run(cmd, capture_output=True, text=True, env=env)
@@ -2450,9 +2428,7 @@ def _assert_pitr_did_not_reach_target(cluster: PgCluster) -> None:
     ready = cluster.is_ready()
     if not ready:
         # A single pg_isready probe can transiently fail under load even
-        # though the server is genuinely up (it may have already passed the
-        # caller's own wait_ready() moments earlier) — retry briefly before
-        # concluding "did not start" and demanding a failure marker.
+        # though the server is up — retry before demanding a failure marker.
         for _ in range(5):
             time.sleep(1)
             if cluster.is_ready():
@@ -2467,12 +2443,10 @@ def _assert_pitr_did_not_reach_target(cluster: PgCluster) -> None:
     try:
         in_recovery = cluster.fetchone("SELECT pg_is_in_recovery()")
     except RuntimeError:
-        # is_ready() and this query are separate connections — the server
-        # can crash/exit in between (an unreachable target with
-        # target_action=promote is a hard startup failure once postgres
-        # runs out of WAL without finding it). That's still "did not reach
-        # target", so require the same log marker rather than letting the
-        # connection error itself fail the test.
+        # is_ready() and this query are separate connections — the server can
+        # crash/exit in between (an unreachable target with
+        # target_action=promote is a hard startup failure). Still "did not
+        # reach target", so require the same marker instead of failing here.
         assert hit, (
             "Negative PITR: server exited between readiness probe and query, "
             "without a recovery/WAL failure marker in the log.\n"
@@ -2515,24 +2489,15 @@ class TestPgBackRestPitrNegative:
         wal_files = _repo_wal_files(tmp_path / "repo", "pitr_neg_corrupt")
         assert wal_files, "expected archived WAL to corrupt"
         # Corrupt the segment that actually contains target_lsn, not just
-        # "the newest archived one": extra archiving activity (checkpoints,
-        # background autovacuum) can land a later segment as "newest" while
-        # target_lsn's own segment sits earlier — corrupting an irrelevant
-        # later segment lets recovery reach the target and exit recovery
-        # cleanly, an intermittent false pass on this negative-PITR test.
+        # "the newest archived one" (extra archiving activity can land a
+        # later segment as newest while target_lsn's segment sits earlier).
         victim = next(
             (p for p in wal_files if p.name == target_wal_file), wal_files[-1]
         )
-        # wait_for_wal_archive() above always forces its own extra
-        # CHECKPOINT + pg_switch_wal() to detect archiver progress, so by
-        # this point the repo can already hold one (or more) segments
-        # archived *after* the victim. Since recovery_target_lsn is
-        # satisfied by any later record whose LSN >= target — not
-        # specifically by the target's own record — those later segments
-        # are an escape hatch: recovery can skip straight past the
-        # corrupted victim and reach the target anyway via them. Remove
-        # anything archived after the victim so the corruption can't be
-        # bypassed.
+        # wait_for_wal_archive() above forces its own extra checkpoint+switch,
+        # so segments after the victim may already exist. recovery_target_lsn
+        # is satisfied by any later record >= target, so an intact later
+        # segment is an escape hatch around the corruption — remove them too.
         for f in wal_files:
             if f.name > victim.name:
                 f.unlink()
@@ -2568,10 +2533,8 @@ class TestPgBackRestPitrNegative:
                 try:
                     assert restored.fetchone("SELECT pg_is_in_recovery()") == "t"
                 except RuntimeError:
-                    # Server crashed between _assert_pitr_did_not_reach_target's
-                    # own readiness check and this query — an even stronger
-                    # "did not cleanly reach target" outcome than staying
-                    # paused in recovery, so it's still a pass here.
+                    # Crashed between the readiness check above and this
+                    # query — a stronger "didn't reach target" than pausing.
                     pass
         finally:
             restored.stop(check=False)
@@ -3187,13 +3150,8 @@ class TestEncryptedInRepoBackupRestorePitr:
         victim = next(
             (p for p in wal_files if p.name == target_wal_file), wal_files[-1]
         )
-        # See test_negative_pitr_corrupt_archived_wal: wait_for_wal_archive()
-        # above always forces its own extra CHECKPOINT + pg_switch_wal(), so
-        # the repo can hold a segment archived *after* the victim. An intact
-        # later segment is an escape hatch — recovery_target_lsn is
-        # satisfied by any later record whose LSN >= target, so recovery can
-        # skip past the corrupted victim via it. Remove anything archived
-        # after the victim.
+        # See test_negative_pitr_corrupt_archived_wal for why: remove
+        # segments archived after the victim too (escape hatch).
         for f in wal_files:
             if f.name > victim.name:
                 f.unlink()
@@ -4031,21 +3989,7 @@ def _chk_start_restored(
     cluster.add_hba_entry("local all all trust")
     cluster.start()
     cluster.wait_ready(timeout=timeout)
-    if cluster.fetchone("SELECT pg_is_in_recovery()") == "t":
-        # Recovery can finish on its own between the check above and this
-        # call (no standby.signal, so PostgreSQL auto-promotes once it runs
-        # out of WAL to replay). Treat that race as success rather than a
-        # failure: the desired end state (out of recovery) is already met.
-        result = cluster.execute_allow_error(
-            "SELECT pg_promote(wait := true, wait_seconds := 60)"
-        )
-        if result.returncode != 0 and "recovery is not in progress" not in result.stderr:
-            raise RuntimeError(
-                f"psql failed (port={cluster.port}, db=postgres)\n"
-                "SQL : SELECT pg_promote(wait := true, wait_seconds := 60)\n"
-                f"OUT : {result.stdout.strip()}\n"
-                f"ERR : {result.stderr.strip()}"
-            )
+    _promote_if_in_recovery(cluster, wait_seconds=60)
     deadline = time.time() + 60
     while time.time() < deadline:
         if cluster.fetchone("SELECT pg_is_in_recovery()") == "f":
@@ -4916,21 +4860,7 @@ def _hae_start_restored_primary(
     (restore_dir / "postmaster.pid").unlink(missing_ok=True)
     cluster.start()
     cluster.wait_ready(timeout=180)
-    if cluster.fetchone("SELECT pg_is_in_recovery()") == "t":
-        # Recovery can finish on its own between the check above and this
-        # call (no standby.signal, so postgres auto-promotes once it runs
-        # out of WAL to replay). Treat that race as success too, since the
-        # desired end state (out of recovery) is already reached.
-        result = cluster.execute_allow_error(
-            "SELECT pg_promote(wait := true, wait_seconds := 90)"
-        )
-        if result.returncode != 0 and "recovery is not in progress" not in result.stderr:
-            raise RuntimeError(
-                f"psql failed (port={cluster.port}, db=postgres)\n"
-                "SQL : SELECT pg_promote(wait := true, wait_seconds := 90)\n"
-                f"OUT : {result.stdout.strip()}\n"
-                f"ERR : {result.stderr.strip()}"
-            )
+    _promote_if_in_recovery(cluster, wait_seconds=90)
     deadline = time.time() + 90
     while time.time() < deadline:
         if cluster.fetchone("SELECT pg_is_in_recovery()") == "f":
@@ -5352,16 +5282,10 @@ class TestPgBackRestPatroniEncryptedBackupRestore:
                 log_l = standby.read_log(80).lower()
                 for marker in _hae_REPLICA_FAIL_MARKERS:
                     if marker == "has already been removed":
-                        # A fresh basebackup-driven standby's walreceiver can
-                        # transiently lose a race against the primary
-                        # recycling the backup's start WAL segment right as
-                        # streaming begins — it auto-reconnects and resumes
-                        # from a later segment. assert_catchup + the row
-                        # check above already proved this replica is fully
-                        # healthy, so a transient instance of this message
-                        # earlier in the log isn't a real failure here
-                        # (unlike the other markers, which indicate the
-                        # replica never recovered at all).
+                        # Walreceiver can transiently lose a race against the
+                        # primary recycling the backup's start segment, then
+                        # auto-reconnect — assert_catchup + the row check
+                        # above already proved the replica is healthy.
                         continue
                     assert marker not in log_l, (
                         f"reinitialized replica must not log {marker!r}:\n"

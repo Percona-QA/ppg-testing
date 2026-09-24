@@ -1,13 +1,9 @@
 # Package + upload pg_tde pytest artifacts to the Jenkins controller.
-#
-# Called from the "always:" section of main.yml's wrapping block, so it
-# runs regardless of WHERE in the run a failure happened — a setup/build
-# failure before the pytest run ever started still produces a debuggable
-# artifact instead of Jenkins showing nothing for that platform.
+# Called from main.yml's "always:", so it runs regardless of where in the
+# run a failure happened.
 #
 # Requires: artifact_filename and pytest_failed facts already set (main.yml
-# sets artifact_filename in "Set Base Facts", and guarantees pytest_failed
-# is defined — true on any pre-pytest failure — before including this file).
+# sets both before including this file).
 
 - name: Package pg_tde pytest test artifacts
   shell: |
@@ -36,10 +32,8 @@
       cp /tmp/tde-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/tde-install.log  "$ARTIFACT_DIR/" 2>/dev/null || true
     else
-      # Failure — collect the full debug bundle. This also covers a failure
-      # before the pytest run ever started (e.g. Docker/Cosmian setup,
-      # package install, build_from_source): whichever of these logs made
-      # it to disk before the failure gets picked up here.
+      # Failure (including a pre-pytest failure) — collect the full debug
+      # bundle; whichever of these logs made it to disk gets picked up.
       mkdir -p "$ARTIFACT_DIR/logs"
 
       cp /tmp/psp-build.log    "$ARTIFACT_DIR/" 2>/dev/null || true

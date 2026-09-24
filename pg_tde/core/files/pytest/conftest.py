@@ -35,15 +35,11 @@ from lib.cluster import (
 from lib.os_env import resolve_install_dir_default, env_pg_major, SUPPORTED_PG_MAJORS
 
 # ── port allocator ──────────────────────────────────────────────────────────
-# Under pytest-xdist (-n N) each worker is a separate process, so this
-# module — and _next_port with it — is re-imported fresh per worker. Without
-# a per-worker offset, every worker's counter starts at the same value and
-# advances at a similar pace, so concurrent workers hand out the *same* port
-# number to different tests (confirmed live: simultaneous "could not bind ...
-# Address already in use" across workers under -n 4). PYTEST_XDIST_WORKER
-# (set by xdist itself: "gw0", "gw1", ... ; unset/"master" when not under
-# xdist) gives each worker a disjoint 2000-port range — comfortably more
-# than any single worker allocates even for the full suite.
+# Under pytest-xdist each worker is a separate process, re-importing this
+# module fresh — without a per-worker offset, every worker's counter starts
+# at the same value and hands out duplicate ports. PYTEST_XDIST_WORKER
+# ("gw0", "gw1", ...; "master" outside xdist) gives each worker a disjoint
+# 2000-port range.
 def _worker_port_base() -> int:
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
     if worker_id == "master":

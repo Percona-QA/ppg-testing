@@ -71,11 +71,9 @@ def _add_global_vault(
 
 
 def _assert_postgres_alive(cluster: PgCluster) -> None:
-    # is_ready() is a single one-shot pg_isready probe (5s subprocess
-    # timeout, no internal retry) — under parallel-suite load it can
-    # transiently fail even though the backend is perfectly fine, which
-    # would misreport a false "died" here. Retry briefly before concluding
-    # the backend is actually down.
+    # is_ready() is a single one-shot probe with no internal retry — under
+    # parallel-suite load it can transiently fail on a perfectly fine
+    # backend. Retry before concluding it's actually down.
     if cluster.is_ready():
         return
     for _ in range(5):

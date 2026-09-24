@@ -92,20 +92,11 @@ class TdeManager:
         *,
         in_place: bool = True,
     ) -> None:
-        # keyfile used to default to a fixed "/tmp/pg_tde_test.per" shared by
-        # every caller that didn't override it — including the tde_primary
-        # and tde_replica_pair fixtures used across most of the TDE test
-        # suite. Under pytest-xdist (-n N), concurrent workers running
-        # different tests would race on that one file: one worker's principal
-        # key material could be overwritten mid-test by another, surfacing as
-        # unrelated-looking failures (e.g. pgbackrest restore unable to
-        # decrypt WAL encrypted with a key that's no longer what's on disk).
-        # Default to a path under the cluster's tmp_path (data_dir's parent)
-        # instead — still per-test/per-worker isolated, but deliberately kept
-        # OUTSIDE the cluster's own data_dir: pg_rewind/pg_tde_rewind
-        # reconciles PGDATA against a source and can drop non-standard files
-        # it finds in the target that aren't part of the source's file set,
-        # so a keyfile placed inside data_dir can vanish mid-rewind.
+        # Previously a fixed "/tmp/pg_tde_test.per" shared by every caller,
+        # which xdist workers raced on (one worker's key material overwritten
+        # by another mid-test). Default under tmp_path instead — kept outside
+        # data_dir since pg_rewind/pg_tde_rewind can drop non-standard files
+        # it finds there that aren't part of the source's file set.
         if keyfile is None:
             keyfile = str(self.cluster.data_dir.parent / "pg_tde_test.per")
         fn = self._first_func([
