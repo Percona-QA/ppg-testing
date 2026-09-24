@@ -59,18 +59,13 @@
   vars:
     repo: "{{ v }} lookup('env', 'TO_REPO') {{ w }}"
 
-{% if telemetry_comment | default('short') != 'none' %}
+{# ppg 18 ships no percona-pg-telemetry package #}
+{% if major < 18 %}
 # percona-pg-telemetry{{ major }} is listed explicitly (it's otherwise only pulled in
 # as a weak dependency/Recommends of the server package) so that this
 # post-repo-switch install actually upgrades it too -- an already-installed
 # package satisfying an unversioned Recommends is not otherwise re-resolved
-{% if telemetry_comment | default('short') == 'extended' %}
-# to a newer version by apt/dnf. This step is inlined (rather than reusing
-# tasks/install_ppg{{ major }}.yml, as it did before) so that change doesn't also
-# affect that shared file's other callers (ppg/pg-{{ major }}, ppg/pg-{{ major + 1 }}-major-upgrade).
-{% else %}
 # to a newer version by apt/dnf.
-{% endif %}
 {% endif %}
 - name: install Percona Platform for PostgreSQL deb packages
   apt:
@@ -88,7 +83,7 @@
       - percona-postgresql-contrib
       - percona-postgresql-doc
       - percona-postgresql-doc-{{ major }}
-{% if telemetry_comment | default('short') != 'none' %}
+{% if major < 18 %}
       - percona-pg-telemetry{{ major }}
 {% endif %}
       - percona-postgresql-plperl-{{ major }}
@@ -127,7 +122,7 @@
         - percona-postgresql-client-common
         - percona-postgresql-common
         - percona-postgresql{{ major }}
-{% if telemetry_comment | default('short') != 'none' %}
+{% if major < 18 %}
         - percona-pg-telemetry{{ major }}
 {% endif %}
         - percona-postgresql{{ major }}-contrib
@@ -226,8 +221,8 @@
   register: results
 
 - debug: var=results.stdout_lines
+{% if major < 18 %}
 
-{% if telemetry_upgrade_verify | default(true) %}
 # =========Telemetry weak-dependency upgrade verification
 - name: Verify telemetry weak-dependency survived the upgrade
   include_tasks: ../../../tasks/verify_telemetry_upgrade.yml
