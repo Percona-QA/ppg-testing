@@ -81,7 +81,6 @@ instances:
       telemetry_comment: extended
       tde: false
       dev_switch_cutoff: '14.17'
-      stop_pause: false
     major-upgrade:
       gates:
       - name: End play on Ubuntu 26 and versions older than 14.23

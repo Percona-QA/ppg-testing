@@ -243,35 +243,18 @@
   when: ansible_os_family == "Debian"
 
 {% endif %}
-{% if stop_pause | default(true) %}
-- name: Stop postgresql service for RHEL based
-  service:
-    name: postgresql-{{ major }}
-    state: stopped
-  when: ansible_os_family == "RedHat"
-
-- name: Stop postgresql service for Debian based
-  service:
-    name: postgresql
-    state: stopped
-  when: ansible_os_family == "Debian"
-
-- pause:
-    minutes: 1
-
-{% endif %}
-- name: Start postgresql service for RHEL based
+- name: Restart postgresql service for RHEL based
   include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
   vars:
     svc_name: postgresql-{{ major }}
-    svc_state: started
+    svc_state: restarted
   when: ansible_os_family == "RedHat"
 
-- name: Start postgresql service for Debian based
+- name: Restart postgresql service for Debian based
   include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
   vars:
     svc_name: postgresql
-    svc_state: started
+    svc_state: restarted
   when: ansible_os_family == "Debian"
 
 {% if flavor == 'psp' %}
