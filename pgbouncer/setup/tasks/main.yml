@@ -135,15 +135,23 @@
   # pgbouncer's own test suite (test/utils.py) already supports pointing at
   # an arbitrary binary via the BOUNCER_EXE env var: `BOUNCER_EXE =
   # os.environ.get("BOUNCER_EXE", TEST_DIR / "../pgbouncer")`
+  # pgbouncer 1.26.0 dropped requirements.txt in favour of pyproject.toml
+  # (`pip install .`); keep requirements.txt for older tags.
   - name: pytest run
     shell: |
+      set -eo pipefail
       python3 -m venv validation
       source validation/bin/activate
       pip install --upgrade pip
-      pip install -r requirements.txt
+      if [ -f requirements.txt ]; then
+        pip install -r requirements.txt
+      else
+        pip install .
+      fi
       pytest
     args:
       chdir: /tmp/pgbouncer
+      executable: /bin/bash
     environment:
       PATH: "/tmp/pgbouncer/validation/bin:/usr/lib/postgresql/{{ major_version }}/bin:{{ ansible_env.PATH }}"
       BOUNCER_EXE: /usr/sbin/pgbouncer
