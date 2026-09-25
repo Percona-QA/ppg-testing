@@ -1,0 +1,29 @@
+---
+  - name: Resolve OBS project for this repo/version selection
+    include_tasks: resolve_obs_repo.yml
+
+  - name: Remove OBS apt source and key (Debian/Ubuntu)
+    ansible.builtin.file:
+      path: "{{ item }}"
+      state: absent
+    loop:
+      - "/etc/apt/sources.list.d/{{ obs_project }}.list"
+      - "/etc/apt/trusted.gpg.d/{{ obs_safe_id }}.gpg"
+    when: ansible_os_family == "Debian"
+
+  - name: Update apt cache after removing OBS source (Debian/Ubuntu)
+    ansible.builtin.apt:
+      update_cache: true
+    when: ansible_os_family == "Debian"
+
+  - name: Remove OBS yum repository (RHEL/Rocky)
+    ansible.builtin.file:
+      path: "/etc/yum.repos.d/{{ obs_safe_id }}.repo"
+      state: absent
+    when: ansible_os_family == "RedHat"
+
+  - name: Refresh dnf cache after removing OBS repo (RHEL/Rocky)
+    ansible.builtin.shell: |
+      dnf clean all
+      dnf makecache
+    when: ansible_os_family == "RedHat"
