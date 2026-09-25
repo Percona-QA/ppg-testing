@@ -175,6 +175,35 @@ def test_main_multi_os_continues_after_failure(fake_group, tmp_path, monkeypatch
     assert set(summary["oses"]) == {"debian-13", "rocky-9"}
 
 
+def test_main_fail_fast_keeps_failed_os_log(fake_group, tmp_path, monkeypatch):
+    # real _run + fake molecule on PATH: output before and at the failure,
+    # plus the safety destroy, must land in molecule.log
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    fake = bindir / "molecule"
+    fake.write_text(textwrap.dedent("""\
+        #!/bin/sh
+        echo "fake $1 on $PLATFORM"
+        [ "$1" = converge ] && [ "$PLATFORM" = debian-13 ] && exit 3
+        exit 0
+        """))
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", "%s%s%s" % (bindir, os.pathsep, os.environ["PATH"]))
+
+    rc = run.main(["--group", str(fake_group), "--os", "debian-13", "rocky-9",
+                   "--fail-fast", "--artifacts-dir", str(tmp_path / "a")])
+    assert rc == 1
+    log = (tmp_path / "a" / "debian-13" / "molecule.log").read_text()
+    assert "$ molecule create -s debian-13" in log
+    assert "fake create on debian-13" in log
+    assert "fake converge on debian-13" in log
+    assert "fake destroy on debian-13" in log           # safety destroy still logged
+    assert not (tmp_path / "a" / "rocky-9").exists()    # second os never started
+    summary = json.loads((tmp_path / "a" / "summary.json").read_text())
+    assert list(summary["oses"]) == ["debian-13"]
+    assert summary["oses"]["debian-13"]["failed_action"] == "converge"
+
+
 def test_main_requires_driver_env(fake_group, tmp_path, monkeypatch):
     monkeypatch.delenv("driver")
     rc = run.main(["--group", str(fake_group), "--os", "debian-13",
