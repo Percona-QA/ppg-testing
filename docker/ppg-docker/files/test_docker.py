@@ -465,6 +465,9 @@ def test_rpm_package_is_installed(host, package):
     if "pg_cron" in package:
         _skip_if_pg_cron_unavailable()
 
+    if package == "python3-etcd":
+        _skip_if_python3_etcd_unavailable()
+
     installed_name = _installed_package_name(package)
     pkg = host.package(installed_name)
 
@@ -1693,6 +1696,29 @@ def _skip_if_telemetry_agent_unavailable():
         pytest.skip(
             f"percona-telemetry-agent is no longer a dependency for "
             f"PostgreSQL {MAJOR_MINOR_VER} (PG-2620)."
+        )
+
+
+# Minimum PPG patch versions where python3-etcd was dropped from the image,
+# keyed by major version integer. At or beyond these versions the package is
+# no longer installed.
+PYTHON3_ETCD_REMOVED_MIN_VERSIONS = {
+    14: version.parse("14.24"),
+    15: version.parse("15.19"),
+    16: version.parse("16.15"),
+    17: version.parse("17.11"),
+    18: version.parse("18.6"),
+}
+
+
+def _skip_if_python3_etcd_unavailable():
+    """Skip the calling test if python3-etcd is not expected to be installed."""
+    current_ver = version.parse(MAJOR_MINOR_VER)
+    min_ver = PYTHON3_ETCD_REMOVED_MIN_VERSIONS.get(int(MAJOR_VER))
+    if min_ver is not None and current_ver >= min_ver:
+        pytest.skip(
+            f"python3-etcd is no longer shipped starting {min_ver} "
+            f"-- found {MAJOR_MINOR_VER}."
         )
 
 

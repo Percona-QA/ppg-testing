@@ -83,6 +83,18 @@ TELEMETRY_AGENT_REMOVED_MIN_VERSIONS = {
     17: version.parse("17.11"),
 }
 
+# Minimum PPG patch versions where python3-etcd was dropped from the image,
+# keyed by major version integer. At or beyond these versions the package is
+# no longer installed. Mirrors PYTHON3_ETCD_REMOVED_MIN_VERSIONS in
+# test_docker.py.
+PYTHON3_ETCD_REMOVED_MIN_VERSIONS = {
+    14: version.parse("14.24"),
+    15: version.parse("15.19"),
+    16: version.parse("16.15"),
+    17: version.parse("17.11"),
+    18: version.parse("18.6"),
+}
+
 # When run.sh drives the upgrade it passes UPGRADE_NEW_VOL (a Docker named
 # volume) instead of a host path.  In standalone mode (SKIP_UPGRADE=false)
 # the fixture manages its own host-path volumes.
@@ -589,10 +601,15 @@ class TestPostUpgradePackages:
 
     def test_new_version_rpm_packages_installed(self, upgrade_pipeline):
         new_host = upgrade_pipeline["new_host"]
+        etcd_min_ver = PYTHON3_ETCD_REMOVED_MIN_VERSIONS.get(int(NEW_MAJOR))
+        etcd_removed_expected = (
+            etcd_min_ver is not None and version.parse(NEW_MAJOR_MINOR) >= etcd_min_ver
+        )
         missing = [
             pkg for pkg in NEW_RPM_PACKAGES
             if new_host.run(f"rpm -q {_installed_package_name(pkg, IMG_TAG_NEW)}").rc != 0
             and (IS_WITH_POSTGIS or "postgis" not in pkg)
+            and not (pkg == "python3-etcd" and etcd_removed_expected)
         ]
         assert not missing, f"RPM packages not installed in new image: {missing}"
 
