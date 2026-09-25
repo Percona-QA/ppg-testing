@@ -1,3 +1,4 @@
+{% import '_shared.j2' as s %}
 os_list: all
 name_pattern: '{token}-{build}-{job}'
 aws:
@@ -19,63 +20,4 @@ sequences:
   - converge
   - verify
   - destroy
-overrides:
-  debian-12:
-    aws:
-      size: small
-  debian-12-arm:
-    aws:
-      size: small
-{% for os in ['debian-13', 'debian-13-arm'] %}
-  {{ os }}:
-{% if flavor == 'psp' %}
-    aws:
-      size: small
-{% else %}
-    cleanup: per-family
-    aws:
-      size: small
-    sequences:
-      destroy:
-      - destroy
-      test:
-      - destroy
-      - create
-      - prepare
-      - converge
-      - verify
-      - destroy
-      cleanup:
-      - cleanup
-{% endif %}
-{% endfor %}
-  rhel-10:
-    billing_tag: jenkins-pg-molecule-rhel
-  rhel-10-arm:
-    billing_tag: jenkins-pg-molecule-rhel
-  rhel-8:
-    billing_tag: jenkins-pg-molecule-rhel
-  rhel-8-arm:
-    billing_tag: jenkins-pg-molecule-rhel
-  rhel-9:
-    billing_tag: jenkins-pg-molecule-rhel
-  rhel-9-arm:
-    billing_tag: jenkins-pg-molecule-rhel
-  ubuntu-jammy:
-    aws:
-      size: small
-  ubuntu-jammy-arm:
-    aws:
-      size: small
-  ubuntu-noble:
-    aws:
-      size: small
-  ubuntu-noble-arm:
-    aws:
-      size: small
-  ubuntu-resolute:
-    aws:
-      size: small
-  ubuntu-resolute-arm:
-    aws:
-      size: small
+{{ s.os_overrides() -}}

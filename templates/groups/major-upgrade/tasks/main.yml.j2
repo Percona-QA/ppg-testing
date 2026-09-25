@@ -1,24 +1,14 @@
 {% set v = '{{' %}{% set w = '}}' %}
 ---
-{% if psp_from | default(false) %}
-# Tasks for test major upgrade for PPG {{ major }} packages.
+# Major upgrade test: {{ prev }} -> {{ 'PSP' if flavor == 'psp' else 'PPG' }}-{{ major }}.
 #
-# FROM_VERSION also accepts psp-{{ prev }}.14 (scenario: PSP-{{ prev }} -> PPG-{{ major }}) — the FROM
-# side just gets pg_tde installed on top of the identical ppg-{{ prev }} package set
-# (psp-{{ prev }} ships the same postgresql{{ prev }} packages, from a different repo
-# channel); the pg_upgrade/port-swap/restart mechanics below are unchanged
-# either way since the TO side is always plain ppg-{{ major }}.
-{% elif flavor == 'psp' %}
-# Major upgrade test: PPG-{{ prev }} -> PSP-{{ major }}.
-#
-# Same PostgreSQL major-version bump ({{ prev }} -> {{ major }}) as pg-{{ major }}-major-upgrade, plus
-# the one PSP delta: install pg_tde and fold it into shared_preload_libraries
-# alongside pg_stat_monitor before the final restart. Package names are
-# unchanged from ppg-{{ major }} — psp-{{ major }} ships the same postgresql{{ major }} packages, just
-# from a different repo channel (to_repo_version below trims the minor for
-# that repo since psp-{{ major }} has no per-minor variant, unlike ppg-{{ major }}.14).
-{% else %}
-# Tasks for test major upgrade for PPG {{ major }} packages
+# FROM_VERSION and VERSION take either prefix, ppg-N.x or psp-N.x: psp ships
+# the same postgresqlN packages from a different repo channel plus pg_tde, so a
+# psp FROM side only gets pg_tde installed on top. psp has one repo per major
+# (psp-N, no psp-N.x minor repos), the *_repo_version facts trim the minor for psp.
+{% if flavor == 'psp' %}
+# The PSP TO side installs pg_tde and folds it into shared_preload_libraries
+# alongside pg_stat_monitor before the final restart.
 {% endif %}
 
 - name: Detect whether to use the OBS repo
@@ -38,39 +28,18 @@
 
 - name: Setting facts so that they will be persisted in the fact cache
   ansible.builtin.set_fact:
-{% if psp_from | default(false) %}
     pg_version_to_install: "{{ v }} lookup('env', 'FROM_VERSION') | regex_replace('^(?:ppg|psp)-', '') {{ w }}"
     upgrade_to_pg_version: "{{ v }} lookup('env', 'VERSION') | regex_replace('^(?:ppg|psp)-', '') {{ w }}"
-    # psp only ships one repo per major version (psp-{{ prev }}), no psp-{{ prev }}.xx minor
-    # repos exist, unlike ppg (ppg-{{ prev }}.14 etc.) — trim the minor for psp only.
     from_repo_version: "{{ v }} lookup('env', 'FROM_VERSION').split('.')[0] if lookup('env', 'FROM_VERSION').startswith('psp-') else lookup('env', 'FROM_VERSION') {{ w }}"
-{% elif flavor == 'psp' %}
-    pg_version_to_install: "{{ v }} lookup('env', 'FROM_VERSION') | regex_replace('^(?:ppg|psp)-', '') {{ w }}"
-    upgrade_to_pg_version: "{{ v }} lookup('env', 'VERSION') | regex_replace('^(?:ppg|psp)-', '') {{ w }}"
-    # psp only ships one repo per major version (psp-{{ major }}), no psp-{{ major }}.xx minor
-    # repos exist, unlike ppg (ppg-{{ major }}.14 etc.) — trim the minor for psp only.
     to_repo_version: "{{ v }} lookup('env', 'VERSION').split('.')[0] if lookup('env', 'VERSION').startswith('psp-') else lookup('env', 'VERSION') {{ w }}"
-{% else %}
-    pg_version_to_install: "{{ v }} lookup('env', 'FROM_VERSION') | replace('ppg-','') {{ w }}"
-    upgrade_to_pg_version: "{{ v }} lookup('env', 'VERSION') | replace('ppg-','') {{ w }}"
-{% endif %}
 
 {{ gates_text }}
 
-{% if psp_from | default(false) %}
 - name: Setup initial (old) repository
   command: percona-release enable {{ v }} from_repo_version {{ w }} {{ v }} repo {{ w }}
   vars:
     repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
   when: not use_obs_repo
-{% else %}
-- name: Setup initial (old) repository
-  command: percona-release enable {{ v }} pg_version {{ w }} {{ v }} repo {{ w }}
-  vars:
-    repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
-    pg_version: "{{ v }} lookup('env', 'FROM_VERSION') {{ w }}"
-  when: not use_obs_repo
-{% endif %}
 
 - name: Setup initial (old) repository (OBS)
   include_tasks: ../../../../tasks/enable_obs_repo.yml
@@ -105,7 +74,6 @@
 - name: Install PPG tools
   include_tasks: ../../../../tasks/install_ppg{{ prev }}_tools.yml
 
-{% if psp_from | default(false) %}
 - name: Install pg_tde packages RHEL (PSP-{{ prev }} FROM version only)
   yum:
     name: "{{ v }} packages {{ w }}"
@@ -135,7 +103,6 @@
     - ansible_os_family == "Debian"
     - lookup('env', 'FROM_VERSION').startswith('psp-')
 
-{% endif %}
 - name: Start Postgres RHEL
   include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
   vars:
@@ -153,20 +120,11 @@
 - name: Seed data-integrity baseline before upgrade
   include_tasks: ../../../../tasks/seed_data_integrity.yml
 
-{% if psp_from | default(false) %}
 - name: Disable old repository
   command: percona-release disable {{ v }} from_repo_version {{ w }} {{ v }} repo {{ w }}
   vars:
     repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
   when: not use_obs_repo
-{% else %}
-- name: Disable old repository
-  command: percona-release disable {{ v }} pg_version {{ w }} {{ v }} repo {{ w }}
-  vars:
-    repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
-    pg_version: "{{ v }} lookup('env', 'FROM_VERSION') {{ w }}"
-  when: not use_obs_repo
-{% endif %}
 
 - name: Disable old repository (OBS)
   include_tasks: ../../../../tasks/disable_obs_repo.yml
@@ -175,20 +133,11 @@
     obs_repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
   when: use_obs_repo
 
-{% if flavor == 'psp' %}
 - name: Setup new repository
   command: percona-release enable-only {{ v }} to_repo_version {{ w }} {{ v }} repo {{ w }}
   vars:
     repo: "{{ v }} lookup('env', 'TO_REPO') {{ w }}"
   when: not use_obs_repo
-{% else %}
-- name: Setup new repository
-  command: percona-release {{ 'enable-only' if enable_only | default(true) else 'enable' }} {{ v }} pg_version {{ w }} {{ v }} repo {{ w }}
-  vars:
-    repo: "{{ v }} lookup('env', 'TO_REPO') {{ w }}"
-    pg_version: "{{ v }} lookup('env', 'VERSION') {{ w }}"
-  when: not use_obs_repo
-{% endif %}
 
 - name: Setup new repository (OBS)
   include_tasks: ../../../../tasks/enable_obs_repo.yml
@@ -217,7 +166,7 @@
       - percona-postgresql-plpython3-{{ major }}
       - percona-postgresql-pltcl-{{ major }}
       - percona-postgresql-server-dev-{{ major }}
-      - {{ dev_pkg_deb | default('percona-postgresql-common-dev') }}
+      - percona-postgresql-common-dev
       - percona-postgresql-{{ major }}-dbgsym
       - percona-postgresql-client-{{ major }}-dbgsym
       - percona-postgresql-plperl-{{ major }}-dbgsym
@@ -229,27 +178,6 @@
   environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-{% if commented_plpython | default(false) %}
-# - name: install Percona Platform for PostgreSQL deb packages
-#   apt:
-#     name: "{{ v }} packages {{ w }}"
-#     update_cache: yes
-#     state: latest
-#   vars:
-#     packages:
-#     - percona-postgresql-plpython3-{{ major }}
-#     - percona-postgresql-plpython3-{{ major }}-dbgsym
-#   when:
-#     - ansible_os_family == "Debian"
-
-{% endif %}
-{% if commented_llvm | default(false) %}
-# - name: Disable llvm-toolset dnf module for RHEL8
-#   become: true
-#   command: dnf module disable llvm-toolset -y
-#   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "8"
-
-{% endif %}
 #Remove conflicting package to make installation move on
 - name: Remove conflicting percona-postgresql-common-dev
   ansible.builtin.package:
@@ -294,7 +222,7 @@
   environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
-{% if dev_switch_active | default(true) %}
+{% if major < 18 %}
 - name: Determine required PostgreSQL dev package for RHEL
   set_fact:
     pg_dev_package: >-
@@ -551,28 +479,6 @@
     svc_state: restarted
   when: ansible_os_family == "RedHat"
 
-{% if legacy_tail | default(false) %}
-- name: list /var/run/postgresql
-  command: ls -la /var/run/postgresql
-  become: true
-  when: ansible_os_family == "Debian"
-  register: results
-
-- debug:
-    var: results.stdout_lines
-
-- name: list pg_lsclsuters
-  command: pg_lsclusters
-  become: true
-  become_method: sudo
-  become_user: postgres
-  when: ansible_os_family == "Debian"
-  register: results
-
-- debug:
-    var: results.stdout_lines
-
-{% endif %}
 - name: Drop pg_dropcluster for version {{ prev }}
   command: /usr/bin/pg_dropcluster {{ prev }} main
   become: true
@@ -601,58 +507,6 @@
   when: ansible_os_family == "Debian"
   register: results
 
-{% if legacy_tail | default(false) %}
-- debug:
-    var: results.stdout_lines
-
-- name: list /var/run/postgresql
-  command: ls -la /var/run/postgresql/
-  become: true
-  when: ansible_os_family == "Debian"
-  register: results
-
-- debug:
-    var: results.stdout_lines
-
-- name: Restart postgresql service for Debian based
-  include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
-  vars:
-    svc_name: postgresql@{{ major }}-main.service
-    svc_state: started
-  when: ansible_os_family == "Debian"
-
-- name: list pg_lsclsuters
-  command: pg_lsclusters
-  become: true
-  become_method: sudo
-  become_user: postgres
-  when: ansible_os_family == "Debian"
-  register: results
-
-- debug:
-    var: results.stdout_lines
-
-# - name: show running process for postgres
-#   command: ps -ef | grep -i postgres
-#   become: true
-#   when: ansible_os_family == "Debian"
-#   register: results
-
-# - debug:
-#     var: results.stdout_lines
-
-- pause:
-    minutes: 1
-
-- name: Display ppg version
-  ignore_errors: true
-  become_user: postgres
-  shell: psql -c "select version();"
-  register: results
-
-- debug:
-    var: results.stdout_lines
-{% else %}
 - name: Restart postgresql service for Debian based
   include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
   vars:
@@ -666,8 +520,8 @@
   register: results
 
 - debug: var=results.stdout_lines
-{% endif %}
-{% if telemetry_upgrade_verify | default(true) %}
+{# ppg 18 ships no percona-pg-telemetry package #}
+{% if major < 18 %}
 
 # =========Telemetry weak-dependency upgrade verification
 - name: Verify telemetry weak-dependency survived the upgrade

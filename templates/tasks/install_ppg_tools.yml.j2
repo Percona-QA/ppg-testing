@@ -1,4 +1,5 @@
 ---
+<% if vars_gate is defined %>
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
       pgaudit_rhel_package_name: "percona-pgaudit"
@@ -9,6 +10,12 @@
       pgaudit_rhel_package_name: "percona-pgaudit<< major >>"
       postgis_rhel_package_name_prefix: "percona-postgis35_<< major >>"
     when: (pg_version_to_install | string is version('<< vars_gate >>', '>=', strict=True))
+<% else %>
+  - name: Setting facts so that they will be persisted in the fact cache
+    ansible.builtin.set_fact:
+      pgaudit_rhel_package_name: "percona-pgaudit<< major >>"
+      postgis_rhel_package_name_prefix: "percona-postgis35_<< major >>"
+<% endif %>
 
   - debug:
       msg: "Value of pgaudit_rhel_package_name is : {{ pgaudit_rhel_package_name }}"
@@ -457,7 +464,6 @@
     when: ansible_os_family == "Debian"
 <% endif %>
 
-<% if not legacy_layout | default(false) %>
   - name: Install pgvector packages RHEL
     yum:
       name: "{{ packages }}"
@@ -489,6 +495,7 @@
     when: ansible_os_family == "Debian"
 <% endif %>
 
+<% if major >= 17 %>
   - name: Install pg_tde packages RHEL
     yum:
       name: "{{ packages }}"
@@ -522,7 +529,8 @@
     when: ansible_os_family == "Debian"
 <% endif %>
 
-<% if oidc | default(false) %>
+<% endif %>
+<% if major >= 18 %>
   - name: Install pg_oidc_validator packages RHEL
     yum:
       name: "{{ packages }}"
@@ -544,7 +552,7 @@
     when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('<< major >>.2', '>=', strict=True))
 
 <% endif %>
-<% endif %>  - name: Install pg_cron packages RHEL
+  - name: Install pg_cron packages RHEL
     yum:
       name: "{{ packages }}"
       state: latest
@@ -570,24 +578,9 @@
 
   - name: Configure shared_preload_libraries
     vars:
-<% if oidc | default(false) %>
-      # 1. Define base extensions
+<% if major >= 18 %>
       # pg_oidc_validator is NOT preloaded; it is tested as a regular extension via CREATE EXTENSION
-      base_extensions: << base_extensions >>
-
-      # 2. Conditionally add pg_cron (available from << major >>.4 onwards)
-      final_extensions: >-
-        {{
-          base_extensions
-          + (['pg_cron'] if (
-              pg_version_to_install | string is version('<< cron_gate >>', '>', strict=True)
-            ) else [])
-        }}
-
-      # 3. Handle OS-specific paths dynamically
-      pg_conf_path: "{{ '/etc/postgresql/<< major >>/main/postgresql.conf' if ansible_os_family == 'Debian' else '/var/lib/pgsql/<< major >>/data/postgresql.conf' }}"
-
-<% else %>
+<% endif %>
       base_extensions: << base_extensions >>
       final_extensions: >-
         {{
@@ -597,22 +590,15 @@
             ) else [])
         }}
       pg_conf_path: "{{ '/etc/postgresql/<< major >>/main/postgresql.conf' if ansible_os_family == 'Debian' else '/var/lib/pgsql/<< major >>/data/postgresql.conf' }}"
-<% if not legacy_layout | default(false) %>
-
-<% endif %>
-<% endif %>
     ansible.builtin.lineinfile:
       path: "{{ pg_conf_path }}"
       regexp: '^#?shared_preload_libraries\s*='
       line: "shared_preload_libraries = '{{ final_extensions | join(', ') }}'"
       state: present
     become: true
-<% if oidc | default(false) %>
-    # Only run if it's one of your supported families
-<% endif %>
     when: ansible_os_family in ["Debian", "RedHat"]
 
-<% if oidc | default(false) %>
+<% if major >= 18 %>
   - name: Configure pg_oidc_validator settings in postgresql.conf
     blockinfile:
       path: "{{ '/etc/postgresql/<< major >>/main/postgresql.conf' if ansible_os_family == 'Debian' else '/var/lib/pgsql/<< major >>/data/postgresql.conf' }}"
@@ -662,7 +648,7 @@
         host    replication     all             ::1/128                 trust
     when: ansible_os_family == "Debian"
 
-<% if oidc | default(false) %>
+<% if major >= 18 %>
   - name: Add OIDC entry to pg_hba.conf RHEL
     lineinfile:
       path: /var/lib/pgsql/<< major >>/data/pg_hba.conf
@@ -707,53 +693,6 @@
       - python3-etcd
     when: ansible_os_family == "RedHat"
 
-<% if etcd_restart | default(true) %>
-  - name: Restart etcd RHEL
-    include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
-    vars:
-      svc_name: etcd
-      svc_state: restarted
-    when: ansible_os_family == "RedHat"
-
-<% endif %>
-<% if legacy_layout | default(false) %>
-  - name: Install pgvector packages RHEL
-    yum:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - percona-pgvector_<< major >>
-      - percona-pgvector_<< major >>-debuginfo
-      - percona-pgvector_<< major >>-debugsource
-      - percona-pgvector_<< major >>-llvmjit
-    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('<< pgvector_gate >>', '>=', strict=True))
-
-  - name: Install pgvector packages Debian
-    apt:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-      - percona-postgresql-<< major >>-pgvector
-    when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('<< pgvector_gate >>', '>=', strict=True))
-
-  - name: Install patroni related packages Debian
-    apt:
-      name: "{{ packages }}"
-      state: latest
-      update_cache: yes
-    vars:
-      packages:
-        - etcd
-        - percona-haproxy
-    when: (ansible_distribution == "Ubuntu") or
-      (ansible_os_family == "Debian" and ansible_lsb.major_release|int <= 11) or
-      (ansible_os_family == "Debian" and pg_version_to_install | string is version('<< patroni_deb_gate >>', '>=', strict=True))
-
-<% endif %>
   - name: Install patroni related packages Debian
     apt:
       name: "{{ packages }}"
