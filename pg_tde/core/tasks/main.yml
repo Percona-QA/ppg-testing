@@ -4,32 +4,16 @@
       major_version: "{{ lookup('env','VERSION') | regex_replace('ppg-(\\d+).*','\\1') }}"
       install_from_packages: "{{ lookup('env', 'INSTALL_FROM_PACKAGES') | default('false') | bool }}"
       full_version: "{{ lookup('env','VERSION') | regex_replace('ppg-','') }}"
-
-      # Convert "true"/"false" strings to actual Booleans
       build_from_source: "{{ lookup('env', 'BUILD_FROM_SOURCE') | default('false') | bool }}"
-
-      # Direct mappings
       io_method: "{{ lookup('env', 'IO_METHOD') | default('worker') }}"
       psp_repo: "{{ lookup('env', 'PSP_REPO') }}"
       psp_branch: "{{ lookup('env', 'PSP_BRANCH') }}"
       tde_repo: "{{ lookup('env', 'TDE_REPO') }}"
       tde_branch: "{{ lookup('env', 'TDE_BRANCH') }}"
-      # Which package source to install PSP/pg_tde from when install_from_packages
-      # is set. 'percona-release' drives the existing tasks/enable_repo.yml
-      # (REPO=testing/release/experimental). 'obs' is not wired up yet — see the
-      # "Configure repository" step below.
       package_source: "{{ lookup('env', 'PACKAGE_SOURCE') | default('percona-release') }}"
       obs_channel: "{{ lookup('env', 'OBS_CHANNEL') | default('devel') }}"
-      # percona-qa/postgresql/pytest sections to skip by default: upgrade
-      # coverage lives in the dedicated upgrade role, vault/kmip need external
-      # key-provider services this role doesn't set up, and slow tests don't
-      # belong in the core regression pass. Override via PYTEST_SKIP_SECTIONS.
       pytest_skip_sections: "{{ lookup('env', 'PYTEST_SKIP_SECTIONS') | default('upgrade,minor_upgrade,slow,vault,kmip,openbao', true) }}"
-      # Captured for future use — not yet consumed anywhere in this role (see
-      # the TEST_SUITE mapping discussion: the pytest suite has no sanity/smoke
-      # markers or suite concept today, only --skip-sections).
-      test_suite: "{{ lookup('env', 'TEST_SUITE') | default('All') }}"
-      # ... include other env lookups here ...
+      test_suite: "{{ lookup('env', 'TEST_SUITE') | default('Sanity', true) }}"
       go_version: "1.25.6"
       go_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }}"
       artifact_filename: "tde-core-{{ lookup('env','VERSION') }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ lookup('env','BUILD_NUMBER') }}.tar.gz"
@@ -97,12 +81,6 @@
         or
         (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution'] == 'RedHat' and ansible_facts['distribution_major_version'] | int == 8)
 
-  # On Debian 13 / Ubuntu 26 systemd mounts /tmp as a RAM-backed tmpfs (~16 GB,
-  # half of RAM). The test framework runs in /tmp/pgtest and the suite needs
-  # more than that on those distros, so /tmp fills (ENOSPC) and the host dies
-  # before packaging — even though the 100 GB root disk is ~85% free. Redirect
-  # /tmp onto the root disk (bind mount) where it is tmpfs, before the build or
-  # tests write anything there. Only acts where /tmp is actually tmpfs.
   - name: Move /tmp off tmpfs onto the root disk where applicable
     become: true
     ansible.builtin.shell: |
@@ -145,8 +123,6 @@
       file: "debian_tasks.yml"
     when: ansible_os_family == 'Debian'
 
-  # Docker is required on all platforms — the pytest suite uses it for KMIP
-  # and other key provider services at test runtime.
   - name: Include Docker setup file
     include_tasks:
       file: "install_docker.yml"
@@ -159,12 +135,6 @@
     delay: 5
     until: docker_info.rc == 0
 
-  # ansible_swaptotal_mb is gathered automatically (setup module) — no need
-  # to shell out to swapon/parse its human-readable output (which was the
-  # bug here before: `swapon --show=SIZE` prints "4G", not bytes, so the old
-  # regex_findall/1048576 math always came out near-zero and re-ran mkswap
-  # against an already-active swapfile on every subsequent converge of the
-  # same host, failing with "swapfile is mounted; will not make swapspace").
   - name: Ensure at least 4 GB swap is configured
     become: true
     block:
@@ -245,6 +215,12 @@
         - tar
       state: present
 
+  - name: Install pgbackrest
+    become: true
+    package:
+      name: "{{ 'percona-pgbackrest' if install_from_packages else 'pgbackrest' }}"
+      state: present
+
   - name: Check if Go is already installed
     shell: "/usr/local/go/bin/go version | grep -q 'go{{ go_version }}'"
     register: go_exists
@@ -288,7 +264,6 @@
   # =================================================
   # Clone,Build and install, Postgres/PSP with pg_tde
   # =================================================
-
   - name: Build from sources, PSP and TDE
     include_tasks:
       file: "build_from_source.yml"
@@ -297,7 +272,6 @@
   # =================================================
   # Install from packages, both Postgres/PSP and pg_tde
   # =================================================
-
   - name: Install on RHEL
     include_tasks:
       file: "install_from_packages_rhel.yml"
@@ -311,10 +285,6 @@
   # =============================
   # Deploy the pg_tde pytest suite
   # =============================
-  # Vendored under files/pytest/ (copied from percona-qa's postgresql/pytest,
-  # py_framework branch) so this role no longer depends on a separate
-  # percona-qa clone/branch at test time.
-
   - name: Deploy pg_tde pytest suite
     copy:
       src: ../files/pytest/
@@ -330,7 +300,7 @@
       ./setup_test_env.sh
       --install-dir {{ pg_install_dir }}
       --pg-major {{ major_version }}
-      --no-setup-external-key-providers
+      {{ '' if test_suite == 'All' else '--no-setup-external-key-providers' }}
     args:
       executable: /bin/bash
       chdir: "/tmp/pg_tde_pytest_src"
@@ -360,7 +330,7 @@
       set -o pipefail;
       source .env.sh &&
       pytest tests/
-      --skip-sections={{ pytest_skip_sections }}
+      {{ '' if test_suite == 'All' else '--skip-sections=' ~ pytest_skip_sections }}
       --basetemp=/tmp/pg_tde_pytest_run
       --junitxml=/tmp/pg_tde_pytest_junit.xml
       --html=/tmp/pg_tde_pytest_report.html --self-contained-html
@@ -372,7 +342,7 @@
       LD_LIBRARY_PATH: "{{ pg_lib_dir }}"
       INSTALL_DIR: "{{ pg_install_dir }}"
       PG_MAJOR: "{{ major_version }}"
-      PG_TDE_SKIP_EXTERNAL_KEY_PROVIDERS: "1"
+      PG_TDE_SKIP_EXTERNAL_KEY_PROVIDERS: "{{ '0' if test_suite == 'All' else '1' }}"
     ignore_errors: true
     register: regression
 
@@ -380,9 +350,6 @@
     set_fact:
       pytest_failed: "{{ (regression.rc | default(1)) != 0 }}"
 
-  # Disk-usage report printed to the Jenkins console (survives a later host death
-  # at "Save test runner output"). Some hosts (debian13-x86, uresolute-x86) fill
-  # the volume during the run for an as-yet-unknown reason; this shows what ate it.
   - name: Capture disk usage after test run
     become: true
     ansible.builtin.shell: |
