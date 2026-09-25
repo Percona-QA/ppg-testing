@@ -73,6 +73,12 @@ params:
   - experimental
   - release
   description: Packages Repo for testing
+- name: USE_OBS_REPO
+  kind: boolean
+  quote: '"'
+  description: Install packages from the OBS (openSUSE Build Service) repo instead
+    of repo.percona.com. REPO above still selects the channel (testing/release/experimental
+    -> staging/release/devel).
 - name: PGSM_REPO
   kind: string
   default: https://github.com/percona/pg_stat_monitor.git
