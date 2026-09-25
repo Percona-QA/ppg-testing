@@ -21,8 +21,13 @@
 # Tasks for test major upgrade for PPG {{ major }} packages
 {% endif %}
 
+- name: Detect whether to use the OBS repo
+  ansible.builtin.set_fact:
+    use_obs_repo: "{{ v }} (lookup('env', 'USE_OBS_REPO') | default('false', true) | lower) in ['true', '1', 'yes'] {{ w }}"
+
 - name: Configure repository
   include_tasks: ../../../tasks/install_percona_release.yml
+  when: not use_obs_repo
 
 - name: setup epel release
   yum:
@@ -57,13 +62,22 @@
   command: percona-release enable {{ v }} from_repo_version {{ w }} {{ v }} repo {{ w }}
   vars:
     repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
+  when: not use_obs_repo
 {% else %}
 - name: Setup initial (old) repository
   command: percona-release enable {{ v }} pg_version {{ w }} {{ v }} repo {{ w }}
   vars:
     repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
     pg_version: "{{ v }} lookup('env', 'FROM_VERSION') {{ w }}"
+  when: not use_obs_repo
 {% endif %}
+
+- name: Setup initial (old) repository (OBS)
+  include_tasks: ../../../../tasks/enable_obs_repo.yml
+  vars:
+    obs_version: "{{ v }} lookup('env', 'FROM_VERSION') {{ w }}"
+    obs_repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
+  when: use_obs_repo
 
 - name: install Percona Platform for PostgreSQL {{ prev }} packages
   include_tasks: ../../../../tasks/install_ppg{{ prev }}.yml
@@ -144,26 +158,44 @@
   command: percona-release disable {{ v }} from_repo_version {{ w }} {{ v }} repo {{ w }}
   vars:
     repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
+  when: not use_obs_repo
 {% else %}
 - name: Disable old repository
   command: percona-release disable {{ v }} pg_version {{ w }} {{ v }} repo {{ w }}
   vars:
     repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
     pg_version: "{{ v }} lookup('env', 'FROM_VERSION') {{ w }}"
+  when: not use_obs_repo
 {% endif %}
+
+- name: Disable old repository (OBS)
+  include_tasks: ../../../../tasks/disable_obs_repo.yml
+  vars:
+    obs_version: "{{ v }} lookup('env', 'FROM_VERSION') {{ w }}"
+    obs_repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
+  when: use_obs_repo
 
 {% if flavor == 'psp' %}
 - name: Setup new repository
   command: percona-release enable-only {{ v }} to_repo_version {{ w }} {{ v }} repo {{ w }}
   vars:
     repo: "{{ v }} lookup('env', 'TO_REPO') {{ w }}"
+  when: not use_obs_repo
 {% else %}
 - name: Setup new repository
   command: percona-release {{ 'enable-only' if enable_only | default(true) else 'enable' }} {{ v }} pg_version {{ w }} {{ v }} repo {{ w }}
   vars:
     repo: "{{ v }} lookup('env', 'TO_REPO') {{ w }}"
     pg_version: "{{ v }} lookup('env', 'VERSION') {{ w }}"
+  when: not use_obs_repo
 {% endif %}
+
+- name: Setup new repository (OBS)
+  include_tasks: ../../../../tasks/enable_obs_repo.yml
+  vars:
+    obs_version: "{{ v }} lookup('env', 'VERSION') {{ w }}"
+    obs_repo: "{{ v }} lookup('env', 'TO_REPO') {{ w }}"
+  when: use_obs_repo
 
 - name: install Percona Platform for PostgreSQL deb packages
   apt:
