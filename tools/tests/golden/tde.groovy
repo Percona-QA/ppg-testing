@@ -24,6 +24,10 @@ pipeline {
                 'release'
             ]
         )
+        booleanParam(
+            name: 'USE_OBS_REPO',
+            description: "Install packages from the OBS (openSUSE Build Service) repo instead of repo.percona.com. REPO above still selects the channel (testing/release/experimental -> staging/release/devel)."
+        )
         string(
             defaultValue: 'https://github.com/percona/pg_tde.git',
             description: 'pg_tde repo that we want to test, we could also use forked developer repo here.',
