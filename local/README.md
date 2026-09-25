@@ -100,7 +100,7 @@ task tde OS=ol-9 SEQ=converge               # any sequence the descriptor declar
 task destroy GROUP=pg_tde/tde OS=ol-9
 ```
 
-`OS` can list several scenarios, space separated, run sequentially; `--fail-fast` after `--` stops at the first failure.
+`OS` can list several scenarios, space separated, run sequentially; `--fail-fast` after `--` stops after the first failing OS, its `molecule.log` and the summary are still collected.
 `SEQ` is the sequence name from `scenario.yml` (default `test`), anything after `--` is passed straight through to run.py.
 `rhel-*` and `*-arm` are listed but not supported locally, see above.
 
