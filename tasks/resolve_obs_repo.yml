@@ -1,0 +1,57 @@
+---
+  - name: Map REPO selection to OBS repository channel
+    ansible.builtin.set_fact:
+      obs_repo_channel_map:
+        testing: staging
+        release: release
+        experimental: devel
+
+  - name: Determine OBS version/repo selectors
+    # obs_version/obs_repo let a caller target a specific VERSION/REPO pair
+    # (e.g. FROM_VERSION/FROM_REPO vs VERSION/TO_REPO during an upgrade,
+    # where the env vars alone can't tell the two repo endpoints apart).
+    # Default to the global env vars for the common single-repo case.
+    ansible.builtin.set_fact:
+      obs_version_selector: "{{ obs_version | default(lookup('env', 'VERSION')) }}"
+      obs_repo_selector: "{{ obs_repo | default(lookup('env', 'REPO')) }}"
+
+  - name: Fail when REPO has no OBS channel mapping
+    ansible.builtin.fail:
+      msg: >-
+        REPO={{ obs_repo_selector }} has no OBS channel mapping. Known
+        values: {{ obs_repo_channel_map.keys() | list }}.
+    when: obs_repo_selector not in obs_repo_channel_map
+
+  - name: Build OBS project string from REPO and VERSION
+    ansible.builtin.set_fact:
+      obs_project: >-
+        isv:percona:ppg:{{ obs_repo_channel_map[obs_repo_selector] }}:{{
+        (obs_version_selector | regex_replace('^(?:ppg|psp)-', '')).split('.')[0] }}{{
+        ':tde' if obs_version_selector.startswith('psp-') else '' }}
+
+  - name: Map distro to OBS repository directory
+    ansible.builtin.set_fact:
+      obs_repo_dir: >-
+        {%- if ansible_distribution == 'Debian' -%}
+        Debian_{{ ansible_distribution_major_version }}
+        {%- elif ansible_distribution == 'Ubuntu' -%}
+        Ubuntu_{{ ansible_distribution_version }}
+        {%- elif ansible_os_family == 'RedHat' -%}
+        RockyLinux_{{ ansible_distribution_major_version }}
+        {%- else -%}
+        UNSUPPORTED
+        {%- endif -%}
+
+  - name: Fail when distro family is not recognized for OBS
+    ansible.builtin.fail:
+      msg: >-
+        Don't know how to map {{ ansible_distribution }}
+        {{ ansible_distribution_version }} to an OBS repository directory
+        for project {{ obs_project }}. Recognized families: Debian, Ubuntu,
+        RedHat (RHEL/Rocky/OracleLinux).
+    when: obs_repo_dir == "UNSUPPORTED"
+
+  - name: Compute OBS repo id and base URL
+    ansible.builtin.set_fact:
+      obs_safe_id: "{{ obs_project | replace(':', '_') }}"
+      obs_base_url: "https://download.opensuse.org/repositories/{{ obs_project | regex_replace(':', ':/') }}/{{ obs_repo_dir }}"
