@@ -11,12 +11,13 @@
 # full extension set it expects in shared_preload_libraries is present).
 {% endif %}
 - name: Detect whether to use the OBS repo
+  # OBS only ever carries the latest minor of each major, so it can only serve
+  # the TO side of an upgrade -- the FROM side always uses percona-release.
   ansible.builtin.set_fact:
     use_obs_repo: "{{ v }} (lookup('env', 'USE_OBS_REPO') | default('false', true) | lower) in ['true', '1', 'yes'] {{ w }}"
 
 - name: Configure repository
   include_tasks: ../../../tasks/install_percona_release.yml
-  when: not use_obs_repo
 
 - name: Setting facts so that they will be persisted in the fact cache
   ansible.builtin.set_fact:
@@ -31,14 +32,6 @@
   vars:
     repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
     pg_version: "{{ v }} lookup('env', 'FROM_VERSION') {{ w }}"
-  when: not use_obs_repo
-
-- name: Setup initial (old) repository (OBS)
-  include_tasks: ../../../../tasks/enable_obs_repo.yml
-  vars:
-    obs_version: "{{ v }} lookup('env', 'FROM_VERSION') {{ w }}"
-    obs_repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
-  when: use_obs_repo
 
 - name: install Percona Platform for PostgreSQL {{ major }} packages
   include_tasks: ../../../../tasks/install_ppg{{ major }}.yml
@@ -65,14 +58,6 @@
   vars:
     repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
     pg_version: "{{ v }} lookup('env', 'FROM_VERSION') {{ w }}"
-  when: not use_obs_repo
-
-- name: Disable old repository (OBS)
-  include_tasks: ../../../../tasks/disable_obs_repo.yml
-  vars:
-    obs_version: "{{ v }} lookup('env', 'FROM_VERSION') {{ w }}"
-    obs_repo: "{{ v }} lookup('env', 'FROM_REPO') {{ w }}"
-  when: use_obs_repo
 
 - name: Setup new repository
   command: percona-release enable {{ v }} to_repo_version {{ w }} {{ v }} repo {{ w }}

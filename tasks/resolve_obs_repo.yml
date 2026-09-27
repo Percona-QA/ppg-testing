@@ -3,7 +3,7 @@
     ansible.builtin.set_fact:
       obs_repo_channel_map:
         testing: staging
-        release: release
+        release: releases
         experimental: devel
 
   - name: Determine OBS version/repo selectors
@@ -51,7 +51,14 @@
         RedHat (RHEL/Rocky/OracleLinux).
     when: obs_repo_dir == "UNSUPPORTED"
 
+  - name: Determine OBS instance hostname
+    # Lets a caller point at a different OBS instance than the public
+    # openSUSE one (e.g. a Percona-hosted instance), same as obs_version/
+    # obs_repo above: an explicit var wins, then OBS_HOST, then the default.
+    ansible.builtin.set_fact:
+      obs_host: "{{ obs_instance_host | default(lookup('env', 'OBS_HOST') | default('download.opensuse.org', true)) }}"
+
   - name: Compute OBS repo id and base URL
     ansible.builtin.set_fact:
       obs_safe_id: "{{ obs_project | replace(':', '_') }}"
-      obs_base_url: "https://download.opensuse.org/repositories/{{ obs_project | regex_replace(':', ':/') }}/{{ obs_repo_dir }}"
+      obs_base_url: "https://{{ obs_host }}/repositories/{{ obs_project | regex_replace(':', ':/') }}/{{ obs_repo_dir }}"
