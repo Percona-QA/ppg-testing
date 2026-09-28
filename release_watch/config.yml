@@ -1,0 +1,210 @@
+# Release watcher configuration, read by tools/release_watch.py.
+#
+# Two kinds of placeholders:
+#   <<name>>  replaced when the config is loaded, from a stream's `vars`
+#   {name}    filled at launch time from what was observed in the repo:
+#             {version} {repo} {minor} {minor_prev} {prev_version}
+#             {pkg[x]} full version, {upstream[x]} without release,
+#             {mm[x]} major.minor, {url[x]} (http sources),
+#             {verified[stream]} the version that last passed QA in a stream
+# A job whose params cannot be filled (e.g. no prev_version yet) is skipped
+# with a Slack warning instead of being launched with a bad value.
+
+settings:
+  settle_minutes: 60          # new content must stop changing this long
+  # When only components changed and the server did not, wait this long
+  # instead: on a re-release the rebuilt components can land before the new
+  # server build, and testing them with the old server gives false failures.
+  component_settle_minutes: 180
+  incomplete_alert_hours: 24  # warn when a push stays partial this long
+  stale_run_hours: 18         # a QA run with no result after this is failed
+  max_parallel: 3             # downstream jobs at once per QA run
+  notify_on_start: false      # true = post to `qa` when a run starts
+  missing_http_codes: [404, 410]  # "not published"; any other error is reported
+
+slack:
+  qa: "#postgresql-test"      # failures, warnings
+  release: "#postgresql-test" # "ready to release"; set to the build team's channel
+
+templates:
+  ppg:
+    source:
+      type: repo
+      repo: "ppg-<<major>>.{minor}"   # percona-release repo per minor
+      # Scan upward from the verified minor; stop after this many missing
+      # minors in a row past the last one found (repos can have gaps, e.g.
+      # ppg-18.3 then ppg-18.6)
+      minor_lookahead: 3
+      # Track every source package in the repo (the pool directory names:
+      # percona-haproxy, percona-pg-cron, psycopg2, ...) as deb:<name> and
+      # rpm:<name>. Any version or build-number bump of any component is then
+      # detected, including components added to the distribution later.
+      track_sources: true
+      ignore_sources: []      # never track these source packages (globs)
+      # Platforms of a family must agree on these (a disagreement means a push
+      # in progress). Other sources are third-party dependencies shipped in the
+      # repo (gdal, geos, proj, python3.12-*, ...) whose builds legitimately
+      # differ between RHEL 8/9/10: tracked, but differences never block.
+      strict_sources: ["percona-*"]
+      # A component in the verified set that is missing from the repo makes
+      # the stream wait (it may simply not be pushed yet) and warns after
+      # incomplete_alert_hours. List intended removals here, e.g.
+      # "*pg-telemetry*". Components that are new in a repo are always tested.
+      allow_removed: []
+      # Mis-push guards: the server in ppg-18.N must be 18.N.x, and nothing may
+      # be older than the last verified build. Either stops the launch and
+      # alerts the qa and release channels once. allow_downgrade lists
+      # intended downgrades (globs on tracked names).
+      version_check: {package: server, expect: "<<major>>.{minor}"}
+      allow_downgrade: []
+      indexes:
+        - format: apt
+          url: "https://repo.percona.com/{repo}/apt/dists/{codename}/testing/binary-{arch}/Packages"
+          codename: [bookworm, trixie, jammy, noble, resolute]
+          arch: [amd64, arm64]
+        - format: rpm
+          url: "https://repo.percona.com/{repo}/yum/testing/{rhel}/RPMS/{arch}"
+          rhel: [8, 9, 10]
+          arch: [x86_64, aarch64]
+    compare: full        # full: build bumps (2.8.23-1 -> 2.8.23-2) trigger; upstream: they do not
+    version: "{repo}"    # VERSION passed to jobs, e.g. ppg-18.5
+    # Upgrade source ({prev_version}) for a respin of the verified release;
+    # otherwise the last verified version is used. {minor_prev} is the
+    # previous minor repo that exists.
+    prev_version: "ppg-<<major>>.{minor_prev}"
+    packages:
+      server:     {apt: "percona-postgresql-<<major>>", rpm: "percona-postgresql<<major>>-server", required: true}
+      common:     {apt: percona-postgresql-common, rpm: percona-postgresql-common, required: true}
+      pg_tde:     {apt: "percona-pg-tde<<major>>", rpm: "percona-pg_tde<<major>>"}
+      pgsm:       {apt: "percona-pg-stat-monitor<<major>>", rpm: "percona-pg_stat_monitor<<major>>"}
+      pg_repack:  {apt: "percona-postgresql-<<major>>-repack", rpm: "percona-pg_repack<<major>>"}
+      set_user:   {apt: "percona-pgaudit<<major>>-set-user", rpm: "percona-pgaudit<<major>>_set_user"}
+      wal2json:   "percona-wal2json<<major>>"
+      pgvector:   {rpm: "percona-pgvector_<<major>>"}
+      patroni:    percona-patroni
+      pgbackrest: percona-pgbackrest
+      pgbouncer:  percona-pgbouncer
+      haproxy:    percona-haproxy
+    jobs:
+      - id: server
+        job: ppg-multiOS-parallel
+        on: ["*"]                     # BVT + test_tools cover every component
+        retries: 1
+        params: &ppg_params
+          REPO: testing
+          VERSION: "{version}"
+          SCENARIO: "pg-<<major>>"
+          IO_METHOD: worker
+          TESTING_BRANCH: main
+          MAJOR_REPO: false
+          USE_OBS_REPO: false
+      - id: meta-server
+        job: ppg-multiOS-parallel
+        on: [server, common, "*ppg-server*"]
+        retries: 1
+        params:
+          <<: *ppg_params
+          SCENARIO: "pg-<<major>>-meta-server"
+      - id: meta-ha
+        job: ppg-multiOS-parallel
+        on: [server, common, patroni, haproxy, pgbackrest, pgbouncer, "*ppg-server-ha*",
+             "*ppg-server*ha*", "*patroni*", "*haproxy*", "*pgbackrest*", "*pgbouncer*",
+             "*pysyncobj*", "*psycopg2*", "*etcd*", "*ydiff*",
+             "rpm:python3.12-*", "rpm:py-consul"]   # Patroni's RHEL python deps
+        retries: 1
+        params:
+          <<: *ppg_params
+          SCENARIO: "pg-<<major>>-meta-ha"
+      - id: minor-upgrade
+        job: ppg-upgrade-parallel
+        on: [server, common]
+        retries: 1
+        params:
+          SCENARIO: "pg-<<major>>-minor-upgrade"
+          FROM_VERSION: "{prev_version}"
+          FROM_REPO: release
+          VERSION: "{version}"
+          TO_REPO: testing
+          TESTING_BRANCH: main
+      - id: major-upgrade
+        job: ppg-upgrade-parallel
+        on: [server, common]
+        retries: 1
+        params:
+          SCENARIO: "pg-<<major>>-major-upgrade"
+          # last QA-verified version of the previous major; testing always
+          # has it, release may not yet
+          FROM_VERSION: "{verified[ppg-<<prev_major>>]}"
+          FROM_REPO: testing
+          VERSION: "{version}"
+          TO_REPO: testing
+          TESTING_BRANCH: main
+      - id: pgsm
+        job: pgsm-parallel
+        on: [pgsm, server, "*stat-monitor*", "*stat_monitor*"]
+        retries: 1
+        params:
+          REPO: testing
+          VERSION: "{version}"
+          PGSM_PACKAGE_INSTALL: true
+          PGSM_BRANCH: "{upstream[pgsm]}"
+          PGSM_REPO: https://github.com/percona/pg_stat_monitor.git
+          TESTING_BRANCH: main
+          MAJOR_REPO: false
+
+streams:
+  # start_minor is only used until the first verified version exists; after
+  # that the watcher scans from the verified minor upwards.
+  ppg-18: {template: ppg, vars: {major: 18, prev_major: 17}, source_start_minor: 4}
+  ppg-17: {template: ppg, vars: {major: 17, prev_major: 16}, source_start_minor: 10}
+  ppg-16: {template: ppg, vars: {major: 16, prev_major: 15}, source_start_minor: 14}
+  ppg-15: {template: ppg, vars: {major: 15, prev_major: 14}, source_start_minor: 18}
+  ppg-14:
+    template: ppg
+    vars: {major: 14}
+    source_start_minor: 18
+    skip_jobs: [major-upgrade]   # ppg-13 is not watched
+
+  psp-16:
+    enabled: false               # enable after checking `observe psp-16`
+    source:
+      type: repo
+      repo: psp-16               # one repo per major, no minor repos
+      indexes:
+        - format: apt
+          url: "https://repo.percona.com/{repo}/apt/dists/{codename}/testing/binary-{arch}/Packages"
+          codename: [bookworm, trixie, jammy, noble]
+          arch: [amd64, arm64]
+        - format: rpm
+          url: "https://repo.percona.com/{repo}/yum/testing/{rhel}/RPMS/{arch}"
+          rhel: [8, 9, 10]
+          arch: [x86_64, aarch64]
+    version: "psp-{mm[server]}"
+    packages:
+      server: {apt: percona-postgresql-16, rpm: percona-postgresql16-server, required: true}
+      pg_tde: {apt: percona-pg-tde16, rpm: percona-pg_tde16}
+    jobs:
+      - id: server
+        job: ppg-multiOS-parallel
+        retries: 1
+        params: {REPO: testing, VERSION: "{version}", SCENARIO: psp-16,
+                 IO_METHOD: worker, TESTING_BRANCH: main, MAJOR_REPO: false,
+                 USE_OBS_REPO: false}
+
+  tarballs-18:
+    enabled: false               # enable after checking `observe tarballs-18`
+    source:
+      type: http
+      repo: "pg_tarballs-18.{minor}"
+      file_version: "18.{minor}"
+      start_minor: 4
+      minor_lookahead: 2
+      required: [ssl3]
+    packages:
+      ssl3: "https://downloads.percona.com/downloads/TESTING/pg_tarballs-18.{minor}/percona-postgresql-18.{minor}-ssl3-linux-x86_64.tar.gz"
+    jobs:
+      - id: tarball-ssl3
+        job: tarball-parallel-ssl3
+        retries: 1
+        params: {SSL_VERSION: "3", VERSION: "ppg-{pkg[ssl3]}", IO_METHOD: worker,
+                 TARBALL_URL: "{url[ssl3]}", TESTING_BRANCH: main}
