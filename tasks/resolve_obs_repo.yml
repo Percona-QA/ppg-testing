@@ -26,16 +26,16 @@
     ansible.builtin.set_fact:
       obs_major: "{{ (obs_version_selector | regex_replace('^(?:ppg|psp)-', '')).split('.')[0] }}"
 
-  - name: Fail when psp is requested for a major with no known OBS :tde project
-    # psp-16 is the only major with a confirmed isv:percona:ppg:<channel>:<major>:tde
-    # project on OBS today (e.g. no :16:tde/:17:tde exists yet) -- fail loudly
-    # instead of silently building a URL for a project that doesn't exist.
+  - name: Fail when the psp- prefix is used for a major other than 16
+    # The psp- prefix exists only for 16: 16's main OBS project ships upstream
+    # PG, so PSP 16 lives in a separate :16:tde project. From 17 on, the main
+    # project already ships PSP (tde included), so those use ppg-<major>.
     ansible.builtin.fail:
       msg: >-
-        psp-{{ obs_major }} has no known OBS ":tde" project
-        (isv:percona:ppg:<channel>:{{ obs_major }}:tde) -- only major 16 is
-        confirmed to exist. Update this check once a psp-{{ obs_major }}
-        project is published on OBS.
+        The psp- prefix is only valid for major 16.
+        {{ ('Use ppg-' ~ obs_major ~ '.x instead: its main OBS project already ships PSP.')
+           if (obs_major | int) > 16
+           else ('There is no PSP build for major ' ~ obs_major ~ '.') }}
     when: obs_version_selector.startswith('psp-') and obs_major != '16'
 
   - name: Build OBS project string from REPO and VERSION
