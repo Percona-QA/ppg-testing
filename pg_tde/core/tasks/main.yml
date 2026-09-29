@@ -14,12 +14,6 @@
       psp_branch: "{{ lookup('env', 'PSP_BRANCH') }}"
       tde_repo: "{{ lookup('env', 'TDE_REPO') }}"
       tde_branch: "{{ lookup('env', 'TDE_BRANCH') }}"
-      # Which package source to install PSP/pg_tde from when install_from_packages
-      # is set. 'percona-release' drives the existing tasks/enable_repo.yml
-      # (REPO=testing/release/experimental). 'obs' is not wired up yet — see the
-      # "Configure repository" step below.
-      package_source: "{{ lookup('env', 'PACKAGE_SOURCE') | default('percona-release') }}"
-      obs_channel: "{{ lookup('env', 'OBS_CHANNEL') | default('devel') }}"
       # percona-qa/postgresql/pytest sections to skip by default: upgrade
       # coverage lives in the dedicated upgrade role, vault/kmip need external
       # key-provider services this role doesn't set up, and slow tests don't
@@ -122,18 +116,11 @@
     ansible.builtin.debug:
       var: tmp_redirect.stdout
 
-  - name: Configure repository (percona-release)
+  - name: Configure repository
+    # Dispatches on USE_OBS_REPO (same switch as the ppg/psp roles): OBS via
+    # tasks/enable_obs_repo.yml, or percona-release otherwise.
     ansible.builtin.include_tasks: ../../../../tasks/enable_repo.yml
-    when: install_from_packages and package_source == 'percona-release'
-
-  - name: Fail fast on unimplemented OBS package source
-    ansible.builtin.fail:
-      msg: >-
-        PACKAGE_SOURCE=obs (OBS_CHANNEL={{ obs_channel }}) has no repo-setup task
-        in this role yet. Add an OBS-equivalent of tasks/enable_repo.yml (repo
-        URL/GPG key per channel) before selecting this option, or use
-        PACKAGE_SOURCE=percona-release.
-    when: install_from_packages and package_source == 'obs'
+    when: install_from_packages
 
   - name: Include Redhat tasks file
     include_tasks: 
