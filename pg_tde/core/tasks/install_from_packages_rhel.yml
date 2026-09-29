@@ -117,6 +117,31 @@
       update_cache: yes
     when: ansible_os_family == "RedHat"
 
+  # Check up front that the enabled repos publish the pg_tde debug RPMs, so a
+  # repo that stops shipping them fails with a clear message instead of a bare
+  # dnf error. OBS releases/devel currently lack them on Rocky 8/10 (PG-2814).
+  - name: Find the pg_tde debug packages the enabled repos publish
+    ansible.builtin.command: >-
+      dnf -q repoquery --qf '%{name}'
+      percona-pg_tde{{ major_version }}-debugsource
+      percona-pg_tde{{ major_version }}-debuginfo
+    register: pg_tde_debug_pkgs
+    changed_when: false
+
+  - name: Fail if the pg_tde debug packages are not published
+    ansible.builtin.fail:
+      msg: >-
+        The enabled repositories don't publish {{ pg_tde_debug_missing | join(', ') }}
+        for {{ ansible_distribution }} {{ ansible_distribution_major_version }}.
+        This is a packaging bug in the repo (for OBS see PG-2814: the project's
+        <debuginfo> flag must be enabled for this platform), not in the test.
+    vars:
+      pg_tde_debug_missing: >-
+        {{ ['percona-pg_tde' ~ major_version ~ '-debugsource',
+            'percona-pg_tde' ~ major_version ~ '-debuginfo']
+           | difference(pg_tde_debug_pkgs.stdout_lines) }}
+    when: pg_tde_debug_missing | length > 0
+
   - name: Install pg_tde packages RHEL
     yum:
       name: "{{ packages }}"
