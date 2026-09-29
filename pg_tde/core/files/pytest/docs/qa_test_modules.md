@@ -2,7 +2,7 @@
 
 > **Audience:** QA, build/release, management  
 > **Related:** [QA workflow](qa_workflow.md) · [Test coverage summary](qa_test_coverage_executive_summary.md) · [Test sections](test_sections.md)  
-> **Scale:** ~550 automated pytest scenarios (+ bash automation and multi-OS package smoke)
+> **Scale:** automated pytest scenarios ([count](qa_test_coverage_executive_summary.md#appendix--pytest-module-index)), plus bash automation and multi-OS package smoke
 
 This document describes **what pg_tde areas we test**, grouped by **functional module**.
 It does not reference source file names — only product behaviour and scenarios.
@@ -410,7 +410,7 @@ Persistent data directory across Setup and Verify (staged workflow).
 
 ## 23. Bash automation layer (Jenkins parity)
 
-**Not counted in pytest 550** — complementary shell scenarios:
+**Not counted in the pytest total** — complementary shell scenarios:
 
 | Category | Examples |
 |----------|----------|
@@ -441,7 +441,7 @@ Run via Jenkins `tde-upgrade-parallel` or `automation/wrapper/test_runner.sh`.
 ## How modules map to test runs
 
 ```bash
-cd postgresql/pytest && source .env.sh
+cd pg_tde/core/files/pytest && source .env.sh
 
 pytest tests/ -m encryption -v       # Modules 1–3, 17–19
 pytest tests/ -m kmip -v               # Module 4

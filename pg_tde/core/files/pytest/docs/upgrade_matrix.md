@@ -56,7 +56,7 @@ Collected with default `io=worker` parametrization. Use `--io-method-matrix` to 
 ### Quick run commands
 
 ```bash
-cd postgresql/pytest && source .env.sh
+cd pg_tde/core/files/pytest && source .env.sh
 
 # Major — full TDE regression
 pytest -m upgrade \

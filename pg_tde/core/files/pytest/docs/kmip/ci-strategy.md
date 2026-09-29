@@ -55,7 +55,7 @@ PG_TEST_REQUIRE_COSMIAN_KMS=1 meson test t/kmip.pl --print-errorlogs
 **percona-qa (pytest parity):**
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
 source scripts/setup_cosmian_for_pytest.sh   # auto: local cosmian_kms if installed
 ./scripts/run_kmip_revalidation.sh

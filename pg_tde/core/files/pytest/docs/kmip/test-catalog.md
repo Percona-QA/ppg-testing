@@ -2,7 +2,7 @@
 
 > **Documentation index:** [README.md](README.md)
 
-Detailed inventory of KMIP-related tests in `postgresql/pytest` (and related bash/TAP
+Detailed inventory of KMIP-related tests in `pg_tde/core/files/pytest` (and related bash/TAP
 automation). Use this when signing off a KMS vendor, validating [PR #595](https://github.com/percona/pg_tde/pull/595) / [PG-2125](https://perconadev.atlassian.net/browse/PG-2125), or onboarding to the lab.
 
 **Related docs:** [quickstart.md](quickstart.md), [../key_provider_matrix.md](../key_provider_matrix.md), [vendor-signoff.md](vendor-signoff.md), [advanced-scenarios.md](advanced-scenarios.md), [vault-kmip-engine.md](vault-kmip-engine.md).

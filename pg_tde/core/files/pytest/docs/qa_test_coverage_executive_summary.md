@@ -12,7 +12,7 @@
 
 | Metric | Value |
 |--------|------:|
-| **pytest scenarios** | **~670** |
+| **pytest scenarios** | See [module index](#appendix--pytest-module-index) |
 | **Test modules** | **31+** |
 | **Bash automation scripts** | **~50** (Jenkins parity) |
 | **Supported KMS backends** | Cosmian, Fortanix, Thales, Akeyless, Vault KV, OpenBao |
@@ -123,8 +123,8 @@ Numbers in parentheses = pytest test count per module group.
 
 | Module | Tests | Focus |
 |--------|------:|-------|
-| `test_pg_tde_product_gaps.py` | 12 | release-2.2 gaps: ACL, inherit_global_providers=off, enforce DB/role, is_encrypted TEMP, storage rewrite, default-key basebackup, multi-tenant DB providers |
-| `test_pg_tde_pgbackrest.py` | 72 | Matrix, extended PITR + negatives, encrypted-in-repo, HA, checksum/header, archive-async, rewind |
+| `test_pg_tde_product_gaps.py` | 11 | release-2.2 gaps: ACL, inherit_global_providers=off, enforce DB/role, is_encrypted TEMP, storage rewrite, default-key basebackup, multi-tenant DB providers |
+| `test_pg_tde_pgbackrest.py` | 96 | Matrix, extended PITR + negatives, encrypted-in-repo, HA, checksum/header, archive-async, rewind |
 | `test_pg_basebackup.py` | 25 | `pg_tde_basebackup` / streaming base backup + PITR (basics/corner/negative) |
 | `test_pitr.py` | 7 | Cold-copy PITR (time/LSN/XID, exclusive, pause, multi-DB) |
 | `test_recovery.py` | 10 | Crash recovery, `pg_resetwal`, archive paths |
@@ -217,7 +217,7 @@ Shared **matrix pattern** — same scenarios on every backend ([key_provider_mat
 
 ## Slide 13 — Bash automation layer (~50 scripts)
 
-Not counted in pytest 550 — run via Jenkins `tde-upgrade-parallel` and `test_runner.sh`:
+Not counted in the pytest total — run via Jenkins `tde-upgrade-parallel` and `test_runner.sh`:
 
 | Category | Example scripts |
 |----------|-------------------|
@@ -258,7 +258,7 @@ Not counted in pytest 550 — run via Jenkins `tde-upgrade-parallel` and `test_r
 ## Slide 16 — How to run by section
 
 ```bash
-cd postgresql/pytest && source .env.sh
+cd pg_tde/core/files/pytest && source .env.sh
 
 pytest tests/ -m encryption -v          # core TDE
 pytest tests/ -m rewind -v              # HA / rewind
@@ -275,28 +275,38 @@ pytest --list-test-sections                       # all sections
 
 ## Slide 17 — Summary for management
 
-> **550 automated pytest scenarios** exercise encryption, keys, upgrades, HA, backup, replication, and every supported external KMS — on ephemeral clusters that mirror production configuration. **~50 bash scripts** extend this for Jenkins upgrade matrices. **Multi-OS Vagrant smoke** gates package promotion. Together this is the evidence package QA uses before recommending **testing → release**.
+> **Automated pytest scenarios** ([count](#appendix--pytest-module-index)) exercise encryption, keys, upgrades, HA, backup, replication, and every supported external KMS — on ephemeral clusters that mirror production configuration. **~50 bash scripts** extend this for Jenkins upgrade matrices. **Multi-OS Vagrant smoke** gates package promotion. Together this is the evidence package QA uses before recommending **testing → release**.
 
 ---
 
 ## Appendix — pytest module index
 
+This table is the single source for the pytest test count; other docs link here
+instead of repeating the number. Counts are collected tests with the default
+`io_method` (2026-09-29); `test_kmip_server_revalidation.py` runs once per KMIP
+profile and is counted once. Regenerate with:
+
+```bash
+pytest tests --collect-only -q --install-dir /tmp | tail -1
+```
+
 | Module | Tests | Marker / theme |
 |--------|------:|----------------|
 | `test_encryption.py` | 82 | `encryption` |
-| `test_tde_rewind_advanced.py` | 97 | `rewind` |
+| `test_tde_rewind_advanced.py` | 101 | `rewind` |
 | `test_tde_pg_upgrade.py` | 48 | `upgrade` |
 | `test_upgrade.py` | 47 | `upgrade` |
 | `test_waldump.py` | 27 | `waldump` |
-| `test_kmip.py` | 24 | `kmip` |
+| `test_kmip.py` | 32 | `kmip` |
 | `test_partitioning.py` | 21 | `encryption` |
-| `test_pg_tde_pgbackrest.py` | 72 | `pgbackrest` |
+| `test_pg_tde_pgbackrest.py` | 96 | `pgbackrest` |
 | `test_bug_reproduction.py` | 18 | `bug` |
 | `test_cipher.py` | 18 | `encryption` |
 | `test_change_key_provider.py` | 16 | `encryption` |
 | `test_tde_cli_tools.py` | 15 | `encryption` |
 | `test_replication.py` | 14 | `replication` |
 | `test_template_databases.py` | 14 | `encryption` |
+| `test_pg_tde_product_gaps.py` | 11 | `encryption` |
 | `test_tde_minor_upgrade.py` | 11 | `minor_upgrade` |
 | `test_pdg_migration.py` | 10 | `migration` |
 | `test_recovery.py` | 10 | `recovery` |
@@ -304,7 +314,7 @@ pytest --list-test-sections                       # all sections
 | `test_kmip_common_matrix.py` | 9 | `kmip_matrix` |
 | `test_openbao_key_providers.py` | 8 | `openbao` |
 | `test_key_provider_lifecycle.py` | 12 | `vault` |
-| `test_external_key_provider_regressions.py` | 7 | `kmip`, `vault`, `openbao` |
+| `test_external_key_provider_regressions.py` | 16 | `kmip`, `vault`, `openbao` |
 | `test_unlogged_recovery.py` | 7 | `recovery` |
 | `test_pg_basebackup.py` | 25 | `backup` |
 | `test_vault_kv_common_matrix.py` | 3 | `vault` |
@@ -313,4 +323,4 @@ pytest --list-test-sections                       # all sections
 | `test_vault_kmip.py` | 2 | `vault_kmip` |
 | `test_pitr.py` | 7 | `backup` |
 | `test_kmip_server_revalidation.py` | 1×N | `kmip_revalidation` (per profile) |
-| **Total** | **582** | |
+| **Total** | **695** | |

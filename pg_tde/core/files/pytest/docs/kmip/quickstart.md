@@ -28,7 +28,7 @@ for register / locate / get / validate instead of the legacy C libkmip BIO API.
 Same package as **pg_tde** `ci_scripts/ubuntu-deps.sh` (v5.21.0):
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 ./scripts/install_cosmian_kms.sh
 ```
 
@@ -52,7 +52,7 @@ command -v cosmian_kms || ls -l /usr/sbin/cosmian_kms
 Then:
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
 source scripts/setup_cosmian_for_pytest.sh
 ./scripts/run_kmip_revalidation.sh
@@ -62,7 +62,7 @@ Build pg_tde from a tree that includes PR #595 (or `main` after merge) when
 validating the new client:
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 ./build_from_source.sh --tde-ref libkmip-rework   # or main after merge
 ```
 
@@ -71,7 +71,7 @@ cd postgresql/pytest
 **CI / Cosmian (recommended):**
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
 source scripts/setup_cosmian_for_pytest.sh   # local cosmian_kms or KMIP_COSMIAN_* from Jenkins
 ./scripts/run_kmip_revalidation.sh
