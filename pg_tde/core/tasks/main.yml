@@ -123,6 +123,9 @@
       file: "debian_tasks.yml"
     when: ansible_os_family == 'Debian'
 
+  # Docker is installed on all platforms for container-based test services;
+  # pytest skips `docker`-marked tests when it's missing. KMIP (Cosmian KMS)
+  # and OpenBao are installed natively by setup_test_env.sh, not via Docker.
   - name: Include Docker setup file
     include_tasks:
       file: "install_docker.yml"
