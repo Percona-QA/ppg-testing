@@ -10,6 +10,10 @@
       psp_branch: "{{ lookup('env', 'PSP_BRANCH') }}"
       tde_repo: "{{ lookup('env', 'TDE_REPO') }}"
       tde_branch: "{{ lookup('env', 'TDE_BRANCH') }}"
+      # percona-qa/postgresql/pytest sections to skip by default: upgrade
+      # coverage lives in the dedicated upgrade role, vault/kmip need external
+      # key-provider services this role doesn't set up, and slow tests don't
+      # belong in the core regression pass. Override via PYTEST_SKIP_SECTIONS.
       pytest_skip_sections: "{{ lookup('env', 'PYTEST_SKIP_SECTIONS') | default('upgrade,minor_upgrade,slow,vault,kmip,openbao', true) }}"
       test_suite: "{{ lookup('env', 'TEST_SUITE') | default('sanity', true) | lower }}"
       go_version: "1.25.6"
