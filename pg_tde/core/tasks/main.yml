@@ -109,9 +109,9 @@
 
   - name: Configure repository
     # Dispatches on USE_OBS_REPO (same switch as the ppg/psp roles): OBS via
-    # tasks/enable_obs_repo.yml, or percona-release otherwise.
+    # tasks/enable_obs_repo.yml, or percona-release otherwise. Runs in
+    # build-from-source mode too, since percona-pgbackrest ships in this repo.
     ansible.builtin.include_tasks: ../../../../tasks/enable_repo.yml
-    when: install_from_packages
 
   - name: Include Redhat tasks file
     include_tasks: 
@@ -218,7 +218,7 @@
   - name: Install pgbackrest
     become: true
     package:
-      name: "{{ 'percona-pgbackrest' if install_from_packages else 'pgbackrest' }}"
+      name: percona-pgbackrest
       state: present
 
   - name: Check if Go is already installed
