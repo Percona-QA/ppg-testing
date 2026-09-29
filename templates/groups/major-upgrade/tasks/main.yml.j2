@@ -11,11 +11,9 @@
 # alongside pg_stat_monitor before the final restart.
 {% endif %}
 
-- name: Detect whether to use the OBS repo
-  # OBS only ever carries the latest minor of each major, so it can only serve
-  # the TO side of an upgrade -- the FROM side always uses percona-release.
-  ansible.builtin.set_fact:
-    use_obs_repo: "{{ v }} (lookup('env', 'USE_OBS_REPO') | default('false', true) | lower) in ['true', '1', 'yes'] {{ w }}"
+# OBS only ever carries the latest minor of each major, so it can only serve
+# the TO side of an upgrade -- the FROM side always uses percona-release.
+- include_tasks: ../../../../tasks/detect_use_obs_repo.yml
 
 - name: Configure repository
   include_tasks: ../../../tasks/install_percona_release.yml
