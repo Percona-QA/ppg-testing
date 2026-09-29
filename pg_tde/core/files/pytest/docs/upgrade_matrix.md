@@ -49,9 +49,9 @@ PG-2379 (per-DB principal keys during migration) fix: [percona/pg_tde#581](https
 
 ---
 
-## Pytest inventory (106 tests)
+## Pytest inventory
 
-Collected with default `io=worker` parametrization. Use `--io-method-matrix` to multiply by `sync` / `worker` / `io_uring` where supported.
+Test count: see [test_sections.md](test_sections.md#test-count). Use `--io-method-matrix` to run each test under `sync` / `worker` / `io_uring` where supported.
 
 ### Quick run commands
 
@@ -83,7 +83,7 @@ pytest tests/ --skip-sections=upgrade,minor_upgrade -v
 
 ---
 
-## Major upgrade — `tests/test_tde_pg_upgrade.py` (48 tests)
+## Major upgrade — `tests/test_tde_pg_upgrade.py`
 
 Marker: `upgrade`, `slow`. Requires `--old-install-dir` and `--install-dir` (different PG majors).
 
@@ -218,7 +218,7 @@ Use when PG17 and PG18 both ship `pg_tde.control` **2.2** (e.g. 2.2.0 vs 2.2.1 p
 
 ---
 
-## Major upgrade — `tests/test_upgrade.py` (47 tests)
+## Major upgrade — `tests/test_upgrade.py`
 
 Marker: `upgrade`, `slow`. Plain `pg_upgrade` and post-upgrade maintenance; one TDE smoke test.
 
@@ -346,7 +346,7 @@ Marker: `upgrade`, `slow`. Plain `pg_upgrade` and post-upgrade maintenance; one 
 
 ---
 
-## Minor upgrade — `tests/test_tde_minor_upgrade.py` (11 tests)
+## Minor upgrade — `tests/test_tde_minor_upgrade.py`
 
 ### Staged workflow (marker: `minor_upgrade`)
 
@@ -464,9 +464,9 @@ Methods: `pytest` (smoke via `TestPspToPspUpgrade`), `debian` (`initdb` under `/
 
 | Path | Role |
 |------|------|
-| `tests/test_tde_pg_upgrade.py` | Deep `pg_tde_upgrade` regression (48 tests) |
-| `tests/test_upgrade.py` | Plain `pg_upgrade` + maintenance (47 tests) |
-| `tests/test_tde_minor_upgrade.py` | In-place pg_tde bump (11 tests) |
+| `tests/test_tde_pg_upgrade.py` | Deep `pg_tde_upgrade` regression |
+| `tests/test_upgrade.py` | Plain `pg_upgrade` + maintenance |
+| `tests/test_tde_minor_upgrade.py` | In-place pg_tde bump |
 | `run_major_upgrade_workflow.sh` | Staged major upgrade driver |
 | `run_minor_upgrade_workflow.sh` | Staged minor upgrade driver (default **18.4.1 → 18.4.2**) |
 | `run_tde_upgrade_parallel.sh` | Major bash matrix (Jenkins `tde-upgrade-parallel`) |

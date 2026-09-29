@@ -136,7 +136,7 @@ Separate from KMIP vendors above. Customer regression: **Register symmetric key:
 ## Commands (lab VM)
 
 ```bash
-cd ppg-testing/pg_tde/core/files/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
 
 # --- KMIP vendor (example: Thales) ---

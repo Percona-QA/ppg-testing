@@ -36,8 +36,8 @@ loaded and `tde_heap` data exists, Percona explicitly warns to use
 
 | Area | Module | How to run |
 |------|--------|------------|
-| **pg_tde_upgrade** (17→18, encrypted data) | `tests/test_tde_pg_upgrade.py` (~45 tests) | `--old-install-dir` + `--install-dir` |
-| Plain **pg_upgrade** catalog objects | `tests/test_upgrade.py` (~47 tests) | same flags |
+| **pg_tde_upgrade** (17→18, encrypted data) | `tests/test_tde_pg_upgrade.py` | `--old-install-dir` + `--install-dir` |
+| Plain **pg_upgrade** catalog objects | `tests/test_upgrade.py` | same flags |
 | **Post-upgrade analyze** | `TestUpgradePostMaintenance` | `vacuumdb --analyze-in-stages` |
 | **`pg_upgrade --check`** | Several classes | |
 | **Debian apt / pg_upgradecluster** | Not automated in pytest | Use `run_major_upgrade_workflow.sh --method debian` |
