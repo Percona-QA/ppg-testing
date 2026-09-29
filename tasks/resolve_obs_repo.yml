@@ -1,0 +1,79 @@
+---
+  - name: Map REPO selection to OBS repository channel
+    ansible.builtin.set_fact:
+      obs_repo_channel_map:
+        testing: staging
+        release: releases
+        experimental: devel
+
+  - name: Determine OBS version/repo selectors
+    # obs_version/obs_repo let a caller target a specific VERSION/REPO pair
+    # (e.g. FROM_VERSION/FROM_REPO vs VERSION/TO_REPO during an upgrade,
+    # where the env vars alone can't tell the two repo endpoints apart).
+    # Default to the global env vars for the common single-repo case.
+    ansible.builtin.set_fact:
+      obs_version_selector: "{{ obs_version | default(lookup('env', 'VERSION')) }}"
+      obs_repo_selector: "{{ obs_repo | default(lookup('env', 'REPO')) }}"
+
+  - name: Fail when REPO has no OBS channel mapping
+    ansible.builtin.fail:
+      msg: >-
+        REPO={{ obs_repo_selector }} has no OBS channel mapping. Known
+        values: {{ obs_repo_channel_map.keys() | list }}.
+    when: obs_repo_selector not in obs_repo_channel_map
+
+  - name: Determine PG major from the selected version
+    ansible.builtin.set_fact:
+      obs_major: "{{ (obs_version_selector | regex_replace('^(?:ppg|psp)-', '')).split('.')[0] }}"
+
+  - name: Fail when the psp- prefix is used for a major other than 16
+    # The psp- prefix exists only for 16: 16's main OBS project ships upstream
+    # PG, so PSP 16 lives in a separate :16:tde project. From 17 on, the main
+    # project already ships PSP (tde included), so those use ppg-<major>.
+    ansible.builtin.fail:
+      msg: >-
+        The psp- prefix is only valid for major 16.
+        {{ ('Use ppg-' ~ obs_major ~ '.x instead: its main OBS project already ships PSP.')
+           if (obs_major | int) > 16
+           else ('There is no PSP build for major ' ~ obs_major ~ '.') }}
+    when: obs_version_selector.startswith('psp-') and obs_major != '16'
+
+  - name: Build OBS project string from REPO and VERSION
+    ansible.builtin.set_fact:
+      obs_project: >-
+        isv:percona:ppg:{{ obs_repo_channel_map[obs_repo_selector] }}:{{ obs_major }}{{
+        ':tde' if obs_version_selector.startswith('psp-') else '' }}
+
+  - name: Map distro to OBS repository directory
+    ansible.builtin.set_fact:
+      obs_repo_dir: >-
+        {%- if ansible_distribution == 'Debian' -%}
+        Debian_{{ ansible_distribution_major_version }}
+        {%- elif ansible_distribution == 'Ubuntu' -%}
+        Ubuntu_{{ ansible_distribution_version }}
+        {%- elif ansible_os_family == 'RedHat' -%}
+        RockyLinux_{{ ansible_distribution_major_version }}
+        {%- else -%}
+        UNSUPPORTED
+        {%- endif -%}
+
+  - name: Fail when distro family is not recognized for OBS
+    ansible.builtin.fail:
+      msg: >-
+        Don't know how to map {{ ansible_distribution }}
+        {{ ansible_distribution_version }} to an OBS repository directory
+        for project {{ obs_project }}. Recognized families: Debian, Ubuntu,
+        RedHat (RHEL/Rocky/OracleLinux).
+    when: obs_repo_dir == "UNSUPPORTED"
+
+  - name: Determine OBS instance hostname
+    # Lets a caller point at a different OBS instance than the public
+    # openSUSE one (e.g. a Percona-hosted instance), same as obs_version/
+    # obs_repo above: an explicit var wins, then OBS_HOST, then the default.
+    ansible.builtin.set_fact:
+      obs_host: "{{ obs_instance_host | default(lookup('env', 'OBS_HOST') | default('download.opensuse.org', true)) }}"
+
+  - name: Compute OBS repo id and base URL
+    ansible.builtin.set_fact:
+      obs_safe_id: "{{ obs_project | replace(':', '_') }}"
+      obs_base_url: "https://{{ obs_host }}/repositories/{{ obs_project | regex_replace(':', ':/') }}/{{ obs_repo_dir }}"

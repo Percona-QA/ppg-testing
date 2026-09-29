@@ -10,6 +10,9 @@
 # shared install_psp{{ major }}_tde.yml (install_ppg{{ major }}_tools.yml already ran below, so the
 # full extension set it expects in shared_preload_libraries is present).
 {% endif %}
+# OBS only ever carries the latest minor of each major, so it can only serve
+# the TO side of an upgrade -- the FROM side always uses percona-release.
+- include_tasks: ../../../../tasks/detect_use_obs_repo.yml
 
 - name: Configure repository
   include_tasks: ../../../tasks/install_percona_release.yml
@@ -58,6 +61,14 @@
   command: percona-release enable {{ v }} to_repo_version {{ w }} {{ v }} repo {{ w }}
   vars:
     repo: "{{ v }} lookup('env', 'TO_REPO') {{ w }}"
+  when: not use_obs_repo
+
+- name: Setup new repository (OBS)
+  include_tasks: ../../../../tasks/enable_obs_repo.yml
+  vars:
+    obs_version: "{{ v }} lookup('env', 'VERSION') {{ w }}"
+    obs_repo: "{{ v }} lookup('env', 'TO_REPO') {{ w }}"
+  when: use_obs_repo
 
 {# ppg 18 ships no percona-pg-telemetry package #}
 {% if major < 18 %}

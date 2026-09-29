@@ -1,0 +1,4 @@
+---
+  - name: Detect whether to use the OBS repo
+    ansible.builtin.set_fact:
+      use_obs_repo: "{{ (lookup('env', 'USE_OBS_REPO') | default('false', true) | lower) in ['true', '1', 'yes'] }}"
