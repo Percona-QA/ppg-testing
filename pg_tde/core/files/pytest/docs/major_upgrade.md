@@ -43,7 +43,7 @@ loaded and `tde_heap` data exists, Percona explicitly warns to use
 | **Debian apt / pg_upgradecluster** | Not automated in pytest | Use `run_major_upgrade_workflow.sh --method debian` |
 
 ```bash
-cd postgresql/pytest && source .env.sh
+cd pg_tde/core/files/pytest && source .env.sh
 
 # 17 → 18 (default matrix)
 pytest -m upgrade \
@@ -98,7 +98,7 @@ plain `pg_upgrade`.
 ### Full run
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 bash run_major_upgrade_workflow.sh
 ```
 

@@ -43,7 +43,7 @@ See also the [Fortanix DSM SaaS global availability map](https://support.fortani
 
 ```bash
 git clone https://github.com/percona/percona-qa.git
-cd percona-qa/postgresql/pytest
+cd ppg-testing/pg_tde/core/files/pytest
 ```
 
 ---
@@ -268,7 +268,7 @@ Fortanix env vars.
 ### 5.1 One-time pytest environment
 
 ```bash
-cd percona-qa/postgresql/pytest
+cd ppg-testing/pg_tde/core/files/pytest
 bash setup_test_env.sh --install-dir "$INSTALL_DIR"
 source .env.sh
 ```
@@ -295,7 +295,7 @@ source ~/fortanix_kmip_pytest.env
 **Vendor matrix (recommended sign-off):**
 
 ```bash
-cd percona-qa/postgresql/pytest
+cd ppg-testing/pg_tde/core/files/pytest
 source .env.sh
 source ~/fortanix_kmip_pytest.env
 

@@ -40,7 +40,7 @@ All KMIP guides for **pg_tde pytest** live in this folder. Each filename states
 **Default (Cosmian — no vendor license):**
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
 source scripts/setup_cosmian_for_pytest.sh
 ./scripts/run_kmip_matrix.sh
@@ -74,5 +74,5 @@ KMIP_PROFILE=vault_kmip ./scripts/run_kmip_matrix.sh
 
 ## Legacy filenames
 
-Older links used generic names (`kmip.md`, `kmip_revalidation.md`, …). Stub
-redirects remain at `docs/kmip*.md` and `docs/vault_kmip.md` pointing here.
+Older links used generic names (`kmip.md`, `kmip_revalidation.md`, …); those
+files are not part of this repo, so update such links to point here.

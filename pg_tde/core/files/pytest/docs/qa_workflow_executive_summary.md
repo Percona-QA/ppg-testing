@@ -13,7 +13,7 @@
 
 - Percona PostgreSQL Transparent Data Encryption
 - Example platform: **Ubuntu 26.04 x86_64**
-- Repo: `percona-qa/postgresql/pytest`
+- Repo: `ppg-testing`, under `pg_tde/core/files/pytest`
 
 ---
 
@@ -49,7 +49,7 @@ Build → Install on lab VM → pytest regression → Key providers → Upgrades
 
 **~1–3 days** on a single Ubuntu VM for core + KMIP + upgrades (vendor labs add time).
 
-**~500+ automated pytest scenarios** plus bash upgrade matrix and Vagrant OS smoke.
+**Automated pytest scenarios** ([count](qa_test_coverage_executive_summary.md#appendix--pytest-module-index)) plus bash upgrade matrix and Vagrant OS smoke.
 
 ---
 

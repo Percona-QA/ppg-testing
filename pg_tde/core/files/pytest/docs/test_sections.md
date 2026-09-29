@@ -9,7 +9,7 @@ the harness does not auto-skip based on missing binaries.
 ## Usage
 
 ```bash
-cd postgresql/pytest && source .env.sh
+cd pg_tde/core/files/pytest && source .env.sh
 
 # Skip pg_rewind / pg_tde_rewind tests (~67 tests)
 pytest tests/ --skip-sections=rewind -v

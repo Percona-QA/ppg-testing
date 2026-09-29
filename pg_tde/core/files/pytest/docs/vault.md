@@ -23,7 +23,7 @@ Legacy smoke: `tests/test_encryption.py::TestKeyManagement::test_vault_key_provi
 ## Quick start — Docker Vault (fastest)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 docker compose up -d vault
 export VAULT_ADDR=http://127.0.0.1:8200
 export VAULT_TOKEN=root
@@ -36,7 +36,7 @@ pytest tests/test_vault_providers.py::TestHashicorpVaultKeyProvider -v
 ## Quick start — automation Vault (SSL)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
 source scripts/setup_vault_for_pytest.sh
 pytest tests/test_vault_providers.py::TestHashicorpVaultKeyProvider -v
@@ -47,7 +47,7 @@ pytest tests/test_vault_providers.py::TestHashicorpVaultKeyProvider -v
 Same package as **pg_tde** `ci_scripts/ubuntu-deps.sh` (v2.5.4). No Go build required.
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 ./scripts/install_openbao.sh
 ```
 
@@ -64,7 +64,7 @@ bao version
 ## OpenBao (namespace tests)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
 source scripts/setup_openbao_for_pytest.sh
 ./scripts/run_openbao_revalidation.sh
@@ -148,7 +148,7 @@ When Vault is already running (namespaces, `pg_tde` KV mount, KMIP engine), use 
 bash revalidation suite instead of `setup_vault_for_pytest.sh`:
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 cp scripts/config/hashicorp_vault.example.env /tmp/my_vault.env
 # Edit: INSTALL_DIR, VAULT_TOKEN_FILE=/tmp/token_ent, VAULT_NAMESPACE=ns1/, KMIP cert paths
 
@@ -172,7 +172,7 @@ HC_VAULT_SUITES=kmip ./scripts/run_hashicorp_vault_revalidation.sh
 ### Pytest only (manual / external Vault server)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
 ./scripts/run_hashicorp_vault_pytest.sh
 ```

@@ -44,7 +44,7 @@ pytest tests/test_vault_kmip.py -v
 Requires **Vault Enterprise** with the KMIP secrets engine.
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
 ./scripts/run_vault_kmip_revalidation.sh
 ```
@@ -90,6 +90,6 @@ Manual / HCP Vault: export `KMIP_VAULT_*` from your environment (see
 
 ## Related
 
-- [vault.md](vault.md) — Vault KV v2 / OpenBao
+- [vault.md](../vault.md) — Vault KV v2 / OpenBao
 - [quickstart.md](quickstart.md) — Cosmian and enterprise KMS revalidation matrix
 - `lib/vault_kmip.py` — env helpers and error matching

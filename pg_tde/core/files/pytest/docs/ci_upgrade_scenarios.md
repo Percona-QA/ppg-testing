@@ -124,7 +124,7 @@ loop above is sequential but exercises the same scenarios.
 Single command covering all major TDE regression (48 tests) + plain `pg_upgrade` (47):
 
 ```bash
-cd postgresql/pytest && source .env.sh
+cd pg_tde/core/files/pytest && source .env.sh
 
 export OLD_INSTALL_DIR=/home/ubuntu/pgwork/pginst/17   # adjust
 export INSTALL_DIR=/home/ubuntu/pgwork/pginst/18
@@ -153,7 +153,7 @@ grep default_version "$INSTALL_DIR"/share/*/extension/pg_tde.control
 #### Staged VM workflow (packages, Debian/RHEL)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 sudo mkdir -p /var/lib/pg_tde_major_upgrade && sudo chown "$USER" /var/lib/pg_tde_major_upgrade
 
 bash run_major_upgrade_workflow.sh \
@@ -189,7 +189,7 @@ This is **not** `pg_upgrade` and **not** `tests/test_upgrade.py`.
 ### B.1 Automated full workflow (recommended)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 
 sudo mkdir -p /var/lib/pg_tde_minor_upgrade
 sudo chown "$USER" /var/lib/pg_tde_minor_upgrade
