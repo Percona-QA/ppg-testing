@@ -1,4 +1,4 @@
-Don’t read the whole suite ([test count](qa_test_coverage_executive_summary.md#appendix--pytest-module-index)) linearly. Use a **layered map → harness → helpers → one module deep → expand by section** approach.
+Don’t read the whole suite ([test count](test_sections.md#test-count)) linearly. Use a **layered map → harness → helpers → one module deep → expand by section** approach.
 
 ## Mental model (3 layers)
 
@@ -19,9 +19,7 @@ Almost every test is: **build cluster → configure TDE/provider → do work →
 
 | Read | Why |
 |------|-----|
-| [docs/qa_workflow_executive_summary.md](qa_workflow_executive_summary.md) | Big picture |
-| [docs/qa_test_modules.md](qa_test_modules.md) | ~23 modules by *product area* (no filenames) |
-| [docs/qa_test_coverage_executive_summary.md](qa_test_coverage_executive_summary.md) | File ↔ area mapping |
+| [docs/qa_workflow.md](qa_workflow.md) | Big picture: QA cycle, lab setup, release gates |
 | [docs/test_sections.md](test_sections.md) | Markers / `--skip-sections` |
 | [docs/pg16.md](pg16.md) | Running the suite on PostgreSQL **16.15+** + pg_tde |
 

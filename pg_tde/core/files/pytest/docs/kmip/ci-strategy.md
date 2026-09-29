@@ -2,13 +2,13 @@
 
 > **Documentation index:** [README.md](README.md)
 
-This document aligns **percona-qa pytest** with how **pg_tde** runs KMIP tests.
+This document aligns **ppg-testing pytest** with how **pg_tde** runs KMIP tests.
 
 ## Why Cosmian, not PyKMIP
 
 **pg_tde engineering moved KMIP testing from PyKMIP to Cosmian KMS** because
 [PyKMIP](https://github.com/PyKMIP/PyKMIP) is **completely abandoned** upstream.
-Percona CI and percona-qa pytest use **Cosmian only** for automated KMIP regression:
+Percona CI and ppg-testing pytest use **Cosmian only** for automated KMIP regression:
 
 - No Docker `mohitpercona/kmip` image
 - No `pykmip` Python package as a test server
@@ -52,7 +52,7 @@ cd pg_tde/build
 PG_TEST_REQUIRE_COSMIAN_KMS=1 meson test t/kmip.pl --print-errorlogs
 ```
 
-**percona-qa (pytest parity):**
+**ppg-testing (pytest parity):**
 
 ```bash
 cd pg_tde/core/files/pytest
@@ -80,7 +80,7 @@ source scripts/setup_cosmian_for_pytest.sh   # auto: local cosmian_kms if instal
 
 **Remote lab Cosmian** (optional): set `KMIP_COSMIAN_HOST` + certs before sourcing setup script.
 
-**Expected:** 15+ tests pass; profile `cosmian` only (not `all`).
+**Expected:** all selected tests pass; profile `cosmian` only (not `all`).
 
 ## Layer 2 — Vendor matrix (manual sign-off → automate over time)
 
@@ -147,9 +147,9 @@ See [vendor-signoff.md](vendor-signoff.md) § QA sign-off table. Record pg_tde v
 | PG-2125 lifecycle | `TestKmipCppClientRegression` | Restarts, idempotent create, WAL |
 | Vendor checklist | `test_kmip_server_revalidation.py` | Per-KMS sign-off |
 
-See **[advanced-scenarios.md](advanced-scenarios.md)** for the full advanced scenario matrix (14 tests).
+See **[advanced-scenarios.md](advanced-scenarios.md)** for the full advanced scenario matrix.
 
-pg_tde `t/kmip.pl` remains upstream meson coverage; percona-qa pytest goes **deeper**
+pg_tde `t/kmip.pl` remains upstream meson coverage; ppg-testing pytest goes **deeper**
 than TAP (multi-rotation, partitions, dump/restore, mixed topologies).
 
 Vendor matrix (Fortanix, Thales, Akeyless) has no TAP in pg_tde — manual/scheduled pytest only.

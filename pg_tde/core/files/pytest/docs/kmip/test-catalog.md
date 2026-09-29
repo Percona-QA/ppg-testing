@@ -11,19 +11,19 @@ automation). Use this when signing off a KMS vendor, validating [PR #595](https:
 
 ## Summary
 
-| Layer | Module / script | Tests | Profile scope | Marker |
-|-------|-----------------|------:|---------------|--------|
-| Shared matrix | `tests/test_kmip_common_matrix.py` | 9 | All `KMIP_REVALIDATE_PROFILES` | `kmip`, `kmip_matrix` |
-| Full checklist | `tests/test_kmip_server_revalidation.py` | 1×N profiles | All profiles | `kmip`, `kmip_revalidation` |
-| Extended / advanced | `tests/test_kmip.py` | 26 | Single profile (`kmip_config`) | `kmip`, `encryption` |
-| PG-2125 regression | `tests/test_external_key_provider_regressions.py` | 4 | Single profile | `kmip`, `bug` |
-| Vault KMIP engine | `tests/test_vault_kmip.py` | 2 | `vault_kmip` only | `kmip`, `vault_kmip`, `bug` |
-| OpenBao + KMIP mix | `tests/test_openbao_key_providers.py` | 5 scenarios | KMIP + OpenBao | `vault`, `openbao`, `kmip` |
-| OpenBao multi-DB | `tests/test_vault_providers.py` | 2 | KMIP + OpenBao | `vault`, `openbao` |
-| Offline CLI (kmip) | `tests/test_change_key_provider.py` | 1 | No live server | `encryption` |
-| Offline CLI (kmip) | `tests/test_kmip.py` | 1 | Live KMIP | `kmip` |
-| Bash revalidation | `scripts/scenarios/hashicorp_vault_kmip.sh` | 4 scenarios | Vault Enterprise KMIP | — |
-| TAP (legacy) | `postgresql/t/*.pl` | several | External KMIP lab | — |
+| Layer | Module / script | Profile scope | Marker |
+|-------|-----------------|---------------|--------|
+| Shared matrix | `tests/test_kmip_common_matrix.py` | All `KMIP_REVALIDATE_PROFILES` | `kmip`, `kmip_matrix` |
+| Full checklist | `tests/test_kmip_server_revalidation.py` | All profiles | `kmip`, `kmip_revalidation` |
+| Extended / advanced | `tests/test_kmip.py` | Single profile (`kmip_config`) | `kmip`, `encryption` |
+| PG-2125 regression | `tests/test_external_key_provider_regressions.py` | Single profile | `kmip`, `bug` |
+| Vault KMIP engine | `tests/test_vault_kmip.py` | `vault_kmip` only | `kmip`, `vault_kmip`, `bug` |
+| OpenBao + KMIP mix | `tests/test_openbao_key_providers.py` | KMIP + OpenBao | `vault`, `openbao`, `kmip` |
+| OpenBao multi-DB | `tests/test_vault_providers.py` | KMIP + OpenBao | `vault`, `openbao` |
+| Offline CLI (kmip) | `tests/test_change_key_provider.py` | No live server | `encryption` |
+| Offline CLI (kmip) | `tests/test_kmip.py` | Live KMIP | `kmip` |
+| Bash revalidation | `scripts/scenarios/hashicorp_vault_kmip.sh` | Vault Enterprise KMIP | — |
+| TAP (legacy) | `postgresql/t/*.pl` | External KMIP lab | — |
 
 **Default KMIP server:** `cosmian` (no vendor license). Override with `KMIP_PROFILE=vault_kmip` (or `fortanix`, `thales`, `akeyless`).
 

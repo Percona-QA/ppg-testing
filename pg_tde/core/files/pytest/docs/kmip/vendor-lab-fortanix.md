@@ -39,11 +39,11 @@ See also the [Fortanix DSM SaaS global availability map](https://support.fortani
 - Ubuntu (or similar) VM with network access to Fortanix KMIP port **5696**
 - **pg_tde** built or installed for your PostgreSQL major version
 - `openssl`, `nc`, and Python 3.9+ (for pytest)
-- Percona QA repo cloned:
+- ppg-testing repo cloned:
 
 ```bash
-git clone https://github.com/percona/percona-qa.git
-cd ppg-testing/pg_tde/core/files/pytest
+git clone https://github.com/Percona-QA/ppg-testing.git
+cd ppg-testing
 ```
 
 ---
@@ -268,7 +268,7 @@ Fortanix env vars.
 ### 5.1 One-time pytest environment
 
 ```bash
-cd ppg-testing/pg_tde/core/files/pytest
+cd pg_tde/core/files/pytest
 bash setup_test_env.sh --install-dir "$INSTALL_DIR"
 source .env.sh
 ```
@@ -295,7 +295,7 @@ source ~/fortanix_kmip_pytest.env
 **Vendor matrix (recommended sign-off):**
 
 ```bash
-cd ppg-testing/pg_tde/core/files/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
 source ~/fortanix_kmip_pytest.env
 
@@ -327,11 +327,14 @@ See also [test-catalog.md](test-catalog.md) and
 
 ## Part 6 — Optional: automated setup script
 
-The repo root contains `fortanix_kmip_setup.py`, which can create the group, app,
-client certificate, and certificate auth via the Fortanix API (MySQL team pattern).
+`fortanix_kmip_setup.py` can create the group, app, client certificate, and
+certificate auth via the Fortanix API (MySQL team pattern). It lives in the
+[percona-qa](https://github.com/Percona-QA/percona-qa) repo, not in ppg-testing, so
+download just the script (it needs the Python `requests` package):
 
 ```bash
-cd percona-qa
+curl -fsSLO https://raw.githubusercontent.com/Percona-QA/percona-qa/master/fortanix_kmip_setup.py
+python3 -m pip install requests
 
 python3 fortanix_kmip_setup.py \
   --email 'you@example.com' \
