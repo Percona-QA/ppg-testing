@@ -22,11 +22,26 @@
         values: {{ obs_repo_channel_map.keys() | list }}.
     when: obs_repo_selector not in obs_repo_channel_map
 
+  - name: Determine PG major from the selected version
+    ansible.builtin.set_fact:
+      obs_major: "{{ (obs_version_selector | regex_replace('^(?:ppg|psp)-', '')).split('.')[0] }}"
+
+  - name: Fail when psp is requested for a major with no known OBS :tde project
+    # psp-16 is the only major with a confirmed isv:percona:ppg:<channel>:<major>:tde
+    # project on OBS today (e.g. no :16:tde/:17:tde exists yet) -- fail loudly
+    # instead of silently building a URL for a project that doesn't exist.
+    ansible.builtin.fail:
+      msg: >-
+        psp-{{ obs_major }} has no known OBS ":tde" project
+        (isv:percona:ppg:<channel>:{{ obs_major }}:tde) -- only major 16 is
+        confirmed to exist. Update this check once a psp-{{ obs_major }}
+        project is published on OBS.
+    when: obs_version_selector.startswith('psp-') and obs_major != '16'
+
   - name: Build OBS project string from REPO and VERSION
     ansible.builtin.set_fact:
       obs_project: >-
-        isv:percona:ppg:{{ obs_repo_channel_map[obs_repo_selector] }}:{{
-        (obs_version_selector | regex_replace('^(?:ppg|psp)-', '')).split('.')[0] }}{{
+        isv:percona:ppg:{{ obs_repo_channel_map[obs_repo_selector] }}:{{ obs_major }}{{
         ':tde' if obs_version_selector.startswith('psp-') else '' }}
 
   - name: Map distro to OBS repository directory
