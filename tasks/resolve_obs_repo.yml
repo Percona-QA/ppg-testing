@@ -15,12 +15,34 @@
       obs_version_selector: "{{ obs_version | default(lookup('env', 'VERSION')) }}"
       obs_repo_selector: "{{ obs_repo | default(lookup('env', 'REPO')) }}"
 
+  - name: Determine an explicit OBS project, if any
+    # OBS_PROJECT names the full OBS project to install from, for packages
+    # that are not in the fixed staging/releases/devel projects: a pull
+    # request build (isv:percona:PR:pr-42:ppg:staging:18) or a release
+    # candidate. When set it replaces the REPO/VERSION mapping below; the
+    # distro directory and OBS_HOST handling stay the same. obs_project_name
+    # lets a caller pass it as a variable instead of the env var.
+    ansible.builtin.set_fact:
+      obs_project_override: "{{ (obs_project_name | default(lookup('env', 'OBS_PROJECT'), true) | default('', true)) | trim }}"
+
+  - name: Fail when OBS_PROJECT is not a valid OBS project name
+    ansible.builtin.fail:
+      msg: >-
+        OBS_PROJECT={{ obs_project_override }} is not a valid OBS project name
+        (letters, digits, '_', '.', '+', '-' and ':' only, e.g.
+        isv:percona:PR:pr-42:ppg:staging:18).
+    when:
+      - obs_project_override | length > 0
+      - obs_project_override is not match('^[A-Za-z0-9][A-Za-z0-9_.+:-]*$')
+
   - name: Fail when REPO has no OBS channel mapping
     ansible.builtin.fail:
       msg: >-
         REPO={{ obs_repo_selector }} has no OBS channel mapping. Known
         values: {{ obs_repo_channel_map.keys() | list }}.
-    when: obs_repo_selector not in obs_repo_channel_map
+    when:
+      - obs_project_override | length == 0
+      - obs_repo_selector not in obs_repo_channel_map
 
   - name: Determine PG major from the selected version
     ansible.builtin.set_fact:
@@ -43,6 +65,12 @@
       obs_project: >-
         isv:percona:ppg:{{ obs_repo_channel_map[obs_repo_selector] }}:{{ obs_major }}{{
         ':tde' if obs_version_selector.startswith('psp-') else '' }}
+    when: obs_project_override | length == 0
+
+  - name: Use the explicit OBS project
+    ansible.builtin.set_fact:
+      obs_project: "{{ obs_project_override }}"
+    when: obs_project_override | length > 0
 
   - name: Map distro to OBS repository directory
     ansible.builtin.set_fact:

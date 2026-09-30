@@ -84,6 +84,12 @@ params:
   default: ''
   description: OBS instance hostname to use when USE_OBS_REPO is enabled. Leave
     empty for the default public instance (download.opensuse.org).
+- name: OBS_PROJECT
+  kind: string
+  default: ''
+  description: Full OBS project to install from when USE_OBS_REPO is enabled, e.g.
+    isv:percona:PR:pr-42:ppg:staging:18 for a pull request build. Leave empty to
+    derive it from REPO and VERSION.
 - name: PGSM_REPO
   kind: string
   default: https://github.com/percona/pg_stat_monitor.git
