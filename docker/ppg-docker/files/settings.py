@@ -689,7 +689,6 @@ DOCKER_RPM_PACKAGES_TEMPLATE = [
     "percona-postgis35_{}-gui",
     "percona-postgis35_{}-llvmjit",
     "percona-postgis35_{}-utils",
-    "python3-etcd",
     "python3-ydiff",
     "percona-pg_cron_{}",
 ]
