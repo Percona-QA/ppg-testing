@@ -229,11 +229,7 @@ def _expected_ubi_major_version():
 # canonical name used in settings.py / pg_docker_versions; only the
 # `host.package()` lookup uses the resolved name, so version lookups still
 # key off the canonical name below.
-RPM_NAME_OVERRIDES_BY_UBI_MAJOR = {
-    # RHEL10 defaults to Python 3.12, so python3-etcd was rebuilt as
-    # python3.12-etcd (python3-ydiff was not renamed the same way).
-    "python3-etcd": {"10": "python3.12-etcd"},
-}
+RPM_NAME_OVERRIDES_BY_UBI_MAJOR = {}
 
 
 def _installed_package_name(package):

@@ -138,11 +138,7 @@ def _expected_ubi_major_version(tag):
 # RPM package names that were renamed on some UBI majors. Keyed by the
 # canonical name used in settings.py; only the installed-package lookup
 # uses the resolved name.
-RPM_NAME_OVERRIDES_BY_UBI_MAJOR = {
-    # RHEL10 defaults to Python 3.12, so python3-etcd was rebuilt as
-    # python3.12-etcd (python3-ydiff was not renamed the same way).
-    "python3-etcd": {"10": "python3.12-etcd"},
-}
+RPM_NAME_OVERRIDES_BY_UBI_MAJOR = {}
 
 
 def _installed_package_name(package, tag):
