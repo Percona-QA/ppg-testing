@@ -718,30 +718,20 @@
       mode: 0644
     when: ansible_os_family == "Debian"
 
-  - name: Enable and start patroni with wait RHEL
-    include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
-    vars:
-      svc_name: patroni
-      svc_state: started
-      svc_daemon_reload: true
-      svc_async: 180
-      svc_poll: 5
-    when: ansible_os_family == "RedHat"
-
-  # Debian's /etc/patroni/patroni.yml is copied from the same
-  # postgresql0_deb.yml template as patroni0's config just below, so both
-  # would claim the same etcd member name "postgresql0" if both actually
-  # ran -- whichever starts second crashes with "there is already a node
-  # named 'postgresql0' running". patroni0/1/2 are the real 3-node cluster;
-  # this base unit only needs to exist and be enabled for test_patroni_service,
-  # so enable it without starting it on Debian.
-  - name: Enable (but do not start) patroni on Debian
+  # patroni0/1/2 are the real 3-node cluster; this base unit only needs to
+  # exist and be enabled for test_patroni_service, so never start it.
+  # Debian: /etc/patroni/patroni.yml comes from the same postgresql0_deb.yml
+  # template as patroni0's config, so starting both would clash on the etcd
+  # member name "postgresql0".
+  # RHEL: no config is written for this unit at all, so patroni exits with
+  # "Config is empty." The old Type=simple unit hid that; the OBS
+  # Type=notify unit reports it as a start failure.
+  - name: Enable (but do not start) patroni
     include_tasks: "{{ role_path }}/../../tasks/start_service_with_diagnostics.yml"
     vars:
       svc_name: patroni
       svc_state: stopped
       svc_daemon_reload: true
-    when: ansible_os_family == "Debian"
 
   - name: Create test patroni directory RHEL
     file:
