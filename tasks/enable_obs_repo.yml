@@ -1,6 +1,6 @@
 ---
   - name: Resolve OBS project for this repo/version selection
-    include_tasks: resolve_obs_repo.yml
+    include_tasks: "{{ role_path }}/../../tasks/resolve_obs_repo.yml"
 
   - name: Add OBS apt source (Debian/Ubuntu)
     ansible.builtin.copy:
