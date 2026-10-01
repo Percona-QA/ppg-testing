@@ -1,4 +1,4 @@
-Don’t read all ~550 tests linearly. Use a **layered map → harness → helpers → one module deep → expand by section** approach.
+Don’t read the whole suite ([test count](test_sections.md#test-count)) linearly. Use a **layered map → harness → helpers → one module deep → expand by section** approach.
 
 ## Mental model (3 layers)
 
@@ -19,11 +19,9 @@ Almost every test is: **build cluster → configure TDE/provider → do work →
 
 | Read | Why |
 |------|-----|
-| [docs/qa_workflow_executive_summary.md](postgresql/pytest/docs/qa_workflow_executive_summary.md) | Big picture |
-| [docs/qa_test_modules.md](postgresql/pytest/docs/qa_test_modules.md) | ~23 modules by *product area* (no filenames) |
-| [docs/qa_test_coverage_executive_summary.md](postgresql/pytest/docs/qa_test_coverage_executive_summary.md) | File ↔ area mapping |
-| [docs/test_sections.md](postgresql/pytest/docs/test_sections.md) | Markers / `--skip-sections` |
-| [docs/pg16.md](postgresql/pytest/docs/pg16.md) | Running the suite on PostgreSQL **16.15+** + pg_tde |
+| [docs/qa_workflow.md](qa_workflow.md) | Big picture: QA cycle, lab setup, release gates |
+| [docs/test_sections.md](test_sections.md) | Markers / `--skip-sections` |
+| [docs/pg16.md](pg16.md) | Running the suite on PostgreSQL **16.15+** + pg_tde |
 
 After this you should know *areas* (encryption, KMIP, upgrade, rewind, pgBackRest…), not every test name.
 
@@ -36,7 +34,7 @@ Read in this order:
 3. Run once and watch fixtures:
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh   # if you use it
 pytest tests/test_encryption.py -k "test_enable" -v --collect-only
 pytest tests/test_encryption.py -k "test_enable" -v -s

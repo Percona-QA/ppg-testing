@@ -76,7 +76,7 @@ Or CLI: `pytest --kmip-revalidate-profiles=fortanix tests/test_kmip_server_reval
 **CI (Cosmian — automated):**
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
 # Jenkins injects KMIP_COSMIAN_* credentials
 source scripts/setup_cosmian_for_pytest.sh

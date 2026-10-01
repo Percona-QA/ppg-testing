@@ -64,7 +64,7 @@ Staged tests **skip** if `--upgrade-data-dir` / `PG_TDE_UPGRADE_DATA_DIR` is not
 Run pytest from the framework root:
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 ```
 
 ---
@@ -101,7 +101,7 @@ Re-running a **Setup** test calls `_reset_scenario_root()` and **deletes only th
 
 ## Automated script (recommended on CI / fresh VM)
 
-From `postgresql/pytest`:
+From `pg_tde/core/files/pytest`:
 
 ```bash
 sudo mkdir -p /var/lib/pg_tde_minor_upgrade
@@ -133,7 +133,7 @@ Install **pg_tde 2.1.x** (or whatever you treat as “source”) on the target P
 export PG_TDE_UPGRADE_DATA_DIR=/var/lib/pg_tde_minor_upgrade
 export INSTALL_DIR=/usr/lib/postgresql/17   # example: PG 17 + pg_tde 2.1
 
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 
 # Single node: 500-row tde_heap table, WAL encryption on
 pytest tests/test_tde_minor_upgrade.py::TestPgTdeMinorUpgradeSetup::test_prepare_persistent_state_for_minor_upgrade \

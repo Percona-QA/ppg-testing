@@ -121,10 +121,10 @@ loop above is sequential but exercises the same scenarios.
 
 ### A.2 Pytest parity (recommended on dev trees)
 
-Single command covering all major TDE regression (48 tests) + plain `pg_upgrade` (47):
+Single command covering all major TDE regression + plain `pg_upgrade`:
 
 ```bash
-cd postgresql/pytest && source .env.sh
+cd pg_tde/core/files/pytest && source .env.sh
 
 export OLD_INSTALL_DIR=/home/ubuntu/pgwork/pginst/17   # adjust
 export INSTALL_DIR=/home/ubuntu/pgwork/pginst/18
@@ -153,7 +153,7 @@ grep default_version "$INSTALL_DIR"/share/*/extension/pg_tde.control
 #### Staged VM workflow (packages, Debian/RHEL)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 sudo mkdir -p /var/lib/pg_tde_major_upgrade && sudo chown "$USER" /var/lib/pg_tde_major_upgrade
 
 bash run_major_upgrade_workflow.sh \
@@ -189,7 +189,7 @@ This is **not** `pg_upgrade` and **not** `tests/test_upgrade.py`.
 ### B.1 Automated full workflow (recommended)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 
 sudo mkdir -p /var/lib/pg_tde_minor_upgrade
 sudo chown "$USER" /var/lib/pg_tde_minor_upgrade
@@ -279,11 +279,11 @@ Use this when reproducing Jenkins #122 **and** the 18.4.1→18.4.2 bump on one V
 |---|-------|--------|----------------|
 | 1 | Major | All 6 `automation/tests/pg_tde_upgrade_*.sh` green | Each script exits 0 |
 | 2 | Major | Both `upgrade_testing/tests/*.sh` green | Row counts match pre/post upgrade |
-| 3 | Major | `pytest -m upgrade tests/test_tde_pg_upgrade.py` | 48 tests pass (minus expected skips for your control-version pair) |
+| 3 | Major | `pytest -m upgrade tests/test_tde_pg_upgrade.py` | All tests pass (minus expected skips for your control-version pair) |
 | 4 | Major | `run_major_upgrade_workflow.sh` (optional VM smoke) | Debian or pytest method completes verify |
 | 5 | Minor | `run_minor_upgrade_workflow.sh` 18.4.1→18.4.2 | Setup + Verify green |
 | 6 | Minor | `--with-pg2381` | PG-2381 churn scenario green (needs pg_tde with PR #582) |
-| 7 | Minor | Non-staged HA/ALTER EXTENSION tests | 4 classes pass on 18.4.2 |
+| 7 | Minor | Non-staged HA/ALTER EXTENSION tests | All pass on 18.4.2 |
 
 ---
 

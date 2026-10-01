@@ -1,9 +1,6 @@
 # pg_tde QA — End-to-End Workflow
 
 > **Audience:** Build team, release management, engineering leadership  
-> **Executive summary:** [qa_workflow_executive_summary.md](qa_workflow_executive_summary.md)  
-> **Test coverage summary:** [qa_test_coverage_executive_summary.md](qa_test_coverage_executive_summary.md)  
-> **Modules by area (no filenames):** [qa_test_modules.md](qa_test_modules.md)  
 > **Platform example:** Ubuntu 26.04 x86_64 (same flow applies to other Linux targets in `package_testing/`)
 
 This document describes the full QA cycle for **Percona PostgreSQL with pg_tde**:
@@ -17,7 +14,7 @@ QA validates that pg_tde packages are correct, upgrade-safe, and compatible with
 supported external key providers (KMIP, Vault KV, OpenBao) before they move from
 **testing** to **release** in Percona repositories.
 
-The primary harness is **pytest** under `postgresql/pytest/`. Legacy bash
+The primary harness is **pytest** under `pg_tde/core/files/pytest/`. Legacy bash
 automation and Vagrant smoke tests provide Jenkins parity and multi-OS coverage.
 
 ---
@@ -123,12 +120,12 @@ QA should record at handover:
 ## 5. Phase 1 — Lab setup (Ubuntu example)
 
 **Where:** QA VM (e.g. AWS Ubuntu)  
-**Repo:** `git clone https://github.com/percona/percona-qa.git`
+**Repo:** `git clone https://github.com/Percona-QA/ppg-testing.git && cd ppg-testing`
 
 ### Path A — Package install (production parity) — default for release QA
 
 ```bash
-cd percona-qa/postgresql/pytest
+cd pg_tde/core/files/pytest
 bash setup_test_env.sh --install-pkgs \
   --pg-major 18 \
   --pg-repo-line 18.4 \
@@ -155,7 +152,7 @@ See `setup_test_env.sh --help` for all options.
 ### Path B — Source build (pre-package / dev)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 bash build_from_source.sh          # or --tde-only, --clean
 source /home/ubuntu/pgwork/pg_env.sh
 bash setup_test_env.sh --install-dir "$INSTALL_DIR"
@@ -167,12 +164,12 @@ Default workdir: `/home/ubuntu/pgwork` (`pginst/18`, `pg_tde`, `tde_build`).
 ### Path C — Docker (isolated)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 bash run_tests.sh                  # package image
 bash run_tests.sh --source         # source build in container
 ```
 
-See [docker/README.md](docker/README.md).
+See [docker/README.md](../docker/README.md).
 
 ---
 
@@ -182,7 +179,7 @@ See [docker/README.md](docker/README.md).
 
 | Layer | Location | Scale |
 |-------|----------|-------|
-| Primary suite | `tests/` | ~29 modules, 500+ tests |
+| Primary suite | `tests/` | [Test count](test_sections.md#test-count) |
 | Section control | `--skip-sections` | [test_sections.md](test_sections.md) |
 | Full catalog | `coverage_reports/test_catalog_2026-08-05.md` | Per-test inventory |
 | Coverage (RHEL / PG-2609) | `coverage_reports/coverage_2026-08-05.md` | Platform + symlink regressions |
@@ -191,7 +188,7 @@ See [docker/README.md](docker/README.md).
 ### Recommended order (fresh VM)
 
 ```bash
-cd postgresql/pytest && source .env.sh
+cd pg_tde/core/files/pytest && source .env.sh
 
 # Core (skip long upgrade sections on first pass)
 pytest tests/ -v --skip-sections=upgrade,minor_upgrade,slow
@@ -295,7 +292,7 @@ Data dir: `PG_TDE_UPGRADE_DATA_DIR` (default `/var/lib/pg_tde_minor_upgrade`).
 | Upgrade testing | `postgresql/upgrade_testing/wrapper/` | Additional upgrade scripts |
 | TAP Perl | `postgresql/t/` | Installcheck-world parity with upstream pg_tde |
 
-pg_tde engineering runs meson TAP (`t/kmip.pl`, etc.) in the pg_tde repo; percona-qa
+pg_tde engineering runs meson TAP (`t/kmip.pl`, etc.) in the pg_tde repo; ppg-testing
 pytest is the deeper integration layer on Percona packages.
 
 ---
@@ -361,7 +358,7 @@ in [ci_upgrade_scenarios.md](ci_upgrade_scenarios.md) and [kmip/ci-strategy.md](
 ## 13. One-day quick reference (Ubuntu VM)
 
 ```bash
-cd percona-qa/postgresql/pytest
+cd pg_tde/core/files/pytest
 bash setup_test_env.sh --install-pkgs --pg-major 18 --pg-repo-line 18.4 --repo-component testing
 source .env.sh
 
@@ -393,7 +390,7 @@ bash run_tde_upgrade_parallel.sh
 | Vendor KMS sign-off | [kmip/vendor-signoff.md](kmip/vendor-signoff.md) |
 | Vault KV | [vault.md](vault.md) |
 | Key provider layout | [key_provider_matrix.md](key_provider_matrix.md) |
-| Docker tests | [docker/README.md](docker/README.md) |
+| Docker tests | [docker/README.md](../docker/README.md) |
 | io_uring host setup | [io_uring_system_setup.md](io_uring_system_setup.md) |
 | Full test catalog | [coverage_reports/test_catalog_2026-08-05.md](../coverage_reports/test_catalog_2026-08-05.md) |
 | Coverage report (2026-08-05) | [coverage_reports/coverage_2026-08-05.md](../coverage_reports/coverage_2026-08-05.md) |

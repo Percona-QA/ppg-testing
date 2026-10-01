@@ -9,7 +9,7 @@
 
 **Objective:** Revalidate pg_tde external key providers against Percona QA automation after libkmip C++ client (PR #595 / PG-2125).
 
-**Harness:** `percona-qa/postgresql/pytest` — ephemeral PostgreSQL clusters, pytest.
+**Harness:** `ppg-testing/pg_tde/core/files/pytest` — ephemeral PostgreSQL clusters, pytest.
 
 **Note:** *KMIP* and *Vault KV v2* are **separate** provider types. Vault **KMIP engine** is lab-only (not production path).
 
@@ -136,7 +136,7 @@ Separate from KMIP vendors above. Customer regression: **Register symmetric key:
 ## Commands (lab VM)
 
 ```bash
-cd percona-qa/postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
 
 # --- KMIP vendor (example: Thales) ---

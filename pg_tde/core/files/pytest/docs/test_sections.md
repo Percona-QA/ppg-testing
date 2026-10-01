@@ -1,6 +1,6 @@
 # Test sections (`--skip-sections`)
 
-> **QA workflow overview:** [qa_workflow.md](qa_workflow.md) · [Executive summary](qa_workflow_executive_summary.md) · [Test coverage](qa_test_coverage_executive_summary.md) · [Modules by area](qa_test_modules.md)
+> **QA workflow overview:** [qa_workflow.md](qa_workflow.md)
 
 Skip whole feature areas when a release or environment does not support them
 (e.g. no `pg_rewind` in the package). This is **explicit and user-controlled**;
@@ -9,9 +9,9 @@ the harness does not auto-skip based on missing binaries.
 ## Usage
 
 ```bash
-cd postgresql/pytest && source .env.sh
+cd pg_tde/core/files/pytest && source .env.sh
 
-# Skip pg_rewind / pg_tde_rewind tests (~67 tests)
+# Skip pg_rewind / pg_tde_rewind tests
 pytest tests/ --skip-sections=rewind -v
 
 # Several sections (comma- or space-separated)
@@ -85,4 +85,19 @@ for l in io_uring_status_lines(Path('$INSTALL_DIR')): print(l)
 
 pytest tests/ --io-method-matrix -v   # includes io_uring only when both checks pass
 pytest tests/ --io-method=io_uring -v
+```
+
+## Test count
+
+This is the only place the pytest test count is stated; other docs link here
+instead of repeating it.
+
+**Total: 695 collected tests** (2026-09-29, default `io_method`;
+`test_kmip_server_revalidation.py` runs once per KMIP profile and is counted once).
+
+Regenerate the total, or a per-module breakdown, from `pg_tde/core/files/pytest`:
+
+```bash
+pytest tests --collect-only -q --install-dir /tmp | tail -1
+pytest tests --collect-only -q --install-dir /tmp | grep '::' | cut -d: -f1 | sort | uniq -c
 ```
