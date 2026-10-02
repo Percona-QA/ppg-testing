@@ -35,6 +35,33 @@ def strip_obs_release_suffix(version):
     return _OBS_RELEASE_SUFFIX_RE.sub("", version)
 
 
+# From 17 on, packages may carry either the upstream version (e.g. 18.6,
+# repo.percona.com builds) or the Percona Server version (e.g. 18.6.1, OBS
+# builds). Accept either one.
+def _percona_version(pg_versions):
+    if int(MAJOR_VER) >= 17:
+        return pg_versions.get("percona-version")
+    return None
+
+
+def expected_pkg_versions(pg_versions):
+    expected = [pg_versions["version"]]
+    percona_version = _percona_version(pg_versions)
+    if percona_version:
+        expected.append(percona_version)
+    return expected
+
+
+def expected_deb_pkg_versions(pg_versions):
+    expected = list(pg_versions["deb_pkg_ver"])
+    percona_version = _percona_version(pg_versions)
+    if percona_version:
+        upstream = f":{pg_versions['version']}-"
+        expected += [v.replace(upstream, f":{percona_version}-")
+                     for v in pg_versions["deb_pkg_ver"] if upstream in v]
+    return expected
+
+
 def _merge_expected_deb_versions(base_versions, distro_overrides):
     """Return expected deb versions with per-distro override additions.
 
