@@ -259,7 +259,7 @@ def test_privilege_drop_tools_available(host):
 
     gosu is asserted as a baseline requirement: it's present on every UBI
     variant tested so far (8/9/10) and is the tool test_pgbackrest.py now
-    relies on in the UBI10-scoped ppg-docker/ppg-docker-upgrade roles.
+    relies on in the UBI10-scoped ppg-docker role.
     This role's test_pgbackrest.py still uses runuser (UBI10 is not in
     scope here yet), so runuser/su presence is recorded for visibility but
     not asserted, since it's known to vary by UBI major (present on

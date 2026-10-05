@@ -1,0 +1,30 @@
+---
+- name: Create python venv and run docker tests
+  shell: |
+    #Activate virtual environment
+    source validation/bin/activate
+
+    #Install dependencies
+    pip install --upgrade pip
+    pip install psycopg2-binary pytest-testinfra requests pytest pytest-order
+
+    #Run test without shared_preload_libraries  (default)
+    pytest test_labels_licences.py \
+       test_docker.py \
+       test_patroni_ha.py \
+       test_pgbackrest.py \
+       -vv -s -rpfs
+  args:
+    executable: /bin/bash
+    chdir: /tmp/docker_test
+  become: true
+  environment:
+    VERSION: "{{ PPG_VERSION }}"
+    DOCKER_REPOSITORY: "{{ DOCKER_REPOSITORY }}"
+    TAG: "{{ TAG }}"
+    WITH_POSTGIS: "{{ WITH_POSTGIS }}"
+    PPG_LABEL_MAINTAINER: "{{ ppg_label_maintainer | default('Percona Development <info@percona.com>') }}"
+    PPG_LABEL_VENDOR: "{{ ppg_label_vendor | default('Percona') }}"
+    PPG_LABEL_NAME_POSTGRESQL: "{{ ppg_label_name_postgresql | default('Percona Distribution for PostgreSQL') }}"
+  ignore_errors: true
+  register: results

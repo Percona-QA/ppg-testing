@@ -31,7 +31,7 @@ def test_tde_render_matches_snapshot(os_key):
 
 def test_full_snapshot_renders_byte_identical():
     pairs = snapshot_pairs()
-    assert len(pairs) == 82
+    assert len(pairs) == 81
     mismatches = []
     for rel, key, scenario in pairs:
         rendered = render.render_one(REPO / rel, scenario)
