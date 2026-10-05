@@ -10,7 +10,6 @@ testinfra_hosts = testinfra.utils.ansible_runner.AnsibleRunner(
     os.environ['MOLECULE_INVENTORY_FILE']).get_hosts('all')
 pg_versions = settings.get_settings(os.environ['MOLECULE_SCENARIO_NAME'])[os.getenv("VERSION")]
 RHEL_FILES = pg_versions['rhel_files']
-RPM7_PACKAGES = pg_versions['rpm7_packages']
 RPM_PACKAGES = pg_versions['rpm_packages']
 EXTENSIONS = pg_versions['extensions']
 LANGUAGES = pg_versions['languages']
@@ -103,7 +102,7 @@ def test_deb_package_is_installed(host, package):
         pytest.skip("Skipping for Q2-2025 releses and moving forward.")
     pkg = host.package(package)
     assert pkg.is_installed
-    assert settings.strip_obs_release_suffix(pkg.version) in pg_versions['deb_pkg_ver']
+    assert settings.strip_obs_release_suffix(pkg.version) in settings.expected_deb_pkg_versions(pg_versions), pkg.version
 
 
 @pytest.mark.upgrade
@@ -123,24 +122,7 @@ def test_rpm_package_is_installed(host, package):
         pkg = host.package(package)
         assert pkg.is_installed
         if package not in ["percona-postgresql-client-common", "percona-postgresql-common"]:
-            assert pkg.version == pg_versions['version']
-        else:
-            assert pkg.version == pg_versions[package]
-
-
-@pytest.mark.upgrade
-@pytest.mark.parametrize("package", RPM7_PACKAGES)
-def test_rpm7_package_is_installed(host, package):
-    with host.sudo():
-        dist = host.system_info.distribution
-        if dist in ["debian", "ubuntu"]:
-            pytest.skip("This test only for RHEL based platforms")
-        if host.system_info.release.startswith("8") or host.system_info.release.startswith("9"):
-            pytest.skip("Only for centos7 tests")
-        pkg = host.package(package)
-        assert pkg.is_installed
-        if package not in ["percona-postgresql-client-common", "percona-postgresql-common"]:
-            assert pkg.version == pg_versions['version']
+            assert pkg.version in settings.expected_pkg_versions(pg_versions), pkg.version
         else:
             assert pkg.version == pg_versions[package]
 
@@ -535,22 +517,6 @@ def test_rpm_package_provides(host, percona_package, vanila_package):
     cmd = "rpm -q --provides {} | awk \'{{ print $1 }}\'".format(percona_package)
     result = host.run(cmd)
     provides = set(result.stdout.split("\n"))
-    assert result.rc == 0, result.stderr
-    assert vanila_package in provides, result.stdout
-
-
-@pytest.mark.parametrize("percona_package, vanila_package", pg_versions['rpm7_provides'])
-def test_rpm7_package_provides(host, percona_package, vanila_package):
-    """Execute command for check provides and check that we have link to vanila postgres
-    """
-    os = host.system_info.distribution
-    if os in ["debian", "ubuntu"]:
-        pytest.skip("This test only for RHEL based platforms")
-    if host.system_info.release.startswith("8") or host.system_info.release.startswith("9"):
-        pytest.skip("Only for centos7 tests")
-    cmd = "rpm -q --provides {} | awk \'{{ print $1 }}\'".format(percona_package)
-    result = host.run(cmd)
-    provides = set(result.stdout.split())
     assert result.rc == 0, result.stderr
     assert vanila_package in provides, result.stdout
 

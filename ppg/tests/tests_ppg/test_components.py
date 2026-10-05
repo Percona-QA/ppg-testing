@@ -91,8 +91,9 @@ def test_deb_package_is_installed(host, package):
         pytest.skip("This test only for Debian based platforms")
     pkg = host.package(package)
     assert pkg.is_installed
-    assert settings.strip_obs_release_suffix(pkg.version) in pg_versions['deb_pkg_ver'],\
-        f"Expected version {pg_versions['deb_pkg_ver']}. Actual version {pkg.version}"
+    expected = settings.expected_deb_pkg_versions(pg_versions)
+    assert settings.strip_obs_release_suffix(pkg.version) in expected,\
+        f"Expected version {expected}. Actual version {pkg.version}"
 
 
 def test_build_libpq_programm(host, build_libpq_programm):
