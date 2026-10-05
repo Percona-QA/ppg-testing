@@ -26,7 +26,7 @@
 # the flag is omitted entirely rather than passed unconditionally.
 #
 # Steps:
-#   1.  Enable Percona repo for TO version
+#   1.  Enable TO repo (percona-release, or OBS when USE_OBS_REPO is set)
 #   2.  Install TO PostgreSQL packages
 #   3.  Install or build pg_tde for TO version
 #   4.  Stop FROM cluster(s)
@@ -43,6 +43,12 @@
   # --- Enable repo for TO major version ---
   - name: Enable Percona repo for TO major version
     command: percona-release enable-only {{ to_repo_version }} {{ to_repo }}
+    when: not use_obs_repo
+
+  - name: Switch to the OBS repo for TO major version
+    include_tasks:
+      file: switch_to_obs_repo.yml
+    when: use_obs_repo
 
   # --- Install TO PostgreSQL packages ---
   - name: Install PostgreSQL TO version packages (RHEL)

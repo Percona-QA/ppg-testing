@@ -1,0 +1,13 @@
+---
+# OBS only carries the latest minor of each major, so it can only serve the TO
+# side of an upgrade; the FROM side always comes from percona-release. Disable
+# the FROM repo first so the TO packages can only resolve from OBS.
+
+  - name: Disable the FROM percona-release repo
+    command: percona-release disable {{ from_repo_version }} {{ from_repo }}
+
+  - name: Enable the OBS repo for the TO version
+    include_tasks: "{{ role_path }}/../../tasks/enable_obs_repo.yml"
+    vars:
+      obs_version: "{{ to_version_str }}"
+      obs_repo: "{{ to_repo }}"

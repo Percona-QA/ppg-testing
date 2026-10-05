@@ -14,6 +14,15 @@
       state: stopped
     become: true
 
+  # No repo switch on the percona-release path: pg_tde updates from the FROM repo.
+  # With USE_OBS_REPO the new pg_tde package comes from OBS instead.
+  - name: Switch to the OBS repo for the pg_tde update (packages path)
+    include_tasks:
+      file: switch_to_obs_repo.yml
+    when:
+      - use_obs_repo
+      - install_from_packages | bool
+
   # --- packages path: update pg_tde package to latest ---
   - name: Update pg_tde packages to latest (packages path)
     include_tasks:
