@@ -17,6 +17,9 @@
       INSTALL_FROM_PACKAGES=$INSTALL_FROM_PACKAGES
       FROM_REPO=$FROM_REPO
       TO_REPO=$TO_REPO
+      USE_OBS_REPO=$USE_OBS_REPO
+      OBS_HOST=$OBS_HOST
+      OBS_PROJECT=$OBS_PROJECT
       FROM_TDE_BRANCH=$FROM_TDE_BRANCH
       TO_TDE_BRANCH=$TO_TDE_BRANCH
       TDE_UPGRADE=$TDE_UPGRADE
@@ -81,6 +84,9 @@
     INSTALL_FROM_PACKAGES: "{{ install_from_packages }}"
     FROM_REPO:             "{{ from_repo }}"
     TO_REPO:               "{{ to_repo }}"
+    USE_OBS_REPO:          "{{ use_obs_repo | default(false) }}"
+    OBS_HOST:              "{{ obs_host | default(lookup('env', 'OBS_HOST')) }}"
+    OBS_PROJECT:           "{{ obs_project | default(lookup('env', 'OBS_PROJECT')) }}"
     FROM_TDE_BRANCH:       "{{ from_tde_branch }}"
     TO_TDE_BRANCH:         "{{ to_tde_branch }}"
     TDE_UPGRADE:           "{{ tde_upgrade }}"

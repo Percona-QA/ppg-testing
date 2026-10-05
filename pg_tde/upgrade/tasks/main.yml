@@ -34,6 +34,9 @@
       to_percona_server_version:   "{{ lookup('env', 'TO_PERCONA_SERVER_VERSION')   | default('', true) }}"
       cacheable: true
 
+  - name: Detect whether the TO side installs from OBS
+    include_tasks: "{{ role_path }}/../../tasks/detect_use_obs_repo.yml"
+
   - name: Set derived major version facts
     set_fact:
       from_major_version: "{{ from_full_version | string | split('.') | first }}"
@@ -130,6 +133,7 @@
         - "Upgrade type: {{ upgrade_type }}"
         - "TDE upgrade: {{ tde_upgrade }}"
         - "TDE from packages: {{ install_from_packages }}"
+        - "TO repo source: {{ 'OBS' if use_obs_repo else 'percona-release' }}"
 
   # ===========================================================
   # Main flow — wrapped in block/always so artifacts are always
