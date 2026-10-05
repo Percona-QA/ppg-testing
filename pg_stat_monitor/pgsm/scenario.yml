@@ -128,6 +128,11 @@ params:
   kind: boolean
   quote: '"'
   description: Enable to use major (ppg-16) repo instead of ppg-16.2
+- name: RUN_LABELS
+  kind: string
+  default: Manual
+  description: Optional comma-separated labels to categorize this run, e.g. Manual,
+    Nightly, Release.
 jenkins:
   molecule_dir: pg_stat_monitor/pgsm
   artifacts: pg_stat_monitor/pgsm/artifacts/**/*.tar.gz

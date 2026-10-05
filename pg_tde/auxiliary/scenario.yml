@@ -115,6 +115,11 @@ params:
   description: Destroy VM after tests
   flavors:
   - single
+- name: RUN_LABELS
+  kind: string
+  default: Manual
+  description: Optional comma-separated labels to categorize this run, e.g. Manual,
+    Nightly, Release.
 jenkins:
   molecule_dir: pg_tde/auxiliary
   artifacts: pg_tde/auxiliary/artifacts/**/*.tar.gz
