@@ -83,6 +83,11 @@ params:
   quote: '"'
   description: Enable to use major (ppg-17) repo instead of ppg-17.4
   description_parallel: Enable to use major (ppg-17) repo instead of ppg-17.6
+- name: RUN_LABELS
+  kind: string
+  default: Manual
+  description: Optional comma-separated labels to categorize this run, e.g. Manual,
+    Nightly, Release.
 jenkins:
   molecule_dir: pg_tde/tde
   artifacts: pg_tde/tde/artifacts/**/*.tar.gz

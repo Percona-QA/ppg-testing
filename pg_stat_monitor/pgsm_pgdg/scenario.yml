@@ -102,6 +102,11 @@ params:
   kind: string
   default: main
   description: Branch for ppg-testing testing repository
+- name: RUN_LABELS
+  kind: string
+  default: Manual
+  description: Optional comma-separated labels to categorize this run, e.g. Manual,
+    Nightly, Release.
 jenkins:
   molecule_dir: pg_stat_monitor/pgsm_pgdg
   artifacts: pg_stat_monitor/pgsm_pgdg/artifacts/**/*.tar.gz
