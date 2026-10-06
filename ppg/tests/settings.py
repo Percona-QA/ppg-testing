@@ -31,6 +31,62 @@ MAJOR_VER = os.getenv("VERSION").split(".")[0].split("-")[1]
 _OBS_RELEASE_SUFFIX_RE = re.compile(r"\+\d+\.\d+")
 
 
+# Expected component versions can be given at run time instead of from the
+# tables in versions/*.py. percona-obs qa passes EXPECTED_VERSIONS to every OBS
+# QA job: obs-packaging's *_VERSION macros, one NAME=value per line
+# (e.g. PGBACKREST_VERSION=2.59.2), i.e. the versions OBS builds for the
+# project under test. The tests then follow component bumps and new releases
+# without a manual edit here. Without it, the tables are used as before.
+# Keys are macro names; values the settings keys they override.
+EXPECTED_VERSION_MACROS = {
+    "ETCD_VERSION": "etcd",
+    "HAPROXY_VERSION": "haproxy",
+    "PATRONI_VERSION": "patroni",
+    "PG_GATHER_VERSION": "pg_gather",
+    "PG_REPACK_VERSION": "pgrepack",
+    "PGAUDIT_SET_USER_VERSION": "set_user",
+    "PGAUDIT_VERSION": "pgaudit",
+    "PGBACKREST_VERSION": "pgbackrest",
+    "PGBADGER_VERSION": "pgbadger",
+    "PGBOUNCER_VERSION": "pgbouncer",
+    "PGPOOL_VERSION": "pgpool",
+    "PGVECTOR_VERSION": "pgvector",
+    "WAL2JSON_VERSION": "wal2json",
+}
+
+
+def apply_expected_versions(entry, spec):
+    """Return *entry* (one release's settings) with the versions in *spec*
+    (EXPECTED_VERSIONS) applied.
+
+    A component's other version fields (binary_version, extension_version,
+    sql_file_version, ...) contain its version string, which is replaced too:
+    "pgBackRest 2.59.1" becomes "pgBackRest 2.59.2". Macros without a settings
+    key here are ignored (EXPECTED_VERSIONS lists every *_VERSION macro), as
+    are components this release does not ship. A line that is not
+    NAME=value raises, so a mistyped manual value is not silently dropped.
+    """
+    if not spec or not spec.strip():
+        return entry
+    entry = dict(entry)
+    for item in re.split(r"[\s,]+", spec.strip()):
+        name, sep, new = item.partition("=")
+        name, new = name.strip(), new.strip()
+        if not sep or not name or not new:
+            raise ValueError(f"EXPECTED_VERSIONS: {item!r} is not NAME=value")
+        key = EXPECTED_VERSION_MACROS.get(name)
+        if key is None or key not in entry:
+            continue
+        old = entry[key]
+        old_version = old["version"]
+        entry[key] = {
+            field: value.replace(old_version, new) if isinstance(value, str) else value
+            for field, value in old.items()
+        }
+        entry[key]["version"] = new
+    return entry
+
+
 def strip_obs_release_suffix(version):
     return _OBS_RELEASE_SUFFIX_RE.sub("", version)
 
@@ -2694,5 +2750,12 @@ def get_settings(distro_type):
         "pgbackrest": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
         "percona-version": "16.15.1",
     }
+
+    # Expected component versions given at run time (see EXPECTED_VERSIONS).
+    current = os.getenv("VERSION")
+    if current in settings:
+        settings[current] = apply_expected_versions(
+            settings[current], os.getenv("EXPECTED_VERSIONS", "")
+        )
 
     return settings
