@@ -106,8 +106,7 @@ Template for any test:
 2. **Fixtures** — `pg_factory`, `kmip_config`, `vault_config`, `io_method`  
 3. **Setup** — providers/keys/WAL encrypt  
 4. **Action** — DML, restart, promote, backup, restore  
-5. **Assert** — what must still work / what must fail  
-6. **Bash twin?** — many docstrings cite `postgresql/automation/tests/*.sh`
+5. **Assert** — what must still work / what must fail
 
 If confused, run **only that test** with `-vv --tb=short` and read `server.log` from the failure artifact path.
 

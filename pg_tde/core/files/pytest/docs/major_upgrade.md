@@ -179,8 +179,6 @@ State is written to:
 | `run_minor_upgrade_workflow.sh` | Same PG major, pg_tde package bump |
 | `tests/test_tde_pg_upgrade.py` | Deep pg_tde_upgrade regression |
 | `tests/test_upgrade.py` | Plain pg_upgrade + post-maintenance |
-| `postgresql/automation/tests/pg_tde_upgrade_test.sh` | Bash parity (ephemeral dirs) |
-| `postgresql/bugs/pg_tde_major_upgrade_plain_pg_upgrade_repro.sh` | Why plain `pg_upgrade` fails with TDE |
 
 ---
 
