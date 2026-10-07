@@ -2,8 +2,8 @@
 
 ppg/tests/settings.py normally takes expected component versions from the
 tables in ppg/tests/versions/*.py, keyed by PPG release. percona-obs qa sends
-every OBS QA job EXPECTED_VERSIONS: obs-packaging's *_VERSION macros
-(NAME=value per line), the versions OBS builds for the project under test.
+every OBS QA job EXPECTED_VERSIONS: the versions OBS builds for the packages
+under test, package=version per line keyed by OBS package name.
 The tests use those instead, so a component bump does not need a manual edit.
 """
 
@@ -34,14 +34,14 @@ ENTRY = {
     "pgvector": {"version": "0.8.6", "extension_version": "0.8.6"},
 }
 
-# What percona-obs qa sends: every *_VERSION macro, most unknown to the tests.
+# What percona-obs qa sends: every package of the project, most unknown here.
 FROM_OBS = "\n".join([
-    "PATRONI_VERSION=4.1.5",
-    "PGBACKREST_VERSION=2.59.2",
-    "PG_GATHER_VERSION=34",
-    "PG_PREV_MAJOR_VERSION=17",
-    "PG_VERSION=18.6",
-    "TIMESCALEDB_VERSION=2.28.1",
+    "etcd=3.5.33",
+    "percona-patroni=4.1.5",
+    "percona-pg_gather=34",
+    "percona-pgbackrest=2.59.2",
+    "percona-postgresql=18.6.1",
+    "python3-psycopg2=2.9.13",
 ])
 
 
@@ -59,26 +59,26 @@ def test_obs_values_override_the_tables(settings):
 
 
 def test_unknown_macros_and_unshipped_components_are_ignored(settings):
-    out = settings.apply_expected_versions(ENTRY, "TIMESCALEDB_VERSION=2.28.1\nETCD_VERSION=3.5.40")
+    out = settings.apply_expected_versions(ENTRY, "python3-six=1.17.0\netcd=3.5.40")
     assert out == ENTRY
 
 
-@pytest.mark.parametrize("spec", ["PGBACKREST_VERSION=2.59.2, PG_GATHER_VERSION=34",
-                                  "PGBACKREST_VERSION=2.59.2 PG_GATHER_VERSION=34\n"])
+@pytest.mark.parametrize("spec", ["percona-pgbackrest=2.59.2, percona-pg_gather=34",
+                                  "percona-pgbackrest=2.59.2 percona-pg_gather=34\n"])
 def test_other_separators(settings, spec):
     out = settings.apply_expected_versions(ENTRY, spec)
     assert out["pgbackrest"]["version"] == "2.59.2" and out["pg_gather"]["version"] == "34"
 
 
-@pytest.mark.parametrize("spec", ["PGBACKREST_VERSION", "PGBACKREST_VERSION=", "=2.59.2"])
+@pytest.mark.parametrize("spec", ["percona-pgbackrest", "percona-pgbackrest=", "=2.59.2"])
 def test_malformed_lines_fail_loudly(settings, spec):
-    with pytest.raises(ValueError, match="is not NAME=value"):
+    with pytest.raises(ValueError, match="is not package=version"):
         settings.apply_expected_versions(ENTRY, spec)
 
 
 def test_every_mapped_key_exists_in_a_real_release(settings):
     current = settings.get_settings("rocky-9")["ppg-18.6"]
-    for key in settings.EXPECTED_VERSION_MACROS.values():
+    for key in settings.EXPECTED_VERSION_PACKAGES.values():
         assert key in current, key
 
 
