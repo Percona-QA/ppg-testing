@@ -1005,34 +1005,17 @@ def should_use_pg_tde_upgrade_wrapper(
     *,
     extra_params: Optional[Dict[str, str]] = None,
 ) -> bool:
-    """Choose ``pg_tde_upgrade`` over plain ``pg_upgrade`` + ``pg_tde/`` copy.
+    """Use ``pg_tde_upgrade`` whenever the source cluster has pg_tde key material.
 
-  Use the Percona wrapper when the source has pg_tde key material and either:
+    Plain ``pg_upgrade`` is not supported on a cluster with encrypted tables
+    (it corrupts the encryption metadata in the target; Percona docs, PG-2240),
+    so the tests upgrade the way customers are told to. Plain ``pg_upgrade`` +
+    ``copy_pg_tde_dir`` stays reachable only through an explicit
+    ``use_tde_wrapper=False``, for clusters that no longer use pg_tde.
 
-  - the old/new installs ship different pg_tde extension default versions
-    (e.g. 2.1.x on PG17 → 2.2.x on PG18), or
-  - WAL encryption was enabled on the source cluster.
-
-  Plain ``pg_upgrade`` + ``copy_pg_tde_dir`` is sufficient for same pg_tde
-  minor across a PG major bump (e.g. 2.2.0 → 2.2.0).
+    *new_install_dir* and *extra_params* are kept for callers' signatures.
     """
-    if not cluster_has_pg_tde_data(old_cluster):
-        return False
-
-    old_ver = read_pg_tde_default_version(old_cluster.install_dir)
-    new_ver = read_pg_tde_default_version(new_install_dir)
-    if old_ver and new_ver and old_ver != new_ver:
-        return True
-
-    if cluster_wal_encryption_enabled(old_cluster):
-        return True
-
-    if extra_params:
-        wal = extra_params.get("pg_tde.wal_encrypt", "").strip().strip("'\"")
-        if wal.lower() == "on":
-            return True
-
-    return False
+    return cluster_has_pg_tde_data(old_cluster)
 
 
 def pg_upgrade_target_params(
@@ -1102,9 +1085,55 @@ def write_pg_upgrade_target_config(
 def resolve_pg_upgrade_binary(
     install_dir: Path, *, use_tde_wrapper: bool
 ) -> Path:
-    """Return ``pg_tde_upgrade`` or plain ``pg_upgrade`` under *install_dir*."""
+    """Return ``pg_tde_upgrade`` or plain ``pg_upgrade`` under *install_dir*.
+
+    A requested wrapper that is missing is an error, not a silent fallback to
+    plain ``pg_upgrade``: that fallback is the unsupported path for pg_tde
+    clusters and would turn into misleading decrypt failures later.
+    """
     new_bin = Path(install_dir) / "bin"
     wrapper = new_bin / "pg_tde_upgrade"
-    if use_tde_wrapper and wrapper.is_file():
+    if use_tde_wrapper:
+        if not wrapper.is_file():
+            raise FileNotFoundError(f"pg_tde_upgrade not found under {new_bin}")
         return wrapper
     return new_bin / "pg_upgrade"
+
+
+def assert_tde_relations_encrypted(cluster: "PgCluster", dbname: str = "postgres") -> int:
+    """
+    Every ``tde_heap`` relation in *dbname* -- with its indexes and TOAST
+    table -- must report ``pg_tde_is_encrypted``. Returns how many relations
+    were checked (0 when pg_tde is not installed in *dbname*).
+
+    Catches an upgrade that keeps the rows readable but leaves a relation
+    unencrypted, which row counts alone never notice.
+    """
+    # Schema-qualified: the extension may live outside search_path.
+    schema = cluster.fetchone(
+        "SELECT quote_ident(extnamespace::regnamespace::text) FROM pg_extension "
+        "WHERE extname = 'pg_tde'",
+        dbname=dbname,
+    )
+    if not schema:
+        return 0
+    rows = cluster.execute(
+        f"""
+        WITH t AS (
+          SELECT c.oid FROM pg_class c JOIN pg_am am ON am.oid = c.relam
+          WHERE am.amname = 'tde_heap' AND c.relkind IN ('r', 'm')
+        ), rels AS (
+          SELECT oid FROM t
+          UNION ALL SELECT indexrelid FROM pg_index WHERE indrelid IN (SELECT oid FROM t)
+          UNION ALL SELECT reltoastrelid FROM pg_class
+            WHERE oid IN (SELECT oid FROM t) AND reltoastrelid <> 0
+        )
+        SELECT count(*) || '|' || coalesce(string_agg(oid::regclass::text, ',')
+                 FILTER (WHERE NOT coalesce({schema}.pg_tde_is_encrypted(oid::regclass), false)), '')
+        FROM rels;
+        """,
+        dbname,
+    ).strip()
+    checked, plain = rows.split("|", 1)
+    assert not plain, f"{dbname}: tde_heap relations not encrypted after upgrade: {plain}"
+    return int(checked)
