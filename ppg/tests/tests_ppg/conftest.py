@@ -4,13 +4,9 @@ import re
 import pytest
 from packaging import version
 
-UBUNTU26_MIN_VERSIONS = {
-    14: version.parse("14.23"),
-    15: version.parse("15.18"),
-    16: version.parse("16.14"),
-    17: version.parse("17.10"),
-    18: version.parse("18.4"),
-}
+from .helpers import BASELINE_2026Q2
+
+UBUNTU26_MIN_VERSIONS = BASELINE_2026Q2
 
 
 def _ubuntu26_skip_reason():
