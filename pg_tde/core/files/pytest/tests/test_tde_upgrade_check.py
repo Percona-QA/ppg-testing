@@ -19,6 +19,10 @@ binaries. The caller drives the upgrade and runs one stage per pytest call:
   verify               the same checks again, plus extversion, and that the
                        upgraded cluster is still usable (writes, new tables,
                        key rotation)
+  verify-replica       HA runs (--replica-port): the streaming replica made
+                       with pg_tde_basebackup is in recovery, caught up, and
+                       holds the same data, encryption state and keys as the
+                       primary, encrypted on disk and in its WAL
 
     pytest tests/test_tde_upgrade_check.py --upgrade-stage=setup \
         --upgrade-check-dir=/var/lib/pg_tde_upgrade_check
@@ -36,6 +40,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 import uuid
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -92,16 +97,18 @@ def stages(*names):
 VERIFY = ("verify-before-alter", "verify")
 
 
-def psql(sql: str, db: str = "postgres") -> str:
-    """Run SQL against the target cluster (PGHOST/PGPORT); stdout, unaligned."""
+def psql(sql: str, db: str = "postgres", port: Optional[int] = None) -> str:
+    """Run SQL against the target cluster (PGHOST/PGPORT, or *port* for the
+    replica); stdout, unaligned."""
+    port_args = ["-p", str(port)] if port else []
     proc = subprocess.run(
-        ["psql", "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-d", db, "-f", "-"],
+        ["psql", "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", *port_args, "-d", db, "-f", "-"],
         input=sql,
         capture_output=True,
         text=True,
     )
     if proc.returncode != 0:
-        raise RuntimeError(f"psql -d {db} failed:\n{sql}\n--\n{proc.stderr}")
+        raise RuntimeError(f"psql -d {db} {port_args} failed:\n{sql}\n--\n{proc.stderr}")
     return proc.stdout.strip()
 
 
@@ -204,20 +211,23 @@ def add_key_provider(scope: str, name: str, cfg: Dict, file_path: Path, db: str)
 # ── snapshot helpers ────────────────────────────────────────────────────────
 
 
-def table_digests(db: str) -> Dict[str, List]:
+def table_digests(db: str, port: Optional[int] = None, skip=()) -> Dict[str, List]:
     out = {}
     for table, order in DIGEST_TABLES.items():
+        if table in skip:
+            continue
         row = psql(
             f"SELECT count(*), md5(coalesce(string_agg(t::text, '|' ORDER BY {order}), '')) "
             f"FROM {SCHEMA}.{table} t;",
             db,
+            port,
         )
         count, digest = row.split("|")
         out[table] = [int(count), digest]
     return out
 
 
-def relations(db: str) -> Dict[str, Dict]:
+def relations(db: str, port: Optional[int] = None) -> Dict[str, Dict]:
     """
     Every storage-bearing relation of the dataset, keyed by a name that is
     stable across pg_upgrade (TOAST tables as "<table>:toast"), with its
@@ -238,6 +248,7 @@ def relations(db: str) -> Dict[str, Dict]:
         FROM rels ORDER BY key;
         """,
         db,
+        port,
     )
     out = {}
     for line in rows.splitlines():
@@ -246,11 +257,11 @@ def relations(db: str) -> Dict[str, Dict]:
     return out
 
 
-def providers(db: str) -> Dict[str, List]:
+def providers(db: str, port: Optional[int] = None) -> Dict[str, List]:
     """Key providers (name, type, options) visible from ``db``, by scope."""
     def listing(fn: str) -> List:
         return sorted(
-            psql(f"SELECT name || '|' || type || '|' || options::text FROM {fn}();", db).splitlines()
+            psql(f"SELECT name || '|' || type || '|' || options::text FROM {fn}();", db, port).splitlines()
         )
     return {
         "database": listing("pg_tde_list_all_database_key_providers"),
@@ -258,16 +269,16 @@ def providers(db: str) -> Dict[str, List]:
     }
 
 
-def key_info(db: str) -> str:
-    return psql("SELECT key_name || '|' || provider_name FROM pg_tde_key_info();", db)
+def key_info(db: str, port: Optional[int] = None) -> str:
+    return psql("SELECT key_name || '|' || provider_name FROM pg_tde_key_info();", db, port)
 
 
-def server_key_info() -> str:
-    return psql("SELECT key_name || '|' || provider_name FROM pg_tde_server_key_info();")
+def server_key_info(port: Optional[int] = None) -> str:
+    return psql("SELECT key_name || '|' || provider_name FROM pg_tde_server_key_info();", port=port)
 
 
-def data_directory() -> Path:
-    return Path(psql("SHOW data_directory;"))
+def data_directory(port: Optional[int] = None) -> Path:
+    return Path(psql("SHOW data_directory;", port=port))
 
 
 def relation_files(datadir: Path, relpath: str) -> List[Path]:
@@ -292,20 +303,21 @@ def files_containing(files: List[Path], needle: bytes) -> List[str]:
     return hits
 
 
-def assert_ciphertext_on_disk(check_dir: Path) -> None:
+def assert_ciphertext_on_disk(check_dir: Path, port: Optional[int] = None) -> None:
     """
     After a CHECKPOINT the tde canary must not appear in any relation file of
     the dataset, nor in pg_wal (WAL encryption is on). The plain_control
     table is the control: its canary must be found, which proves the scan
-    reads the right files.
+    reads the right files. With *port* the replica is scanned (its CHECKPOINT
+    is a restartpoint: run one on the primary and wait for replay first).
     """
-    psql("CHECKPOINT;")
-    datadir = data_directory()
+    psql("CHECKPOINT;", port=port)
+    datadir = data_directory(port)
     tde_needle = canary_tde(check_dir).encode()
     plain_needle = canary_plain(check_dir).encode()
     leaks, control_found = [], False
     for db in TDE_DBS:
-        for key, rel in relations(db).items():
+        for key, rel in relations(db, port).items():
             files = relation_files(datadir, rel["path"])
             if key.startswith("plain_control"):
                 control_found |= bool(files_containing(files, plain_needle))
@@ -615,3 +627,67 @@ def test_verify_key_rotation_after_upgrade(state):
 @stages("verify")
 def test_verify_ciphertext_on_disk_after_writes(check_dir):
     assert_ciphertext_on_disk(check_dir)
+
+
+# ── stage: verify-replica (HA runs) ─────────────────────────────────────────
+
+
+@pytest.fixture
+def replica_port(request) -> int:
+    port = request.config.getoption("--replica-port")
+    if not port:
+        pytest.fail("--upgrade-stage=verify-replica needs --replica-port")
+    return int(port)
+
+
+def wait_replica_caught_up(port: int, timeout: int = 120) -> None:
+    """Wait until the replica has replayed everything the primary has written."""
+    lsn = psql("SELECT pg_current_wal_lsn();")
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if psql(f"SELECT pg_last_wal_replay_lsn() >= '{lsn}'::pg_lsn;", port=port) == "t":
+            return
+        time.sleep(1)
+    raise AssertionError(f"replica on port {port} did not replay up to {lsn} in {timeout}s")
+
+
+# Unlogged relations have no data on a standby (and cannot be read there).
+REPLICA_SKIP = ("scratch_unlogged",)
+
+
+@stages("verify-replica")
+def test_replica_is_streaming_standby(replica_port):
+    assert psql("SELECT pg_is_in_recovery();", port=replica_port) == "t"
+    assert psql("SELECT status FROM pg_stat_wal_receiver;", port=replica_port) == "streaming"
+    assert psql("SELECT pg_tde_version();", port=replica_port) == psql("SELECT pg_tde_version();")
+    wait_replica_caught_up(replica_port)
+
+
+@stages("verify-replica")
+@pytest.mark.parametrize("db", TDE_DBS)
+def test_replica_data_matches_primary(replica_port, db):
+    wait_replica_caught_up(replica_port)
+    assert table_digests(db, replica_port, skip=REPLICA_SKIP) == table_digests(db, skip=REPLICA_SKIP)
+
+
+@stages("verify-replica")
+@pytest.mark.parametrize("db", TDE_DBS)
+def test_replica_encryption_state_and_keys_match_primary(replica_port, db):
+    wait_replica_caught_up(replica_port)
+    enc = lambda port: {k: v["encrypted"] for k, v in relations(db, port).items()}
+    assert enc(replica_port) == enc(None)
+    assert providers(db, replica_port) == providers(db)
+    assert key_info(db, replica_port) == key_info(db)
+
+
+@stages("verify-replica")
+def test_replica_wal_encryption_and_server_key(replica_port):
+    assert psql("SHOW pg_tde.wal_encrypt;", port=replica_port) == psql("SHOW pg_tde.wal_encrypt;")
+    assert server_key_info(replica_port) == server_key_info()
+
+
+@stages("verify-replica")
+def test_replica_ciphertext_on_disk(check_dir, replica_port):
+    psql("CHECKPOINT;")
+    wait_replica_caught_up(replica_port)
+    assert_ciphertext_on_disk(check_dir, port=replica_port)

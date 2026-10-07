@@ -143,6 +143,17 @@
         {%- elif not on and to_major_version | int >= 18 -%}--no-data-checksums
         {%- endif -%}
 
+  # HA: a standby cannot follow a pg_tde_upgrade'd primary. It is dropped here
+  # and rebuilt from the new primary once that is up.
+  - name: HA - drop the FROM replica
+    include_tasks:
+      file: replica.yml
+    vars:
+      replica_action: drop
+      pg_bin_dir:     "{{ from_pg_bin_dir }}"
+      pg_socket_dir:  "{{ from_pg_socket_dir }}"
+    when: ha | bool
+
   # ==========================================================================
   # Stop FROM cluster(s)
   # ==========================================================================
@@ -346,6 +357,16 @@
     until: pg_ready_to.rc == 0
     retries: 15
     delay: 5
+
+  - name: HA - rebuild the replica from the upgraded primary (TO)
+    include_tasks:
+      file: replica.yml
+    vars:
+      replica_action: "{{ item }}"
+      pg_bin_dir:     "{{ to_pg_bin_dir }}"
+      pg_socket_dir:  "{{ to_pg_socket_dir }}"
+    loop: [create, wait]
+    when: ha | bool
 
   - name: Run post-upgrade vacuum analyze on all databases
     become: true

@@ -244,12 +244,17 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
         "--upgrade-stage",
         default=os.environ.get("PG_TDE_UPGRADE_STAGE", ""),
-        choices=["", "prepare", "setup", "verify-before-alter", "verify"],
+        choices=["", "prepare", "setup", "verify-before-alter", "verify", "verify-replica"],
         help=(
             "Stage of tests/test_tde_upgrade_check.py to run against the "
             "cluster at PGHOST/PGPORT (prepare, setup, verify-before-alter, "
             "verify). Unset: those tests are skipped."
         ),
+    )
+    parser.addoption(
+        "--replica-port",
+        default=os.environ.get("PG_TDE_UPGRADE_REPLICA_PORT", ""),
+        help="Port of the streaming replica checked by --upgrade-stage=verify-replica.",
     )
     parser.addoption(
         "--upgrade-check-dir",

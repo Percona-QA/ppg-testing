@@ -10,12 +10,25 @@
 #
 # After the upgrade the to_pg_* facts are aligned to the from_pg_* values since
 # both the FROM and TO versions share the same major version number.
+#
+# HA=true: rolling instead of stop/swap/start -- the primary stays up during
+# the package swap, the replica restarts first (ha_rolling.yml).
 
   - name: Stop PostgreSQL before minor upgrade
     service:
       name: "{{ from_pg_service }}"
       state: stopped
     become: true
+    when: not (ha | bool)
+
+  - name: HA rolling upgrade - hold
+    include_tasks:
+      file: ha_rolling.yml
+    vars:
+      ha_phase:      hold
+      pg_bin_dir:    "{{ from_pg_bin_dir }}"
+      pg_socket_dir: "{{ from_pg_socket_dir }}"
+    when: ha | bool
 
   # Switch the Percona repo to the TO minor version so package updates pull the right build
   - name: Enable Percona repo for TO version
@@ -92,6 +105,15 @@
       - not (tde_upgrade | bool)
       - not (install_from_packages | bool)
 
+  - name: HA rolling upgrade - replica_first
+    include_tasks:
+      file: ha_rolling.yml
+    vars:
+      ha_phase:      replica_first
+      pg_bin_dir:    "{{ from_pg_bin_dir }}"
+      pg_socket_dir: "{{ from_pg_socket_dir }}"
+    when: ha | bool
+
   # Use restarted, not started: on Debian the server-package postinst auto-starts
   # the cluster during the package update (before pg_tde is updated), so a plain
   # "started" would be a no-op and the old pg_tde .so would stay loaded. A restart
@@ -114,6 +136,15 @@
     until: pg_ready_minor.rc == 0
     retries: 12
     delay: 5
+
+  - name: HA rolling upgrade - release
+    include_tasks:
+      file: ha_rolling.yml
+    vars:
+      ha_phase:      release
+      pg_bin_dir:    "{{ from_pg_bin_dir }}"
+      pg_socket_dir: "{{ from_pg_socket_dir }}"
+    when: ha | bool
 
   # For a minor upgrade the major version is unchanged — align to_pg_ facts.
   - name: Align to_pg_ path facts with from_pg_ (minor upgrade shares the same major)

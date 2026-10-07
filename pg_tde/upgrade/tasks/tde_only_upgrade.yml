@@ -9,11 +9,22 @@
 # restart to load the new shared library; main.yml then runs
 # ALTER EXTENSION pg_tde UPDATE.
 
+  # HA=true: rolling, as in minor_upgrade.yml (ha_rolling.yml).
   - name: Stop PostgreSQL before pg_tde upgrade
     service:
       name: "{{ from_pg_service }}"
       state: stopped
     become: true
+    when: not (ha | bool)
+
+  - name: HA rolling upgrade - hold
+    include_tasks:
+      file: ha_rolling.yml
+    vars:
+      ha_phase:      hold
+      pg_bin_dir:    "{{ from_pg_bin_dir }}"
+      pg_socket_dir: "{{ from_pg_socket_dir }}"
+    when: ha | bool
 
   # No repo switch on the percona-release path: pg_tde updates from the FROM repo.
   # With USE_OBS_REPO the new pg_tde package comes from OBS instead.
@@ -48,6 +59,15 @@
       tde_install_log:     "/tmp/tde-to-install.log"
     when: not (install_from_packages | bool)
 
+  - name: HA rolling upgrade - replica_first
+    include_tasks:
+      file: ha_rolling.yml
+    vars:
+      ha_phase:      replica_first
+      pg_bin_dir:    "{{ from_pg_bin_dir }}"
+      pg_socket_dir: "{{ from_pg_socket_dir }}"
+    when: ha | bool
+
   # restarted (not started) so the cluster always reloads the freshly-installed
   # pg_tde shared library, even if something left it running.
   - name: Restart PostgreSQL after pg_tde upgrade
@@ -68,6 +88,15 @@
     until: pg_ready_tde_only.rc == 0
     retries: 12
     delay: 5
+
+  - name: HA rolling upgrade - release
+    include_tasks:
+      file: ha_rolling.yml
+    vars:
+      ha_phase:      release
+      pg_bin_dir:    "{{ from_pg_bin_dir }}"
+      pg_socket_dir: "{{ from_pg_socket_dir }}"
+    when: ha | bool
 
   # PostgreSQL version is unchanged — align to_pg_ facts to from_pg_ so the
   # post-upgrade verification targets the same cluster.
