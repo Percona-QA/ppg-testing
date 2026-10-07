@@ -1,11 +1,14 @@
 import json
 import os
 import re
+import time
 
 import pytest
 import testinfra.utils.ansible_runner
 from .. import settings
 from packaging import version
+from .helpers import (BASELINE_2026Q2, is_deb, is_rpm, meets_min_version,
+                      pg_bin_dir, pg_lib_dir)
 # from ppg.tests.settings import get_settings, MAJOR_VER
 
 testinfra_hosts = testinfra.utils.ansible_runner.AnsibleRunner(
@@ -15,6 +18,10 @@ pg_versions = settings.get_settings(os.environ['MOLECULE_SCENARIO_NAME'])[os.get
 MAJOR_VER = settings.MAJOR_VER
 
 POSTGIS_VERSION_LIMIT = version.parse("3.3.99")  # Run only for ≤3.3.x tarballs
+
+# PostGIS releases whose RHEL packages install the client binaries in /usr/bin
+# instead of /usr/pgsql-<major>/bin (3.5.5 and later are back in pgsql-<major>).
+POSTGIS_RPM_BINARIES_IN_USR_BIN = {"3.5.4"}
 
 # List of expected PG-18 TDE binaries
 TDE_BINARIES = [
@@ -30,13 +37,7 @@ TDE_BINARIES = [
 ]
 
 # Minimum PostgreSQL versions where llvmjit is functional (fixed build)
-LLVMJIT_MIN_VERSIONS = {
-    14: version.parse("14.23"),
-    15: version.parse("15.18"),
-    16: version.parse("16.14"),
-    17: version.parse("17.10"),
-    18: version.parse("18.4"),
-}
+LLVMJIT_MIN_VERSIONS = BASELINE_2026Q2
 
 # Minimum PostgreSQL versions where percona-patroni requires python3.12+ on RHEL
 # (the first version strictly after 14.23, 15.18, 16.14, 17.10, 18.4)
@@ -63,13 +64,7 @@ PATRONI_PYTHON312_UPGRADE_FROM_MIN_VERSIONS = {
 }
 
 # Minimum PostgreSQL versions where pg_cron is available
-PG_CRON_MIN_VERSIONS = {
-    14: version.parse("14.23"),
-    15: version.parse("15.18"),
-    16: version.parse("16.14"),
-    17: version.parse("17.10"),
-    18: version.parse("18.4"),
-}
+PG_CRON_MIN_VERSIONS = BASELINE_2026Q2
 
 # Minimum PostgreSQL versions where percona-pg-telemetry became a weak
 # dependency (Recommends/Suggests) of the server package instead of a hard
@@ -84,23 +79,13 @@ TELEMETRY_WEAK_DEP_MIN_VERSIONS = {
 }
 
 # Minimum PostgreSQL versions where pg_tde_upgrade binary is available
-PG_TDE_UPGRADE_MIN_VERSIONS = {
-    17: version.parse("17.10"),
-    18: version.parse("18.4"),
-}
+PG_TDE_UPGRADE_MIN_VERSIONS = {major: BASELINE_2026Q2[major] for major in (17, 18)}
 
 # Minimum PostgreSQL versions where libpgpoolpcp3 replaces libpgpool2 on Debian/Ubuntu
-LIBPGPOOLPCP3_MIN_VERSIONS = {
-    14: version.parse("14.23"),
-    15: version.parse("15.18"),
-    16: version.parse("16.14"),
-    17: version.parse("17.10"),
-    18: version.parse("18.4"),
-}
+LIBPGPOOLPCP3_MIN_VERSIONS = BASELINE_2026Q2
 
 # Minimum PostgreSQL versions where pg_gather install location changed
 PG_GATHER_MIN_VERSIONS = {
-    13: version.parse("13.23"),
     14: version.parse("14.20"),
     15: version.parse("15.15"),
     16: version.parse("16.11"),
@@ -110,7 +95,6 @@ PG_GATHER_MIN_VERSIONS = {
 
 # Minimum PostgreSQL versions where PostGIS is available
 POSTGIS_MIN_SUPPORTED_VERSIONS = {
-    13: version.parse("13.19"),
     14: version.parse("14.16"),
     15: version.parse("15.11"),
     16: version.parse("16.6"),
@@ -129,27 +113,10 @@ POSTGIS_EXTENSIONS = [
 ]
 
 
-@pytest.fixture(scope="module")
-def operating_system(host):
-    return host.system_info.distribution
-
-
-@pytest.fixture()
-def load_data(host):
-    with host.sudo("postgres"):
-        pgbench = "pgbench -i -s 1"
-        assert host.run(pgbench).rc == 0
-        select = "psql -c 'SELECT COUNT(*) FROM pgbench_accounts;' | awk 'NR==3{print $3}'"
-        assert host.run(select).rc == 0
-
-
 @pytest.fixture()
 def pgaudit(host):
     dist = host.system_info.distribution
     with host.sudo("postgres"):
-        # enable_library = "psql -c \'ALTER SYSTEM SET shared_preload_libraries=\'pgaudit\'\';"
-        # result = host.check_output(enable_library)
-        # assert result.strip("\n") == "ALTER SYSTEM"
         enable_pgaudit = "psql -c 'CREATE EXTENSION pgaudit;'"
         result = host.check_output(enable_pgaudit)
         assert result.strip("\n") == "CREATE EXTENSION"
@@ -168,18 +135,16 @@ def pgaudit(host):
         result = host.run(create_table)
         assert result.rc == 0
         assert result.stdout.strip("\n") == "CREATE TABLE"
-        log_file = "/var/log/postgresql/postgresql-{}-main.log".format(settings.MAJOR_VER)
-        if dist.lower() in ["debian", "ubuntu"]:
-            log_file = "/var/log/postgresql/postgresql-{}-main.log".format(settings.MAJOR_VER)
-        elif dist.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
+        log_file = "/var/log/postgresql/postgresql-{}-main.log".format(MAJOR_VER)
+        if is_rpm(dist):
             # log_filename rotates by day-of-week (postgresql-%a.log), so more
             # than one file can exist if the run crosses a day boundary --
             # take the most recently modified one, not the raw `ls` output
             # (which would otherwise glue multiple filenames together with an
             # embedded newline and break the `cat` below).
-            log_files = "ls -t /var/lib/pgsql/{}/data/log/".format(settings.MAJOR_VER)
+            log_files = "ls -t /var/lib/pgsql/{}/data/log/".format(MAJOR_VER)
             file_name = host.check_output(log_files).splitlines()[0]
-            log_file = "".join(["/var/lib/pgsql/{}/data/log/".format(settings.MAJOR_VER), file_name])
+            log_file = "".join(["/var/lib/pgsql/{}/data/log/".format(MAJOR_VER), file_name])
         file = host.file(log_file)
         file_content = file.content_string
     yield file_content
@@ -187,156 +152,210 @@ def pgaudit(host):
         drop_pgaudit = "psql -c 'DROP EXTENSION pgaudit;'"
         result = host.check_output(drop_pgaudit)
         assert result.strip("\n") == "DROP EXTENSION"
-    if dist.lower() in ["debian", "ubuntu"]:
+    if is_deb(dist):
         cmd = "sudo systemctl restart postgresql"
-    elif dist.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
+    elif is_rpm(dist):
         cmd = "sudo systemctl restart postgresql-{}".format(MAJOR_VER)
     result = host.run(cmd)
     assert result.rc == 0
 
 
 @pytest.fixture()
-def pgbackrest_version(host, operating_system):
+def pgbackrest_version(host):
     return host.check_output("pgbackrest version").strip("\n")
 
 
+# --- pgbackrest functional chain ------------------------------------------
+# Self-contained: pgbackrest_env writes its own config, turns on archiving and
+# restarts postgres (archive_mode needs a restart), and undoes all of that at
+# the end of the module. The fixtures below are module-scoped and each builds
+# on the previous one, so every test can run on its own (-k) and does not
+# depend on the order tests happen to run in.
+PGBACKREST_STANZA = "ppg-tests"
+PGBACKREST_CONF = "/etc/pgbackrest-ppg-tests.conf"
+PGBACKREST_REPO = "/var/lib/pgbackrest"
+PGBACKREST_MARKER = "pgbackrest-restore-marker"
+
+
+def _pg_service(host):
+    return f"postgresql-{MAJOR_VER}" if is_rpm(host.system_info.distribution) else "postgresql"
+
+
+def _psql(host, sql):
+    with host.sudo("postgres"):
+        return host.run('psql -tAc "{}"'.format(sql.replace('"', '\\"')))
+
+
+def _pgbackrest(host, args):
+    with host.sudo("postgres"):
+        return host.run(
+            f"pgbackrest --config={PGBACKREST_CONF} --stanza={PGBACKREST_STANZA} "
+            f"--log-level-console=info {args}")
+
+
+def _systemctl(host, action):
+    with host.sudo():
+        return host.run(f"systemctl {action} {_pg_service(host)}")
+
+
+def _wait_for_postgres(host, timeout=60):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if _psql(host, "SELECT 1;").rc == 0:
+            return True
+        time.sleep(2)
+    return False
+
+
+def _wait_for_postgres_stopped(host, data_dir, timeout=30):
+    """Wait for *this* cluster's postmaster to exit: postmaster.pid is the last
+    thing removed on shutdown. Do not look for postgres processes by name, the
+    patroni test cluster runs other postgres instances on the same host, so
+    that is never empty. (`systemctl stop` can return before background
+    workers have released the data directory.)"""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        with host.sudo():
+            running = host.run(f"test -e {data_dir}/postmaster.pid")
+        if running.rc != 0:
+            return True
+        time.sleep(1)
+    return False
+
+
+def _empty_data_dir(host, data_dir, attempts=5):
+    """Empty the data directory, retrying: exiting workers can still be
+    writing into pg_wal ("Directory not empty")."""
+    for _ in range(attempts):
+        with host.sudo():
+            host.run(f"find {data_dir} -mindepth 1 -delete")
+            left = host.run(f"ls -A {data_dir}")
+        if left.rc == 0 and not left.stdout.strip():
+            return True
+        time.sleep(2)
+    return False
+
+
+def _ensure_postgres_running(host, data_dir):
+    """Leave a working server behind. A failed restore leaves the data
+    directory empty or half-restored; restoring again repairs it."""
+    _systemctl(host, "start")
+    if _wait_for_postgres(host, timeout=20):
+        return True
+    _systemctl(host, "stop")
+    _wait_for_postgres_stopped(host, data_dir)
+    _pgbackrest(host, "--delta restore")
+    _systemctl(host, "start")
+    return _wait_for_postgres(host)
+
+
+def _fmt(result):
+    return f"rc={result.rc}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+
+
 @pytest.fixture(scope="module")
-def configure_postgres_pgbackrest(host):
-    with host.sudo("postgres"):
-        wal_senders = """psql -c \"ALTER SYSTEM SET max_wal_senders=3;\""""
-        assert host.check_output(wal_senders).strip("\n") == "ALTER SYSTEM"
-        wal_level = """psql -c \"ALTER SYSTEM SET wal_level='replica';\""""
-        assert host.check_output(wal_level).strip("\n") == "ALTER SYSTEM"
-        archive = """psql -c \"ALTER SYSTEM SET archive_mode='on';\""""
-        assert host.check_output(archive).strip("\n") == "ALTER SYSTEM"
-        archive_command = """
-        psql -c \"ALTER SYSTEM SET archive_command = 'pgbackrest --stanza=testing archive-push %p';\"
-        """
-        assert host.check_output(archive_command).strip("\n") == "ALTER SYSTEM"
-        reload_conf = "psql -c 'SELECT pg_reload_conf();'"
-        result = host.run(reload_conf)
-        assert result.rc == 0
+def pgbackrest_env(host):
+    """Config file + archiving on + postgres restarted. Yields the data directory."""
+    data_dir = _psql(host, "SHOW data_directory;").stdout.strip()
+    # The restore test empties this directory, so refuse anything odd.
+    assert data_dir.startswith("/var/lib/") and data_dir.count("/") >= 3, data_dir
+
+    conf = (f"[global]\nrepo1-path={PGBACKREST_REPO}\nrepo1-retention-full=2\n\n"
+            f"[{PGBACKREST_STANZA}]\npg1-path={data_dir}\n")
+    with host.sudo():
+        # The repo dir normally comes with the package; create it if it does not.
+        result = host.run(f"mkdir -p {PGBACKREST_REPO} && chown postgres:postgres {PGBACKREST_REPO}")
+        assert result.rc == 0, _fmt(result)
+        result = host.run(
+            f"printf '%s' '{conf}' > {PGBACKREST_CONF} && "
+            f"chown postgres:postgres {PGBACKREST_CONF} && chmod 640 {PGBACKREST_CONF}")
+        assert result.rc == 0, _fmt(result)
+
+    archive_command = (f"pgbackrest --config={PGBACKREST_CONF} "
+                       f"--stanza={PGBACKREST_STANZA} archive-push %p")
+    for sql in ("ALTER SYSTEM SET archive_mode = 'on';",
+                f"ALTER SYSTEM SET archive_command = '{archive_command}';"):
+        result = _psql(host, sql)
+        assert result.rc == 0 and "ALTER SYSTEM" in result.stdout, _fmt(result)
+    result = _systemctl(host, "restart")
+    assert result.rc == 0, _fmt(result)
+    assert _wait_for_postgres(host), "postgres did not come back after enabling archive_mode"
+
+    yield data_dir
+
+    # Best-effort cleanup.
+    if _ensure_postgres_running(host, data_dir):
+        _psql(host, "DROP TABLE IF EXISTS pgbackrest_ppg_marker;")
+        _psql(host, "ALTER SYSTEM RESET archive_mode;")
+        _psql(host, "ALTER SYSTEM RESET archive_command;")
+        # pgbackrest restore leaves a restore_command pointing at the config file removed below.
+        _psql(host, "ALTER SYSTEM RESET restore_command;")
+        _systemctl(host, "restart")
+        _wait_for_postgres(host)
+    with host.sudo():
+        host.run(f"rm -f {PGBACKREST_CONF}; "
+                 f"rm -rf {PGBACKREST_REPO}/backup/{PGBACKREST_STANZA} "
+                 f"{PGBACKREST_REPO}/archive/{PGBACKREST_STANZA}")
 
 
-@pytest.mark.usefixtures("configure_postgres_pgbackrest")
-@pytest.fixture()
-def create_stanza(host):
-    with host.sudo("postgres"):
-        cmd = "pgbackrest stanza-create --stanza=testing --log-level-console=info"
-        return host.run(cmd)
+@pytest.fixture(scope="module")
+def pgbackrest_stanza(host, pgbackrest_env):
+    return _pgbackrest(host, "stanza-create")
 
 
-@pytest.mark.usefixtures("configure_postgres_pgbackrest")
-@pytest.fixture()
-def pgbackrest_check(host):
-    with host.sudo("postgres"):
-        cmd = "pgbackrest check --stanza=testing --log-level-console=info"
-        result = host.run(cmd)
-        assert result.rc == 0, result.stderr
-        return [l.split("INFO:")[-1] for l in result.stdout.split("\n") if "INFO" in l]
+@pytest.fixture(scope="module")
+def pgbackrest_check(host, pgbackrest_stanza):
+    assert pgbackrest_stanza.rc == 0, f"stanza-create failed:\n{_fmt(pgbackrest_stanza)}"
+    return _pgbackrest(host, "check")
 
 
-@pytest.mark.usefixtures("load_data")
-@pytest.mark.usefixtures("configure_postgres_pgbackrest")
-@pytest.fixture()
-def pgbackrest_full_backup(host):
-    with host.sudo("postgres"):
-        cmd = "pgbackrest backup --stanza=testing --log-level-console=info"
-        result = host.run(cmd)
-        assert result.rc == 0
-        return [l.split("INFO:")[-1] for l in result.stdout.split("\n") if "INFO" in l]
+@pytest.fixture(scope="module")
+def pgbackrest_full_backup(host, pgbackrest_check):
+    assert pgbackrest_check.rc == 0, f"check failed:\n{_fmt(pgbackrest_check)}"
+    # Data the restore test must find again, and a WAL switch so it is archived.
+    result = _psql(host, "CREATE TABLE pgbackrest_ppg_marker (note text);")
+    assert result.rc == 0, _fmt(result)
+    result = _psql(host, f"INSERT INTO pgbackrest_ppg_marker VALUES ('{PGBACKREST_MARKER}');")
+    assert result.rc == 0, _fmt(result)
+    result = _psql(host, "SELECT pg_switch_wal();")
+    assert result.rc == 0, _fmt(result)
+    return _pgbackrest(host, "--type=full backup")
 
 
-@pytest.mark.usefixtures("configure_postgres_pgbackrest")
-@pytest.fixture()
-def pgbackrest_delete_data(host):
-    dist = host.system_info.distribution
-    data_dir = f"/var/lib/postgresql/{MAJOR_VER}/main/*"
-    service_name = "postgresql"
-    if dist.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
-        data_dir = f"/var/lib/pgsql/{MAJOR_VER}/data/*"
-        service_name = f"postgresql-{MAJOR_VER}"
-    with host.sudo("root"):
-        stop_postgresql = 'systemctl stop {}'.format(service_name)
-        s = host.run(stop_postgresql)
-        assert s.rc == 0
-    with host.sudo("postgres"):
-        cmd = "rm -rf {}".format(data_dir)
-        result = host.run(cmd)
-        assert result.rc == 0
-
-
-@pytest.mark.usefixtures("configure_postgres_pgbackrest")
-@pytest.fixture()
-def pgbackrest_restore(pgbackrest_delete_data, host):
-    with host.sudo("postgres"):
-        result = host.run("pgbackrest --stanza=testing --log-level-stderr=info restore")
-        assert result.rc == 0
-        return [l.split("INFO:")[-1] for l in result.stdout.split("\n") if "INFO" in l]
-
-
-@pytest.fixture()
-def pgrepack(host):
-    dist = host.system_info.distribution
-    cmd = f"/usr/lib/postgresql/{MAJOR_VER}/bin/pg_repack"
-    if dist.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
-        cmd = f"/usr/pgsql-{MAJOR_VER}/bin/pg_repack "
-    return host.check_output(cmd)
+def _pgbench_init(host, dist):
+    """Create the pgbench tables (scale 1) as the postgres user. The caller
+    must already be inside host.sudo("postgres")."""
+    pgbench_bin = f"{pg_bin_dir(dist, MAJOR_VER)}/pgbench" if is_rpm(dist) else "pgbench"
+    assert host.run(f"{pgbench_bin} -i -s 1").rc == 0
+    select = "psql -tAc 'SELECT COUNT(*) FROM pgbench_accounts;'"
+    assert host.run(select).rc == 0
 
 
 @pytest.fixture()
 def pg_repack_functional(host):
     dist = host.system_info.distribution
-    pgbench_bin = "pgbench"
-    pg_repack_bin = f"/usr/lib/postgresql/{MAJOR_VER}/bin/pg_repack"
-    if dist.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
-        pgbench_bin = f"/usr/pgsql-{pg_versions['version'].split('.')[0]}/bin/pgbench"
-        pg_repack_bin = f"/usr/pgsql-{MAJOR_VER}/bin/pg_repack"
+    pg_repack_bin = f"{pg_bin_dir(dist, MAJOR_VER)}/pg_repack"
     with host.sudo("postgres"):
-        pgbench = f"{pgbench_bin} -i -s 1"
-        assert host.run(pgbench).rc == 0
-        select = "psql -c 'SELECT COUNT(*) FROM pgbench_accounts;' | awk 'NR==3{print $3}'"
-        assert host.run(select).rc == 0
-        cmd = f"{pg_repack_bin} -t pgbench_accounts -j 4"
-        if dist.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
-            cmd = f"{pg_repack_bin} -t pgbench_accounts -j 4"
-        pg_repack_result = host.run(cmd)
+        _pgbench_init(host, dist)
+        pg_repack_result = host.run(f"{pg_repack_bin} -t pgbench_accounts -j 4")
     yield pg_repack_result
 
 
 @pytest.fixture()
-def pg_repack_dry_run(host, operating_system):
+def pg_repack_dry_run(host):
     dist = host.system_info.distribution
-    pgbench_bin = "pgbench"
-    pg_repack_bin = f"/usr/lib/postgresql/{MAJOR_VER}/bin/pg_repack"
-    if dist.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
-        pgbench_bin = f"/usr/pgsql-{pg_versions['version'].split('.')[0]}/bin/pgbench"
-        pg_repack_bin = f"/usr/pgsql-{MAJOR_VER}/bin/pg_repack"
+    pg_repack_bin = f"{pg_bin_dir(dist, MAJOR_VER)}/pg_repack"
     with host.sudo("postgres"):
-        pgbench = f"{pgbench_bin} -i -s 1"
-        assert host.run(pgbench).rc == 0
-        select = "psql -c 'SELECT COUNT(*) FROM pgbench_accounts;' | awk 'NR==3{print $3}'"
-        assert host.run(select).rc == 0
-        cmd = f"{pg_repack_bin} --dry-run -d postgres"
-        if operating_system.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
-            cmd = f"{pg_repack_bin} --dry-run -d postgres"
-
-        pg_repack_result = host.run(cmd)
+        _pgbench_init(host, dist)
+        pg_repack_result = host.run(f"{pg_repack_bin} --dry-run -d postgres")
     yield pg_repack_result
 
 
 @pytest.fixture()
-def pg_repack_client_version(host, operating_system):
+def pg_repack_client_version(host):
+    dist = host.system_info.distribution
     with host.sudo("postgres"):
-        cmd = f"/usr/lib/postgresql/{MAJOR_VER}/bin/pg_repack --version"
-        if operating_system.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
-            cmd = f"/usr/pgsql-{MAJOR_VER}/bin/pg_repack --version"
-        return host.run(cmd)
-
-
-@pytest.fixture()
-def patroni(host):
-    return host.run("/opt/patroni/bin/patroni")
+        return host.run(f"{pg_bin_dir(dist, MAJOR_VER)}/pg_repack --version")
 
 
 @pytest.fixture()
@@ -347,18 +366,16 @@ def patroni_version(host):
 
 def test_pgaudit_package(host):
     with host.sudo():
-        os = host.system_info.distribution
+        dist = host.system_info.distribution
         pkgn = ""
-        if os.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
+        if is_rpm(dist):
             pkgn = f"percona-pgaudit{MAJOR_VER}"
-            # pkgn = "percona-pgaudit14_12"
-        elif os in ["debian", "ubuntu"]:
+        elif is_deb(dist):
             pkgn = "percona-postgresql-{}-pgaudit".format(MAJOR_VER)
-            if "12" not in MAJOR_VER:
-                dbgsym_pkgn = "percona-postgresql-{}-pgaudit-dbgsym".format(MAJOR_VER)
-                dbgsym_pkg = host.package(dbgsym_pkgn)
-                assert dbgsym_pkg.is_installed
-                assert pg_versions['pgaudit']['version'] in dbgsym_pkg.version
+            dbgsym_pkgn = "percona-postgresql-{}-pgaudit-dbgsym".format(MAJOR_VER)
+            dbgsym_pkg = host.package(dbgsym_pkgn)
+            assert dbgsym_pkg.is_installed
+            assert pg_versions['pgaudit']['version'] in dbgsym_pkg.version
         if pkgn == "":
             pytest.fail("Unsupported operating system")
         pkg = host.package(pkgn)
@@ -373,15 +390,14 @@ def test_pgaudit(pgaudit):
 def test_pgrepack_package(host):
     with host.sudo():
 
-        os = host.system_info.distribution
+        dist = host.system_info.distribution
         pkgn = ""
-        if os.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
+        if is_rpm(dist):
             pkgn = pg_versions['pgrepack_package_rpm']
-        elif os in ["debian", "ubuntu"]:
+        elif is_deb(dist):
             pkgn = pg_versions['pgrepack_package_deb']
-            if MAJOR_VER != "12":
-                pkg_dbgsym = host.package("{}-dbgsym".format(pg_versions['pgrepack_package_deb']))
-                assert pkg_dbgsym.is_installed
+            pkg_dbgsym = host.package("{}-dbgsym".format(pg_versions['pgrepack_package_deb']))
+            assert pkg_dbgsym.is_installed
         if pkgn == "":
             pytest.fail("Unsupported operating system")
         pkg = host.package(pkgn)
@@ -392,16 +408,13 @@ def test_pgrepack_package(host):
 def test_pgrepack(host):
     with host.sudo("postgres"):
         install_extension = host.run("psql -c 'CREATE EXTENSION \"pg_repack\";'")
-        try:
-            assert install_extension.rc == 0, install_extension.stdout
-            assert install_extension.stdout.strip("\n") == "CREATE EXTENSION"
-        except AssertionError:
-            pytest.fail("Return code {}. Stderror: {}. Stdout {}".format(install_extension.rc,
-                                                                         install_extension.stderr,
-                                                                         install_extension.stdout))
-            extensions = host.run("psql -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $3}'")
-            assert extensions.rc == 0
-            assert "pg_repack" in set(extensions.stdout.split())
+        assert install_extension.rc == 0, (
+            f"Return code {install_extension.rc}. Stderr: {install_extension.stderr}. "
+            f"Stdout: {install_extension.stdout}")
+        assert install_extension.stdout.strip("\n") == "CREATE EXTENSION", install_extension.stdout
+        extensions = host.run("psql -tAc 'SELECT extname FROM pg_extension;'")
+        assert extensions.rc == 0, extensions.stderr
+        assert "pg_repack" in set(extensions.stdout.split()), extensions.stdout
 
 
 def test_pg_repack_client_version(pg_repack_client_version):
@@ -413,7 +426,7 @@ def test_pg_repack_functional(pg_repack_functional):
     assert pg_repack_functional.rc == 0
     messages = pg_repack_functional.stderr.split("\n")
     assert 'NOTICE: Setting up workers.conns' in messages
-    assert 'NOTICE: Setting up workers.conns', 'INFO: repacking table "public.pgbench_accounts"' in messages
+    assert 'INFO: repacking table "public.pgbench_accounts"' in messages
 
 
 def test_pg_repack_dry_run(pg_repack_dry_run):
@@ -427,12 +440,11 @@ def test_pg_repack_dry_run(pg_repack_dry_run):
 
 def test_pgbackrest_package(host):
     with host.sudo():
-        os = host.system_info.distribution
+        dist = host.system_info.distribution
         pkgn = ""
-        if os.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
+        if is_rpm(dist) or is_deb(dist):
             pkgn = "percona-pgbackrest"
-        elif os in ["debian", "ubuntu"]:
-            pkgn = "percona-pgbackrest"
+        if is_deb(dist):
             doc_pkgn = "percona-pgbackrest-doc"
             docs_pkg = host.package(doc_pkgn)
             dbg_pkg = "percona-pgbackrest-dbgsym"
@@ -452,42 +464,61 @@ def test_pgbackrest_version(pgbackrest_version):
     assert pgbackrest_version == pg_versions['pgbackrest']['binary_version']
 
 
-def test_pgbackrest_create_stanza(create_stanza):
-    assert "INFO: stanza-create command end: completed successfully" in create_stanza.stdout
+def test_pgbackrest_create_stanza(pgbackrest_stanza):
+    assert pgbackrest_stanza.rc == 0, _fmt(pgbackrest_stanza)
+    assert "stanza-create command end: completed successfully" in pgbackrest_stanza.stdout, _fmt(pgbackrest_stanza)
 
 
 def test_pgbackrest_check(pgbackrest_check):
-    assert "check command end: completed successfully" in pgbackrest_check[-1]
+    assert pgbackrest_check.rc == 0, _fmt(pgbackrest_check)
+    assert "check command end: completed successfully" in pgbackrest_check.stdout, _fmt(pgbackrest_check)
 
 
-def test_pgbackrest_full_backup(pgbackrest_full_backup):
-    assert "expire command end: completed successfully" in pgbackrest_full_backup[-1]
+def test_pgbackrest_full_backup(host, pgbackrest_full_backup):
+    assert pgbackrest_full_backup.rc == 0, _fmt(pgbackrest_full_backup)
+    assert "expire command end: completed successfully" in pgbackrest_full_backup.stdout, _fmt(pgbackrest_full_backup)
+    info = _pgbackrest(host, "info")
+    assert info.rc == 0, _fmt(info)
+    assert "status: ok" in info.stdout, info.stdout
+    assert "full backup:" in info.stdout, info.stdout
 
 
-def test_pgbackrest_restore(host):
-    os = host.system_info.distribution
-    if os.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
-        service_name = "postgresql-{}".format(MAJOR_VER)
-    else:
-        service_name = "postgresql"
-    with host.sudo("root"):
-        stop_postgresql = 'systemctl start {}'.format(service_name)
-        assert host.run(stop_postgresql).rc == 0
-    with host.sudo("postgres"):
-        select = "psql -c 'SELECT COUNT(*) FROM pgbench_accounts;' | awk 'NR==3{print $1}'"
-        result = host.run(select)
-        assert result.rc == 0
-        assert result.stdout.strip("\n") == "100000"
+def test_pgbackrest_restore(host, pgbackrest_env, pgbackrest_full_backup):
+    """Stop postgres, empty the data directory, restore from the backup taken
+    above and check the marker row written before the backup comes back."""
+    assert pgbackrest_full_backup.rc == 0, f"backup failed:\n{_fmt(pgbackrest_full_backup)}"
+    data_dir = pgbackrest_env
+
+    try:
+        result = _systemctl(host, "stop")
+        assert result.rc == 0, _fmt(result)
+        assert _wait_for_postgres_stopped(host, data_dir), (
+            f"{data_dir}/postmaster.pid still present 30s after systemctl stop")
+        assert _empty_data_dir(host, data_dir), f"could not empty {data_dir}"
+
+        restore = _pgbackrest(host, "restore")
+        assert restore.rc == 0, _fmt(restore)
+        assert "restore command end: completed successfully" in restore.stdout, _fmt(restore)
+
+        result = _systemctl(host, "start")
+        assert result.rc == 0, _fmt(result)
+        assert _wait_for_postgres(host), "postgres did not accept connections within 60s after restore"
+
+        marker = _psql(host, "SELECT note FROM pgbackrest_ppg_marker;")
+        assert marker.rc == 0, _fmt(marker)
+        assert marker.stdout.strip() == PGBACKREST_MARKER, (
+            f"restored database is missing the marker row written before the backup:\n{_fmt(marker)}")
+    finally:
+        # Whatever happened above, the rest of the module needs a running server.
+        _ensure_postgres_running(host, data_dir)
 
 
 def test_patroni_package(host):
     with host.sudo():
 
-        os = host.system_info.distribution
+        dist = host.system_info.distribution
         pkgn = ""
-        if os.lower() in ["ubuntu", "redhat", "centos", "rocky", "ol", "rhel"]:
-            pkgn = "percona-patroni"
-        elif os == "debian":
+        if is_rpm(dist) or is_deb(dist):
             pkgn = "percona-patroni"
         if pkgn == "":
             pytest.fail("Unsupported operating system")
@@ -509,9 +540,7 @@ def test_patroni_service(host):
 def _skip_if_patroni_python312_unavailable():
     """Skip if the python3.12+ patroni dependency isn't expected yet for the
     current PostgreSQL version."""
-    current_ver = version.parse(pg_versions.get("version", "0.0"))
-    min_ver = PATRONI_PYTHON312_MIN_VERSIONS.get(current_ver.major)
-    if min_ver is None or current_ver < min_ver:
+    if not meets_min_version(PATRONI_PYTHON312_MIN_VERSIONS, pg_versions.get("version", "0.0")):
         pytest.skip(f"python3.12+ patroni dependency not expected for "
                     f"PostgreSQL {pg_versions.get('version')}")
 
@@ -541,7 +570,7 @@ def test_patroni_requires_python312(host):
     _skip_if_patroni_python312_unavailable()
     _skip_if_patroni_python312_upgrade_pending()
     dist = host.system_info.distribution
-    if dist.lower() in ["ubuntu", "debian"]:
+    if is_deb(dist):
         pytest.skip("python3.12+ dependency pin only applies to RHEL-based packaging")
     with host.sudo():
         result = host.run("rpm -q --requires percona-patroni")
@@ -561,7 +590,7 @@ def test_patroni_requires_python312(host):
 
 def test_pg_stat_monitor_package_version(host):
     dist = host.system_info.distribution
-    if dist.lower() in ["ubuntu", "debian"]:
+    if is_deb(dist):
         pg_stat = host.package(f"percona-pg-stat-monitor{MAJOR_VER}")
     else:
         pg_stat = host.package(f"percona-pg_stat_monitor{MAJOR_VER}")
@@ -572,7 +601,7 @@ def test_pg_stat_monitor_extension_version(host):
     with host.sudo("postgres"):
         result = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS pg_stat_monitor;'")
         assert result.rc == 0, result.stderr
-        result = host.run("psql -c 'SELECT pg_stat_monitor_version();' | awk 'NR==3{print $1}'")
+        result = host.run("psql -tAc 'SELECT pg_stat_monitor_version();'")
         assert result.rc == 0, result.stderr
         assert result.stdout.strip("\n") == pg_versions['PGSM_version']
 
@@ -605,7 +634,7 @@ def test_postgis_package_version(host):
     dist = host.system_info.distribution.lower()
     release = host.system_info.release
 
-    if dist in ["ubuntu", "debian"]:
+    if is_deb(dist):
         package_names = [
             f"percona-postgresql-{MAJOR_VER}-postgis-3",
             f"percona-postgresql-{MAJOR_VER}-postgis-3-scripts",
@@ -642,13 +671,13 @@ def test_postgis_package_version(host):
 @pytest.fixture()
 def installed_extensions_list(host):
     with host.sudo("postgres"):
-        result = host.check_output("psql -c 'SELECT * FROM pg_available_extensions;' | awk 'NR>=3{print $1}'")
+        result = host.check_output("psql -tAc 'SELECT name FROM pg_available_extensions;'")
         result = result.split()
         return result
 
 
 def test_postgis_extenstions_list(installed_extensions_list, host):
-    pg_version_str = _skip_if_postgis_unavailable(pg_versions)
+    _skip_if_postgis_unavailable(pg_versions)
 
     dist = host.system_info.distribution
     POSTGIS_DEB_EXTENSIONS = ['postgis_tiger_geocoder-3','postgis_sfcgal-3','postgis_raster-3','postgis_topology-3',
@@ -656,11 +685,11 @@ def test_postgis_extenstions_list(installed_extensions_list, host):
         'address_standardizer-3','postgis-3','address_standardizer','postgis','address_standardizer_data_us-3']
     POSTGIS_RHEL_EXTENSIONS = ['postgis_sfcgal','address_standardizer','postgis_tiger_geocoder','postgis',
         'postgis_topology','postgis_raster','address_standardizer_data_us']
-    if dist.lower() in ["redhat", "centos", "rhel", "rocky", "ol"]:
+    if is_rpm(dist):
         for extension in POSTGIS_RHEL_EXTENSIONS:
             print(extension)
             assert extension in installed_extensions_list
-    if dist.lower() in ['debian', 'ubuntu']:
+    if is_deb(dist):
         for extension in POSTGIS_DEB_EXTENSIONS:
             print(extension)
             assert extension in installed_extensions_list
@@ -700,24 +729,16 @@ def test_postgis_extensions_create_drop(host):
             result = host.run(f"psql -c 'DROP EXTENSION IF EXISTS {ext} CASCADE;'")
             assert result.rc == 0, f"Failed to drop {ext}: {result.stderr}"
 
-        # result = host.run("psql -c 'SET pgaudit.log = 'all';'")
-        # assert result.rc == 0, result.stderr
-
 
 def test_postgis_extension_version(host):
-    pg_version_str = _skip_if_postgis_unavailable(pg_versions)
+    _skip_if_postgis_unavailable(pg_versions)
 
     with host.sudo("postgres"):
-        # result = host.run("psql -c 'SET pgaudit.log = 'none';'")
-        # assert result.rc == 0, result.stderr
         result = host.run("psql -c \"SET pgaudit.log = 'none'; CREATE EXTENSION IF NOT EXISTS postgis; SET pgaudit.log = 'all';\"")
         assert result.rc == 0, result.stderr
-        result = host.run("psql -c \"SELECT installed_version FROM pg_available_extensions WHERE name LIKE 'postgis';\" | awk 'NR==3{print $1}'")
+        result = host.run("psql -tAc \"SELECT installed_version FROM pg_available_extensions WHERE name = 'postgis';\"")
         assert result.rc == 0, result.stderr
         assert result.stdout.strip("\n") == pg_versions['postgis_version']
-        # result = host.run("psql -c 'SET pgaudit.log = 'all';'")
-        # assert result.rc == 0, result.stderr
-
 
 @pytest.mark.parametrize("binary", ["shp2pgsql", "pgsql2shp"])
 def test_postgis_binary_version(host, binary):
@@ -740,16 +761,11 @@ def test_postgis_binary_version(host, binary):
 def test_postgis_binary_presence(host):
     dist = host.system_info.distribution
     with host.sudo("postgres"):
-        if dist.lower() in ["redhat", "centos", "rhel", "rocky", "ol"]:
-            postgis_major_version = float(pg_versions['postgis_major_version'])
-            #if postgis_major_version >= 3.5:
-            #    postgis_binaries_path = "/usr/bin"
-            #else:
-            #    postgis_binaries_path = f"/usr/pgsql-{MAJOR_VER}/bin"
-            if str(pg_versions['postgis_version']) == "3.5.4":
+        if is_rpm(dist):
+            if str(pg_versions['postgis_version']) in POSTGIS_RPM_BINARIES_IN_USR_BIN:
                 postgis_binaries_path = "/usr/bin"
             else:
-                postgis_binaries_path = f"/usr/pgsql-{MAJOR_VER}/bin"
+                postgis_binaries_path = pg_bin_dir(dist, MAJOR_VER)
 
             # List of expected PostGIS binaries
             binaries = [
@@ -766,7 +782,7 @@ def test_postgis_binary_presence(host):
                 assert binary_file.exists, f"{binary} does not exist in {postgis_binaries_path}"
                 assert binary_file.is_file, f"{binary} is not a regular file"
 
-        if dist.lower() in ['debian', 'ubuntu']:
+        if is_deb(dist):
             # List of expected PostGIS binaries
             binaries = [
                 "pgtopo_export",
@@ -792,7 +808,7 @@ def test_package_version(host, package):
 
 def test_wal2json_version(host):
     dist = host.system_info.distribution
-    if dist.lower() in ["ubuntu", "debian"]:
+    if is_deb(dist):
         wal2json = host.package(f"percona-postgresql-{MAJOR_VER}-wal2json")
     else:
         wal2json = host.package(f"percona-wal2json{MAJOR_VER}")
@@ -802,7 +818,7 @@ def test_wal2json_version(host):
 
 def test_set_user_version(host):
     dist = host.system_info.distribution
-    if dist.lower() in ["ubuntu", "debian"]:
+    if is_deb(dist):
         set_user = host.package(f"percona-pgaudit{MAJOR_VER}-set-user")
     else:
         set_user = host.package(f"percona-pgaudit{MAJOR_VER}_set_user")
@@ -818,9 +834,6 @@ def test_binary_version(host, binary):
 
 
 def test_etcd(host):
-    # dist = host.system_info.distribution
-    # if dist.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
-    #     if "8" in host.system_info.release:
     etcd_package = host.package("etcd")
     assert etcd_package.is_installed
     service = host.service("etcd")
@@ -830,15 +843,15 @@ def test_etcd(host):
 
 def test_python_etcd(host):
     dist = host.system_info.distribution
-    if dist.lower() in ["redhat", "centos", "rocky", "ol", "rhel"]:
-        if "8" in host.system_info.release:
-            package = host.package("python3-etcd")
-            assert package.is_installed
+    if not is_rpm(dist) or "8" not in host.system_info.release:
+        pytest.skip("python3-etcd is only shipped as a package on RHEL 8")
+    package = host.package("python3-etcd")
+    assert package.is_installed
 
 
 def _patroni_config_path(host):
     dist = host.system_info.distribution.lower()
-    if dist in ["ubuntu", "debian"]:
+    if is_deb(dist):
         return "/var/lib/postgresql/patroni_test/postgresql1.yml"
     return "/var/lib/pgsql/patroni_test/postgresql1.yml"
 
@@ -927,21 +940,21 @@ def test_haproxy_version(host):
 
 
 def test_etcd_package_version(host):
-    etcd = host.package(f"etcd")
+    etcd = host.package("etcd")
     assert etcd.is_installed
     assert pg_versions["etcd"]['version'] in etcd.version, etcd.version
 
 
 def test_etcd_binary_version(host):
-    result = host.run(f"etcd --version 2>&1 | grep etcd | cut -d' ' -f3")
+    result = host.run("etcd --version 2>&1 | grep etcd | cut -d' ' -f3")
     assert result.rc == 0, result.stderr
     assert pg_versions["etcd"]['version'] in result.stdout.strip("\n"), result.stdout
 
 
 def test_pgpool_package_version(host):
     dist = host.system_info.distribution
-    if dist.lower() in ["ubuntu", "debian"]:
-        pgpool = host.package(f"percona-pgpool2")
+    if is_deb(dist):
+        pgpool = host.package("percona-pgpool2")
     else:
         pgpool = host.package(f"percona-pgpool-II-pg{MAJOR_VER}")
     assert pgpool.is_installed
@@ -952,7 +965,7 @@ def test_pgpool_libpgpool_package(host):
     """Verify the correct libpgpool variant is installed on Debian/Ubuntu.
     libpgpoolpcp3 replaces libpgpool2 from: 14.23, 15.18, 16.14, 17.10, 18.4."""
     dist = host.system_info.distribution.lower()
-    if dist not in ["ubuntu", "debian"]:
+    if not is_deb(dist):
         pytest.skip("libpgpool package check only applies to Debian/Ubuntu.")
 
     current_ver = version.parse(pg_versions.get("version", "0.0"))
@@ -978,20 +991,20 @@ def test_pgpool_libpgpool_package(host):
 
 
 def test_pgpool_binary_version(host):
-    dist = host.system_info.distribution
-    if dist.lower() in ["redhat", "centos", "rocky", "ol", "rhel",'ubuntu']:
-        result = host.run(f"pgpool --version 2>&1 | grep pgpool | cut -d' ' -f3")
-        assert result.rc == 0, result.stderr
-        assert pg_versions["pgpool"]['binary_version'] in result.stdout.strip("\n"), result.stdout
+    # /usr/sbin is not on a non-root user's PATH on Debian; same prefix as test_binary_version.
+    result = host.run(
+        "PATH=\"/usr/sbin/:$PATH\" && pgpool --version 2>&1 | grep pgpool | cut -d' ' -f3")
+    assert result.rc == 0, result.stderr
+    assert pg_versions["pgpool"]['binary_version'] in result.stdout.strip("\n"), result.stdout
 
 
 def test_pgpool_service(host):
     dist = host.system_info.distribution
     service_name = ""
-    if dist.lower() in ["ubuntu", "debian"]:
-        service_name = f"percona-pgpool2"
+    if is_deb(dist):
+        service_name = "percona-pgpool2"
     else:
-        service_name = f"pgpool"
+        service_name = "pgpool"
     service = host.service(service_name)
     with host.sudo("postgres"):
             assert service.is_running
@@ -1049,84 +1062,20 @@ def test_pg_gather_file_version(host):
     assert expected_version in result.stdout.strip(), result.stdout
 
 
-# def test_pg_gather_output(host):
-#     dist = host.system_info.distribution
-
-#     # Minimum PostgreSQL versions where pg_gather install location were changed
-#     PG_GATHER_VERSIONS = {
-#         13: version.parse("13.23"),
-#         14: version.parse("14.20"),
-#         15: version.parse("15.15"),
-#         16: version.parse("16.11"),
-#         17: version.parse("17.7"),
-#         18: version.parse("18.1"),
-#     }
-
-#     pg_version_str = pg_versions["version"]
-#     pg_version = version.parse(pg_version_str)
-
-#     min_supported = PG_GATHER_VERSIONS.get(pg_version.major)
-#     if min_supported and pg_version < min_supported:
-#         with host.sudo("postgres"):
-#             result = host.run("cd && psql -X -f /usr/bin/gather.sql > out.txt")
-#             assert result.rc == 0, result.stderr
-#     else:
-#         with host.sudo("postgres"):
-#             if dist.lower() in ["ubuntu", "debian"]:
-#                 result = host.run(f"cd && psql -X -f /usr/share/postgresql/{MAJOR_VER}/contrib/gather.sql > out.txt")
-#             else:
-#                 result = host.run(f"cd && psql -X -f /usr/pgsql-{MAJOR_VER}/share/contrib/gather.sql > out.txt")
-#             assert result.rc == 0, result.stderr
-
-
-# def test_pg_gather_file_version(host):
-#     dist = host.system_info.distribution
-
-#     # Minimum PostgreSQL versions where pg_gather install location were changed
-#     PG_GATHER_VERSIONS = {
-#         13: version.parse("13.23"),
-#         14: version.parse("14.20"),
-#         15: version.parse("15.15"),
-#         16: version.parse("16.11"),
-#         17: version.parse("17.7"),
-#         18: version.parse("18.1"),
-#     }
-
-#     pg_version_str = pg_versions["version"]
-#     pg_version = version.parse(pg_version_str)
-
-#     min_supported = PG_GATHER_VERSIONS.get(pg_version.major)
-#     if min_supported and pg_version < min_supported:
-#         with host.sudo("postgres"):
-#             result = host.run("cd && psql -X -f /usr/bin/gather.sql > out.txt")
-#     else:
-#         with host.sudo("postgres"):
-#             if dist.lower() in ["ubuntu", "debian"]:
-#                 result = host.run(f"head -5 /usr/share/postgresql/{MAJOR_VER}/contrib/gather.sql | tail -1 | cut -d' ' -f3")
-#             else:
-#                 result = host.run(f"head -5 /usr/pgsql-{MAJOR_VER}/share/contrib/gather.sql | tail -1 | cut -d' ' -f3")
-#     assert result.rc == 0, result.stderr
-#     assert pg_versions["pg_gather"]['sql_file_version'] in result.stdout.strip("\n"), result.stdout
-
-
 def test_pg_gather_package_version(host):
     dist = host.system_info.distribution
-    if dist.lower() in ["ubuntu", "debian"]:
-        pg_gather = host.package(f"percona-pg-gather")
+    if is_deb(dist):
+        pg_gather = host.package("percona-pg-gather")
     else:
-        pg_gather = host.package(f"percona-pg_gather")
+        pg_gather = host.package("percona-pg_gather")
     assert pg_gather.is_installed
     assert pg_versions["pg_gather"]['version'] in pg_gather.version, pg_gather.version
 
 
 def test_pgvector_package_version(host):
     dist = host.system_info.distribution
-    ppg_version=float(pg_versions['version'])
 
-    if ppg_version <= 12.22:
-        pytest.skip("pgvector not available on " + pg_versions['version'])
-
-    if dist.lower() in ["ubuntu", "debian"]:
+    if is_deb(dist):
         pgvector = host.package(f"percona-postgresql-{MAJOR_VER}-pgvector")
     else:
         pgvector = host.package(f"percona-pgvector_{MAJOR_VER}")
@@ -1135,70 +1084,55 @@ def test_pgvector_package_version(host):
 
 
 def test_pgvector(host):
-    ppg_version=float(pg_versions['version'])
-
-    if ppg_version <= 12.22:
-        pytest.skip("pgvector not available on " + pg_versions['version'])
-
     with host.sudo("postgres"):
         install_extension = host.run("psql -c 'CREATE EXTENSION \"vector\";'")
-        try:
-            assert install_extension.rc == 0, install_extension.stdout
-            assert install_extension.stdout.strip("\n") == "CREATE EXTENSION"
-        except AssertionError:
-            pytest.fail("Return code {}. Stderror: {}. Stdout {}".format(install_extension.rc,
-                                                                         install_extension.stderr,
-                                                                         install_extension.stdout))
-            extensions = host.run("psql -c 'SELECT * FROM pg_extension;' | awk 'NR>=3{print $3}'")
-            assert extensions.rc == 0
-            assert "vector" in set(extensions.stdout.split())
+        assert install_extension.rc == 0, (
+            f"Return code {install_extension.rc}. Stderr: {install_extension.stderr}. "
+            f"Stdout: {install_extension.stdout}")
+        assert install_extension.stdout.strip("\n") == "CREATE EXTENSION", install_extension.stdout
+        extensions = host.run("psql -tAc 'SELECT extname FROM pg_extension;'")
+        assert extensions.rc == 0, extensions.stderr
+        assert "vector" in set(extensions.stdout.split()), extensions.stdout
 
     with host.sudo("postgres"):
-        extension_version = host.run("psql -c \"select extversion from pg_extension where extname = 'vector';\" | awk 'NR==3{print $1}'")
-        try:
-            assert extension_version.rc == 0, extension_version.stdout
-            assert pg_versions["pgvector"]['extension_version'] in extension_version.stdout.strip("\n"), extension_version.stdout
-        except AssertionError:
-            pytest.fail("Return code {}. Stderror: {}. Stdout {}".format(extension_version.rc,
-                                                                            extension_version.stderr,
-                                                                            extension_version.stdout))
+        extension_version = host.run("psql -tAc \"select extversion from pg_extension where extname = 'vector';\"")
+        assert extension_version.rc == 0, (
+            f"Return code {extension_version.rc}. Stderr: {extension_version.stderr}. "
+            f"Stdout: {extension_version.stdout}")
+        assert pg_versions["pgvector"]['extension_version'] in extension_version.stdout.strip("\n"), extension_version.stdout
+
+
+def _skip_if_telemetry_unsupported():
+    if int(MAJOR_VER) >= 18:
+        pytest.skip("Telemetry not supported on PSP 18 and onwards.")
 
 
 def test_pg_telemetry_package_version(host):
-    if settings.MAJOR_VER in ["18"]:
-        pytest.skip("Telemetry not supported on PSP 18 and onwards.")
-    dist = host.system_info.distribution
-    if dist.lower() in ["ubuntu", "debian"]:
-        pg_telemetry = host.package(f"percona-pg-telemetry{MAJOR_VER}")
-    else:
-        pg_telemetry = host.package(f"percona-pg-telemetry{MAJOR_VER}")
+    _skip_if_telemetry_unsupported()
+    pg_telemetry = host.package(f"percona-pg-telemetry{MAJOR_VER}")
     assert pg_versions['pg_telemetry_package_version'] in pg_telemetry.version
 
 
 def test_pg_telemetry_extension_version(host):
-    if settings.MAJOR_VER in ["18"]:
-        pytest.skip("Telemetry not supported on PSP 18 and onwards.")
+    _skip_if_telemetry_unsupported()
     with host.sudo("postgres"):
         result = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS percona_pg_telemetry;'")
         assert result.rc == 0, result.stderr
-        result = host.run("psql -c 'SELECT percona_pg_telemetry_version();' | awk 'NR==3{print $1}'")
+        result = host.run("psql -tAc 'SELECT percona_pg_telemetry_version();'")
         assert result.rc == 0, result.stderr
         assert result.stdout.strip("\n") == pg_versions['pg_telemetry_version']
 
 
 def _telemetry_weak_dep_expected():
     """True if this version ships the PG-2615 weak-dependency packaging."""
-    current_ver = version.parse(pg_versions.get("version", "0.0"))
-    min_ver = TELEMETRY_WEAK_DEP_MIN_VERSIONS.get(current_ver.major)
-    return min_ver is not None and current_ver >= min_ver
+    return meets_min_version(TELEMETRY_WEAK_DEP_MIN_VERSIONS, pg_versions.get("version", "0.0"))
 
 
 def test_pg_telemetry_agent_not_a_dependency(host):
     """PG-2615: percona-telemetry-agent must not be installed on versions
     shipping the weak-dependency packaging -- it's no longer a dependency
     of percona-pg-telemetry at all."""
-    if settings.MAJOR_VER in ["18"]:
-        pytest.skip("Telemetry not supported on PSP 18 and onwards.")
+    _skip_if_telemetry_unsupported()
     if not _telemetry_weak_dep_expected():
         pytest.skip(f"pre-PG-2615 packaging for PostgreSQL {pg_versions.get('version')}; "
                     f"agent is expected here instead")
@@ -1216,14 +1150,13 @@ def test_pg_server_package_recommends_not_requires_telemetry(host):
     host was freshly installed or just upgraded -- marked `upgrade` so it
     also runs in the minor/major upgrade verifier passes (see
     tasks/verify_telemetry_upgrade.yml for the Ansible-layer equivalent)."""
-    if settings.MAJOR_VER in ["18"]:
-        pytest.skip("Telemetry not supported on PSP 18 and onwards.")
+    _skip_if_telemetry_unsupported()
     if not _telemetry_weak_dep_expected():
         pytest.skip(f"pre-PG-2615 packaging for PostgreSQL {pg_versions.get('version')}")
 
     telemetry_pkg = f"percona-pg-telemetry{MAJOR_VER}"
     dist = host.system_info.distribution.lower()
-    if dist in ["redhat", "centos", "rocky", "ol", "rhel"]:
+    if is_rpm(dist):
         server_pkg = f"percona-postgresql{MAJOR_VER}-server"
         requires = host.run(f"rpm -q --requires {server_pkg}").stdout
         recommends = host.run(f"rpm -q --recommends {server_pkg}").stdout
@@ -1246,14 +1179,13 @@ def test_pg_telemetry_package_does_not_depend_on_agent(host):
     percona-telemetry-agent at all. Pure dependency-metadata check, marked
     `upgrade` for the same reason as
     test_pg_server_package_recommends_not_requires_telemetry above."""
-    if settings.MAJOR_VER in ["18"]:
-        pytest.skip("Telemetry not supported on PSP 18 and onwards.")
+    _skip_if_telemetry_unsupported()
     if not _telemetry_weak_dep_expected():
         pytest.skip(f"pre-PG-2615 packaging for PostgreSQL {pg_versions.get('version')}")
 
     telemetry_pkg = f"percona-pg-telemetry{MAJOR_VER}"
     dist = host.system_info.distribution.lower()
-    if dist in ["redhat", "centos", "rocky", "ol", "rhel"]:
+    if is_rpm(dist):
         requires = host.run(f"rpm -q --requires {telemetry_pkg}").stdout
     else:
         requires = host.run(f"dpkg-query -W -f='${{Depends}}\\n' {telemetry_pkg}").stdout
@@ -1274,8 +1206,7 @@ def test_pg_telemetry_agent_state_after_upgrade(host):
     (in-place) upgrades -- cross-major upgrades install the new major's
     packages side by side rather than upgrading anything in place, and are
     covered by the Ansible-layer check instead."""
-    if settings.MAJOR_VER in ["18"]:
-        pytest.skip("Telemetry not supported on PSP 18 and onwards.")
+    _skip_if_telemetry_unsupported()
     from_version = os.getenv("FROM_VERSION")
     if not from_version:
         pytest.skip("no FROM_VERSION (not an upgrade scenario)")
@@ -1286,8 +1217,7 @@ def test_pg_telemetry_agent_state_after_upgrade(host):
         pytest.skip("cross-major upgrade; old major's packages aren't touched in place, "
                     "see tasks/verify_telemetry_upgrade.yml instead")
 
-    from_min_ver = TELEMETRY_WEAK_DEP_MIN_VERSIONS.get(from_ver.major)
-    from_weak_dep = from_min_ver is not None and from_ver >= from_min_ver
+    from_weak_dep = meets_min_version(TELEMETRY_WEAK_DEP_MIN_VERSIONS, str(from_ver))
     to_weak_dep = _telemetry_weak_dep_expected()
 
     agent = host.package("percona-telemetry-agent")
@@ -1313,26 +1243,18 @@ def test_tde_binaries_present(host, binary):
     depending on OS type (Debian/Ubuntu vs RHEL/CentOS/Rocky).
     """
     # pg_tde only exists on PG-17 and above.
-    if int(settings.MAJOR_VER) < 17:
+    if int(MAJOR_VER) < 17:
         pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
 
     # pg_tde_upgrade was introduced in 17.10 / 18.4.
     if binary == "pg_tde_upgrade":
-        current_ver = version.parse(pg_versions.get("version", "0.0"))
-        min_ver = PG_TDE_UPGRADE_MIN_VERSIONS.get(current_ver.major)
-        if min_ver is None or current_ver < min_ver:
+        if not meets_min_version(PG_TDE_UPGRADE_MIN_VERSIONS, pg_versions.get("version", "0.0")):
             pytest.skip(
                 f"pg_tde_upgrade not available on PostgreSQL {pg_versions.get('version')} "
-                f"(requires >= {min_ver})"
+                f"(requires >= {PG_TDE_UPGRADE_MIN_VERSIONS.get(int(MAJOR_VER))})"
             )
 
-    dist = host.system_info.distribution.lower()
-
-    # Determine the PostgreSQL 18 bin directory
-    if dist in ["ubuntu", "debian"]:
-        bin_path = f"/usr/lib/postgresql/{MAJOR_VER}/bin/{binary}"
-    else:  # RHEL / Rocky / AlmaLinux / Amazon Linux 2023
-        bin_path = f"/usr/pgsql-{MAJOR_VER}/bin/{binary}"
+    bin_path = f"{pg_bin_dir(host.system_info.distribution, MAJOR_VER)}/{binary}"
 
     file = host.file(bin_path)
 
@@ -1347,15 +1269,11 @@ def test_tde_perl_test_module_present(host):
     on both Debian/Ubuntu and RHEL-based systems.
     """
     # pg_tde Perl module only exists on PG-17 and above.
-    if int(settings.MAJOR_VER) < 17:
+    if int(MAJOR_VER) < 17:
         pytest.skip(f"pg_tde not supported on {MAJOR_VER}.")
 
-    dist = host.system_info.distribution.lower()
-
-    if dist in ["ubuntu", "debian"]:
-        path = f"/usr/lib/postgresql/{MAJOR_VER}/lib/pgxs/src/test/perl/PostgreSQL/Test/TdeCluster.pm"
-    else:
-        path = f"/usr/pgsql-{MAJOR_VER}/lib/pgxs/src/test/perl/PostgreSQL/Test/TdeCluster.pm"
+    dist = host.system_info.distribution
+    path = f"{pg_lib_dir(dist, MAJOR_VER)}/pgxs/src/test/perl/PostgreSQL/Test/TdeCluster.pm"
 
     f = host.file(path)
     assert f.exists, f"Missing: {path}"
@@ -1368,14 +1286,8 @@ def test_pgxs_perl_modules_present(host):
     for both Debian/Ubuntu and RHEL-based systems.
     """
 
-    dist = host.system_info.distribution.lower()
     major = int(MAJOR_VER)
-
-    # Debian/Ubuntu path vs RHEL path
-    if dist in ["ubuntu", "debian"]:
-        base = f"/usr/lib/postgresql/{MAJOR_VER}/lib/pgxs/src/test/perl"
-    else:
-        base = f"/usr/pgsql-{MAJOR_VER}/lib/pgxs/src/test/perl"
+    base = f"{pg_lib_dir(host.system_info.distribution, MAJOR_VER)}/pgxs/src/test/perl"
 
     # PGXS files for PG-17 (AdjustDump.pm does NOT exist on PG17)
     PGXS_PG17 = [
@@ -1461,7 +1373,7 @@ def test_pg_tde_package_version(host):
 
     # 1. Determine package names based on OS family
     # Debian/Ubuntu uses hyphens (-); RHEL/CentOS/Oracle uses underscores (_)
-    if dist in ["ubuntu", "debian"]:
+    if is_deb(dist):
         package_names = [
             f"percona-pg-tde{MAJOR_VER}", 
             f"percona-pg-tde{MAJOR_VER}-client"
@@ -1486,26 +1398,18 @@ def test_pg_tde_package_version(host):
 
 def _skip_if_llvmjit_unavailable():
     """Skip if llvmjit is not available (fixed build) for the current PostgreSQL version."""
-    current_ver = version.parse(pg_versions.get("version", "0.0"))
-    min_ver = LLVMJIT_MIN_VERSIONS.get(current_ver.major)
-    if min_ver is None or current_ver < min_ver:
+    if not meets_min_version(LLVMJIT_MIN_VERSIONS, pg_versions.get("version", "0.0")):
         pytest.skip(f"llvmjit not available for PostgreSQL {pg_versions.get('version')}")
 
 
 def _llvmjit_lib_path(host):
     """Return the OS-appropriate path to the PostgreSQL lib directory."""
-    dist = host.system_info.distribution.lower()
-    if dist in ["redhat", "centos", "rocky", "ol", "rhel"]:
-        return f"/usr/pgsql-{MAJOR_VER}/lib"
-    return f"/usr/lib/postgresql/{MAJOR_VER}/lib"
+    return pg_lib_dir(host.system_info.distribution, MAJOR_VER)
 
 
 def _llvmjit_pg_config(host):
     """Return the OS-appropriate pg_config binary path."""
-    dist = host.system_info.distribution.lower()
-    if dist in ["redhat", "centos", "rocky", "ol", "rhel"]:
-        return f"/usr/pgsql-{MAJOR_VER}/bin/pg_config"
-    return f"/usr/lib/postgresql/{MAJOR_VER}/bin/pg_config"
+    return f"{pg_bin_dir(host.system_info.distribution, MAJOR_VER)}/pg_config"
 
 
 def test_llvmjit_files_present(host):
@@ -1528,7 +1432,7 @@ def test_llvmjit_rpm_ownership(host):
     Applies to RHEL-family systems only."""
     _skip_if_llvmjit_unavailable()
     dist = host.system_info.distribution.lower()
-    if dist not in ["redhat", "centos", "rocky", "ol", "rhel"]:
+    if not is_rpm(dist):
         pytest.skip("RPM ownership check only applies to RHEL-family systems.")
     lib_path = _llvmjit_lib_path(host)
     expected_pkg = f"percona-postgresql{MAJOR_VER}-llvmjit"
@@ -1546,7 +1450,7 @@ def test_llvmjit_statically_linked(host):
     Applies to RHEL-family systems where Percona ships a statically linked LLVM."""
     _skip_if_llvmjit_unavailable()
     dist = host.system_info.distribution.lower()
-    if dist not in ["redhat", "centos", "rocky", "ol", "rhel"]:
+    if not is_rpm(dist):
         pytest.skip("Static LLVM linking check only applies to RHEL-family systems.")
     so_path = f"{_llvmjit_lib_path(host)}/llvmjit.so"
     result = host.run(f"ldd {so_path}")
@@ -1582,7 +1486,7 @@ def test_llvmjit_no_undefined_cxx_symbols(host):
     These symbols must be statically linked into llvmjit.so on RHEL builds."""
     _skip_if_llvmjit_unavailable()
     dist = host.system_info.distribution.lower()
-    if dist not in ["redhat", "centos", "rocky", "ol", "rhel"]:
+    if not is_rpm(dist):
         pytest.skip("Undefined C++ symbol check only applies to RHEL-family systems.")
     so_path = f"{_llvmjit_lib_path(host)}/llvmjit.so"
     result = host.run(f"nm -D {so_path} | awk '$2 == \"U\" && $3 ~ /^_ZSt/ {{print}}'")
@@ -1630,17 +1534,18 @@ def test_llvmjit_pg_config_compiled_with_llvm(host):
     )
 
 
-def test_pg_oidc_validator_package_version(host):
-    # 1. Check Major Version
-    major = int(settings.MAJOR_VER)
+def _skip_if_pg_oidc_validator_unavailable():
+    """pg_oidc_validator ships with PG 18.2 and later only."""
+    major = int(MAJOR_VER)
     if major < 18:
         pytest.skip(f"pg_oidc_validator supported only on PG-18+ (got {major})")
-
-    # 2. Check Specific Minor Version (18.2)
     current_ver_str = pg_versions.get('version', '0.0')
-    # Use packaging.version or simple float conversion
     if version.parse(current_ver_str) < version.parse("18.2"):
         pytest.skip(f"pg_oidc_validator requires PG 18.2+, found {current_ver_str}")
+
+
+def test_pg_oidc_validator_package_version(host):
+    _skip_if_pg_oidc_validator_unavailable()
 
     expected_version = pg_versions.get("PG_OIDC_VALIDATOR_package_version")
     if not expected_version:
@@ -1648,7 +1553,7 @@ def test_pg_oidc_validator_package_version(host):
 
     # Determine package name based on OS family
     dist = host.system_info.distribution.lower()
-    pkg_name = "percona-pg-oidc-validator18" if dist in ["ubuntu", "debian"] else "percona-pg_oidc_validator18"
+    pkg_name = "percona-pg-oidc-validator18" if is_deb(dist) else "percona-pg_oidc_validator18"
 
     pkg = host.package(pkg_name)
     assert pkg.is_installed, f"Package {pkg_name} is not installed"
@@ -1665,14 +1570,7 @@ def test_pg_oidc_validator_config(host):
     Full end-to-end OAuth authentication will be covered by a dedicated OIDC job
     that runs Keycloak. This test confirms the environmental setup is active.
     """
-    # 1. Version guardrails
-    major = int(settings.MAJOR_VER)
-    if major < 18:
-        pytest.skip(f"pg_oidc_validator supported only on PG-18+ (got {major})")
-
-    current_ver_str = pg_versions.get('version', '0.0')
-    if version.parse(current_ver_str) < version.parse("18.2"):
-        pytest.skip(f"pg_oidc_validator requires PG 18.2+, found {current_ver_str}")
+    _skip_if_pg_oidc_validator_unavailable()
 
     psql = "psql -t -A -c"
 
@@ -1712,13 +1610,7 @@ def test_pg_oidc_validator_loaded_module_version(host):
     test_pg_oidc_validator_package_version above. The library loads lazily
     on first OAuth attempt, so force it into the session with LOAD first.
     """
-    major = int(settings.MAJOR_VER)
-    if major < 18:
-        pytest.skip(f"pg_oidc_validator supported only on PG-18+ (got {major})")
-
-    current_ver_str = pg_versions.get('version', '0.0')
-    if version.parse(current_ver_str) < version.parse("18.2"):
-        pytest.skip(f"pg_oidc_validator requires PG 18.2+, found {current_ver_str}")
+    _skip_if_pg_oidc_validator_unavailable()
 
     expected_version = pg_versions.get("PG_OIDC_VALIDATOR_version")
     if not expected_version:
@@ -1744,9 +1636,7 @@ def test_pg_oidc_validator_loaded_module_version(host):
 
 def _skip_if_pg_cron_unavailable():
     """Skip if pg_cron is not available for the current PostgreSQL version."""
-    current_ver = version.parse(pg_versions.get("version", "0.0"))
-    min_ver = PG_CRON_MIN_VERSIONS.get(current_ver.major)
-    if min_ver is None or current_ver < min_ver:
+    if not meets_min_version(PG_CRON_MIN_VERSIONS, pg_versions.get("version", "0.0")):
         pytest.skip(f"pg_cron not available on PostgreSQL {pg_versions.get('version')}")
 
 
@@ -1759,7 +1649,7 @@ def test_pg_cron_package_version(host):
     if not expected_version:
         pytest.skip("PG_CRON_package_version not defined in pg_versions.")
 
-    if dist in ["ubuntu", "debian"]:
+    if is_deb(dist):
         pkg_name = f"percona-postgresql-{MAJOR_VER}-cron"
     else:
         pkg_name = f"percona-pg_cron_{MAJOR_VER}"
@@ -1823,15 +1713,3 @@ def test_pg_cron_extension(host):
                 f"{psql} \"SELECT count(*) FROM pg_extension WHERE extname = 'pg_cron';\""
             ).stdout.strip()
             assert final_count == "0", "Failed to drop pg_cron extension cleanly"
-
-
-# def test_pg_telemetry_file_pillar_version(host):
-#     output = host.run("cat /usr/local/percona/telemetry/pg/*.json | grep -i pillar_version")
-#     assert output.rc == 0, output.stderr
-#     assert pg_versions['version'] in output.stdout, output.stdout
-
-
-# def test_pg_telemetry_file_database_count(host):
-#     output = host.run("cat /usr/local/percona/telemetry/pg/*.json | grep -i databases_count")
-#     assert output.rc == 0, output.stderr
-#     assert '2' in output.stdout, output.stdout

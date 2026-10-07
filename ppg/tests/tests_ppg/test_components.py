@@ -4,6 +4,7 @@ import pytest
 import testinfra.utils.ansible_runner
 
 from .. import settings
+from .helpers import is_rpm
 # from ppg.tests.settings import get_settings, MAJOR_VER
 
 
@@ -32,9 +33,6 @@ $$ LANGUAGE plperl;
 
 @pytest.fixture()
 def python3_function(host):
-    os = host.system_info.distribution
-    if os.lower() in ["redhat", "centos", "rhel", "rocky", "ol"]:
-        pytest.skip("Skipping python3 extensions for Centos or RHEL")
     with host.sudo("postgres"):
         install_extension = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS \"plpython3u\";'")
         assert install_extension.rc == 0
@@ -70,12 +68,12 @@ $$ LANGUAGE pltcl STRICT;
 
 @pytest.fixture()
 def build_libpq_programm(host):
-    os = host.system_info.distribution
+    dist = host.system_info.distribution
     pg_include_cmd = "pg_config --includedir"
     pg_include = host.check_output(pg_include_cmd)
     lib_dir_cmd = "pg_config --libdir"
     host.check_output(lib_dir_cmd)
-    if os in ["redhat", "centos", "rhel", "rocky", "ol"]:
+    if is_rpm(dist):
         return host.run(
             "export LIBPQ_DIR=/usr/pgsql-{}/  && export LIBRARY_PATH=/usr/pgsql-{}/lib/ &&"
             "gcc -o lib_version /tmp/libpq_command_temp_dir/lib_version.c -I{} -lpq -std=c99".format(
@@ -86,8 +84,8 @@ def build_libpq_programm(host):
 
 @pytest.mark.parametrize("package", PACKAGES)
 def test_deb_package_is_installed(host, package):
-    os = host.system_info.distribution
-    if os.lower() in ["redhat", "centos", "rhel", "rocky", "ol"]:
+    dist = host.system_info.distribution
+    if is_rpm(dist):
         pytest.skip("This test only for Debian based platforms")
     pkg = host.package(package)
     assert pkg.is_installed
@@ -106,22 +104,22 @@ def test_build_libpq_programm(host, build_libpq_programm):
 def test_perl_function(host, perl_function):
     _ = perl_function
     with host.sudo("postgres"):
-        result = host.run("psql -c \'SELECT perl_max(1, 2);\' | awk 'NR>=3{print $1}'")
+        result = host.run("psql -tAc 'SELECT perl_max(1, 2);'")
         assert result.rc == 0
-        assert result.stdout.strip("\n(1") == "2", result.stdout
+        assert result.stdout.strip() == "2", result.stdout
 
 
 def test_tcl_function(host, tcl_function):
     _ = tcl_function
     with host.sudo("postgres"):
-        result = host.run("psql -c \'SELECT tcl_max(1, 2);\' | awk 'NR>=3{print $1}'")
+        result = host.run("psql -tAc 'SELECT tcl_max(1, 2);'")
         assert result.rc == 0
-        assert result.stdout.strip("\n(1") == "2", result.stdout
+        assert result.stdout.strip() == "2", result.stdout
 
 
 def test_python3(host, python3_function):
     _ = python3_function
     with host.sudo("postgres"):
-        result = host.run("psql -c \'SELECT pymax3(1, 2);\' | awk 'NR>=3{print $1}'")
+        result = host.run("psql -tAc 'SELECT pymax3(1, 2);'")
         assert result.rc == 0
-        assert result.stdout.strip("\n(1") == "2", result.stdout
+        assert result.stdout.strip() == "2", result.stdout

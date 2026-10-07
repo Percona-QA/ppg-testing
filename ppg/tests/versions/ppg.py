@@ -8,7 +8,6 @@ DEB12_PACKAGES_TEMPLATE = [
     "percona-postgresql-client-{}",
     "percona-postgresql-contrib",
     "percona-postgresql-doc",
-    "percona-postgresql-server-dev-all",
     "percona-postgresql-doc-{}",
     "percona-postgresql-plperl-{}",
     "percona-postgresql-common",
@@ -73,7 +72,7 @@ RHEL_FILES_TEMPLATE = ["/var/lib/pgsql/{}/data/postgresql.conf",
                        "/var/lib/pgsql/{}/data/pg_hba.conf",
                        "/var/lib/pgsql/{}/data/pg_ident.conf"]
 
-LANGUAGES = ["pltcl", "pltclu", "plperl", "plperlu", "plpythonu", "plpython2u", "plpython3u"]
+LANGUAGES = ["pltcl", "pltclu", "plperl", "plperlu", "plpython3u"]
 
 DEB_PROVIDES_TEMPLATE = [("percona-postgresql-{}", "postgresql-{}"),
                          ("percona-postgresql-client", "postgresql-client"),
