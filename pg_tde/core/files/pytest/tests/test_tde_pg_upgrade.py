@@ -2583,6 +2583,112 @@ class TestPgTdeUpgradeRefusalsAndConfig:
         assert new_cluster.fetchone("SELECT salary FROM employee") == "50000"
         new_cluster.stop()
 
+    def test_refuses_target_without_pg_tde_preloaded(
+        self,
+        old_install_dir: Optional[Path],
+        install_dir: Path,
+        tmp_path: Path,
+        io_method: str,
+    ):
+        """Target without pg_tde in shared_preload_libraries: --check fails at the
+        loadable-library check (pg_tde refuses a dynamic LOAD) and names pg_tde."""
+        if not old_install_dir:
+            pytest.skip("--old-install-dir not provided")
+
+        old = _tde_old_cluster(old_install_dir, tmp_path, io_method)
+        old.stop()
+
+        new_port = allocate_port()
+        new_data = tmp_path / "new"
+        new_cluster = PgCluster(
+            new_data, new_port, install_dir, socket_dir=tmp_path, io_method=io_method
+        )
+        new_cluster.initdb(
+            extra_args=initdb_extra_align_data_checksums_with_old(old, install_dir, None)
+        )
+        write_pg_upgrade_target_config(new_cluster, None)  # no shared_preload_libraries
+
+        result = _run_pg_tde_upgrade_raw(old, install_dir, new_data, new_port, tmp_path, check_only=True)
+        assert result.returncode != 0, f"--check accepted a target without pg_tde preloaded:\n{result.stdout}"
+        assert "required libraries" in (result.stdout + result.stderr).lower()
+        reports = list(new_data.glob("pg_upgrade_output.d/*/loadable_libraries.txt"))
+        assert reports and "pg_tde" in reports[0].read_text(), reports
+
+    def test_refuses_when_key_provider_unavailable_then_retry_succeeds(
+        self,
+        old_install_dir: Optional[Path],
+        install_dir: Path,
+        tmp_path: Path,
+        io_method: str,
+    ):
+        """Key provider unreachable (keyring file gone): the old cluster cannot start,
+        so --check and the real run both refuse without touching it. Once the
+        provider is back, a retry upgrades and the encrypted data is readable."""
+        if not old_install_dir:
+            pytest.skip("--old-install-dir not provided")
+
+        old = _tde_old_cluster(old_install_dir, tmp_path, io_method)
+        old.stop()
+        keyring = tmp_path / "refusal.per"
+        away = tmp_path / "refusal.per.away"
+        keyring.rename(away)
+
+        _, check = _upgrade(
+            old, install_dir, tmp_path, io_method,
+            new_subdir="new_check", extra_params=_tde_params(""), check_only=True,
+        )
+        assert check.returncode != 0, "--check passed with the key provider unavailable"
+        _, full = _upgrade(
+            old, install_dir, tmp_path, io_method,
+            new_subdir="new_full", extra_params=_tde_params(""),
+        )
+        assert full.returncode != 0, "upgrade ran with the key provider unavailable"
+
+        away.rename(keyring)
+        new_cluster, retry = _upgrade(
+            old, install_dir, tmp_path, io_method,
+            new_subdir="new_retry", extra_params=_tde_params(""),
+        )
+        assert retry.returncode == 0, f"retry after restoring the provider failed:\n{retry.stderr}"
+        _start_cluster_after_pg_upgrade(new_cluster)
+        assert new_cluster.fetchone("SELECT COUNT(*) FROM refusal_t") == "100"
+        new_cluster.stop()
+
+    def test_link_upgrade_rollback_before_new_cluster_started(
+        self,
+        old_install_dir: Optional[Path],
+        install_dir: Path,
+        tmp_path: Path,
+        io_method: str,
+    ):
+        """After pg_tde_upgrade --link the old cluster refuses to start (pg_control
+        renamed to pg_control.old). Before the new cluster is ever started, renaming
+        it back restores the old cluster with its encrypted data -- the documented
+        link-mode rollback."""
+        if not old_install_dir:
+            pytest.skip("--old-install-dir not provided")
+
+        old = _tde_old_cluster(old_install_dir, tmp_path, io_method)
+        before = old.fetchone("SELECT md5(string_agg(v, ',' ORDER BY id)) FROM refusal_t")
+        old.stop()
+
+        _, result = _upgrade(
+            old, install_dir, tmp_path, io_method,
+            extra_params=_tde_params(""), pg_upgrade_extra=["--link"],
+        )
+        assert result.returncode == 0, result.stderr
+
+        control = old.data_dir / "global" / "pg_control"
+        assert not control.exists() and control.with_name("pg_control.old").exists()
+        with pytest.raises(RuntimeError):
+            old.start()
+
+        control.with_name("pg_control.old").rename(control)
+        old.start()
+        assert old.fetchone("SELECT md5(string_agg(v, ',' ORDER BY id)) FROM refusal_t") == before
+        assert old.fetchone("SELECT pg_tde_is_encrypted('refusal_t'::regclass)") == "t"
+        old.stop()
+
 
 class TestTdeUpgradeExtremeCornerCases:
     """

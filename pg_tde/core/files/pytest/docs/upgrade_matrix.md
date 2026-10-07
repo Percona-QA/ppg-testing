@@ -166,6 +166,9 @@ Always uses `pg_tde_upgrade` when the source cluster has pg_tde key material (pl
 | `test_refuses_unclean_shutdown` | Crashed cluster with encrypted WAL refused; recovery replays it |
 | `test_pg_tde_installed_no_encrypted_tables` | Keys carried over without encrypted tables; new tables encrypt |
 | `test_inheritance_on_tde_heap` | INHERITS hierarchy on tde_heap |
+| `test_refuses_target_without_pg_tde_preloaded` | `--check` fails at the loadable-library check; report names pg_tde |
+| `test_refuses_when_key_provider_unavailable_then_retry_succeeds` | Provider unreachable: check and run refuse, old cluster untouched; retry after restore works |
+| `test_link_upgrade_rollback_before_new_cluster_started` | After `--link` the old cluster refuses to start; restoring `pg_control.old` brings it back with its encrypted data |
 
 
 ### `TestTdeUpgradeExtremeCornerCases`
