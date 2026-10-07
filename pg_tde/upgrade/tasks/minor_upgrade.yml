@@ -120,6 +120,7 @@
     set_fact:
       to_pg_bin_dir:    "{{ from_pg_bin_dir }}"
       to_pg_lib_dir:    "{{ from_pg_lib_dir }}"
+      to_pg_install_dir: "{{ from_pg_install_dir }}"
       to_pg_service:    "{{ from_pg_service }}"
       to_pg_socket_dir: "{{ from_pg_socket_dir }}"
       cacheable: true

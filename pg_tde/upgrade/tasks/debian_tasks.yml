@@ -26,6 +26,7 @@
         - ninja-build
         - cmake
         - python3-pip
+        - python3-venv
         - zlib1g-dev
         - libssl-dev
         - libreadline6-dev

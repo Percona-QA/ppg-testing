@@ -80,6 +80,9 @@
 
   - name: Set artifact filename
     set_fact:
+      # Staged upgrade checker (pg_tde/core/files/pytest/tests/test_tde_upgrade_check.py)
+      checker_src: /tmp/pg_tde_pytest_src
+      checker_dir: /var/lib/pg_tde_upgrade_check
       artifact_filename: "tde-upgrade-{{ from_version_str }}-to-{{ to_version_str }}-{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-build{{ build_number }}.tar.gz"
       cacheable: true
 
@@ -246,41 +249,47 @@
           pg_conf: "{{ from_pg_conf }}"
 
       - name: Restart PostgreSQL FROM version to load pg_tde
-        service:
-          name: "{{ from_pg_service }}"
-          state: restarted
-        become: true
-
-      - name: Wait for PostgreSQL FROM version to be ready
-        become: true
-        become_user: postgres
-        shell: pg_isready -h {{ from_pg_socket_dir }} -p 5432
-        args:
-          executable: /bin/bash
-        environment:
-          PATH: "{{ from_pg_bin_dir }}:{{ ansible_env.PATH }}"
-        register: pg_ready_from
-        until: pg_ready_from.rc == 0
-        retries: 12
-        delay: 5
-
-      # ===========================================================
-      # Seed TDE test data (pre-upgrade)
-      # ===========================================================
-      - name: Seed TDE encrypted test data
         include_tasks:
-          file: seed_tde_data.yml
+          file: restart_and_wait.yml
         vars:
+          pg_service:    "{{ from_pg_service }}"
           pg_bin_dir:    "{{ from_pg_bin_dir }}"
           pg_socket_dir: "{{ from_pg_socket_dir }}"
 
-      - name: Verify TDE data is readable (pre-upgrade)
+      # ===========================================================
+      # Seed the standard dataset (pre-upgrade) with the staged checker:
+      # prepare sets up the server key and turns WAL encryption on, which
+      # needs a restart before setup seeds and snapshots the data.
+      # ===========================================================
+      - name: Deploy the upgrade checker
         include_tasks:
-          file: verify_tde_data.yml
+          file: deploy_checker.yml
+
+      - name: Upgrade checker - prepare
+        include_tasks:
+          file: run_checker.yml
         vars:
+          checker_stage:  prepare
+          pg_bin_dir:     "{{ from_pg_bin_dir }}"
+          pg_install_dir: "{{ from_pg_install_dir }}"
+          pg_socket_dir:  "{{ from_pg_socket_dir }}"
+
+      - name: Restart PostgreSQL FROM version to enable WAL encryption
+        include_tasks:
+          file: restart_and_wait.yml
+        vars:
+          pg_service:    "{{ from_pg_service }}"
           pg_bin_dir:    "{{ from_pg_bin_dir }}"
           pg_socket_dir: "{{ from_pg_socket_dir }}"
-          check_label:   "pre-upgrade"
+
+      - name: Upgrade checker - setup
+        include_tasks:
+          file: run_checker.yml
+        vars:
+          checker_stage:  setup
+          pg_bin_dir:     "{{ from_pg_bin_dir }}"
+          pg_install_dir: "{{ from_pg_install_dir }}"
+          pg_socket_dir:  "{{ from_pg_socket_dir }}"
 
       - name: Capture server version (FROM, pre-upgrade)
         include_tasks:
@@ -336,13 +345,14 @@
       # still on the old extension catalog, then again after
       # ALTER EXTENSION pg_tde UPDATE.
       # ===========================================================
-      - name: Verify TDE data is readable (post-upgrade, before ALTER EXTENSION)
+      - name: Upgrade checker - verify-before-alter
         include_tasks:
-          file: verify_tde_data.yml
+          file: run_checker.yml
         vars:
-          pg_bin_dir:    "{{ to_pg_bin_dir }}"
-          pg_socket_dir: "{{ to_pg_socket_dir }}"
-          check_label:   "post-upgrade, before ALTER EXTENSION"
+          checker_stage:  verify-before-alter
+          pg_bin_dir:     "{{ to_pg_bin_dir }}"
+          pg_install_dir: "{{ to_pg_install_dir }}"
+          pg_socket_dir:  "{{ to_pg_socket_dir }}"
 
       - name: Update pg_tde extension in every database
         include_tasks:
@@ -351,13 +361,14 @@
           pg_bin_dir:    "{{ to_pg_bin_dir }}"
           pg_socket_dir: "{{ to_pg_socket_dir }}"
 
-      - name: Verify TDE data is readable (post-upgrade)
+      - name: Upgrade checker - verify
         include_tasks:
-          file: verify_tde_data.yml
+          file: run_checker.yml
         vars:
-          pg_bin_dir:    "{{ to_pg_bin_dir }}"
-          pg_socket_dir: "{{ to_pg_socket_dir }}"
-          check_label:   "post-upgrade"
+          checker_stage:  verify
+          pg_bin_dir:     "{{ to_pg_bin_dir }}"
+          pg_install_dir: "{{ to_pg_install_dir }}"
+          pg_socket_dir:  "{{ to_pg_socket_dir }}"
 
       - name: Capture server version (TO, post-upgrade)
         include_tasks:

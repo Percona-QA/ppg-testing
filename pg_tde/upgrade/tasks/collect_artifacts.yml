@@ -35,6 +35,11 @@
       # pg_upgrade logs
       cp /tmp/pg_upgrade.log           "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/pg_upgrade_check.log     "$ARTIFACT_DIR/" 2>/dev/null || true
+
+      # staged upgrade checker: per-stage pytest log + junit, and the
+      # FROM-side state snapshot it compared against
+      cp /tmp/upgrade_check_*.log /tmp/upgrade_check_*.xml "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp {{ checker_dir }}/upgrade_check_state.json "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/pg_upgrade_internal.log  "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/pg_upgrade_server.log    "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/pg_upgrade_utility.log   "$ARTIFACT_DIR/" 2>/dev/null || true
