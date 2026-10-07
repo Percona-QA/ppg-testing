@@ -21,6 +21,23 @@ def test_generate_returns_exactly_the_golden_filenames():
     assert sorted(out) == sorted(GOLDEN_FILES)
 
 
+# pg_tde/upgrade: the jobs with the largest parameter set, kept as a second
+# golden so descriptor or template changes show up as a diff here too
+UPGRADE_GOLDEN_FILES = ["tde-upgrade.groovy", "tde-upgrade.yml",
+                        "tde-upgrade-parallel.groovy", "tde-upgrade-parallel.yml"]
+
+
+@pytest.mark.parametrize("name", UPGRADE_GOLDEN_FILES)
+def test_generate_upgrade_matches_golden(name):
+    out = gen_jenkins.generate(REPO / "pg_tde/upgrade")
+    assert out[name] == (GOLDEN / name).read_text()
+
+
+def test_generate_upgrade_returns_exactly_the_golden_filenames():
+    out = gen_jenkins.generate(REPO / "pg_tde/upgrade")
+    assert sorted(out) == sorted(UPGRADE_GOLDEN_FILES)
+
+
 def _populate(jenkins_repo):
     ppg = jenkins_repo / "ppg"
     ppg.mkdir(parents=True)
@@ -65,6 +82,7 @@ def test_write_creates_files(tmp_path):
 def test_find_groups_with_jenkins_includes_pg_tde():
     groups = gen_jenkins.find_groups_with_jenkins()
     assert REPO / "pg_tde" / "tde" in groups
+    assert REPO / "pg_tde" / "upgrade" in groups
 
 
 def test_generate_raises_clear_error_without_jenkins_section(tmp_path):

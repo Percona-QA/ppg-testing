@@ -3,15 +3,19 @@
   # Base facts from environment variables
   # ===========================================================
   - name: Set base facts
+    vars:
+      # TO_VERSION, or VERSION when that is all a caller sets (a buildbot
+      # release sweep sets one VERSION, the candidate, for every group).
+      to_version_env: "{{ lookup('env', 'TO_VERSION') | default(lookup('env', 'VERSION'), true) }}"
     set_fact:
       from_full_version:     "{{ lookup('env', 'FROM_VERSION') | regex_replace('^(?:ppg|psp)-', '') }}"
-      to_full_version:       "{{ lookup('env', 'TO_VERSION')   | regex_replace('^(?:ppg|psp)-', '') }}"
+      to_full_version:       "{{ to_version_env | regex_replace('^(?:ppg|psp)-', '') }}"
       from_version_str:      "{{ lookup('env', 'FROM_VERSION') }}"
-      to_version_str:        "{{ lookup('env', 'TO_VERSION')   }}"
+      to_version_str:        "{{ to_version_env }}"
       # psp only ships one repo per major version (psp-16), no psp-16.xx minor
       # repos exist, unlike ppg (ppg-16.14 etc.) — trim the minor for psp only.
       from_repo_version:     "{{ lookup('env', 'FROM_VERSION').split('.')[0] if lookup('env', 'FROM_VERSION').startswith('psp-') else lookup('env', 'FROM_VERSION') }}"
-      to_repo_version:       "{{ lookup('env', 'TO_VERSION').split('.')[0] if lookup('env', 'TO_VERSION').startswith('psp-') else lookup('env', 'TO_VERSION') }}"
+      to_repo_version:       "{{ to_version_env.split('.')[0] if to_version_env.startswith('psp-') else to_version_env }}"
       upgrade_type:          "{{ lookup('env', 'UPGRADE_TYPE') | default('server_minor') | lower }}"
       tde_upgrade:           "{{ lookup('env', 'TDE_UPGRADE')  | default('false') | bool }}"
       install_from_packages: "{{ lookup('env', 'INSTALL_FROM_PACKAGES') | default('true') | bool }}"
