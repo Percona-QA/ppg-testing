@@ -1,0 +1,11 @@
+---
+# REPOSITORY is only the image prefix; the roles append the image name
+# themselves. Fail before installing anything when the image name was typed
+# in too, or the pull would ask for ".../<image>/<image>:<tag>".
+- name: Fail when REPOSITORY includes the image name
+  fail:
+    msg: >-
+      REPOSITORY={{ DOCKER_REPOSITORY }} ends with the image name
+      "{{ DOCKER_REPOSITORY | basename }}". Enter only the prefix, e.g.
+      {{ DOCKER_REPOSITORY | dirname }}; the image name is appended.
+  when: DOCKER_REPOSITORY | basename is match('percona-(distribution-postgresql|pgbouncer|pgbackrest)')

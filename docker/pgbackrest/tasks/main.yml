@@ -9,6 +9,12 @@
 #     - prerequisites
 #     - always
 
+- include_tasks:
+    file: "{{ role_path }}/../../tasks/check_docker_repository.yml"
+    apply:
+      tags: always
+  tags: always
+
 - name: Ensure required dependencies are installed
   ansible.builtin.yum:
     name:
