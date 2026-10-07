@@ -30,6 +30,10 @@
       key_provider:          "{{ lookup('env', 'KEY_PROVIDER') | default('file', true) | lower }}"
       # Root token of the localhost-only vault/openbao dev server.
       kms_root_token:        upg-root-token
+      # HA=true: a streaming replica on the same host (replica.yml), upgraded
+      # rolling for minor/tde_only and rebuilt after a major upgrade.
+      ha:                    "{{ lookup('env', 'HA') | default('false', true) | bool }}"
+      replica_port:          5433
       # Host ports of the KMS containers, away from the defaults a native
       # openbao / cosmian_kms install would use.
       vault_host_port:       18200
@@ -157,6 +161,7 @@
         - "TO repo source: {{ 'OBS' if use_obs_repo else 'percona-release' }}"
         - "pytest upgrade tests: {{ run_pytest_upgrade_section and upgrade_type == 'server_major' }}"
         - "Key provider: {{ key_provider }}"
+        - "HA replica: {{ ha }}"
 
   # ===========================================================
   # Main flow — wrapped in block/always so artifacts are always
@@ -316,6 +321,28 @@
           pg_install_dir: "{{ from_pg_install_dir }}"
           pg_socket_dir:  "{{ from_pg_socket_dir }}"
 
+      # HA: the replica is built from the seeded FROM cluster and checked
+      # before the upgrade, so a later failure is the upgrade's, not the setup's.
+      - name: HA - create the replica (FROM)
+        include_tasks:
+          file: replica.yml
+        vars:
+          replica_action: "{{ item }}"
+          pg_bin_dir:     "{{ from_pg_bin_dir }}"
+          pg_socket_dir:  "{{ from_pg_socket_dir }}"
+        loop: [create, wait]
+        when: ha | bool
+
+      - name: Upgrade checker - verify-replica (FROM)
+        include_tasks:
+          file: run_checker.yml
+        vars:
+          checker_stage:  verify-replica
+          pg_bin_dir:     "{{ from_pg_bin_dir }}"
+          pg_install_dir: "{{ from_pg_install_dir }}"
+          pg_socket_dir:  "{{ from_pg_socket_dir }}"
+        when: ha | bool
+
       - name: Capture server version (FROM, pre-upgrade)
         include_tasks:
           file: capture_server_version.yml
@@ -395,6 +422,16 @@
           pg_install_dir: "{{ to_pg_install_dir }}"
           pg_socket_dir:  "{{ to_pg_socket_dir }}"
 
+      - name: Upgrade checker - verify-replica (TO)
+        include_tasks:
+          file: run_checker.yml
+        vars:
+          checker_stage:  verify-replica
+          pg_bin_dir:     "{{ to_pg_bin_dir }}"
+          pg_install_dir: "{{ to_pg_install_dir }}"
+          pg_socket_dir:  "{{ to_pg_socket_dir }}"
+        when: ha | bool
+
       - name: Capture server version (TO, post-upgrade)
         include_tasks:
           file: capture_server_version.yml
@@ -444,6 +481,11 @@
           cacheable: true
 
     always:
+      - name: Release the HA package-script hold if a run stopped mid-way
+        include_tasks:
+          file: ha_release_hold.yml
+        when: ha | bool
+
       # ===========================================================
       # Collect artifacts — runs even when the play fails
       # ===========================================================

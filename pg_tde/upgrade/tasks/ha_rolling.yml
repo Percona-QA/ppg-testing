@@ -1,0 +1,79 @@
+---
+# HA rolling upgrade for server_minor / tde_only (same PGDATA, package swap):
+# the packages are replaced, the REPLICA restarts first on the new binaries,
+# then the primary restarts (the caller's own restart task) and the replica
+# must follow it.
+#
+# On RHEL rpm leaves running servers alone, so the old primary keeps running
+# through the swap and the replica must stream from it on the new binaries --
+# the real rolling-upgrade check. On Debian the server package's maintainer
+# scripts stop the cluster themselves (systemctl, not invoke-rc.d), so that
+# old-primary phase cannot be staged on one host; it is logged and skipped.
+#
+# Caller must pass ha_phase:
+#   hold          before the package swap (Debian): policy-rc.d denies the
+#                 package scripts' *start*, so the primary is not brought back
+#                 on new server binaries with the old pg_tde library mid-swap
+#   replica_first after the swap, before the primary restart
+#   release       after the primary restart
+# and pg_bin_dir / pg_socket_dir of the (same-major) installation.
+
+  - name: HA hold - stop package scripts from restarting PostgreSQL (Debian)
+    copy:
+      dest: /usr/sbin/policy-rc.d
+      mode: "0755"
+      content: |
+        #!/bin/sh
+        # pg_tde/upgrade HA rolling upgrade: no service restarts during the package swap
+        exit 101
+    become: true
+    when:
+      - ha_phase == 'hold'
+      - ansible_os_family == 'Debian'
+
+  - name: HA replica first - is the old primary still running?
+    become: true
+    become_user: postgres
+    command: "{{ pg_bin_dir }}/pg_isready -h {{ pg_socket_dir }} -p 5432"
+    register: ha_old_primary
+    changed_when: false
+    failed_when: false
+    when: ha_phase == 'replica_first'
+
+  - name: HA replica first - note when the package scripts stopped the primary
+    debug:
+      msg: >-
+        The package swap stopped the primary ({{ ansible_os_family }} packaging), so the
+        replica cannot stream from the old primary on this host; restarting the replica
+        on the new binaries and checking it after the primary restart instead.
+    when:
+      - ha_phase == 'replica_first'
+      - ha_old_primary.rc != 0
+
+  - name: HA replica first - restart the replica on the new binaries
+    include_tasks:
+      file: replica.yml
+    vars:
+      replica_action: restart
+    when: ha_phase == 'replica_first'
+
+  - name: HA replica first - replica (new) streams from the old primary
+    include_tasks:
+      file: replica.yml
+    vars:
+      replica_action: wait
+    when:
+      - ha_phase == 'replica_first'
+      - ha_old_primary.rc == 0
+
+  - name: HA release - allow package scripts to manage services again (Debian)
+    include_tasks:
+      file: ha_release_hold.yml
+    when: ha_phase == 'release'
+
+  - name: HA release - the replica follows the restarted primary
+    include_tasks:
+      file: replica.yml
+    vars:
+      replica_action: wait
+    when: ha_phase == 'release'

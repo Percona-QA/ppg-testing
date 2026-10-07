@@ -19,6 +19,7 @@
         --upgrade-stage={{ checker_stage }} \
         --upgrade-check-dir={{ checker_dir }} \
         --install-dir={{ pg_install_dir }} \
+        {{ ('--replica-port=' ~ replica_port) if ha | bool else '' }} \
         -p no:cacheprovider -rs -v \
         --junitxml=/tmp/upgrade_check_{{ checker_stage }}.xml \
         2>&1 | tee /tmp/upgrade_check_{{ checker_stage }}.log
