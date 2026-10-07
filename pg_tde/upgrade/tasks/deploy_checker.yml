@@ -1,0 +1,41 @@
+---
+# Deploy the vendored pg_tde pytest suite (pg_tde/core/files/pytest) and a
+# minimal venv for tests/test_tde_upgrade_check.py, the staged checker that
+# seeds the FROM cluster and verifies the TO cluster (see run_checker.yml).
+# Only pytest is needed: the checker talks to the service cluster with psql.
+
+  # Copied as root and chowned, not with become_user: postgres -- a file
+  # transfer to an unprivileged become user needs setfacl (acl package) on the
+  # target, which not every image has.
+  - name: Deploy pg_tde pytest suite
+    copy:
+      src: "{{ role_path }}/../core/files/pytest/"
+      dest: "{{ checker_src }}"
+      owner: postgres
+      group: postgres
+      mode: preserve
+    become: true
+
+  - name: Create pytest venv for the upgrade checker
+    become: true
+    become_user: postgres
+    shell: |
+      set -e
+      python3 -m venv .venv
+      .venv/bin/python -m pip install --quiet --upgrade pip
+      .venv/bin/python -m pip install --quiet "pytest>=7.4"
+    args:
+      executable: /bin/bash
+      chdir: "{{ checker_src }}"
+      creates: "{{ checker_src }}/.venv/bin/pytest"
+
+  # Keyrings, canary and state live here, not under /tmp: the key provider
+  # config inside PGDATA points at these files across the upgrade.
+  - name: Create upgrade checker directory
+    file:
+      path: "{{ checker_dir }}"
+      state: directory
+      owner: postgres
+      group: postgres
+      mode: "0700"
+    become: true

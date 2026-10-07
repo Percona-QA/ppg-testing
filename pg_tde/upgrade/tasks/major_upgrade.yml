@@ -120,6 +120,21 @@
     register: from_checksums_result
     changed_when: false
 
+  # pg_tde.wal_encrypt lives in the FROM cluster's postgresql.auto.conf, which
+  # pg_upgrade does not carry over. Like shared_preload_libraries it has to be
+  # set on the TO cluster by hand -- after pg_tde_upgrade, as the empty target
+  # has no server key yet and would not start with it on.
+  - name: Read FROM cluster pg_tde.wal_encrypt setting
+    become: true
+    become_user: postgres
+    command: psql -d postgres -tA -c "SHOW pg_tde.wal_encrypt;"
+    environment:
+      PGHOST: "{{ from_pg_socket_dir }}"
+      PGPORT: "5432"
+      PATH:   "{{ from_pg_bin_dir }}:{{ ansible_env.PATH }}"
+    register: from_wal_encrypt_result
+    changed_when: false
+
   - name: Pick initdb checksum option for the TO cluster
     set_fact:
       to_initdb_checksum_opt: >-
@@ -268,6 +283,14 @@
     # cluster still running outside systemd makes a bare drop refuse
     command: pg_dropcluster --stop {{ from_major_version }} main
     when: ansible_os_family == "Debian"
+
+  - name: Carry pg_tde.wal_encrypt over to the TO cluster
+    lineinfile:
+      path: "{{ to_pg_conf }}"
+      regexp: '^\s*#?\s*pg_tde\.wal_encrypt\s*='
+      line: "pg_tde.wal_encrypt = on"
+    become: true
+    when: from_wal_encrypt_result.stdout | trim == 'on'
 
   # pg_createcluster picks the next free port, and because the FROM cluster's
   # config still reserves 5432, the TO cluster is assigned 5433. The downstream

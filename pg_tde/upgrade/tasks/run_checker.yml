@@ -1,0 +1,43 @@
+---
+# Run one stage of the staged upgrade checker (tests/test_tde_upgrade_check.py)
+# against the service cluster. Stages, in order:
+#   prepare -> (restart) -> setup -> (upgrade) -> verify-before-alter
+#   -> (ALTER EXTENSION) -> verify
+#
+# Caller must pass:
+#   checker_stage  - one of the stages above
+#   pg_bin_dir     - PostgreSQL bin directory of the cluster being checked
+#   pg_install_dir - its install root (pytest --install-dir)
+#   pg_socket_dir  - directory for the Unix socket (PGHOST)
+
+  - name: Upgrade checker stage {{ checker_stage }}
+    become: true
+    become_user: postgres
+    shell: |
+      set -o pipefail
+      .venv/bin/pytest tests/test_tde_upgrade_check.py \
+        --upgrade-stage={{ checker_stage }} \
+        --upgrade-check-dir={{ checker_dir }} \
+        --install-dir={{ pg_install_dir }} \
+        -p no:cacheprovider -rs -v \
+        --junitxml=/tmp/upgrade_check_{{ checker_stage }}.xml \
+        2>&1 | tee /tmp/upgrade_check_{{ checker_stage }}.log
+    args:
+      executable: /bin/bash
+      chdir: "{{ checker_src }}"
+    environment:
+      PGHOST: "{{ pg_socket_dir }}"
+      PGPORT: "5432"
+      PATH: "{{ pg_bin_dir }}:{{ ansible_env.PATH }}"
+      PG_TDE_SKIP_EXTERNAL_KEY_PROVIDERS: "1"
+    register: checker_result
+    ignore_errors: true
+
+  - name: Show upgrade checker output ({{ checker_stage }})
+    debug:
+      var: checker_result.stdout_lines
+
+  - name: Fail if upgrade checker stage {{ checker_stage }} failed
+    fail:
+      msg: "Upgrade checker stage {{ checker_stage }} failed. See /tmp/upgrade_check_{{ checker_stage }}.log"
+    when: checker_result.rc != 0
