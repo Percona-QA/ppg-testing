@@ -451,19 +451,18 @@ pgbackrest = {
     "16.14": {"version": "2.58.0","binary_version": "pgBackRest 2.58.0"},
     "17.10": {"version": "2.58.0","binary_version": "pgBackRest 2.58.0"},
     "18.4": {"version": "2.58.0","binary_version": "pgBackRest 2.58.0"},
-    "14.24": {"version": "2.59.1","binary_version": "pgBackRest 2.59.1"},
-    "15.19": {"version": "2.59.1","binary_version": "pgBackRest 2.59.1"},
-    "16.15": {"version": "2.59.1","binary_version": "pgBackRest 2.59.1"},
-    "17.11": {"version": "2.59.1","binary_version": "pgBackRest 2.59.1"},
-    "18.6": {"version": "2.59.1","binary_version": "pgBackRest 2.59.1"},
+    "14.24": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
+    "15.19": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
+    "16.15": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
+    "17.11": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
+    "18.6": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
 }
 
 # Some packages/fields are built or reported separately for psp-<major> images
 # and can differ from the plain ppg image for the same PG minor version.
-# Confirmed for 16.15: psp-16.15 ships pgbackrest 2.59.1 (plain ppg-16.15
-# above is still 2.59.0) and reports itself as "Percona Server for PostgreSQL
-# 16.15.1" in `psql -V` (a string plain ppg-16.15 never prints, since it's not
-# a PSP build). Key by ppg_version -> {settings key: value} to override just
+# Confirmed for 16.15: psp-16.15 reports itself as "Percona Server for
+# PostgreSQL 16.15.1" in `psql -V` (a string plain ppg-16.15 never prints,
+# since it's not a PSP build). Key by ppg_version -> {settings key: value} to override just
 # that key when is_psp is true; get_settings() applies it.
 PSP_OVERRIDES = {
     "16.15": {

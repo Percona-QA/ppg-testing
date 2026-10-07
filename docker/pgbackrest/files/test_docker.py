@@ -130,18 +130,25 @@ def _check_licenses_at_licenses(image_ref):
         ) from e
 
 
-def _expected_ubi_major_version(tag):
-    """Derive expected RHEL/UBI major version from an image tag.
+def _expected_ubi_major_version(tag, image_ref=None):
+    """Derive expected RHEL/UBI major version from an image tag or, for OBS
+    images with bare tags, the repository path ('.../containers/ubi8/<image>').
 
     Rules:
       - tag contains 'ubi8'  -> expect RHEL/UBI 8
       - tag contains 'ubi10' -> expect RHEL/UBI 10
-      - no 'ubi' in tag      -> default to RHEL/UBI 9
+      - else a repository path component 'ubi8' / 'ubi10' -> expect that UBI major
+      - otherwise            -> default to RHEL/UBI 9
     """
     tag = (tag or "").lower()
     if 'ubi8' in tag:
         return '8'
     if 'ubi10' in tag:
+        return '10'
+    repo_parts = (image_ref or "").lower().rsplit(":", 1)[0].split("/")[:-1]
+    if 'ubi8' in repo_parts:
+        return '8'
+    if 'ubi10' in repo_parts:
         return '10'
     return '9'
 
@@ -151,7 +158,7 @@ def _check_base_image_is_rhel(image_ref, tag_hint):
     and that the base OS is genuinely RHEL rather than a look-alike (e.g. Oracle Linux), which
     can report the exact same VERSION_ID and would otherwise pass the version check silently.
     """
-    expected = _expected_ubi_major_version(tag_hint)
+    expected = _expected_ubi_major_version(tag_hint, image_ref)
     try:
         output = client.containers.run(
             image_ref, command=["sh", "-c", "cat /etc/os-release"], remove=True, detach=False

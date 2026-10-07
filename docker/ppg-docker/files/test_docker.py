@@ -197,20 +197,28 @@ def test_wait_docker_load(host):
 
 
 def _expected_ubi_major_version():
-    """Derive expected RHEL/UBI major version from the image tag.
+    """Derive expected RHEL/UBI major version from the image reference.
+
+    Docker Hub names the UBI variant in the tag ('18-ubi8'); OBS names it as
+    a repository path component ('.../containers/ubi8') with a bare tag.
 
     Rules:
-      - tag contains 'ubi8'  -> expect RHEL/UBI 8
-      - tag contains 'ubi9'  -> expect RHEL/UBI 9
-      - tag contains 'ubi10' -> expect RHEL/UBI 10
-      - no 'ubi' in tag      -> default to RHEL/UBI 9 (legacy bare tags)
-      - unknown 'ubi*' tag   -> fail fast
+      - tag contains 'ubi8'/'ubi9'/'ubi10'            -> expect that UBI major
+      - else a repository component 'ubi8'/'ubi9'/... -> expect that UBI major
+      - neither                                       -> default to RHEL/UBI 9 (legacy bare tags)
+      - unknown 'ubi*' tag or UBI major               -> fail fast
     """
     tag = IMG_TAG.lower()
-    if "ubi" not in tag:
+    repo_ubi = [part for part in DOCKER_REPO.lower().split("/") if re.fullmatch(r"ubi\d+", part)]
+    if "ubi" in tag:
+        source, value = "tag", IMG_TAG
+        match = re.search(r"ubi(\d+)", tag)
+    elif repo_ubi:
+        source, value = "repository", DOCKER_REPO
+        match = re.fullmatch(r"ubi(\d+)", repo_ubi[-1])
+    else:
         return "9"
 
-    match = re.search(r"ubi(\d+)", tag)
     if not match:
         raise AssertionError(
             f"Unrecognized UBI tag format: '{IMG_TAG}'. "
@@ -220,7 +228,7 @@ def _expected_ubi_major_version():
     ubi_major = match.group(1)
     if ubi_major not in {"8", "9", "10"}:
         raise AssertionError(
-            f"Unsupported UBI major '{ubi_major}' in tag '{IMG_TAG}'. "
+            f"Unsupported UBI major '{ubi_major}' in {source} '{value}'. "
             "Supported UBI majors are: 8, 9, 10."
         )
     return ubi_major
@@ -233,6 +241,21 @@ def _expected_ubi_major_version():
 RPM_NAME_OVERRIDES_BY_UBI_MAJOR = {}
 
 
+def _expected_pkg_versions():
+    """Versions the server packages may carry.
+
+    From 17 on, packages may carry either the upstream version (e.g. 18.6,
+    repo.percona.com / Docker Hub builds) or the Percona Server version
+    (e.g. 18.6.1, OBS builds). Accept either one. Mirrors
+    expected_pkg_versions() in ppg/tests/settings.py.
+    """
+    expected = [pg_docker_versions["version"]]
+    percona_version = pg_docker_versions.get("percona-version")
+    if int(MAJOR_VER) >= 17 and percona_version:
+        expected.append(percona_version)
+    return expected
+
+
 def _installed_package_name(package):
     """Resolve the RPM package name actually installed for the current UBI
     major, accounting for names that changed between UBI variants."""
@@ -243,14 +266,14 @@ def _installed_package_name(package):
 
 
 def test_base_image_matches_ubi_tag(host):
-    """Verify the container base OS major version matches the UBI version in the image tag,
+    """Verify the container base OS major version matches the image's UBI version (tag or OBS path),
     and that the base OS is genuinely RHEL rather than a look-alike (e.g. Oracle Linux),
     which can report the exact same VERSION_ID and would otherwise pass this check silently.
 
-    - ubi8  tag -> RHEL/UBI 8
-    - ubi9  tag -> RHEL/UBI 9
-    - ubi10 tag -> RHEL/UBI 10
-    - no ubi    -> RHEL/UBI 9 (default)
+    - ubi8  tag or repository path -> RHEL/UBI 8
+    - ubi9  tag or repository path -> RHEL/UBI 9
+    - ubi10 tag or repository path -> RHEL/UBI 10
+    - no ubi                       -> RHEL/UBI 9 (default)
     """
     expected = _expected_ubi_major_version()
     os_release = host.file('/etc/os-release').content_string
@@ -263,14 +286,14 @@ def test_base_image_matches_ubi_tag(host):
             os_id = line.split('=', 1)[1].strip().strip('"')
     assert version_id is not None, "Could not find VERSION_ID in /etc/os-release"
     assert version_id == expected, (
-        f"Base image OS mismatch: tag '{IMG_TAG}' expects RHEL/UBI {expected}, "
+        f"Base image OS mismatch: image '{IMAGE}' expects RHEL/UBI {expected}, "
         f"but container /etc/os-release reports VERSION_ID major={version_id}"
     )
     assert os_id == "rhel", (
         f"Base image is not genuine RHEL/UBI: /etc/os-release reports ID='{os_id}'. "
         f"Look-alike distros (e.g. Oracle Linux reports ID='ol') can mirror RHEL's "
         f"VERSION_ID exactly and would pass the version check above while not actually "
-        f"being RHEL/UBI. Tag '{IMG_TAG}' must be built on a genuine RHEL/UBI {expected} base."
+        f"being RHEL/UBI. Image '{IMAGE}' must be built on a genuine RHEL/UBI {expected} base."
     )
 
 
@@ -477,17 +500,16 @@ def test_rpm_package_is_installed(host, package):
     else:
         expected_version = pkg_data
 
-    # Fallback to the global 'version' if the specific package isn't mapped
-    if not expected_version:
-        expected_version = pg_docker_versions.get("version")
+    # Fallback to the server package versions if the specific package isn't mapped
+    expected_versions = [expected_version] if expected_version else _expected_pkg_versions()
 
     # --- Console Output Enhancement ---
     print(f"\n[VERIFYING] Package: {installed_name}")
-    print(f"            Expected: {expected_version}")
+    print(f"            Expected: {' or '.join(expected_versions)}")
     print(f"            Found:    {pkg.version}")
 
-    assert pkg.version == expected_version, (
-        f"Version mismatch for {installed_name}. Expected: {expected_version}, Found: {pkg.version}"
+    assert pkg.version in expected_versions, (
+        f"Version mismatch for {installed_name}. Expected: {' or '.join(expected_versions)}, Found: {pkg.version}"
     )
 
     print(f"[SUCCESS] {installed_name} version {pkg.version} verified.")
