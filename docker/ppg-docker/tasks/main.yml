@@ -24,6 +24,8 @@
     msg: "REPOSITORY is empty; set an image prefix such as percona, perconalab, or an OBS registry path."
   when: DOCKER_REPOSITORY | length == 0
 
+- include_tasks: "{{ role_path }}/../../tasks/check_docker_repository.yml"
+
 - name: Set server test facts
   set_fact:
     PPG_VERSION: "{{ lookup('env', 'SERVER_VERSION') }}"
