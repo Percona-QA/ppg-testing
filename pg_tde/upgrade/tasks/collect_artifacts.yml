@@ -40,6 +40,14 @@
       # FROM-side state snapshot it compared against
       cp /tmp/upgrade_check_*.log /tmp/upgrade_check_*.xml "$ARTIFACT_DIR/" 2>/dev/null || true
       cp {{ checker_dir }}/upgrade_check_state.json "$ARTIFACT_DIR/" 2>/dev/null || true
+
+      # pytest upgrade tests (RUN_PYTEST_UPGRADE_SECTION): log + junit, and the
+      # per-test server/pg_upgrade logs -- not the test data dirs, too big
+      cp /tmp/pytest_upgrade_section.log /tmp/pytest_upgrade_section.xml "$ARTIFACT_DIR/" 2>/dev/null || true
+      if [ -d /tmp/pg_tde_upgrade_section ]; then
+        (cd /tmp && find pg_tde_upgrade_section -name '*.log' -type f \
+          -exec cp --parents {} "$ARTIFACT_DIR/" \; ) 2>/dev/null || true
+      fi
       cp /tmp/pg_upgrade_internal.log  "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/pg_upgrade_server.log    "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/pg_upgrade_utility.log   "$ARTIFACT_DIR/" 2>/dev/null || true

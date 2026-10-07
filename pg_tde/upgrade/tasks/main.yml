@@ -21,6 +21,10 @@
       from_repo:             "{{ lookup('env', 'FROM_REPO') | default('testing') }}"
       to_repo:               "{{ lookup('env', 'TO_REPO')   | default('testing') }}"
       build_number:          "{{ lookup('env', 'BUILD_NUMBER') | default('0') }}"
+      # server_major only: also run the pytest major-upgrade tests against the
+      # packaged FROM/TO binaries (run_pytest_upgrade_section.yml).
+      run_pytest_upgrade_section: "{{ lookup('env', 'RUN_PYTEST_UPGRADE_SECTION') | default('false', true) | bool }}"
+      pytest_upgrade_tests:  "{{ lookup('env', 'PYTEST_UPGRADE_TESTS') | default('tests/test_tde_pg_upgrade.py', true) }}"
       # Optional package pins for Percona patched-release upgrades. Empty = latest
       # in the channel (current behaviour). Server is pinned by build increment
       # (e.g. "2" -> 18.4-2); pg_tde is pinned by package version (e.g. "2.2.0").
@@ -137,6 +141,7 @@
         - "TDE upgrade: {{ tde_upgrade }}"
         - "TDE from packages: {{ install_from_packages }}"
         - "TO repo source: {{ 'OBS' if use_obs_repo else 'percona-release' }}"
+        - "pytest upgrade tests: {{ run_pytest_upgrade_section and upgrade_type == 'server_major' }}"
 
   # ===========================================================
   # Main flow — wrapped in block/always so artifacts are always
@@ -404,6 +409,13 @@
       - name: Check the upgrade actually changed what it was asked to
         include_tasks:
           file: assert_upgrade_versions.yml
+
+      - name: Run pytest upgrade tests on the packaged binaries
+        include_tasks:
+          file: run_pytest_upgrade_section.yml
+        when:
+          - upgrade_type == "server_major"
+          - run_pytest_upgrade_section | bool
 
     rescue:
       - name: Record upgrade test failure
