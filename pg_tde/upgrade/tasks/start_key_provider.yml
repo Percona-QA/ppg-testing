@@ -1,0 +1,155 @@
+---
+# KEY_PROVIDER=vault|openbao|kmip: start a KMS that outlives every postgres
+# restart and the upgrade itself, and describe it to the staged checker in
+# {{ checker_dir }}/key_provider.json (see tests/test_tde_upgrade_check.py).
+#
+# The pytest suite's own KMS helpers start per-session dev servers that stop
+# when pytest exits; the checker runs pytest once per stage, so the KMS is
+# started here instead, as a docker container, and left running.
+#
+#   vault   hashicorp/vault dev server on 127.0.0.1:{{ vault_host_port }},
+#           KV v2 at secret/, token file
+#   openbao openbao/openbao dev server (same vault_v2 API and port)
+#   kmip    Cosmian KMS built from pg_tde/tde/files/kmip (as the tde/core
+#           roles do), KMIP on 127.0.0.1:{{ kmip_host_port }}, TLS client
+#           certs in {{ checker_dir }}/kmip_certs
+#
+# Dev servers keep keys in memory: fine here, the container is never restarted
+# during the run. Caller: after deploy_checker.yml (checker_dir must exist).
+
+  - name: Install docker
+    include_tasks: "{{ role_path }}/../core/tasks/install_docker.yml"
+
+  - name: Remove a previous key provider container
+    command: docker rm -f upg-kms
+    become: true
+    changed_when: false
+    failed_when: false
+
+  # ---------------------------------------------------------------- vault / openbao
+  - name: Start {{ key_provider }} dev server
+    command: >-
+      docker run -d --name upg-kms --cap-add IPC_LOCK
+      -p 127.0.0.1:{{ vault_host_port }}:8200
+      -e {{ env_prefix }}_DEV_ROOT_TOKEN_ID={{ kms_root_token }}
+      -e {{ env_prefix }}_DEV_LISTEN_ADDRESS=0.0.0.0:8200
+      {{ kms_image }}
+    vars:
+      env_prefix: "{{ 'VAULT' if key_provider == 'vault' else 'BAO' }}"
+      kms_image: "{{ 'hashicorp/vault:1.20' if key_provider == 'vault' else 'openbao/openbao:2.4.1' }}"
+    become: true
+    when: key_provider in ['vault', 'openbao']
+
+  - name: Wait for {{ key_provider }} KV v2 mount secret/
+    uri:
+      url: http://127.0.0.1:{{ vault_host_port }}/v1/sys/mounts/secret/tune
+      headers:
+        X-Vault-Token: "{{ kms_root_token }}"
+    register: kms_mount
+    until: kms_mount.status == 200 and kms_mount.json.options.version == '2'
+    retries: 20
+    delay: 3
+    when: key_provider in ['vault', 'openbao']
+
+  - name: Write {{ key_provider }} token file for the postgres server
+    copy:
+      content: "{{ kms_root_token }}"
+      dest: "{{ checker_dir }}/kms_token"
+      owner: postgres
+      group: postgres
+      mode: "0600"
+    become: true
+    when: key_provider in ['vault', 'openbao']
+
+  - name: Describe {{ key_provider }} provider for the checker
+    copy:
+      content: "{{ {'type': 'vault', 'url': 'http://127.0.0.1:' ~ vault_host_port, 'mount': 'secret',
+                    'token_path': checker_dir ~ '/kms_token', 'ca_path': none} | to_nice_json }}"
+      dest: "{{ checker_dir }}/key_provider.json"
+      owner: postgres
+      group: postgres
+      mode: "0600"
+    become: true
+    when: key_provider in ['vault', 'openbao']
+
+  # ---------------------------------------------------------------- kmip
+  - name: Create Cosmian KMS build directory
+    file:
+      path: /tmp/upg_cosmian_build
+      state: directory
+      mode: "0755"
+    become: true
+    when: key_provider == 'kmip'
+
+  - name: Stage Cosmian KMS image build files
+    copy:
+      src: "{{ role_path }}/../tde/files/kmip/{{ item.src }}"
+      dest: "/tmp/upg_cosmian_build/{{ item.dest }}"
+      mode: "0755"
+    loop:
+      - { src: Dockerfile.cosmian_server, dest: Dockerfile }
+      - { src: gen_certs.sh, dest: gen_certs.sh }
+      - { src: cosmian_entrypoint.sh, dest: cosmian_entrypoint.sh }
+    become: true
+    when: key_provider == 'kmip'
+
+  - name: Build Cosmian KMS image
+    shell: |
+      set -o pipefail
+      # no --progress: the legacy builder (docker.io without buildx) rejects it
+      docker build -t upg-cosmian . 2>&1 | tee /tmp/upg-cosmian-build.log
+    args:
+      chdir: /tmp/upg_cosmian_build
+      executable: /bin/bash
+    become: true
+    when: key_provider == 'kmip'
+
+  - name: Create KMIP certificate directory
+    file:
+      path: "{{ checker_dir }}/kmip_certs"
+      state: directory
+      mode: "0755"
+    become: true
+    when: key_provider == 'kmip'
+
+  # Only the KMIP port is published, on a host port of its own: a native
+  # cosmian_kms (e.g. from the core role) may already hold 5556/9998.
+  - name: Start Cosmian KMS
+    command: >-
+      docker run -d --name upg-kms
+      -p 127.0.0.1:{{ kmip_host_port }}:5556
+      -v {{ checker_dir }}/kmip_certs:/opt/cosmian/certs
+      upg-cosmian
+    become: true
+    when: key_provider == 'kmip'
+
+  - name: Wait for KMIP port {{ kmip_host_port }}
+    wait_for:
+      host: 127.0.0.1
+      port: "{{ kmip_host_port }}"
+      timeout: 90
+    when: key_provider == 'kmip'
+
+  # The container generates the certs as root; the postgres server reads the
+  # client key and certs when it talks to the KMS.
+  - name: Hand the KMIP certificates to postgres
+    file:
+      path: "{{ checker_dir }}/kmip_certs"
+      owner: postgres
+      group: postgres
+      recurse: true
+    become: true
+    when: key_provider == 'kmip'
+
+  - name: Describe KMIP provider for the checker
+    copy:
+      content: "{{ {'type': 'kmip', 'host': '127.0.0.1', 'port': kmip_host_port | int,
+                    'cert_path': checker_dir ~ '/kmip_certs/client.pem',
+                    'key_path': checker_dir ~ '/kmip_certs/client.key',
+                    'ca_path': checker_dir ~ '/kmip_certs/ca.pem'} | to_nice_json }}"
+      dest: "{{ checker_dir }}/key_provider.json"
+      owner: postgres
+      group: postgres
+      mode: "0600"
+    become: true
+    when: key_provider == 'kmip'

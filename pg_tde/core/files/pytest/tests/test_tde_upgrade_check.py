@@ -23,13 +23,18 @@ binaries. The caller drives the upgrade and runs one stage per pytest call:
     pytest tests/test_tde_upgrade_check.py --upgrade-stage=setup \
         --upgrade-check-dir=/var/lib/pg_tde_upgrade_check
 
+Key provider: file by default. When the caller drops a key_provider.json
+into --upgrade-check-dir (written by the pg_tde/upgrade role for
+KEY_PROVIDER=vault|openbao|kmip, with the KMS already running), the global
+provider (server key, tde_c) and tde_a's database provider use that KMS;
+tde_b always keeps a file provider, so every run also covers a mixed setup.
+
 Without --upgrade-stage every test here is skipped, so full-suite runs are
 unaffected.
 """
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import uuid
 from pathlib import Path
@@ -141,6 +146,59 @@ def canary_tde(check_dir: Path) -> str:
 
 def canary_plain(check_dir: Path) -> str:
     return "plaincanary" + _canary_hex(check_dir)
+
+
+# ── key providers ───────────────────────────────────────────────────────────
+
+
+def key_provider_config(check_dir: Path) -> Dict:
+    """{"type": "file"} unless the caller wrote key_provider.json:
+      {"type": "vault", "url": ..., "mount": ..., "token_path": ..., "ca_path": null}
+      {"type": "kmip", "host": ..., "port": ..., "cert_path": ..., "key_path": ..., "ca_path": ...}
+    (openbao uses type "vault": same vault_v2 API.)"""
+    f = check_dir / "key_provider.json"
+    if not f.exists():
+        return {"type": "file"}
+    return json.loads(f.read_text())
+
+
+def _lit(v) -> str:
+    if v is None:
+        return "NULL"
+    if isinstance(v, int):
+        return str(v)
+    return "'" + str(v).replace("'", "''") + "'"
+
+
+def _call_padded(fn: str, args: list, db: str) -> None:
+    """SELECT fn(args...), padding trailing optional arguments (e.g. the
+    vault_v2 namespace added in later pg_tde releases) with NULL."""
+    nargs = int(psql(f"SELECT max(pronargs) FROM pg_proc WHERE proname = '{fn}';", db) or 0)
+    if nargs < len(args):
+        raise RuntimeError(f"{fn} takes {nargs} arguments, {len(args)} given")
+    padded = list(args) + [None] * (nargs - len(args))
+    psql(f"SELECT {fn}({', '.join(_lit(a) for a in padded)});", db)
+
+
+def add_key_provider(scope: str, name: str, cfg: Dict, file_path: Path, db: str) -> None:
+    """scope: 'global' or 'database'. *file_path* is used for type file."""
+    kind = cfg["type"]
+    if kind == "file":
+        _call_padded(f"pg_tde_add_{scope}_key_provider_file", [name, str(file_path)], db)
+    elif kind == "vault":
+        _call_padded(
+            f"pg_tde_add_{scope}_key_provider_vault_v2",
+            [name, cfg["url"], cfg["mount"], cfg["token_path"], cfg.get("ca_path")],
+            db,
+        )
+    elif kind == "kmip":
+        _call_padded(
+            f"pg_tde_add_{scope}_key_provider_kmip",
+            [name, cfg["host"], int(cfg["port"]), cfg["cert_path"], cfg["key_path"], cfg.get("ca_path")],
+            db,
+        )
+    else:
+        raise ValueError(f"unknown key provider type {kind!r}")
 
 
 # ── snapshot helpers ────────────────────────────────────────────────────────
@@ -266,11 +324,13 @@ def assert_ciphertext_on_disk(check_dir: Path) -> None:
 
 @stages("prepare")
 def test_prepare_server_key_and_wal_encryption(check_dir):
-    keyring = check_dir / "global_keyring.per"
+    psql("CREATE EXTENSION IF NOT EXISTS pg_tde;")
+    add_key_provider(
+        "global", GLOBAL_PROVIDER, key_provider_config(check_dir),
+        check_dir / "global_keyring.per", "postgres",
+    )
     psql(
         f"""
-        CREATE EXTENSION IF NOT EXISTS pg_tde;
-        SELECT pg_tde_add_global_key_provider_file('{GLOBAL_PROVIDER}', '{keyring}');
         SELECT pg_tde_create_key_using_global_key_provider('{SERVER_KEY}', '{GLOBAL_PROVIDER}');
         SELECT pg_tde_set_server_key_using_global_key_provider('{SERVER_KEY}', '{GLOBAL_PROVIDER}');
         ALTER SYSTEM SET pg_tde.wal_encrypt = on;
@@ -289,10 +349,10 @@ def test_setup_wal_encryption_active():
 
 
 def _seed_keys(db: str, check_dir: Path) -> None:
+    psql("CREATE EXTENSION pg_tde;", db)
     if db == "tde_c":
         psql(
             f"""
-            CREATE EXTENSION pg_tde;
             SELECT pg_tde_create_key_using_global_key_provider('upg_tde_c_key', '{GLOBAL_PROVIDER}');
             SELECT pg_tde_set_key_using_global_key_provider('upg_tde_c_key', '{GLOBAL_PROVIDER}');
             """,
@@ -300,10 +360,11 @@ def _seed_keys(db: str, check_dir: Path) -> None:
         )
         return
     provider = f"upg_{db}_provider"
+    # tde_a follows the configured KMS; tde_b always uses a file provider.
+    cfg = key_provider_config(check_dir) if db == "tde_a" else {"type": "file"}
+    add_key_provider("database", provider, cfg, check_dir / (db + "_keyring.per"), db)
     psql(
         f"""
-        CREATE EXTENSION pg_tde;
-        SELECT pg_tde_add_database_key_provider_file('{provider}', '{check_dir / (db + '_keyring.per')}');
         SELECT pg_tde_create_key_using_database_key_provider('upg_{db}_key1', '{provider}');
         SELECT pg_tde_set_key_using_database_key_provider('upg_{db}_key1', '{provider}');
         """,
@@ -392,6 +453,22 @@ def test_setup_seed_dataset(check_dir):
 
 
 @stages("setup")
+def test_setup_key_provider_type(check_dir):
+    """The KMS providers really are of the configured type (no silent file fallback)."""
+    want = key_provider_config(check_dir)["type"]
+    got_global = psql(
+        f"SELECT type FROM pg_tde_list_all_global_key_providers() WHERE name = '{GLOBAL_PROVIDER}';"
+    )
+    got_tde_a = psql(
+        "SELECT type FROM pg_tde_list_all_database_key_providers() WHERE name = 'upg_tde_a_provider';",
+        "tde_a",
+    )
+    # pg_tde reports vault_v2 for the vault/openbao provider
+    expect = {"file": "file", "vault": "vault-v2", "kmip": "kmip"}[want]
+    assert (got_global, got_tde_a) == (expect, expect), (got_global, got_tde_a, want)
+
+
+@stages("setup")
 def test_setup_encryption_state():
     for db in TDE_DBS:
         for key, rel in relations(db).items():
@@ -410,6 +487,7 @@ def test_setup_ciphertext_on_disk(check_dir):
 def test_setup_write_state(check_dir):
     snapshot = {
         "wal_encrypt": psql("SHOW pg_tde.wal_encrypt;"),
+        "key_provider": key_provider_config(check_dir)["type"],
         "server_key": server_key_info(),
         "from": {
             "server_version_num": psql("SHOW server_version_num;"),
