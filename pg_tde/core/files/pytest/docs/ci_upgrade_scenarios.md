@@ -12,7 +12,7 @@ Full pytest catalog: [`upgrade_matrix.md`](upgrade_matrix.md).
 
 | Track | Jenkins-style name | PostgreSQL | Data dir | Tooling in this repo |
 |-------|-------------------|------------|----------|----------------------|
-| **A — Major parallel** | `tde-upgrade-parallel` | Different major (typ. **17 → 18**) | New cluster via `pg_tde_upgrade` | `tests/test_tde_pg_upgrade.py` + `tests/test_upgrade.py` |
+| **A — Major parallel** | `tde-upgrade-parallel` | Different major (typ. **17 → 18**) | New cluster via `pg_tde_upgrade` | `tests/test_tde_pg_upgrade.py` |
 | **B — Minor patch** | (same job or separate minor job) | Same major (**18 → 18**) | **Same** `$PGDATA` | `run_minor_upgrade_workflow.sh` + `tests/test_tde_minor_upgrade.py` |
 
 ---
@@ -25,7 +25,7 @@ part of this repo. The pytest suite here covers the same scenarios; see
 
 ### A.1 Pytest run
 
-Single command covering all major TDE regression + plain `pg_upgrade`:
+Single command covering the major TDE regression:
 
 ```bash
 cd pg_tde/core/files/pytest && source .env.sh
@@ -36,7 +36,7 @@ export INSTALL_DIR=/home/ubuntu/pgwork/pginst/18
 pytest -m upgrade \
   --old-install-dir="$OLD_INSTALL_DIR" \
   --install-dir="$INSTALL_DIR" \
-  tests/test_tde_pg_upgrade.py tests/test_upgrade.py \
+  tests/test_tde_pg_upgrade.py \
   -v --tb=short
 ```
 
@@ -45,7 +45,7 @@ pytest -m upgrade \
 | Old / new pg_tde.control | Run these classes | Skip reason for others |
 |--------------------------|-------------------|------------------------|
 | **2.1 → 2.2** (cross-minor) | `TestPg2381EmptyKeyMigration`, `TestPg2379MultiDbKeyMigration` + all other major classes | `TestPg2381MajorUpgradeSamePgTdeControl` skips |
-| **2.2 → 2.2** (same control, e.g. PG17 2.2.0 → PG18 2.2.1) | `TestPg2381MajorUpgradeSamePgTdeControl`, `TestPspToPspUpgrade`, … | `TestPg2381EmptyKeyMigration`, `TestPg2379MultiDbKeyMigration` skip |
+| **2.2 → 2.2** (same control, e.g. PG17 2.2.0 → PG18 2.2.1) | `TestPg2381MajorUpgradeSamePgTdeControl`, `TestTdeMajorUpgradeBasics`, … | `TestPg2381EmptyKeyMigration`, `TestPg2379MultiDbKeyMigration` skip |
 
 Check control version:
 
@@ -73,7 +73,7 @@ Same PostgreSQL **major** (18), same `$PGDATA`, operator replaces packages
 (18.4.1 → 18.4.2), then pytest Verify runs `ALTER EXTENSION pg_tde UPDATE` when
 the catalog minor advances.
 
-This is **not** `pg_upgrade` and **not** `tests/test_upgrade.py`.
+This is **not** `pg_upgrade` / `pg_tde_upgrade` and **not** `tests/test_tde_pg_upgrade.py`.
 
 ### B.1 Automated full workflow (recommended)
 
@@ -127,7 +127,7 @@ pytest tests/test_tde_minor_upgrade.py::TestPgTdeMinorUpgradeVerify \
 
 ### B.3 Non-staged behaviour tests (single pytest run on 18.4.2)
 
-Run after packages are on 18.4.2; no `--upgrade-data-dir`:
+Single-install HA checks (no binaries change, marked `replication`); run after packages are on 18.4.2, no `--upgrade-data-dir`:
 
 ```bash
 pytest tests/test_tde_minor_upgrade.py::TestTdeMinorUpgradePreConditions \
@@ -189,7 +189,6 @@ Use this when reproducing the Jenkins job **and** the 18.4.1→18.4.2 bump on on
 
 | Path | Role |
 |------|------|
-| `run_tde_upgrade_parallel.sh` | Local driver for the Jenkins job; use `--pytest-only` (section A.1) |
 | `run_minor_upgrade_workflow.sh` | 18.4.1→18.4.2 staged driver (section B.1) |
 | `run_major_upgrade_workflow.sh` | PG 17→18 staged driver |
 | `docs/upgrade_matrix.md` | Full test catalog |

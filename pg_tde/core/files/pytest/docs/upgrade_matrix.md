@@ -9,7 +9,7 @@ Related runbooks:
 |-------|----------|-----------------|
 | Major PG 17→18 + `pg_tde_upgrade` | [`major_upgrade.md`](major_upgrade.md) | `run_major_upgrade_workflow.sh` |
 | In-place bump (e.g. **18.4.1 → 18.4.2**) | [`minor_upgrade.md`](minor_upgrade.md) | `run_minor_upgrade_workflow.sh` |
-| Jenkins `tde-upgrade-parallel` CI | [`ci_upgrade_scenarios.md`](ci_upgrade_scenarios.md) | `run_tde_upgrade_parallel.sh --pytest-only` |
+| Jenkins `tde-upgrade-parallel` CI | [`ci_upgrade_scenarios.md`](ci_upgrade_scenarios.md) | `pytest -m upgrade` |
 | Skip whole areas | [`test_sections.md`](test_sections.md) | `--skip-sections=upgrade` / `minor_upgrade` |
 
 ---
@@ -27,7 +27,6 @@ Related runbooks:
 
 **Do not confuse:**
 
-- `tests/test_upgrade.py` — plain `pg_upgrade` catalog smoke; **not** in-place PG 18.3→18.4.
 - `TestPg2379MultiDbKeyMigration::test_in_place_package_upgrade_multidb_distinct_keys` — minor bump helper living in `test_tde_pg_upgrade.py` (same PG major, different install dirs).
 
 ---
@@ -62,10 +61,6 @@ cd pg_tde/core/files/pytest && source .env.sh
 pytest -m upgrade \
   --old-install-dir=/path/to/pg17 \
   --install-dir=/path/to/pg18 \
-  tests/test_tde_pg_upgrade.py tests/test_upgrade.py -v
-
-# Major — TDE only
-pytest -m upgrade --old-install-dir=... --install-dir=... \
   tests/test_tde_pg_upgrade.py -v
 
 # Minor — staged (after Setup + package swap)
@@ -87,26 +82,17 @@ pytest tests/ --skip-sections=upgrade,minor_upgrade -v
 
 Marker: `upgrade`, `slow`. Requires `--old-install-dir` and `--install-dir` (different PG majors).
 
-Uses `pg_tde_upgrade` when the target ships it and encrypted `tde_heap` data exists; runs `ALTER EXTENSION pg_tde UPDATE` after start when catalog minor differs.
+Always uses `pg_tde_upgrade` when the source cluster has pg_tde key material (plain `pg_upgrade` is not supported on encrypted clusters). After start, every `tde_heap` relation, index and TOAST table in every database must still report `pg_tde_is_encrypted`, then `ALTER EXTENSION pg_tde UPDATE` runs.
 
-### `TestPpgToPspUpgrade` — PPG → PSP
-
-| Test | Validates |
-|------|-----------|
-| `test_file_provider_data_intact` | PG-2240: `tde_heap` data survives PPG→PSP via `pg_tde_upgrade` |
-| `test_alter_extension_update_after_upgrade` | `ALTER EXTENSION pg_tde UPDATE` succeeds post-upgrade |
-| `test_multiple_databases_survive` | Multiple DBs with TDE survive upgrade |
-| `test_check_mode_with_tde_configured` | `pg_upgrade --check` passes with pg_tde loaded |
-
-
-### `TestPspToPspUpgrade` — PSP → PSP, same flavour
+### `TestTdeMajorUpgradeBasics`
 
 | Test | Validates |
 |------|-----------|
-| `test_tde_heap_data_survives` | Encrypted data intact after 17→18 `pg_tde_upgrade` |
-| `test_multiple_databases_different_keys` | Per-DB keys survive |
-| `test_key_provider_accessible_after_upgrade` | Provider queryable; new encrypted writes work |
-| `test_wal_encryption_disabled_before_upgrade` | WAL enc disabled before upgrade; stays off |
+| `test_tde_heap_data_survives` | Row digest identical after `pg_tde_upgrade`; table still `tde_heap` |
+| `test_alter_extension_update_after_upgrade` | `extversion` reaches the new `default_version`; second UPDATE is a no-op |
+| `test_multiple_databases_different_keys` | Per-database principal keys; digests identical |
+| `test_check_mode_with_tde_configured` | `pg_tde_upgrade --check` passes with pg_tde loaded |
+| `test_key_provider_and_keys_preserved` | Providers (name/type/options), server and database keys unchanged; new tables encrypted |
 
 
 ### `TestUpgradeAccessMethodPermutations` — heap ↔ tde_heap
@@ -169,6 +155,19 @@ Uses `pg_tde_upgrade` when the target ships it and encrypted `tde_heap` data exi
 | `test_upgrade_database_key_provider_and_partitions` | DB-level key provider + partitioned tables |
 | `test_upgrade_with_wal_encryption_left_on` | Upgrade with `pg_tde.wal_encrypt=ON` during upgrade |
 
+### `TestPgTdeUpgradeRefusalsAndConfig`
+
+| Test | Validates |
+|------|-----------|
+| `test_wal_encrypt_setting_not_carried_over` | `pg_tde.wal_encrypt` (auto.conf) is not migrated; data readable |
+| `test_refuses_checksum_mismatch` | `--check` refuses checksums on → off |
+| `test_refuses_running_old_cluster_and_leaves_it_intact` | Full run refused; old encrypted data intact |
+| `test_refuses_non_empty_target` | `--check` refuses a target with user tables |
+| `test_refuses_unclean_shutdown` | Crashed cluster with encrypted WAL refused; recovery replays it |
+| `test_pg_tde_installed_no_encrypted_tables` | Keys carried over without encrypted tables; new tables encrypt |
+| `test_inheritance_on_tde_heap` | INHERITS hierarchy on tde_heap |
+
+
 ### `TestTdeUpgradeExtremeCornerCases`
 
 | Test | Validates |
@@ -212,134 +211,6 @@ Use when PG17 and PG18 both ship `pg_tde.control` **2.2** (e.g. 2.2.0 vs 2.2.1 p
 
 ---
 
-## Major upgrade — `tests/test_upgrade.py`
-
-Marker: `upgrade`, `slow`. Plain `pg_upgrade` and post-upgrade maintenance; one TDE smoke test.
-
-### `TestPgUpgradeSmoke`
-
-| Test | Validates |
-|------|-----------|
-| `test_upgrade_check_passes` | `pg_upgrade --check` |
-| `test_upgrade_succeeds` | Basic upgrade + row count |
-| `test_post_upgrade_vacuum_analyze` | `vacuumdb` after upgrade |
-
-### `TestUpgradeWithChecksums`
-
-| Test | Validates |
-|------|-----------|
-| `test_upgrade_checksums_on_to_on` | Checksums on → on |
-| `test_upgrade_checksums_off_to_on` | Checksums off → on rejected |
-
-### `TestUpgradeExtensions`
-
-| Test | Validates |
-|------|-----------|
-| `test_upgrade_with_pg_tde_extension` | pg_tde extension + encrypted table via plain `pg_upgrade` path |
-
-### `TestUpgradeNegative`
-
-| Test | Validates |
-|------|-----------|
-| `test_upgrade_fails_wrong_binaries` | Version mismatch detected |
-| `test_upgrade_check_on_running_cluster_fails` | Old cluster still running |
-
-### `TestUpgradeDataIntegrity`
-
-| Test | Validates |
-|------|-----------|
-| `test_sequences_preserve_values` | Sequences |
-| `test_enum_types_survive` | ENUM types |
-| `test_composite_and_domain_types` | Composite / domain types |
-| `test_views_and_materialized_views` | Views / matviews |
-| `test_partitioned_tables` | List partitioning |
-| `test_range_partitioned_table` | Range partitioning |
-| `test_functions_and_triggers` | Functions + triggers |
-| `test_indexes_various_types` | Multiple index types |
-| `test_foreign_key_constraints` | Foreign keys |
-| `test_large_objects` | Large objects |
-| `test_inheritance_tables` | Table inheritance |
-
-### `TestUpgradeMultiDatabase`
-
-| Test | Validates |
-|------|-----------|
-| `test_multiple_databases` | Multiple DBs |
-| `test_database_with_non_default_schema` | Non-`public` schema |
-
-### `TestUpgradeLinkMode`
-
-| Test | Validates |
-|------|-----------|
-| `test_upgrade_link_mode` | `--link` |
-| `test_upgrade_clone_mode` | Clone (no link) |
-
-### `TestUpgradeParallel`
-
-| Test | Validates |
-|------|-----------|
-| `test_upgrade_parallel_jobs` | `-j` parallel jobs |
-
-### `TestUpgradeMultiHop`
-
-| Test | Validates |
-|------|-----------|
-| `test_two_hop_upgrade` | Two consecutive major hops |
-
-### `TestUpgradeConfigPreservation`
-
-| Test | Validates |
-|------|-----------|
-| `test_postgresql_auto_conf_is_not_auto_migrated` | `postgresql.auto.conf` not copied |
-| `test_pg_hba_is_not_auto_migrated` | `pg_hba.conf` not copied |
-| `test_checksums_on_preserved` | Checksum setting preserved |
-
-### `TestUpgradePostMaintenance`
-
-| Test | Validates |
-|------|-----------|
-| `test_reindex_after_upgrade` | `REINDEX` |
-| `test_analyze_all_after_upgrade` | `vacuumdb --analyze-in-stages` |
-| `test_post_upgrade_artifacts_present` | `analyze_new_cluster.sh` etc. |
-
-### `TestUpgradeNegativeExtended`
-
-| Test | Validates |
-|------|-----------|
-| `test_upgrade_fails_checksums_on_to_off` | Checksums on → off rejected |
-| `test_upgrade_fails_when_new_cluster_is_not_pristine` | Non-empty new PGDATA |
-| `test_upgrade_fails_wrong_data_dir` | Wrong data directory |
-| `test_upgrade_fails_when_old_cluster_is_running` | Running old cluster |
-| `test_upgrade_fails_unclean_shutdown` | Unclean shutdown |
-| `test_upgrade_fails_same_data_dir_for_old_and_new` | Same dir for old and new |
-
-### `TestUpgradeTdeCornerCases`
-
-| Test | Validates |
-|------|-----------|
-| `test_upgrade_tde_encrypted_table_data_intact` | Encrypted table data |
-| `test_upgrade_tde_wal_encryption_enabled` | WAL encryption on old cluster |
-| `test_upgrade_tde_mixed_encrypted_and_plain_tables` | Mixed tables |
-| `test_upgrade_tde_multiple_databases_different_keys` | Multi-DB keys |
-| `test_upgrade_tde_key_rotation_before_upgrade` | Key rotation before upgrade |
-
-### `TestUpgradeReplicationState`
-
-| Test | Validates |
-|------|-----------|
-| `test_upgrade_with_replication_slots_removed` | Slots removed before upgrade |
-| `test_upgrade_fails_with_active_replication_slots` | Active slots block upgrade |
-| `test_upgrade_with_publication_preserved` | Logical publication preserved |
-
-### `TestUpgradeScale`
-
-| Test | Validates |
-|------|-----------|
-| `test_upgrade_large_dataset` | Large row count |
-| `test_upgrade_many_tables` | Many tables |
-
----
-
 ## Minor upgrade — `tests/test_tde_minor_upgrade.py`
 
 ### Staged workflow (marker: `minor_upgrade`)
@@ -356,7 +227,7 @@ Requires `--upgrade-data-dir` / `PG_TDE_UPGRADE_DATA_DIR`. Two pytest invocation
 
 ### Non-staged (single pytest run, `tmp_path`)
 
-Run on the **target** pg_tde build; no `--upgrade-data-dir`.
+Run on the **target** pg_tde build; no `--upgrade-data-dir`. No binaries change here: these are HA pre-condition checks, marked `replication` (not `minor_upgrade`).
 
 | Class | Tests | Purpose |
 |-------|-------|---------|
@@ -379,7 +250,7 @@ Run on the **target** pg_tde build; no `--upgrade-data-dir`.
 | `pg_tde_upgrade` | | ✓ | |
 | Start, `ALTER EXTENSION`, `vacuumdb`, row check | | | ✓ |
 
-Methods: `pytest` (smoke via `TestPspToPspUpgrade`), `debian` (`initdb` under `/var/lib/postgresql/pg_tde_major_upgrade/`), `auto`.
+Methods: `pytest` (smoke via `TestTdeMajorUpgradeBasics`), `debian` (`initdb` under `/var/lib/postgresql/pg_tde_major_upgrade/`), `auto`.
 
 ### Minor — `run_minor_upgrade_workflow.sh`
 
@@ -396,7 +267,7 @@ Methods: `pytest` (smoke via `TestPspToPspUpgrade`), `debian` (`initdb` under `/
 
 | Your environment | Run |
 |------------------|-----|
-| PG17 packages + PG18 source tree; both pg_tde control **2.2** | Major: `TestPspToPspUpgrade`, `TestPg2381MajorUpgradeSamePgTdeControl`, `run_major_upgrade_workflow.sh` |
+| PG17 packages + PG18 source tree; both pg_tde control **2.2** | Major: `TestTdeMajorUpgradeBasics`, `TestPg2381MajorUpgradeSamePgTdeControl`, `run_major_upgrade_workflow.sh` |
 | PG17 pg_tde 2.1 → PG18 pg_tde 2.2 | Major: `TestPg2381EmptyKeyMigration`, `TestPg2379MultiDbKeyMigration` |
 | Same PG major, package bump 2.1→2.2 | Minor: `run_minor_upgrade_workflow.sh` or staged Setup/Verify |
 | Two dev trees, same PG major, different pg_tde control | `test_in_place_package_upgrade_multidb_distinct_keys` |
@@ -409,11 +280,9 @@ Methods: `pytest` (smoke via `TestPspToPspUpgrade`), `debian` (`initdb` under `/
 | Path | Role |
 |------|------|
 | `tests/test_tde_pg_upgrade.py` | Deep `pg_tde_upgrade` regression |
-| `tests/test_upgrade.py` | Plain `pg_upgrade` + maintenance |
 | `tests/test_tde_minor_upgrade.py` | In-place pg_tde bump |
 | `run_major_upgrade_workflow.sh` | Staged major upgrade driver |
 | `run_minor_upgrade_workflow.sh` | Staged minor upgrade driver (default **18.4.1 → 18.4.2**) |
-| `run_tde_upgrade_parallel.sh` | Local driver for the Jenkins `tde-upgrade-parallel` job; use `--pytest-only` |
 | `docs/ci_upgrade_scenarios.md` | CI runbook: Jenkins job + 18.4.1→18.4.2 |
 | `docs/major_upgrade.md` | Major upgrade runbook |
 | `docs/minor_upgrade.md` | Minor upgrade runbook |

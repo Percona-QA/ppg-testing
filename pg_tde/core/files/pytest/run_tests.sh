@@ -37,7 +37,7 @@
 #
 #   # Upgrade tests (needs OLD_PG_MAJOR installed)
 #   bash run_tests.sh --pg-major 17 --old-pg-major 16 \
-#       -- pytest tests/test_upgrade.py -v
+#       -- pytest tests/test_tde_pg_upgrade.py -v
 #
 #   # Full suite (parallel, skip vault)
 #   bash run_tests.sh --workers 4 \

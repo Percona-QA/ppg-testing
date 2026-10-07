@@ -5,7 +5,7 @@ This document describes how to run **pg_tde extension minor-version upgrades** w
 For **PostgreSQL major upgrades** (e.g. PG 17 → 18 via `pg_tde_upgrade`), see
 [`major_upgrade.md`](major_upgrade.md) and `run_major_upgrade_workflow.sh`.
 For **in-place pg_tde minor bumps** on the same PG major (e.g. 18.3 → 18.4), this
-document applies. Do **not** use `tests/test_upgrade.py` for in-place PG 18.3→18.4 —
+document applies. Do **not** use `tests/test_tde_pg_upgrade.py` for in-place PG 18.3→18.4 —
 that module runs `pg_upgrade` into a **new** data directory.
 
 Coverage: [`coverage_reports/coverage_2026-05-19.md`](../coverage_reports/coverage_2026-05-19.md).
@@ -247,7 +247,7 @@ pytest tests/test_tde_minor_upgrade.py::TestPgTdeMinorUpgradeVerify \
 
 ### Non-staged (single pytest run, `tmp_path`, one `--install-dir`)
 
-These assume you are **already** on the target pg_tde build. They exercise behavior **after** catalog and binary already match (or idempotent `ALTER EXTENSION`), not the OS package-swap workflow:
+These assume you are **already** on the target pg_tde build. No binaries change: they exercise behavior **after** catalog and binary already match (or idempotent `ALTER EXTENSION`), not the OS package-swap workflow, and are marked `replication`:
 
 | Class | Purpose |
 |-------|---------|
@@ -256,7 +256,7 @@ These assume you are **already** on the target pg_tde build. They exercise behav
 | `TestRollingRestart` | Patroni-style restart order with encrypted data |
 | `TestWalArchivingContinuity` | PITR from archive after rolling restart |
 
-Markers: `minor_upgrade` (staged Setup/Verify only), `encryption`, `slow`. Do **not** tag this file with `upgrade` — that marker is for major `pg_upgrade` tests and requires `--old-install-dir`.
+Markers: `minor_upgrade` (staged Setup/Verify only), `replication` (the four classes above), `encryption`, `slow`. Staged Verify fails when neither `pg_tde_version()` nor the server version changed since Setup (nothing was upgraded). Do **not** tag this file with `upgrade` — that marker is for major `pg_upgrade` tests and requires `--old-install-dir`.
 
 ---
 

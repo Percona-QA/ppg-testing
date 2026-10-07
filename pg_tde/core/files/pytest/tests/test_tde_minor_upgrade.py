@@ -52,7 +52,6 @@ pytestmark = [pytest.mark.encryption, pytest.mark.slow]
 
 # ── constants ─────────────────────────────────────────────────────────────────
 
-_KEYFILE = "/tmp/tde_minor_upgrade_test.per"
 
 _TDE_PARAMS = {
     "shared_preload_libraries": "'pg_tde'",
@@ -71,9 +70,13 @@ def _build_ha_cluster(
     wal_encrypt: bool = True,
     with_archive: bool = False,
     archive_dir: Path = None,
+    keyfile: Optional[str] = None,
 ) -> Tuple[PgCluster, PgCluster]:
     """
     Create a two-node TDE streaming replication cluster.
+
+    *keyfile* defaults to a file under *tmp_path*: the global key provider in
+    PGDATA points at it, so staged Setup passes a path that outlives the run.
     """
     nodeA = PgCluster(
         tmp_path / "nodeA", allocate_port(), install_dir,
@@ -108,7 +111,7 @@ def _build_ha_cluster(
 
     tde = TdeManager(nodeA)
     tde.create_extension()
-    tde.add_global_key_provider_file(keyfile=_KEYFILE)
+    tde.add_global_key_provider_file(keyfile=keyfile or str(tmp_path / "tde_ha.per"))
     tde.set_global_principal_key()
 
     if wal_encrypt:
@@ -176,9 +179,17 @@ def _force_switch_and_wait_archived(
     )
 
 
-# ── Phase 0: pre-conditions ───────────────────────────────────────────────────
+# ── Phases 0-3: single-install HA checks ─────────────────────────────────────
+#
+# These four classes build an HA pair on ONE install and never change binaries:
+# they check catalog vs library version, ALTER EXTENSION idempotency, rolling
+# restarts and PITR after restarts -- useful pre-conditions for an in-place
+# upgrade, but not an upgrade. Marked ``replication`` so they run (and are
+# skipped) with the HA tests, not with ``--skip-sections=minor_upgrade``.
+# The actual upgrade is the staged Setup/Verify below.
 
 
+@pytest.mark.replication
 class TestTdeMinorUpgradePreConditions:
 
     def test_catalog_version_vs_binary_version(
@@ -216,6 +227,7 @@ class TestTdeMinorUpgradePreConditions:
 # ── Phase 1: ALTER EXTENSION safety ──────────────────────────────────────────
 
 
+@pytest.mark.replication
 class TestAlterExtensionUpdate:
 
     def test_alter_extension_update_safety_and_idempotency(
@@ -272,6 +284,7 @@ class TestAlterExtensionUpdate:
 # ── Phase 2: rolling restart ──────────────────────────────────────────────────
 
 
+@pytest.mark.replication
 class TestRollingRestart:
 
     def test_rolling_restart_preserves_cluster_state(
@@ -318,6 +331,7 @@ class TestRollingRestart:
 # ── Phase 3: WAL archiving continuity ────────────────────────────────────────
 
 
+@pytest.mark.replication
 class TestWalArchivingContinuity:
 
     def test_pitr_from_archive_works_after_rolling_restart(
@@ -481,6 +495,7 @@ def _capture_pre_upgrade_state(
         "old_pg_tde_binary_version": (
             cluster.fetchone("SELECT pg_tde_version()") or ""
         ).strip(),
+        "old_server_version": (cluster.fetchone("SHOW server_version") or "").strip(),
         "old_extversion": (
             cluster.fetchone(
                 "SELECT extversion FROM pg_extension WHERE extname='pg_tde'"
@@ -530,6 +545,25 @@ def _staged_table_digest(
     return cluster.fetchone(
         f"SELECT md5(string_agg(payload, ',' ORDER BY id)) "
         f"FROM {table}"
+    )
+
+
+def _assert_something_was_upgraded(cluster: PgCluster, state: Dict[str, Any]) -> None:
+    """
+    Verify must run on different binaries than Setup: the pg_tde library or
+    the server version has to differ from what Setup recorded. Otherwise the
+    package swap did not happen (e.g. workflow --skip-install) and Verify would
+    only prove that a restart works.
+    """
+    old_tde = state.get("old_pg_tde_binary_version", "")
+    old_srv = state.get("old_server_version")  # absent in state from older Setups
+    new_tde = (cluster.fetchone("SELECT pg_tde_version()") or "").strip()
+    new_srv = (cluster.fetchone("SHOW server_version") or "").strip()
+    tde_changed = bool(old_tde) and new_tde != old_tde
+    srv_changed = old_srv is not None and new_srv != old_srv
+    assert tde_changed or srv_changed, (
+        f"nothing was upgraded since Setup: pg_tde {old_tde!r} -> {new_tde!r}, "
+        f"server {old_srv!r} -> {new_srv!r}"
     )
 
 
@@ -759,8 +793,9 @@ class TestPgTdeMinorUpgradeVerify:
         """
         cluster, state = _verify_single_cluster
 
-        # 1. Boot verification.
+        # 1. Boot verification, on upgraded binaries.
         assert cluster.is_ready()
+        _assert_something_was_upgraded(cluster, state)
         bin_ver = (cluster.fetchone("SELECT pg_tde_version()") or "").strip()
         assert bin_ver
 
@@ -841,6 +876,7 @@ class TestPg2381MinorUpgradeVerify:
 
     def test_verify_pg2381_churn_after_minor_upgrade(self, _verify_pg2381_cluster):
         cluster, state = _verify_pg2381_cluster
+        _assert_something_was_upgraded(cluster, state)
         churn_table = state.get("churn_table", "pg2381_churn_t")
         expected_id = state.get("churn_expected_id", "2")
 
@@ -882,7 +918,8 @@ class TestPgTdeMinorUpgradeSetupHA:
         _reset_scenario_root(scenario_root)
 
         nodeA, nodeB = _build_ha_cluster(
-            tmp_path, install_dir, io_method, wal_encrypt=True
+            tmp_path, install_dir, io_method, wal_encrypt=True,
+            keyfile=_persist_keyfile_path(scenario_root),
         )
         try:
             _populate_encrypted_table(nodeA)
@@ -910,10 +947,6 @@ class TestPgTdeMinorUpgradeSetupHA:
         (scenario_root / "sock").mkdir(parents=True, exist_ok=True)
         shutil.copytree(str(nodeA.data_dir), str(_ha_primary_dir(scenario_root)))
         shutil.copytree(str(nodeB.data_dir), str(_ha_replica_dir(scenario_root)))
-
-        src_keyfile = Path(_KEYFILE)
-        if src_keyfile.exists():
-            shutil.copy(str(src_keyfile), payload["keyfile"])
 
         _write_state(scenario_root, payload)
 
@@ -970,8 +1003,9 @@ class TestPgTdeMinorUpgradeVerifyHA:
         """
         primary, replica, state = _verify_ha_pair
 
-        # 1. Role state.
+        # 1. Role state, on upgraded binaries.
         assert primary.is_ready() and replica.is_ready()
+        _assert_something_was_upgraded(primary, state)
         assert primary.fetchone("SELECT pg_is_in_recovery()") == "f"
         assert replica.fetchone("SELECT pg_is_in_recovery()") == "t"
 

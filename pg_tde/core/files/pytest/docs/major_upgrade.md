@@ -37,8 +37,7 @@ loaded and `tde_heap` data exists, Percona explicitly warns to use
 | Area | Module | How to run |
 |------|--------|------------|
 | **pg_tde_upgrade** (17→18, encrypted data) | `tests/test_tde_pg_upgrade.py` | `--old-install-dir` + `--install-dir` |
-| Plain **pg_upgrade** catalog objects | `tests/test_upgrade.py` | same flags |
-| **Post-upgrade analyze** | `TestUpgradePostMaintenance` | `vacuumdb --analyze-in-stages` |
+| **Post-upgrade analyze** | `run_major_upgrade_workflow.sh` debian verify | `vacuumdb --analyze-in-stages` |
 | **`pg_upgrade --check`** | Several classes | |
 | **Debian apt / pg_upgradecluster** | Not automated in pytest | Use `run_major_upgrade_workflow.sh --method debian` |
 
@@ -49,13 +48,13 @@ cd pg_tde/core/files/pytest && source .env.sh
 pytest -m upgrade \
   --old-install-dir=/usr/lib/postgresql/17 \
   --install-dir=/usr/lib/postgresql/18 \
-  tests/test_tde_pg_upgrade.py tests/test_upgrade.py -v
+  tests/test_tde_pg_upgrade.py -v
 
 # 16 → 17 (PG 16.15 + pg_tde → PG 17)
 pytest -m upgrade \
   --old-install-dir=/usr/lib/postgresql/16 \
   --install-dir=/usr/lib/postgresql/17 \
-  tests/test_tde_pg_upgrade.py tests/test_upgrade.py -v
+  tests/test_tde_pg_upgrade.py -v
 ```
 
 See also [pg16.md](pg16.md) for installing and running the full suite on PostgreSQL 16.
@@ -87,7 +86,7 @@ sudo chown "$USER" /var/lib/pg_tde_major_upgrade
 
 | Method | When | What it does |
 |--------|------|--------------|
-| **`pytest`** (default on RHEL / no `pg_createcluster`) | Dev trees or CI with two install prefixes | Runs `TestPspToPspUpgrade` smoke + analyze test via `pg_tde_upgrade` |
+| **`pytest`** (default on RHEL / no `pg_createcluster`) | Dev trees or CI with two install prefixes | Runs `TestTdeMajorUpgradeBasics::test_tde_heap_data_survives`, `TestUpgradeWalEncryptionPaths::test_check_mode_with_wal_enc_on` and `TestTdeMajorUpgradeBasics::test_key_provider_and_keys_preserved` via `pg_tde_upgrade` |
 | **`debian`** | Ubuntu/Debian with `initdb` as `postgres` | Creates PGDATA under `/var/lib/postgresql/pg_tde_major_upgrade/{17,18}/<name>` with `postgresql.conf` **inside** PGDATA, then `pg_tde_upgrade` + `vacuumdb` |
 | **`auto`** | Default when `--method` omitted | `debian` if `pg_createcluster` exists, else `pytest` |
 
@@ -161,11 +160,11 @@ State is written to:
 |----------|--------------------------------|---------------------------|
 | Install PG 18 + pg_tde | `install_packages NEW_PG_MAJOR` | N/A (uses existing trees) |
 | Stop old cluster | `pg_ctlcluster … stop` | `old.stop()` |
-| `--check` | `pg_tde_upgrade --check` | `TestPspToPspUpgrade::test_check_mode_with_wal_enc_on` (PSP→PSP); `TestPpgToPspUpgrade::test_check_mode_with_tde_configured` (PPG→PSP) |
+| `--check` | `pg_tde_upgrade --check` | `TestUpgradeWalEncryptionPaths::test_check_mode_with_wal_enc_on`; `TestTdeMajorUpgradeBasics::test_check_mode_with_tde_configured` |
 | Upgrade | `pg_tde_upgrade` | `_upgrade()` helper |
-| Start + verify data | `psql` row count | `test_tde_heap_data_survives` |
+| Start + verify data | `psql` row count (asserted) | `test_tde_heap_data_survives` |
 | `ALTER EXTENSION pg_tde UPDATE` | debian verify SQL | `_start_cluster_after_pg_upgrade()` |
-| `vacuumdb --analyze-in-stages` | debian verify / pytest | `test_analyze_all_after_upgrade` |
+| `vacuumdb --analyze-in-stages` | debian verify | — |
 | `pg_dropcluster 17 …` | end of debian verify (`--skip-drop` to keep) | N/A (ephemeral `/tmp`) |
 | `apt` / `systemctl` | `setup_test_env.sh --install-pkgs` only | Not simulated |
 
@@ -178,7 +177,6 @@ State is written to:
 | `run_major_upgrade_workflow.sh` | Staged VM driver |
 | `run_minor_upgrade_workflow.sh` | Same PG major, pg_tde package bump |
 | `tests/test_tde_pg_upgrade.py` | Deep pg_tde_upgrade regression |
-| `tests/test_upgrade.py` | Plain pg_upgrade + post-maintenance |
 
 ---
 

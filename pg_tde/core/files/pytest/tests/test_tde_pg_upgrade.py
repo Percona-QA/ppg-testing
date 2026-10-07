@@ -1,17 +1,16 @@
 """
 pg_tde major-version upgrade tests: PPG→PSP, PSP→PSP, heap↔tde_heap permutations, WAL paths.
 
-Regression coverage for PG-2240: vanilla ``pg_upgrade`` does not migrate ``$PGDATA/pg_tde/``,
-so encrypted ``tde_heap`` data could not be decrypted on the new cluster unless that
-directory is copied. ``_upgrade()`` picks ``pg_tde_upgrade`` when the source ships a
-different pg_tde default version than the target (e.g. 2.1.x → 2.2.x) or WAL
-encryption was enabled; otherwise plain ``pg_upgrade`` + ``copy_pg_tde_dir()``.
-Explicit ``--link`` / ``--clone`` / ``-j`` also force the wrapper.
+Regression coverage for PG-2240: vanilla ``pg_upgrade`` does not migrate ``$PGDATA/pg_tde/``
+and is not supported on clusters with encrypted tables. ``_upgrade()`` therefore
+always uses ``pg_tde_upgrade`` when the source cluster has pg_tde key material;
+plain ``pg_upgrade`` is only used for clusters without it, or when a test asks
+for it explicitly (``use_tde_wrapper=False``).
 
-Upgrade flavours tested
-───────────────────────
-  PPG (<17) → PSP (≥17)    Old pkg build → new source/pkg build.
-  PSP (17)  → PSP (18)     Same-flavour major-version bump; identical key-provider API.
+Basics (``TestTdeMajorUpgradeBasics``)
+──────────────────────────────────────
+  Encrypted rows identical, ALTER EXTENSION to the new default_version,
+  per-database keys, --check, providers and keys preserved.
 
 After each successful upgrade, ``_start_cluster_after_pg_upgrade()`` runs
 ``ALTER EXTENSION pg_tde UPDATE`` when pg_tde is installed — required for
@@ -49,6 +48,7 @@ from lib import (
     restore_conf_line_raw,
 )
 from lib.cluster import (
+    assert_tde_relations_encrypted,
     copy_pg_tde_dir,
     initdb_args_no_data_checksums,
     initdb_extra_align_data_checksums_with_old,
@@ -119,9 +119,16 @@ def _start_cluster_after_pg_upgrade(
 
     For multiple databases with distinct principal keys (PG-2379), pass every
     database that has ``CREATE EXTENSION pg_tde`` in *alter_databases*.
+
+    Before the UPDATE, every ``tde_heap`` relation (with its indexes and TOAST)
+    in every database must still report ``pg_tde_is_encrypted``.
     """
     cluster.start()
     cluster.wait_ready(timeout=ready_timeout)
+    for dbname in cluster.fetchall(
+        "SELECT datname FROM pg_database WHERE datallowconn"
+    ):
+        assert_tde_relations_encrypted(cluster, dbname)
     for dbname in alter_databases or ["postgres"]:
         if cluster.fetchone(
             "SELECT 1 FROM pg_extension WHERE extname='pg_tde'",
@@ -405,28 +412,38 @@ def _pg2381_major_upgrade_after_churn(
     new_cluster.stop()
 
 
-# ── PPG (<17) → PSP (≥17) ────────────────────────────────────────────────────
+# ── basic major upgrade of a pg_tde cluster ─────────────────────────────────
 
 
-class TestPpgToPspUpgrade:
-    """Upgrade from an older Percona build (PPG) to a newer one (PSP).
+def _digest(cluster: PgCluster, table: str, dbname: str = "postgres") -> str:
+    """Row count + md5 over all rows in a stable order."""
+    return cluster.fetchone(
+        f"SELECT count(*) || ':' || md5(coalesce(string_agg(t::text, '|' ORDER BY t::text), '')) "
+        f"FROM {table} t",
+        dbname=dbname,
+    )
 
-    TdeManager auto-detects the pg_tde API version so tests work regardless of
-    which exact API revision the old or new build exposes.
+
+class TestTdeMajorUpgradeBasics:
+    """Major upgrade of a pg_tde cluster with ``pg_tde_upgrade`` (e.g. 17 → 18).
+
+    Formerly split into PPG→PSP and PSP→PSP classes that ran the same
+    mechanism against whatever ``--old-install-dir`` / ``--install-dir`` were
+    given; merged, with duplicates dropped.
     """
 
-    def test_file_provider_data_intact(
+    def test_tde_heap_data_survives(
         self,
         old_install_dir: Optional[Path],
         install_dir: Path,
         tmp_path: Path,
         io_method: str,
     ):
-        """Core PG-2240 scenario: tde_heap data survives PPG→PSP via pg_tde_upgrade."""
+        """Encrypted tde_heap rows are identical after the upgrade and stay tde_heap."""
         if not old_install_dir:
             pytest.skip("--old-install-dir not provided")
 
-        keyfile = str(tmp_path / "ppg_to_psp.per")
+        keyfile = str(tmp_path / "basic.per")
         old = _make_old_cluster(
             old_install_dir,
             tmp_path,
@@ -438,11 +455,12 @@ class TestPpgToPspUpgrade:
         tde = TdeManager(old)
         tde.create_extension()
         tde.add_global_key_provider_file(keyfile=keyfile)
-        tde.set_global_principal_key(key_name="ppg_key")
+        tde.set_global_principal_key()
         old.execute(
-            "CREATE TABLE secrets (id INT, payload TEXT) USING tde_heap; "
-            "INSERT INTO secrets SELECT i, md5(i::text) FROM generate_series(1,500) i;"
+            "CREATE TABLE enc_rows (id INT PRIMARY KEY, data TEXT) USING tde_heap; "
+            "INSERT INTO enc_rows SELECT i, md5(i::text) FROM generate_series(1,1000) i;"
         )
+        before = _digest(old, "enc_rows")
         old.stop()
 
         new_cluster, result = _upgrade(
@@ -452,11 +470,11 @@ class TestPpgToPspUpgrade:
             io_method,
             extra_params=_tde_params(keyfile),
         )
-        assert result.returncode == 0, f"pg_upgrade failed:\n{result.stderr}"
+        assert result.returncode == 0, f"pg_tde_upgrade failed:\n{result.stderr}"
 
         _start_cluster_after_pg_upgrade(new_cluster)
-        count = new_cluster.fetchone("SELECT COUNT(*) FROM secrets")
-        assert count == "500", f"Expected 500 rows, got {count}"
+        assert _digest(new_cluster, "enc_rows") == before
+        assert TdeManager(new_cluster).get_access_method("enc_rows") == "tde_heap"
         new_cluster.stop()
 
     def test_alter_extension_update_after_upgrade(
@@ -466,10 +484,10 @@ class TestPpgToPspUpgrade:
         tmp_path: Path,
         io_method: str,
     ):
-        """ALTER EXTENSION pg_tde UPDATE must succeed after PPG→PSP upgrade.
+        """After ALTER EXTENSION pg_tde UPDATE the catalog matches the new control file.
 
-        When the pg_tde catalog version changes between PPG and PSP the extension
-        entry in the new cluster references the old version; UPDATE brings it current.
+        The upgraded catalog keeps the old ``extversion``; UPDATE must bring it
+        to the new ``default_version``, and a second UPDATE must be a no-op.
         """
         if not old_install_dir:
             pytest.skip("--old-install-dir not provided")
@@ -503,19 +521,25 @@ class TestPpgToPspUpgrade:
         assert result.returncode == 0, result.stderr
 
         _start_cluster_after_pg_upgrade(new_cluster)
-        # Idempotency: second ALTER EXTENSION must not error or change data.
+        version_sql = (
+            "SELECT e.extversion || '|' || a.default_version FROM pg_extension e "
+            "JOIN pg_available_extensions a ON a.name = e.extname WHERE e.extname = 'pg_tde'"
+        )
+        ext, default = new_cluster.fetchone(version_sql).split("|")
+        assert ext == default, f"extversion {ext} != default_version {default} after UPDATE"
         new_cluster.execute("ALTER EXTENSION pg_tde UPDATE")
+        assert new_cluster.fetchone(version_sql).split("|")[0] == default
         assert new_cluster.fetchone("SELECT COUNT(*) FROM ext_update_tbl") == "3"
         new_cluster.stop()
 
-    def test_multiple_databases_survive(
+    def test_multiple_databases_different_keys(
         self,
         old_install_dir: Optional[Path],
         install_dir: Path,
         tmp_path: Path,
         io_method: str,
     ):
-        """Multiple databases with independent TDE keys all survive PPG→PSP."""
+        """Databases with different principal keys all decrypt after the upgrade."""
         if not old_install_dir:
             pytest.skip("--old-install-dir not provided")
 
@@ -530,36 +554,31 @@ class TestPpgToPspUpgrade:
         old.start()
         tde = TdeManager(old)
         tde.create_extension()
-        # Add the GLOBAL provider once
         tde.add_global_key_provider_file(keyfile=keyfile)
-        tde.set_global_principal_key(key_name="key_postgres")
+        tde.set_global_principal_key(key_name="key_v1")
 
-        old.execute("CREATE DATABASE db_alpha")
-        old.execute("CREATE EXTENSION IF NOT EXISTS pg_tde", dbname="db_alpha")
-
-        # Global provider already exists; bind a distinct *database* principal
-        # key for db_alpha. Do NOT call set_server_key here — server/WAL key is
-        # cluster-wide and was set on postgres via set_global_principal_key.
+        old.execute("CREATE DATABASE db_b")
+        old.execute("CREATE EXTENSION IF NOT EXISTS pg_tde", dbname="db_b")
+        # A distinct *database* principal key for db_b from the same global
+        # provider; the server/WAL key stays key_v1 from postgres.
         old.execute(
             "SELECT pg_tde_create_key_using_global_key_provider("
-            "'key_alpha', 'file_provider')",
-            dbname="db_alpha",
+            "'key_v2', 'file_provider')",
+            dbname="db_b",
         )
         old.execute(
             "SELECT pg_tde_set_key_using_global_key_provider("
-            "'key_alpha', 'file_provider')",
-            dbname="db_alpha",
+            "'key_v2', 'file_provider')",
+            dbname="db_b",
         )
 
+        old.execute("CREATE TABLE rows_a (n INT) USING tde_heap; INSERT INTO rows_a VALUES (1),(2)")
         old.execute(
-            "CREATE TABLE pg_secrets (v INT) USING tde_heap; "
-            "INSERT INTO pg_secrets VALUES (10);"
+            "CREATE TABLE rows_b (n INT) USING tde_heap; INSERT INTO rows_b SELECT generate_series(1,30);",
+            dbname="db_b",
         )
-        old.execute(
-            "CREATE TABLE alpha_secrets (v INT) USING tde_heap; "
-            "INSERT INTO alpha_secrets SELECT generate_series(1,20);",
-            dbname="db_alpha",
-        )
+        before_a = _digest(old, "rows_a")
+        before_b = _digest(old, "rows_b", dbname="db_b")
         old.stop()
 
         new_cluster, result = _upgrade(
@@ -572,10 +591,10 @@ class TestPpgToPspUpgrade:
         assert result.returncode == 0, result.stderr
 
         _start_cluster_after_pg_upgrade(
-            new_cluster, alter_databases=["postgres", "db_alpha"]
+            new_cluster, alter_databases=["postgres", "db_b"]
         )
-        assert new_cluster.fetchone("SELECT COUNT(*) FROM pg_secrets") == "1"
-        assert new_cluster.fetchone("SELECT COUNT(*) FROM alpha_secrets", dbname="db_alpha") == "20"
+        assert _digest(new_cluster, "rows_a") == before_a
+        assert _digest(new_cluster, "rows_b", dbname="db_b") == before_b
         new_cluster.stop()
 
     def test_check_mode_with_tde_configured(
@@ -585,7 +604,7 @@ class TestPpgToPspUpgrade:
         tmp_path: Path,
         io_method: str,
     ):
-        """pg_upgrade --check must succeed even when pg_tde is loaded and tables exist."""
+        """pg_tde_upgrade --check succeeds with pg_tde loaded and encrypted tables present."""
         if not old_install_dir:
             pytest.skip("--old-install-dir not provided")
 
@@ -616,145 +635,21 @@ class TestPpgToPspUpgrade:
             extra_params=_tde_params(keyfile),
             check_only=True,
         )
-        assert result.returncode == 0, f"pg_upgrade --check failed:\n{result.stderr}"
+        assert result.returncode == 0, f"pg_tde_upgrade --check failed:\n{result.stderr}"
 
-
-# ── PSP → PSP (e.g. 17 → 18) ─────────────────────────────────────────────────
-
-
-class TestPspToPspUpgrade:
-    """Same-flavour PSP major-version upgrade (e.g. 17 → 18).
-
-    The key-provider API is identical on both sides; only the PostgreSQL
-    catalog version changes. Encrypted ``tde_heap`` data relies on
-    ``pg_tde_upgrade`` to carry ``pg_tde`` state to the new cluster (PG-2240).
-    """
-
-    def test_tde_heap_data_survives(
+    def test_key_provider_and_keys_preserved(
         self,
         old_install_dir: Optional[Path],
         install_dir: Path,
         tmp_path: Path,
         io_method: str,
     ):
-        """Encrypted tde_heap data is intact after PSP→PSP (pg_tde_upgrade)."""
+        """Providers (name, type, options) and the server/database keys are unchanged;
+        the inherited key still encrypts new tables."""
         if not old_install_dir:
             pytest.skip("--old-install-dir not provided")
 
-        keyfile = str(tmp_path / "psp_psp.per")
-        old = _make_old_cluster(
-            old_install_dir,
-            tmp_path,
-            io_method,
-            extra_initdb=initdb_args_no_data_checksums(old_install_dir),
-            extra_params=_tde_params(keyfile),
-        )
-        old.start()
-        tde = TdeManager(old)
-        tde.create_extension()
-        tde.add_global_key_provider_file(keyfile=keyfile)
-        tde.set_global_principal_key()
-        old.execute(
-            "CREATE TABLE enc_rows (id INT, data TEXT) USING tde_heap; "
-            "INSERT INTO enc_rows SELECT i, md5(i::text) FROM generate_series(1,1000) i;"
-        )
-        old.stop()
-
-        new_cluster, result = _upgrade(
-            old,
-            install_dir,
-            tmp_path,
-            io_method,
-            extra_params=_tde_params(keyfile),
-        )
-        assert result.returncode == 0, f"PSP→PSP upgrade failed:\n{result.stderr}"
-
-        _start_cluster_after_pg_upgrade(new_cluster)
-        count = new_cluster.fetchone("SELECT COUNT(*) FROM enc_rows")
-        assert count == "1000"
-        # Verify table is still using tde_heap on the new cluster
-        tde_new = TdeManager(new_cluster)
-        tde_new.create_extension()
-        assert tde_new.get_access_method("enc_rows") == "tde_heap"
-        new_cluster.stop()
-
-    def test_multiple_databases_different_keys(
-        self,
-        old_install_dir: Optional[Path],
-        install_dir: Path,
-        tmp_path: Path,
-        io_method: str,
-    ):
-        """Multiple databases using different principal keys all decrypt correctly."""
-        if not old_install_dir:
-            pytest.skip("--old-install-dir not provided")
-
-        keyfile = str(tmp_path / "psp_multidb.per")
-        old = _make_old_cluster(
-            old_install_dir,
-            tmp_path,
-            io_method,
-            extra_initdb=initdb_args_no_data_checksums(old_install_dir),
-            extra_params=_tde_params(keyfile),
-        )
-        old.start()
-        tde = TdeManager(old)
-        tde.create_extension()
-        # Add the GLOBAL provider once
-        tde.add_global_key_provider_file(keyfile=keyfile)
-        tde.set_global_principal_key(key_name="key_v1")
-
-        old.execute("CREATE DATABASE db_b")
-        old.execute("CREATE EXTENSION IF NOT EXISTS pg_tde", dbname="db_b")
-
-        # Global provider already exists; bind a distinct *database* principal
-        # key for db_b (server/WAL key stays key_v1 from postgres).
-        old.execute(
-            "SELECT pg_tde_create_key_using_global_key_provider("
-            "'key_v2', 'file_provider')",
-            dbname="db_b",
-        )
-        old.execute(
-            "SELECT pg_tde_set_key_using_global_key_provider("
-            "'key_v2', 'file_provider')",
-            dbname="db_b",
-        )
-
-        old.execute("CREATE TABLE rows_a (n INT) USING tde_heap; INSERT INTO rows_a VALUES (1),(2)")
-        old.execute(
-            "CREATE TABLE rows_b (n INT) USING tde_heap; INSERT INTO rows_b SELECT generate_series(1,30);",
-            dbname="db_b",
-        )
-        old.stop()
-
-        new_cluster, result = _upgrade(
-            old,
-            install_dir,
-            tmp_path,
-            io_method,
-            extra_params=_tde_params(keyfile),
-        )
-        assert result.returncode == 0, result.stderr
-
-        _start_cluster_after_pg_upgrade(
-            new_cluster, alter_databases=["postgres", "db_b"]
-        )
-        assert new_cluster.fetchone("SELECT COUNT(*) FROM rows_a") == "2"
-        assert new_cluster.fetchone("SELECT COUNT(*) FROM rows_b", dbname="db_b") == "30"
-        new_cluster.stop()
-
-    def test_key_provider_accessible_after_upgrade(
-        self,
-        old_install_dir: Optional[Path],
-        install_dir: Path,
-        tmp_path: Path,
-        io_method: str,
-    ):
-        """Key provider is queryable and can encrypt new data on the upgraded cluster."""
-        if not old_install_dir:
-            pytest.skip("--old-install-dir not provided")
-
-        keyfile = str(tmp_path / "psp_provider.per")
+        keyfile = str(tmp_path / "provider.per")
         old = _make_old_cluster(
             old_install_dir,
             tmp_path,
@@ -768,6 +663,13 @@ class TestPspToPspUpgrade:
         tde.add_global_key_provider_file(keyfile=keyfile)
         tde.set_global_principal_key()
         old.execute("CREATE TABLE pre_upgrade (id INT) USING tde_heap; INSERT INTO pre_upgrade VALUES (42)")
+        state_sql = {
+            "providers": "SELECT string_agg(name || '/' || type || '/' || options::text, ',' ORDER BY name) "
+                         "FROM pg_tde_list_all_global_key_providers()",
+            "server_key": "SELECT key_name || '/' || provider_name FROM pg_tde_server_key_info()",
+            "db_key": "SELECT key_name || '/' || provider_name FROM pg_tde_key_info()",
+        }
+        before = {k: old.fetchone(q) for k, q in state_sql.items()}
         old.stop()
 
         new_cluster, result = _upgrade(
@@ -780,61 +682,11 @@ class TestPspToPspUpgrade:
         assert result.returncode == 0, result.stderr
 
         _start_cluster_after_pg_upgrade(new_cluster)
-        tde_new = TdeManager(new_cluster)
-        tde_new.create_extension()
-        # Provider count should be ≥1 (preserved from old catalog via pg_upgrade)
-        provider_count = tde_new.list_key_providers(scope="global")
-        assert provider_count >= 1, "Expected at least one global key provider after upgrade"
-        # New data must be encryptable with the inherited key
+        after = {k: new_cluster.fetchone(q) for k, q in state_sql.items()}
+        assert after == before
         new_cluster.execute("CREATE TABLE post_upgrade (id INT) USING tde_heap; INSERT INTO post_upgrade VALUES (99)")
+        assert new_cluster.fetchone("SELECT pg_tde_is_encrypted('post_upgrade'::regclass)") == "t"
         assert new_cluster.fetchone("SELECT COUNT(*) FROM pre_upgrade") == "1"
-        assert new_cluster.fetchone("SELECT COUNT(*) FROM post_upgrade") == "1"
-        new_cluster.stop()
-
-    def test_wal_encryption_disabled_before_upgrade(
-        self,
-        old_install_dir: Optional[Path],
-        install_dir: Path,
-        tmp_path: Path,
-        io_method: str,
-    ):
-        """Disable WAL encryption before pg_upgrade; data survives; WAL enc stays off."""
-        if not old_install_dir:
-            pytest.skip("--old-install-dir not provided")
-
-        keyfile = str(tmp_path / "psp_wal_off.per")
-        old = _make_old_cluster(
-            old_install_dir,
-            tmp_path,
-            io_method,
-            extra_initdb=initdb_args_no_data_checksums(old_install_dir),
-            extra_params=_tde_params(keyfile),
-        )
-        old.start()
-        tde = TdeManager(old)
-        tde.create_extension()
-        tde.add_global_key_provider_file(keyfile=keyfile)
-        tde.set_global_principal_key()
-        tde.enable_wal_encryption()
-        old.execute("CREATE TABLE wal_data (id INT) USING tde_heap; INSERT INTO wal_data VALUES (7)")
-        # Disable WAL enc before stopping so pg_upgrade sees a clean state
-        tde.disable_wal_encryption()
-        old.stop()
-
-        new_cluster, result = _upgrade(
-            old,
-            install_dir,
-            tmp_path,
-            io_method,
-            extra_params=_tde_params(keyfile),
-        )
-        assert result.returncode == 0, result.stderr
-
-        _start_cluster_after_pg_upgrade(new_cluster)
-        assert new_cluster.fetchone("SELECT COUNT(*) FROM wal_data") == "1"
-        tde_new = TdeManager(new_cluster)
-        tde_new.create_extension()
-        assert not tde_new.is_wal_encrypted(), "WAL encryption should remain off after upgrade"
         new_cluster.stop()
 
 
@@ -1690,9 +1542,8 @@ class TestPgTdeUpgradeModes:
     upstream ``pg_upgrade``: ``--link`` (fast, in-place), ``--clone``
     (CoW-filesystem-only), and ``-j N`` (parallel data file transfer).
 
-    These were covered for plain heap in ``test_upgrade.py`` but
-    **not** for the TDE binary + tde_heap combination — a real coverage
-    gap because link mode is the most common production upgrade path.
+    Link mode is the most common production upgrade path, so these run
+    with the TDE binary on tde_heap data.
     """
 
     def _build_tde_old_with_data(
@@ -1871,8 +1722,8 @@ class TestPgTdeUpgradeComplexSchema:
     """
     Schema objects often used in real applications must survive a
     pg_tde_upgrade run when the underlying relation is ``tde_heap``.
-    Existing ``test_upgrade.py::TestUpgradeDataIntegrity`` covers these
-    for plain heap; this class is the TDE counterpart.
+    (Plain-heap pg_upgrade coverage is upstream PostgreSQL's and the PPG
+    major-upgrade groups'; this suite only tests tde_heap.)
     """
 
     def _build_tde_old(
@@ -2424,9 +2275,11 @@ class TestUpgradeBashScriptParity:
         tde.add_global_key_provider_file(keyfile=keyfile)
         tde.set_global_principal_key()
 
-        # Enable WAL encryption and leave it ON
-        old.execute("ALTER SYSTEM SET pg_tde.wal_encrypt = 'ON';")
-        old.execute("SELECT pg_reload_conf();")
+        # Enable WAL encryption and leave it ON. pg_tde.wal_encrypt is not
+        # reloadable: without the restart in enable_wal_encryption() it would
+        # never be active and the data below would go to plain WAL.
+        tde.enable_wal_encryption()
+        assert tde.is_wal_encrypted()
 
         old.execute("CREATE TABLE test_enc_global (k int primary key) USING tde_heap;")
         old.execute("INSERT INTO test_enc_global VALUES (10),(20),(30);")
@@ -2444,13 +2297,292 @@ class TestUpgradeBashScriptParity:
 
         assert new_cluster.fetchone("SELECT COUNT(*) FROM test_enc_global;") == "3"
 
-        # WAL encrypt migrates with the source cluster; re-enable if the upgrade reset it.
+        # pg_upgrade does not carry postgresql.auto.conf over, so the new cluster
+        # starts with WAL encryption off. Turning it back on must work with the
+        # migrated server key, and the data must stay readable under it.
         tde_new = TdeManager(new_cluster)
-        if not tde_new.is_wal_encrypted():
-            tde_new.enable_wal_encryption()
-        assert tde_new.is_wal_encrypted(), "WAL encryption was lost during upgrade!"
+        tde_new.enable_wal_encryption()
+        assert tde_new.is_wal_encrypted(), "WAL encryption could not be re-enabled after upgrade"
+        new_cluster.execute("INSERT INTO test_enc_global VALUES (40);")
+        assert new_cluster.fetchone("SELECT COUNT(*) FROM test_enc_global;") == "4"
 
         new_cluster.stop()
+
+# ── pg_tde_upgrade refusals and configuration ──────────────────────────────
+
+
+def _tde_old_cluster(
+    old_install_dir: Path,
+    tmp_path: Path,
+    io_method: str,
+    *,
+    extra_initdb: Optional[list] = None,
+    wal_encrypt: bool = False,
+) -> PgCluster:
+    """Started old cluster with pg_tde keys and 100 rows in tde_heap table refusal_t."""
+    keyfile = str(tmp_path / "refusal.per")
+    old = _make_old_cluster(
+        old_install_dir,
+        tmp_path,
+        io_method,
+        extra_initdb=(
+            extra_initdb
+            if extra_initdb is not None
+            else initdb_args_no_data_checksums(old_install_dir)
+        ),
+        extra_params=_tde_params(keyfile),
+    )
+    old.start()
+    tde = TdeManager(old)
+    tde.create_extension()
+    tde.add_global_key_provider_file(keyfile=keyfile)
+    tde.set_global_principal_key()
+    if wal_encrypt:
+        tde.enable_wal_encryption()
+        assert tde.is_wal_encrypted()
+    old.execute(
+        "CREATE TABLE refusal_t (id INT PRIMARY KEY, v TEXT) USING tde_heap; "
+        "INSERT INTO refusal_t SELECT i, md5(i::text) FROM generate_series(1,100) i;"
+    )
+    return old
+
+
+def _run_pg_tde_upgrade_raw(
+    old: PgCluster,
+    install_dir: Path,
+    new_data: Path,
+    new_port: int,
+    tmp_path: Path,
+    *,
+    check_only: bool = False,
+) -> subprocess.CompletedProcess:
+    """pg_tde_upgrade against a target the caller prepared (no checksum alignment)."""
+    cmd = [
+        str(resolve_pg_upgrade_binary(install_dir, use_tde_wrapper=True)),
+        "-b", str(old.bin),
+        "-B", str(install_dir / "bin"),
+        "-d", str(old.data_dir),
+        "-D", str(new_data),
+        "-p", str(old.port),
+        "-P", str(new_port),
+        "--socketdir", str(tmp_path),
+    ]
+    if check_only:
+        cmd.append("--check")
+    env = os.environ.copy()
+    prepend_install_lib_dirs(env, install_dir, old.install_dir)
+    return subprocess.run(cmd, capture_output=True, text=True, cwd=str(tmp_path), env=env)
+
+
+class TestPgTdeUpgradeRefusalsAndConfig:
+    """``pg_tde_upgrade`` on an encrypted cluster: what it must refuse, and what
+    it does not carry over."""
+
+    def test_wal_encrypt_setting_not_carried_over(
+        self,
+        old_install_dir: Optional[Path],
+        install_dir: Path,
+        tmp_path: Path,
+        io_method: str,
+    ):
+        """``pg_tde.wal_encrypt`` lives in postgresql.auto.conf, which pg_upgrade
+        does not migrate: the operator must set it again on the new cluster."""
+        if not old_install_dir:
+            pytest.skip("--old-install-dir not provided")
+
+        old = _tde_old_cluster(old_install_dir, tmp_path, io_method, wal_encrypt=True)
+        old.stop()
+
+        new_cluster, result = _upgrade(
+            old, install_dir, tmp_path, io_method, extra_params=_tde_params(str(tmp_path / "refusal.per"))
+        )
+        assert result.returncode == 0, result.stderr
+        auto_conf = (new_cluster.data_dir / "postgresql.auto.conf").read_text()
+        assert "pg_tde.wal_encrypt" not in auto_conf
+
+        _start_cluster_after_pg_upgrade(new_cluster)
+        assert not TdeManager(new_cluster).is_wal_encrypted()
+        assert new_cluster.fetchone("SELECT COUNT(*) FROM refusal_t") == "100"
+        new_cluster.stop()
+
+    def test_refuses_checksum_mismatch(
+        self,
+        old_install_dir: Optional[Path],
+        install_dir: Path,
+        tmp_path: Path,
+        io_method: str,
+    ):
+        """Old cluster with data checksums, new one without: --check must refuse."""
+        if not old_install_dir:
+            pytest.skip("--old-install-dir not provided")
+
+        old = _tde_old_cluster(
+            old_install_dir, tmp_path, io_method, extra_initdb=["--data-checksums"]
+        )
+        old.stop()
+
+        new_port = allocate_port()
+        new_data = tmp_path / "new"
+        new_cluster = PgCluster(
+            new_data, new_port, install_dir, socket_dir=tmp_path, io_method=io_method
+        )
+        new_cluster.initdb(extra_args=initdb_args_no_data_checksums(install_dir) or None)
+        assert int(new_cluster.controldata("Data page checksum version") or "0") == 0
+        write_pg_upgrade_target_config(new_cluster, pg_upgrade_target_params(_tde_params("")))
+
+        result = _run_pg_tde_upgrade_raw(old, install_dir, new_data, new_port, tmp_path, check_only=True)
+        combined = (result.stdout + result.stderr).lower()
+        assert result.returncode != 0, f"--check accepted a checksum mismatch:\n{result.stdout}"
+        assert "checksum" in combined, combined
+
+    def test_refuses_running_old_cluster_and_leaves_it_intact(
+        self,
+        old_install_dir: Optional[Path],
+        install_dir: Path,
+        tmp_path: Path,
+        io_method: str,
+    ):
+        """A full (not --check) run against a running old cluster must fail
+        without touching it: the encrypted data is still readable afterwards."""
+        if not old_install_dir:
+            pytest.skip("--old-install-dir not provided")
+
+        old = _tde_old_cluster(old_install_dir, tmp_path, io_method)
+        _, result = _upgrade(old, install_dir, tmp_path, io_method, extra_params=_tde_params(""))
+        assert result.returncode != 0, "pg_tde_upgrade ran against a running old cluster"
+        assert old.fetchone("SELECT COUNT(*) FROM refusal_t") == "100"
+        old.stop()
+
+    def test_refuses_non_empty_target(
+        self,
+        old_install_dir: Optional[Path],
+        install_dir: Path,
+        tmp_path: Path,
+        io_method: str,
+    ):
+        """--check must refuse a target cluster that already holds user tables."""
+        if not old_install_dir:
+            pytest.skip("--old-install-dir not provided")
+
+        old = _tde_old_cluster(old_install_dir, tmp_path, io_method)
+        old.stop()
+
+        new_port = allocate_port()
+        new_data = tmp_path / "new"
+        new_cluster = PgCluster(
+            new_data, new_port, install_dir, socket_dir=tmp_path, io_method=io_method
+        )
+        new_cluster.initdb(
+            extra_args=initdb_extra_align_data_checksums_with_old(old, install_dir, None)
+        )
+        write_pg_upgrade_target_config(new_cluster, pg_upgrade_target_params(_tde_params("")))
+        new_cluster.add_hba_entry("local all all trust")
+        new_cluster.start()
+        new_cluster.execute("CREATE TABLE public.poisoned_table (id INT);")
+        new_cluster.stop()
+
+        result = _run_pg_tde_upgrade_raw(old, install_dir, new_data, new_port, tmp_path, check_only=True)
+        combined = (result.stdout + result.stderr).lower()
+        assert result.returncode != 0, f"--check accepted a non-empty target:\n{result.stdout}"
+        assert "not empty" in combined, combined
+
+    def test_refuses_unclean_shutdown(
+        self,
+        old_install_dir: Optional[Path],
+        install_dir: Path,
+        tmp_path: Path,
+        io_method: str,
+    ):
+        """An old cluster that crashed (encrypted WAL not yet replayed) must be
+        refused until it has been started and shut down cleanly."""
+        if not old_install_dir:
+            pytest.skip("--old-install-dir not provided")
+
+        old = _tde_old_cluster(old_install_dir, tmp_path, io_method, wal_encrypt=True)
+        old.execute("INSERT INTO refusal_t VALUES (101, 'after checkpoint');")
+        old.crash()
+
+        _, result = _upgrade(
+            old, install_dir, tmp_path, io_method,
+            extra_params=_tde_params(""), check_only=True,
+        )
+        assert result.returncode != 0, "pg_tde_upgrade --check accepted a crashed cluster"
+
+        # Recovery replays the encrypted WAL; the row written before the crash is there.
+        old.start()
+        assert old.fetchone("SELECT COUNT(*) FROM refusal_t") == "101"
+        old.stop()
+
+    def test_pg_tde_installed_no_encrypted_tables(
+        self,
+        old_install_dir: Optional[Path],
+        install_dir: Path,
+        tmp_path: Path,
+        io_method: str,
+    ):
+        """pg_tde preloaded with provider and keys, but only plain heap tables."""
+        if not old_install_dir:
+            pytest.skip("--old-install-dir not provided")
+
+        keyfile = str(tmp_path / "no_enc.per")
+        old = _make_old_cluster(
+            old_install_dir, tmp_path, io_method,
+            extra_initdb=initdb_args_no_data_checksums(old_install_dir),
+            extra_params=_tde_params(keyfile),
+        )
+        old.start()
+        tde = TdeManager(old)
+        tde.create_extension()
+        tde.add_global_key_provider_file(keyfile=keyfile)
+        tde.set_global_principal_key()
+        old.execute(
+            "CREATE TABLE plain_only (id INT) USING heap; "
+            "INSERT INTO plain_only SELECT generate_series(1,500);"
+        )
+        old.stop()
+
+        new_cluster, result = _upgrade(
+            old, install_dir, tmp_path, io_method, extra_params=_tde_params(keyfile)
+        )
+        assert result.returncode == 0, result.stderr
+        _start_cluster_after_pg_upgrade(new_cluster)
+        assert new_cluster.fetchone("SELECT COUNT(*) FROM plain_only") == "500"
+        assert new_cluster.fetchone("SELECT pg_tde_is_encrypted('plain_only'::regclass)") == "f"
+        # The keys came across: a new table can still be encrypted.
+        new_cluster.execute("CREATE TABLE enc_after (id INT) USING tde_heap; INSERT INTO enc_after VALUES (1);")
+        assert new_cluster.fetchone("SELECT pg_tde_is_encrypted('enc_after'::regclass)") == "t"
+        new_cluster.stop()
+
+    def test_inheritance_on_tde_heap(
+        self,
+        old_install_dir: Optional[Path],
+        install_dir: Path,
+        tmp_path: Path,
+        io_method: str,
+    ):
+        """Parent and child tde_heap tables in an INHERITS hierarchy."""
+        if not old_install_dir:
+            pytest.skip("--old-install-dir not provided")
+
+        old = _tde_old_cluster(old_install_dir, tmp_path, io_method)
+        old.execute(
+            "CREATE TABLE person (name TEXT, age INT) USING tde_heap; "
+            "CREATE TABLE employee (salary NUMERIC) INHERITS (person) USING tde_heap; "
+            "INSERT INTO person VALUES ('Alice', 30); "
+            "INSERT INTO employee VALUES ('Bob', 25, 50000);"
+        )
+        old.stop()
+
+        new_cluster, result = _upgrade(
+            old, install_dir, tmp_path, io_method, extra_params=_tde_params("")
+        )
+        assert result.returncode == 0, result.stderr
+        _start_cluster_after_pg_upgrade(new_cluster)
+        assert new_cluster.fetchone("SELECT COUNT(*) FROM person") == "2"
+        assert new_cluster.fetchone("SELECT COUNT(*) FROM ONLY person") == "1"
+        assert new_cluster.fetchone("SELECT salary FROM employee") == "50000"
+        new_cluster.stop()
+
 
 class TestTdeUpgradeExtremeCornerCases:
     """
@@ -2880,8 +3012,7 @@ class TestPg2381MajorUpgradeSamePgTdeControl:
     Major PostgreSQL upgrade (e.g. PG17→PG18) when **both** install trees ship the
     same ``pg_tde.control`` ``default_version`` (e.g. 2.2 on old and new).
 
-    Uses plain ``pg_upgrade`` + ``copy_pg_tde_dir`` unless WAL encryption forces
-    ``pg_tde_upgrade`` (see ``should_use_pg_tde_upgrade_wrapper``).
+    Uses ``pg_tde_upgrade`` (see ``should_use_pg_tde_upgrade_wrapper``).
 
     Overlaps with ``TestPg2381EmptyKeyMigration`` (which now also runs for the
     same control version); this class keeps the same-control-only matrix explicit
