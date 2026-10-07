@@ -499,6 +499,7 @@ def test_setup_ciphertext_on_disk(check_dir):
 def test_setup_write_state(check_dir):
     snapshot = {
         "wal_encrypt": psql("SHOW pg_tde.wal_encrypt;"),
+        "data_checksums": psql("SHOW data_checksums;"),
         "key_provider": key_provider_config(check_dir)["type"],
         "server_key": server_key_info(),
         "from": {
@@ -526,6 +527,12 @@ def test_setup_write_state(check_dir):
 @stages(*VERIFY)
 def test_verify_wal_encryption(state):
     assert psql("SHOW pg_tde.wal_encrypt;") == state["wal_encrypt"]
+
+
+@stages(*VERIFY)
+def test_verify_data_checksums_setting(state):
+    """A major upgrade must keep the FROM cluster's data checksums setting."""
+    assert psql("SHOW data_checksums;") == state["data_checksums"]
 
 
 @stages(*VERIFY)

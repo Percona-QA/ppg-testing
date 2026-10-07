@@ -34,6 +34,10 @@
       # rolling for minor/tde_only and rebuilt after a major upgrade.
       ha:                    "{{ lookup('env', 'HA') | default('false', true) | bool }}"
       replica_port:          5433
+      # Data checksums of the FROM cluster: default (initdb default of the FROM
+      # major: off before 18, on from 18), on or off. The TO cluster of a major
+      # upgrade follows the FROM setting (major_upgrade.yml).
+      data_checksums:        "{{ lookup('env', 'DATA_CHECKSUMS') | default('default', true) | lower }}"
       # Host ports of the KMS containers, away from the defaults a native
       # openbao / cosmian_kms install would use.
       vault_host_port:       18200
@@ -53,6 +57,11 @@
 
   - name: Detect whether the TO side installs from OBS
     include_tasks: "{{ role_path }}/../../tasks/detect_use_obs_repo.yml"
+
+  - name: Validate DATA_CHECKSUMS
+    fail:
+      msg: "DATA_CHECKSUMS={{ data_checksums }}: expected default, on or off"
+    when: data_checksums not in ['default', 'on', 'off']
 
   - name: Validate KEY_PROVIDER
     fail:
@@ -162,6 +171,7 @@
         - "pytest upgrade tests: {{ run_pytest_upgrade_section and upgrade_type == 'server_major' }}"
         - "Key provider: {{ key_provider }}"
         - "HA replica: {{ ha }}"
+        - "FROM data checksums: {{ data_checksums }}"
 
   # ===========================================================
   # Main flow — wrapped in block/always so artifacts are always
@@ -252,10 +262,35 @@
       # ===========================================================
       # Initialize and start PostgreSQL FROM version
       # ===========================================================
+      # initdb flag for DATA_CHECKSUMS; --no-data-checksums only exists from
+      # PG 18, where checksums became the default.
+      - name: Pick initdb checksum option for the FROM cluster
+        set_fact:
+          from_initdb_checksum_opt: >-
+            {%- if data_checksums == 'on' -%}--data-checksums
+            {%- elif data_checksums == 'off' and from_major_version | int >= 18 -%}--no-data-checksums
+            {%- endif -%}
+
       - name: Initialize PostgreSQL FROM version data directory (RHEL)
         command: /usr/pgsql-{{ from_major_version }}/bin/postgresql-{{ from_major_version }}-setup initdb
         become: true
+        environment:
+          PGSETUP_INITDB_OPTIONS: "{{ from_initdb_checksum_opt }}"
         when: ansible_os_family == "RedHat"
+
+      # The Debian server package creates <ver>/main with initdb defaults; for an
+      # explicit DATA_CHECKSUMS it is recreated with the requested setting.
+      - name: Recreate the FROM cluster with DATA_CHECKSUMS={{ data_checksums }} (Debian)
+        shell: |
+          set -e
+          pg_dropcluster --stop {{ from_major_version }} main
+          pg_createcluster {{ from_major_version }} main {{ ('-- ' ~ from_initdb_checksum_opt) if from_initdb_checksum_opt | length > 0 else '' }}
+        args:
+          executable: /bin/bash
+        become: true
+        when:
+          - ansible_os_family == "Debian"
+          - data_checksums != 'default'
 
       - name: Start PostgreSQL FROM version
         service:
@@ -431,6 +466,15 @@
           pg_install_dir: "{{ to_pg_install_dir }}"
           pg_socket_dir:  "{{ to_pg_socket_dir }}"
         when: ha | bool
+
+      - name: Verify data checksums offline (pg_tde_checksums)
+        include_tasks:
+          file: verify_checksums.yml
+        vars:
+          pg_bin_dir:    "{{ to_pg_bin_dir }}"
+          pg_data_dir:   "{{ to_pg_data_dir }}"
+          pg_service:    "{{ to_pg_service }}"
+          pg_socket_dir: "{{ to_pg_socket_dir }}"
 
       - name: Capture server version (TO, post-upgrade)
         include_tasks:
