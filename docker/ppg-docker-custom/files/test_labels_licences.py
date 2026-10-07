@@ -1,7 +1,10 @@
 import json
 import os
+import re
 import subprocess
 import time
+import urllib.error
+import urllib.parse
 import urllib.request
 
 import pytest
@@ -44,8 +47,7 @@ MANIFEST_IMAGE = f"{IMAGE.rsplit(':', 1)[0]}:{_BASE_TAG}"
 # Queried directly over the registry HTTP API rather than via the docker CLI:
 # `docker manifest inspect`/`buildx imagetools inspect` can fail on hosts
 # with no configured credential helper, even for public, anonymous images.
-DOCKER_HUB_TOKEN_URL = "https://auth.docker.io/token"
-DOCKER_HUB_REGISTRY_URL = "https://registry-1.docker.io/v2"
+DOCKER_HUB_REGISTRY_HOST = "registry-1.docker.io"
 MANIFEST_ACCEPT_HEADER = ", ".join((
     "application/vnd.oci.image.index.v1+json",
     "application/vnd.docker.distribution.manifest.list.v2+json",
@@ -58,6 +60,40 @@ def _fetch_json(url, headers=None):
     request = urllib.request.Request(url, headers=headers or {})
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.loads(response.read())
+
+
+def _split_image_ref(image):
+    """'[registry/]path:tag' -> (registry host, repository path, tag).
+
+    Docker's rule: the first path component is a registry host only if it
+    contains '.' or ':' or is 'localhost'; otherwise the image is on Docker Hub.
+    """
+    name, tag = image.rsplit(":", 1)
+    first, _, rest = name.partition("/")
+    if rest and ("." in first or ":" in first or first == "localhost"):
+        host = DOCKER_HUB_REGISTRY_HOST if first == "docker.io" else first
+        return host, rest, tag
+    return DOCKER_HUB_REGISTRY_HOST, name, tag
+
+
+def _registry_get_json(url, accept):
+    """GET a registry API URL, answering a Bearer token challenge if one comes back."""
+    headers = {"Accept": accept}
+    try:
+        return _fetch_json(url, headers)
+    except urllib.error.HTTPError as err:
+        if err.code != 401:
+            raise
+        challenge = err.headers.get("WWW-Authenticate", "")
+    scheme, _, params = challenge.partition(" ")
+    if scheme.lower() != "bearer":
+        raise RuntimeError(f"Unsupported registry auth challenge for {url}: {challenge!r}")
+    fields = dict(re.findall(r'(\w+)="([^"]*)"', params))
+    query = urllib.parse.urlencode({k: fields[k] for k in ("service", "scope") if k in fields})
+    token_response = _fetch_json(f"{fields['realm']}?{query}" if query else fields["realm"])
+    token = token_response.get("token") or token_response.get("access_token")
+    headers["Authorization"] = f"Bearer {token}"
+    return _fetch_json(url, headers)
 
 
 # --- Fixtures ---
@@ -105,13 +141,9 @@ def image_labels():
 @pytest.fixture(scope="session")
 def image_manifest():
     """Fixture to fetch the registry manifest list/index once per session."""
-    repo_path, tag = MANIFEST_IMAGE.split(":", 1)
-    token = _fetch_json(
-        f"{DOCKER_HUB_TOKEN_URL}?service=registry.docker.io&scope=repository:{repo_path}:pull"
-    )["token"]
-    return _fetch_json(
-        f"{DOCKER_HUB_REGISTRY_URL}/{repo_path}/manifests/{tag}",
-        headers={"Authorization": f"Bearer {token}", "Accept": MANIFEST_ACCEPT_HEADER},
+    registry, repo_path, tag = _split_image_ref(MANIFEST_IMAGE)
+    return _registry_get_json(
+        f"https://{registry}/v2/{repo_path}/manifests/{tag}", MANIFEST_ACCEPT_HEADER
     )
 
 
