@@ -48,7 +48,7 @@ import settings
 
 # When SKIP_UPGRADE=true the upgrade pipeline fixture skips the pre-upgrade
 # container setup and the pg_upgrade mediator step.  It assumes the host
-# data volumes were already populated by an external orchestrator (run.sh).
+# data volumes were already populated by an external orchestrator (run_upgrade.sh).
 # Use this when running test_upgrade.py as part of a larger workflow where
 # the upgrade has already been performed.
 SKIP_UPGRADE = os.environ.get("SKIP_UPGRADE", "false").lower() == "true"
@@ -83,7 +83,7 @@ TELEMETRY_AGENT_REMOVED_MIN_VERSIONS = {
     17: version.parse("17.11"),
 }
 
-# When run.sh drives the upgrade it passes UPGRADE_NEW_VOL (a Docker named
+# When run_upgrade.sh drives the upgrade it passes UPGRADE_NEW_VOL (a Docker named
 # volume) instead of a host path.  In standalone mode (SKIP_UPGRADE=false)
 # the fixture manages its own host-path volumes.
 UPGRADE_NEW_VOL = os.environ.get("UPGRADE_NEW_VOL")
@@ -196,10 +196,10 @@ def upgrade_pipeline():
         3. Start NEW container on upgraded data, yield state.
 
     External-upgrade mode  (SKIP_UPGRADE=true)
-      Assumes run.sh (or another orchestrator) already ran the upgrade and
+      Assumes run_upgrade.sh (or another orchestrator) already ran the upgrade and
       populated NEW_DATA_HOST.  Skips phases 1-2 entirely and just starts
       the NEW container.  Use this when test_upgrade.py is called as part of
-      the run.sh workflow so the upgrade is not repeated.
+      the run_upgrade.sh workflow so the upgrade is not repeated.
 
     Yielded state dict keys
     ───────────────────────
@@ -314,7 +314,7 @@ def upgrade_pipeline():
             print(f"  Mediator stderr:\n{upgrade_result.stderr[:500]}")
 
     else:
-        # ── External-upgrade mode: upgrade already done by run.sh ─────────────
+        # ── External-upgrade mode: upgrade already done by run_upgrade.sh ─────────────
         if UPGRADE_NEW_VOL:
             print(
                 f"  SKIP_UPGRADE=true — reusing upgraded data from "
@@ -327,18 +327,18 @@ def upgrade_pipeline():
             if result.returncode != 0:
                 pytest.fail(
                     f"SKIP_UPGRADE=true but Docker volume {UPGRADE_NEW_VOL!r} "
-                    f"not found — did run.sh complete Phase 2?"
+                    f"not found — did run_upgrade.sh complete Phase 2?"
                 )
         else:
             print(f"  SKIP_UPGRADE=true — reusing upgraded data from {NEW_DATA_HOST}/postgres")
             if not pathlib.Path(NEW_DATA_HOST, "postgres").exists():
                 pytest.fail(
                     f"SKIP_UPGRADE=true but upgraded data not found at "
-                    f"{NEW_DATA_HOST}/postgres — did run.sh complete Phase 2?"
+                    f"{NEW_DATA_HOST}/postgres — did run_upgrade.sh complete Phase 2?"
                 )
 
     # ── Start new container on the upgraded data ───────────────────────────────
-    # Use the named volume when provided by run.sh; otherwise use the host path.
+    # Use the named volume when provided by run_upgrade.sh; otherwise use the host path.
     new_data_vol = (
         f"{UPGRADE_NEW_VOL}:{PG_DATA_DIR}"
         if UPGRADE_NEW_VOL
@@ -385,7 +385,7 @@ class TestUpgradeExecution:
     """
     Verify the pg_upgrade mediator ran to completion without errors.
 
-    Skipped when SKIP_UPGRADE=true (upgrade was run externally by run.sh).
+    Skipped when SKIP_UPGRADE=true (upgrade was run externally by run_upgrade.sh).
     """
 
     def test_upgrade_exit_code(self, upgrade_pipeline):

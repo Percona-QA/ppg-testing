@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# run.sh — Full upgrade test orchestrator
+# run_upgrade.sh — Full upgrade test orchestrator
 #
 # Phases
 # ──────
@@ -46,12 +46,12 @@
 #   # PG 17 → PG 18
 #   OLD_VERSION=17.10 NEW_VERSION=18.4 DOCKER_REPOSITORY=perconalab \
 #       OLD_TAG=17-ubi10 NEW_TAG=18-ubi10 UPGRADE_TAG=18-17-16-15-14 \
-#       WITH_POSTGIS=true ./run.sh
+#       WITH_POSTGIS=true ./run_upgrade.sh
 #
 #   # PG 16 → PG 17
 #   OLD_VERSION=16.14 NEW_VERSION=17.10 DOCKER_REPOSITORY=perconalab \
 #       OLD_TAG=16-ubi10 NEW_TAG=17-ubi10 UPGRADE_TAG=18-17-16-15-14 \
-#       WITH_POSTGIS=true ./run.sh
+#       WITH_POSTGIS=true ./run_upgrade.sh
 # =============================================================================
 set -uo pipefail
 
@@ -192,7 +192,7 @@ _print_header "Phase 2: Upgrading PG $OLD_VERSION → PG $NEW_VERSION"
 # OLD_VOL was populated by test_docker.py's session-scoped host fixture during
 # Phase 1.  We must insert the sentinel row now — test_upgrade.py will verify
 # it survived the upgrade.  (SKIP_UPGRADE=true skips the fixture's own sentinel
-# creation, so run.sh is responsible for it here.)
+# creation, so run_upgrade.sh is responsible for it here.)
 
 SENTINEL_CONTAINER="ppg_sentinel_${OLD_MAJOR}_${NEW_MAJOR}"
 SENTINEL_TABLE="upgrade_sentinel"

@@ -5,8 +5,9 @@
   become_method: sudo
   # Set facts from environment variables (Jenkins job)
   vars:
-    # Get Docker repository from environment (percona or perconalab)
-    DOCKER_REPOSITORY: "{{ lookup('env', 'REPOSITORY') | default('percona', true) }}"
+    # Image prefix (percona, perconalab, or an OBS registry path); stray
+    # whitespace and trailing "/" are dropped to keep image refs valid
+    DOCKER_REPOSITORY: "{{ lookup('env', 'REPOSITORY') | trim | regex_replace('/+$', '') | default('percona', true) }}"
     # Get PostgreSQL server version from environment
     PG_SERVER_VERSION: "{{ lookup('env', 'SERVER_VERSION') | default('18.3', true) }}"
     # Get PostgreSQL server image tag from environment
