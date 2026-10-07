@@ -1,0 +1,40 @@
+---
+# Optional, server_major only (RUN_PYTEST_UPGRADE_SECTION=true): run the pg_tde
+# pytest major-upgrade tests against the packaged FROM and TO binaries, which
+# both stay installed after the upgrade. Each test initdbs its own throwaway
+# clusters on its own ports, so the upgraded service cluster is not touched.
+#
+# Expected skips on a cross-major pair: tests that need the same pg_tde control
+# version or the same PG major on both sides, and --clone on filesystems
+# without reflink support.
+
+  - name: Run pytest upgrade tests ({{ from_major_version }} -> {{ to_major_version }} packaged binaries)
+    become: true
+    become_user: postgres
+    shell: |
+      set -o pipefail
+      rm -rf /tmp/pg_tde_upgrade_section
+      timeout 3600 .venv/bin/pytest {{ pytest_upgrade_tests }} \
+        -m upgrade \
+        --old-install-dir={{ from_pg_install_dir }} \
+        --install-dir={{ to_pg_install_dir }} \
+        --basetemp=/tmp/pg_tde_upgrade_section \
+        --junitxml=/tmp/pytest_upgrade_section.xml \
+        -p no:cacheprovider -rfEs -v \
+        2>&1 | tee /tmp/pytest_upgrade_section.log
+    args:
+      executable: /bin/bash
+      chdir: "{{ checker_src }}"
+    environment:
+      PG_TDE_SKIP_EXTERNAL_KEY_PROVIDERS: "1"
+    register: pytest_upgrade_section_result
+    ignore_errors: true
+
+  - name: Show pytest upgrade tests summary
+    debug:
+      var: pytest_upgrade_section_result.stdout_lines[-40:]
+
+  - name: Fail if pytest upgrade tests failed
+    fail:
+      msg: "pytest upgrade tests failed. See /tmp/pytest_upgrade_section.log"
+    when: pytest_upgrade_section_result.rc != 0
