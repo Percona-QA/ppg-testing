@@ -264,7 +264,6 @@ Template: `config/kmip_profiles.example.env`.
 | Tool | Path |
 |------|------|
 | Staged workflow | `run_major_upgrade_workflow.sh` |
-| Bash matrix | `run_tde_upgrade_parallel.sh` |
 | Pytest | `pytest -m upgrade tests/test_tde_pg_upgrade.py -v` |
 
 Docs: [major_upgrade.md](major_upgrade.md), [ci_upgrade_scenarios.md](ci_upgrade_scenarios.md)
@@ -327,7 +326,7 @@ provision → install → SQL smoke → uninstall.
 | Core pytest green | `pytest tests/` log |
 | Cosmian KMIP | `run_kmip_revalidation.sh` |
 | OpenBao / Vault KV | `run_openbao_revalidation.sh`, `run_vault_kv_matrix.sh` |
-| Major upgrade | `tde-upgrade-parallel` or `run_tde_upgrade_parallel.sh` |
+| Major upgrade | `pytest -m upgrade --old-install-dir=… --install-dir=…` or `run_major_upgrade_workflow.sh` |
 | Minor upgrade | `run_minor_upgrade_workflow.sh` |
 | Vendor KMS (release) | [vendor-signoff.md](kmip/vendor-signoff.md) checklist |
 | Multi-OS smoke | `package_testing` / `tarball_testing` |
@@ -375,7 +374,7 @@ KMIP_PROFILE=akeyless ./scripts/run_kmip_matrix.sh
 
 # Upgrades (when both versions installed)
 bash run_minor_upgrade_workflow.sh
-bash run_tde_upgrade_parallel.sh
+bash run_major_upgrade_workflow.sh
 ```
 
 ---

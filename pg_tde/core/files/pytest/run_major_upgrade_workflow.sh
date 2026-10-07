@@ -430,9 +430,9 @@ run_pytest_smoke() {
     [[ -n "$new_dir" && -x "${new_dir}/bin/initdb" ]] || die "NEW_INSTALL_DIR / INSTALL_DIR not set or invalid"
 
     local tests=(
-        "tests/test_tde_pg_upgrade.py::TestPspToPspUpgrade::test_tde_heap_data_survives"
-        "tests/test_tde_pg_upgrade.py::TestPspToPspUpgrade::test_check_mode_with_wal_enc_on"
-        "tests/test_upgrade.py::TestUpgradePostMaintenance::test_analyze_all_after_upgrade"
+        "tests/test_tde_pg_upgrade.py::TestTdeMajorUpgradeBasics::test_tde_heap_data_survives"
+        "tests/test_tde_pg_upgrade.py::TestUpgradeWalEncryptionPaths::test_check_mode_with_wal_enc_on"
+        "tests/test_tde_pg_upgrade.py::TestTdeMajorUpgradeBasics::test_key_provider_and_keys_preserved"
     )
 
     "${SCRIPT_DIR}/.venv/bin/pytest" "${tests[@]}" -v \
@@ -646,10 +646,12 @@ debian_verify_cluster() {
     debian_pg_ctl start "${NEW_BIN}" "${NEW_DATA}" "${NEW_PORT}"
 
     info "ALTER EXTENSION pg_tde UPDATE + row check (port ${NEW_PORT})"
-    sudo -u postgres psql -h "${SOCKET_DIR}" -p "${NEW_PORT}" -d postgres -v ON_ERROR_STOP=1 <<SQL
-ALTER EXTENSION pg_tde UPDATE;
-SELECT COUNT(*) AS major_upg_rows FROM major_upg_t;
-SQL
+    sudo -u postgres psql -h "${SOCKET_DIR}" -p "${NEW_PORT}" -d postgres -v ON_ERROR_STOP=1 \
+        -c "ALTER EXTENSION pg_tde UPDATE;"
+    local rows
+    rows="$(sudo -u postgres psql -h "${SOCKET_DIR}" -p "${NEW_PORT}" -d postgres -tA \
+        -c "SELECT COUNT(*) FROM major_upg_t;")"
+    [[ "$rows" == "500" ]] || die "major_upg_t has ${rows} rows after upgrade, expected 500"
 
     info "vacuumdb --all --analyze-in-stages (doc step 6)"
     sudo -u postgres "${NEW_BIN}/vacuumdb" -h "${SOCKET_DIR}" -p "${NEW_PORT}" \
@@ -657,7 +659,7 @@ SQL
 
     debian_pg_ctl stop "${NEW_BIN}" "${NEW_DATA}" "${NEW_PORT}"
 
-    ok "Debian verify complete (500 rows expected in major_upg_t)"
+    ok "Debian verify complete (500 rows in major_upg_t)"
 
     if [[ "$SKIP_DROP" != true ]]; then
         info "Removing old PGDATA ${OLD_DATA}"

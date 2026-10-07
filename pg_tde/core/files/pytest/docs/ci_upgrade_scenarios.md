@@ -132,7 +132,7 @@ export INSTALL_DIR=/home/ubuntu/pgwork/pginst/18
 pytest -m upgrade \
   --old-install-dir="$OLD_INSTALL_DIR" \
   --install-dir="$INSTALL_DIR" \
-  tests/test_tde_pg_upgrade.py tests/test_upgrade.py \
+  tests/test_tde_pg_upgrade.py \
   -v --tb=short
 ```
 
@@ -141,7 +141,7 @@ pytest -m upgrade \
 | Old / new pg_tde.control | Run these classes | Skip reason for others |
 |--------------------------|-------------------|------------------------|
 | **2.1 → 2.2** (cross-minor) | `TestPg2381EmptyKeyMigration`, `TestPg2379MultiDbKeyMigration` + all other major classes | `TestPg2381MajorUpgradeSamePgTdeControl` skips |
-| **2.2 → 2.2** (same control, e.g. PG17 2.2.0 → PG18 2.2.1) | `TestPg2381MajorUpgradeSamePgTdeControl`, `TestPspToPspUpgrade`, … | `TestPg2381EmptyKeyMigration`, `TestPg2379MultiDbKeyMigration` skip |
+| **2.2 → 2.2** (same control, e.g. PG17 2.2.0 → PG18 2.2.1) | `TestPg2381MajorUpgradeSamePgTdeControl`, `TestTdeMajorUpgradeBasics`, … | `TestPg2381EmptyKeyMigration`, `TestPg2379MultiDbKeyMigration` skip |
 
 Check control version:
 
@@ -167,9 +167,9 @@ See [`major_upgrade.md`](major_upgrade.md) for `--method debian`, split phases, 
 
 | Bash script | Pytest class(es) |
 |-------------|------------------|
-| `pg_tde_upgrade_test.sh` | `TestUpgradeBashScriptParity`, `TestPspToPspUpgrade` |
-| `pg_tde_upgrade_ppg_to_psp.sh` | `TestPpgToPspUpgrade` |
-| `pg_tde_upgrade_psp_to_psp.sh` | `TestPspToPspUpgrade` |
+| `pg_tde_upgrade_test.sh` | `TestUpgradeBashScriptParity`, `TestTdeMajorUpgradeBasics` |
+| `pg_tde_upgrade_ppg_to_psp.sh` | `TestTdeMajorUpgradeBasics` |
+| `pg_tde_upgrade_psp_to_psp.sh` | `TestTdeMajorUpgradeBasics` |
 | `pg_tde_upgrade_access_method.sh` | `TestUpgradeAccessMethodPermutations` |
 | `pg_tde_upgrade_wal_encryption.sh` | `TestUpgradeWalEncryptionPaths` |
 | `pg_tde_upgrade_scenarios_test.sh` | `TestPgTdeUpgradeComplexSchema`, `TestTdeUpgradeExtremeCornerCases` |
@@ -184,7 +184,7 @@ Same PostgreSQL **major** (18), same `$PGDATA`, operator replaces packages
 (18.4.1 → 18.4.2), then pytest Verify runs `ALTER EXTENSION pg_tde UPDATE` when
 the catalog minor advances.
 
-This is **not** `pg_upgrade` and **not** `tests/test_upgrade.py`.
+This is **not** `pg_upgrade` / `pg_tde_upgrade` and **not** `tests/test_tde_pg_upgrade.py`.
 
 ### B.1 Automated full workflow (recommended)
 
@@ -238,7 +238,7 @@ pytest tests/test_tde_minor_upgrade.py::TestPgTdeMinorUpgradeVerify \
 
 ### B.3 Non-staged behaviour tests (single pytest run on 18.4.2)
 
-Run after packages are on 18.4.2; no `--upgrade-data-dir`:
+Single-install HA checks (no binaries change, marked `replication`); run after packages are on 18.4.2, no `--upgrade-data-dir`:
 
 ```bash
 pytest tests/test_tde_minor_upgrade.py::TestTdeMinorUpgradePreConditions \
@@ -302,7 +302,6 @@ Use this when reproducing Jenkins #122 **and** the 18.4.1→18.4.2 bump on one V
 
 | Path | Role |
 |------|------|
-| `run_tde_upgrade_parallel.sh` | Local driver for major bash matrix (section A.1) |
 | `run_minor_upgrade_workflow.sh` | 18.4.1→18.4.2 staged driver (section B.1) |
 | `run_major_upgrade_workflow.sh` | PG 17→18 staged driver |
 | `docs/upgrade_matrix.md` | Full test catalog |

@@ -111,7 +111,7 @@ Build → Install on lab VM → pytest regression → Key providers → Upgrades
 
 | Track | Scenario | Tooling |
 |-------|----------|---------|
-| **Major** | PG **17 → 18** + pg_tde | `run_tde_upgrade_parallel.sh`, Jenkins job |
+| **Major** | PG **17 → 18** + pg_tde | `pytest -m upgrade --old-install-dir=… --install-dir=…`, `run_major_upgrade_workflow.sh` |
 | **Minor** | **18.4.1 → 18.4.2** in-place | `run_minor_upgrade_workflow.sh` |
 
 Validates: data survives, keys work, `ALTER EXTENSION pg_tde UPDATE` succeeds.

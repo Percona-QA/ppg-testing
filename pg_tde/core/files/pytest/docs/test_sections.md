@@ -31,7 +31,7 @@ pytest --list-test-sections
 |---------|------------------|-----------------|
 | `rewind` | `rewind` | `test_tde_rewind_advanced.py` |
 | `minor_upgrade` | `minor_upgrade` | Staged in-place pg_tde bump — [`docs/minor_upgrade.md`](minor_upgrade.md), CI matrix [`docs/ci_upgrade_scenarios.md`](ci_upgrade_scenarios.md) |
-| `upgrade` | `upgrade` | `test_tde_pg_upgrade.py`, `test_upgrade.py` — [`docs/major_upgrade.md`](major_upgrade.md), CI matrix [`docs/ci_upgrade_scenarios.md`](ci_upgrade_scenarios.md) |
+| `upgrade` | `upgrade` | `test_tde_pg_upgrade.py` — [`docs/major_upgrade.md`](major_upgrade.md), CI matrix [`docs/ci_upgrade_scenarios.md`](ci_upgrade_scenarios.md) |
 | `migration` | `migration` | `test_pdg_migration.py` |
 | `encryption` | `encryption` | Core pg_tde SQL/API + `test_pg_tde_product_gaps.py` |
 | `replication` | `replication` | `test_replication.py` |

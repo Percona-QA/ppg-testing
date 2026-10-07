@@ -88,11 +88,8 @@ Numbers in parentheses = pytest test count per module group.
 
 | Track | Module | Tests | What happens |
 |-------|--------|------:|--------------|
-| **Major — pg_tde_upgrade** | `test_tde_pg_upgrade.py` | 48 | PG 17→18, same data dir, `pg_tde_upgrade` wrapper |
-| **Major — pg_upgrade** | `test_upgrade.py` | 47 | New PGDATA, heap + TDE tables |
+| **Major — pg_tde_upgrade** | `test_tde_pg_upgrade.py` | 52 | PG 17→18, same data dir, `pg_tde_upgrade` wrapper |
 | **Minor in-place** | `test_tde_minor_upgrade.py` | 11 | 18.4.1→18.4.2, persistent `$PGDATA`, `ALTER EXTENSION` |
-
-**Plus bash matrix** (`run_tde_upgrade_parallel.sh`, ~8 scripts): WAL encryption paths, access-method permutations, multi-DB keys, PSP↔PSP, PPG↔PSP.
 
 **Guards:** customer upgrade windows — the highest business-impact area.
 
@@ -285,8 +282,7 @@ pytest --list-test-sections                       # all sections
 |--------|------:|----------------|
 | `test_encryption.py` | 82 | `encryption` |
 | `test_tde_rewind_advanced.py` | 97 | `rewind` |
-| `test_tde_pg_upgrade.py` | 48 | `upgrade` |
-| `test_upgrade.py` | 47 | `upgrade` |
+| `test_tde_pg_upgrade.py` | 52 | `upgrade` |
 | `test_waldump.py` | 27 | `waldump` |
 | `test_kmip.py` | 24 | `kmip` |
 | `test_partitioning.py` | 21 | `encryption` |
