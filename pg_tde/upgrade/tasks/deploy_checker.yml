@@ -4,17 +4,49 @@
 # seeds the FROM cluster and verifies the TO cluster (see run_checker.yml).
 # Only pytest is needed: the checker talks to the service cluster with psql.
 
-  # Copied as root and chowned, not with become_user: postgres -- a file
-  # transfer to an unprivileged become user needs setfacl (acl package) on the
-  # target, which not every image has.
+  # One tarball instead of a recursive copy: copy transfers the ~200 files one
+  # by one (several ssh round trips each, ~10 min). Unpacked as root and
+  # chowned, not with become_user: postgres -- a transfer to an unprivileged
+  # become user needs setfacl (acl package) on the target.
+  - name: Create a controller-side temp file for the pytest suite
+    tempfile:
+      suffix: .tgz
+    register: suite_tgz
+    delegate_to: localhost
+    become: false
+
+  - name: Pack the pg_tde pytest suite on the controller
+    command: >-
+      tar -czf {{ suite_tgz.path }}
+      --exclude=__pycache__ --exclude=.venv --exclude=coverage_reports
+      -C {{ role_path }}/../core/files/pytest .
+    delegate_to: localhost
+    become: false
+    changed_when: false
+
+  - name: Create the pytest suite directory
+    file:
+      path: "{{ checker_src }}"
+      state: directory
+      owner: postgres
+      group: postgres
+      mode: "0755"
+    become: true
+
   - name: Deploy pg_tde pytest suite
-    copy:
-      src: "{{ role_path }}/../core/files/pytest/"
+    unarchive:
+      src: "{{ suite_tgz.path }}"
       dest: "{{ checker_src }}"
       owner: postgres
       group: postgres
-      mode: preserve
     become: true
+
+  - name: Remove the controller-side pytest suite tarball
+    file:
+      path: "{{ suite_tgz.path }}"
+      state: absent
+    delegate_to: localhost
+    become: false
 
   - name: Create pytest venv for the upgrade checker
     become: true

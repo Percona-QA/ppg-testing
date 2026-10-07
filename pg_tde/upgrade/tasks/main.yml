@@ -25,6 +25,15 @@
       # packaged FROM/TO binaries (run_pytest_upgrade_section.yml).
       run_pytest_upgrade_section: "{{ lookup('env', 'RUN_PYTEST_UPGRADE_SECTION') | default('false', true) | bool }}"
       pytest_upgrade_tests:  "{{ lookup('env', 'PYTEST_UPGRADE_TESTS') | default('tests/test_tde_pg_upgrade.py', true) }}"
+      # Key provider for the staged checker's global and tde_a keys:
+      # file, or a KMS started by start_key_provider.yml.
+      key_provider:          "{{ lookup('env', 'KEY_PROVIDER') | default('file', true) | lower }}"
+      # Root token of the localhost-only vault/openbao dev server.
+      kms_root_token:        upg-root-token
+      # Host ports of the KMS containers, away from the defaults a native
+      # openbao / cosmian_kms install would use.
+      vault_host_port:       18200
+      kmip_host_port:        15556
       # Optional package pins for Percona patched-release upgrades. Empty = latest
       # in the channel (current behaviour). Server is pinned by build increment
       # (e.g. "2" -> 18.4-2); pg_tde is pinned by package version (e.g. "2.2.0").
@@ -40,6 +49,11 @@
 
   - name: Detect whether the TO side installs from OBS
     include_tasks: "{{ role_path }}/../../tasks/detect_use_obs_repo.yml"
+
+  - name: Validate KEY_PROVIDER
+    fail:
+      msg: "KEY_PROVIDER={{ key_provider }}: expected file, vault, openbao or kmip"
+    when: key_provider not in ['file', 'vault', 'openbao', 'kmip']
 
   - name: Set derived major version facts
     set_fact:
@@ -142,6 +156,7 @@
         - "TDE from packages: {{ install_from_packages }}"
         - "TO repo source: {{ 'OBS' if use_obs_repo else 'percona-release' }}"
         - "pytest upgrade tests: {{ run_pytest_upgrade_section and upgrade_type == 'server_major' }}"
+        - "Key provider: {{ key_provider }}"
 
   # ===========================================================
   # Main flow — wrapped in block/always so artifacts are always
@@ -269,6 +284,11 @@
       - name: Deploy the upgrade checker
         include_tasks:
           file: deploy_checker.yml
+
+      - name: Start the {{ key_provider }} key provider
+        include_tasks:
+          file: start_key_provider.yml
+        when: key_provider != 'file'
 
       - name: Upgrade checker - prepare
         include_tasks:

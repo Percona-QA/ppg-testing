@@ -40,6 +40,8 @@
       # FROM-side state snapshot it compared against
       cp /tmp/upgrade_check_*.log /tmp/upgrade_check_*.xml "$ARTIFACT_DIR/" 2>/dev/null || true
       cp {{ checker_dir }}/upgrade_check_state.json "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp {{ checker_dir }}/key_provider.json "$ARTIFACT_DIR/" 2>/dev/null || true
+      docker logs upg-kms > "$ARTIFACT_DIR/key-provider-container.log" 2>&1 || true
 
       # pytest upgrade tests (RUN_PYTEST_UPGRADE_SECTION): log + junit, and the
       # per-test server/pg_upgrade logs -- not the test data dirs, too big
