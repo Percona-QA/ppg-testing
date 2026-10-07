@@ -16,3 +16,224 @@ sequences:
   - destroy
   cleanup:
   - cleanup
+params:
+- name: PLATFORM
+  kind: choice
+  special: platform_choice
+  description: Operating system to run the upgrade test on.
+  flavors:
+  - single
+- name: FROM_VERSION
+  kind: string
+  default: ppg-17.10
+  description: PostgreSQL version to install before the upgrade, e.g. ppg-17.10, ppg-18.3
+- name: TO_VERSION
+  kind: string
+  default: ppg-18.4
+  description: PostgreSQL version to upgrade to, e.g. ppg-18.4 (minor) or ppg-19.0 (major).
+    A release sweep's VERSION is used when this is left unset.
+- name: UPGRADE_TYPE
+  kind: choice
+  choices:
+  - server_minor
+  - server_major
+  - tde_only
+  description: 'Type of upgrade to perform. server_minor: PostgreSQL minor-version update
+    within the same major (e.g. ppg-17.10 -> ppg-17.11), via package update + restart.
+    server_major: PostgreSQL major-version upgrade (e.g. ppg-17.x -> ppg-18.x), via
+    pg_tde_upgrade --link. tde_only: keep FROM_VERSION == TO_VERSION and upgrade only
+    pg_tde. For server_minor/server_major, whether pg_tde is also upgraded is controlled
+    by TDE_UPGRADE.'
+- name: TDE_UPGRADE
+  kind: boolean
+  default: true
+  description: 'Also upgrade pg_tde during a server_minor/server_major upgrade. Packages
+    path: updates pg_tde package to latest. Source path: rebuilds pg_tde from TO_TDE_BRANCH.
+    Ignored when UPGRADE_TYPE=tde_only (that mode always upgrades pg_tde).'
+- name: INSTALL_FROM_PACKAGES
+  kind: boolean
+  default: true
+  description: Controls how pg_tde is installed; the PostgreSQL server is always installed
+    from Percona packages. When enabled, pg_tde is installed from Percona packages
+    (FROM_REPO/TO_REPO channel). When disabled, pg_tde is built from source using
+    FROM_TDE_BRANCH / TO_TDE_BRANCH.
+- name: FROM_REPO
+  kind: choice
+  choices:
+  - testing
+  - experimental
+  - release
+  description: Percona repository channel for the FROM version. Always used for the
+    PostgreSQL server packages; also used for pg_tde packages when INSTALL_FROM_PACKAGES
+    is enabled.
+- name: TO_REPO
+  kind: choice
+  choices:
+  - testing
+  - experimental
+  - release
+  description: Percona repository channel for the TO version. Always used for the
+    PostgreSQL server packages; also used for pg_tde packages when INSTALL_FROM_PACKAGES
+    is enabled.
+- name: USE_OBS_REPO
+  kind: boolean
+  quote: '"'
+  description: Install the TO version from the OBS (openSUSE Build Service) repo instead of repo.percona.com.
+      OBS only carries the latest minor, so the FROM version always comes from percona-release.
+      TO_REPO still selects the channel (testing/release/experimental -> staging/releases/devel).
+- name: OBS_HOST
+  kind: string
+  default: ''
+  description: OBS instance hostname to use when USE_OBS_REPO is enabled. Leave empty
+    for the default public instance (download.opensuse.org).
+- name: OBS_PROJECT
+  kind: string
+  default: ''
+  description: Full OBS project for the TO version when USE_OBS_REPO is enabled, e.g. isv:percona:PR:pr-42:ppg:staging:18
+      for a pull request build. Leave empty to derive it from TO_REPO and TO_VERSION.
+- name: KEY_PROVIDER
+  kind: choice
+  choices:
+  - file
+  - vault
+  - openbao
+  - kmip
+  description: Key provider for the staged checker's global and tde_a keys. file, or a
+    KMS the role starts in a docker container (hashicorp/vault, openbao or Cosmian KMIP);
+    tde_b always keeps a file provider.
+- name: HA
+  kind: boolean
+  default: false
+  description: Add a streaming replica (pg_tde_basebackup, same host, port 5433). server_minor
+    and tde_only upgrade it rolling (replica first); server_major rebuilds it from the
+    upgraded primary. The checker verifies the replica before and after the upgrade.
+- name: DATA_CHECKSUMS
+  kind: choice
+  choices:
+  - default
+  - 'on'
+  - 'off'
+  description: Data checksums of the FROM cluster. default keeps the initdb default of
+    the FROM major (off before 18, on from 18). With checksums on, the upgraded cluster
+    (and the replica) is verified offline with pg_tde_checksums.
+- name: RUN_PYTEST_UPGRADE_SECTION
+  kind: boolean
+  default: false
+  description: server_major only. Also run the pg_tde pytest major-upgrade tests against
+    the packaged FROM and TO binaries (about 6 minutes).
+- name: PYTEST_UPGRADE_TESTS
+  kind: string
+  default: tests/test_tde_pg_upgrade.py
+  description: Test files for RUN_PYTEST_UPGRADE_SECTION.
+- name: TESTING_BRANCH
+  kind: string
+  default: main
+  description: Branch of ppg-testing to check out.
+- name: TDE_REPO
+  kind: string
+  default: https://github.com/percona/pg_tde.git
+  description: pg_tde git repository. Only applicable when INSTALL_FROM_PACKAGES is disabled.
+- name: FROM_TDE_BRANCH
+  kind: string
+  default: main
+  description: pg_tde branch/tag to build for the initial (FROM) installation. Only
+    applicable when INSTALL_FROM_PACKAGES is disabled.
+- name: TO_TDE_BRANCH
+  kind: string
+  default: main
+  description: pg_tde branch/tag to build after the upgrade when TDE_UPGRADE is enabled.
+    Only applicable when INSTALL_FROM_PACKAGES is disabled and TDE_UPGRADE is enabled.
+- name: FROM_PKG_RELEASE
+  kind: string
+  default: ''
+  description: Optional Percona server build increment to pin for the FROM install (e.g.
+    "1" -> 18.4-1). Empty installs the latest build in FROM_REPO. Packages path only.
+- name: TO_PKG_RELEASE
+  kind: string
+  default: ''
+  description: Optional Percona server build increment to pin for the TO install (e.g.
+    "2" -> 18.4-2). Empty installs the latest build in TO_REPO. Packages path only.
+- name: FROM_TDE_PKG_VERSION
+  kind: string
+  default: ''
+  description: Optional pg_tde package version to pin for the FROM install (e.g. "2.2.0").
+    Empty installs the latest pg_tde in FROM_REPO. Packages path only.
+- name: TO_TDE_PKG_VERSION
+  kind: string
+  default: ''
+  description: Optional pg_tde package version to pin for the TO install (e.g. "2.2.1").
+    Empty installs the latest pg_tde in TO_REPO. Packages path only.
+- name: FROM_PERCONA_SERVER_VERSION
+  kind: string
+  default: ''
+  description: Optional expected Percona Server patch version for the FROM cluster (e.g.
+    "18.4.1"); asserted against SELECT version() before the upgrade.
+- name: TO_PERCONA_SERVER_VERSION
+  kind: string
+  default: ''
+  description: Optional expected Percona Server patch version for the TO cluster (e.g.
+    "18.4.2"); asserted against SELECT version() after the upgrade.
+- name: DESTROY_ENV
+  kind: boolean
+  default: true
+  description: Destroy the VM after the test run. Disable to keep the VM for debugging.
+  flavors:
+  - single
+- name: RUN_LABELS
+  kind: string
+  default: Manual
+  description: Optional comma-separated labels to categorize this run, e.g. Manual, Nightly,
+    Release.
+jenkins:
+  molecule_dir: pg_tde/upgrade
+  artifacts: pg_tde/upgrade/artifacts/**/*.tar.gz
+  jobs:
+    single:
+      job_name: tde-upgrade
+      file: tde-upgrade
+      display_name: ${env.BUILD_NUMBER}-upgrade-${env.FROM_VERSION}-to-${env.TO_VERSION}-${env.UPGRADE_TYPE}-${env.PLATFORM}
+    parallel:
+      job_name: tde-upgrade-parallel
+      file: tde-upgrade-parallel
+      display_name: ${env.BUILD_NUMBER}-upgrade-${env.FROM_VERSION}-to-${env.TO_VERSION}-${env.UPGRADE_TYPE}
+      slack:
+        channel: '#postgresql-test'
+        params:
+        - from_version
+        - to_version
+        - upgrade_type
+        - tde_upgrade
+        - key_provider
+        - ha
+        - data_checksums
+        - from_repo
+        - to_repo
+        args:
+        - FROM_VERSION
+        - TO_VERSION
+        - UPGRADE_TYPE
+        - TDE_UPGRADE
+        - KEY_PROVIDER
+        - HA
+        - DATA_CHECKSUMS
+        - FROM_REPO
+        - TO_REPO
+        fields:
+        - label: From_Version
+          param: from_version
+        - label: To_Version
+          param: to_version
+        - label: Upgrade_Type
+          param: upgrade_type
+        - label: TDE_Upgrade
+          param: tde_upgrade
+        - label: Key_Provider
+          param: key_provider
+        - label: HA
+          param: ha
+        - label: Data_Checksums
+          param: data_checksums
+        - label: From_Repo
+          param: from_repo
+        - label: To_Repo
+          param: to_repo

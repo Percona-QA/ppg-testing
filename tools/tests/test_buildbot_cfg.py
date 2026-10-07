@@ -185,6 +185,18 @@ def test_run_command_renderer(cfg):
 
 
 @needs_buildbot
+def test_run_command_sweep_version_reaches_to_version(cfg):
+    """pg_tde/upgrade declares TO_VERSION, not VERSION: a sweep's VERSION is
+    passed as TO_VERSION unless TO_VERSION is set explicitly."""
+    base = dict(group="pg_tde/upgrade", os="ol-9", run_id=1, buildnumber=1)
+    cmd = cfg["run_command"].fn(FakeProps(base, VERSION="ppg-18.6"))
+    assert "--param TO_VERSION=ppg-18.6" in cmd
+    assert "--param VERSION=" not in cmd
+    cmd = cfg["run_command"].fn(FakeProps(base, VERSION="ppg-18.6", TO_VERSION="ppg-18.5"))
+    assert "--param TO_VERSION=ppg-18.5" in cmd
+
+
+@needs_buildbot
 def test_run_command_booleans(cfg):
     seen = False
     for group, desc in cfg["GROUPS"].items():
