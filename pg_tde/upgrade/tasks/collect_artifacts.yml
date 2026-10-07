@@ -34,6 +34,7 @@
 
       # pg_upgrade logs
       cp /tmp/pg_upgrade.log           "$ARTIFACT_DIR/" 2>/dev/null || true
+      cp /tmp/pg_upgrade_check.log     "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/pg_upgrade_internal.log  "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/pg_upgrade_server.log    "$ARTIFACT_DIR/" 2>/dev/null || true
       cp /tmp/pg_upgrade_utility.log   "$ARTIFACT_DIR/" 2>/dev/null || true

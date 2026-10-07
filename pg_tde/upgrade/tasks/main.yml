@@ -174,6 +174,7 @@
       - name: Enable Percona repo for FROM version
         command: percona-release enable-only {{ from_repo_version }} {{ from_repo }}
 
+
       # ===========================================================
       # Install PostgreSQL FROM version packages
       # ===========================================================
@@ -303,6 +304,15 @@
           version_label:        "FROM"
           expected_tde_version: "{{ from_tde_pkg_version }}"
 
+      - name: Read versions (FROM, pre-upgrade)
+        include_tasks:
+          file: read_versions.yml
+        vars:
+          pg_major:      "{{ from_major_version }}"
+          pg_bin_dir:    "{{ from_pg_bin_dir }}"
+          pg_socket_dir: "{{ from_pg_socket_dir }}"
+          version_label: "FROM"
+
       # ===========================================================
       # Perform the upgrade
       # ===========================================================
@@ -322,8 +332,25 @@
         when: upgrade_type == "tde_only"
 
       # ===========================================================
-      # Verify TDE data post-upgrade
+      # Verify TDE data post-upgrade: once with the new pg_tde library
+      # still on the old extension catalog, then again after
+      # ALTER EXTENSION pg_tde UPDATE.
       # ===========================================================
+      - name: Verify TDE data is readable (post-upgrade, before ALTER EXTENSION)
+        include_tasks:
+          file: verify_tde_data.yml
+        vars:
+          pg_bin_dir:    "{{ to_pg_bin_dir }}"
+          pg_socket_dir: "{{ to_pg_socket_dir }}"
+          check_label:   "post-upgrade, before ALTER EXTENSION"
+
+      - name: Update pg_tde extension in every database
+        include_tasks:
+          file: alter_extension_update.yml
+        vars:
+          pg_bin_dir:    "{{ to_pg_bin_dir }}"
+          pg_socket_dir: "{{ to_pg_socket_dir }}"
+
       - name: Verify TDE data is readable (post-upgrade)
         include_tasks:
           file: verify_tde_data.yml
@@ -353,6 +380,19 @@
           version_log:          "/tmp/tde-to-version.log"
           version_label:        "TO"
           expected_tde_version: "{{ to_tde_pkg_version }}"
+
+      - name: Read versions (TO, post-upgrade)
+        include_tasks:
+          file: read_versions.yml
+        vars:
+          pg_major:      "{{ to_major_version }}"
+          pg_bin_dir:    "{{ to_pg_bin_dir }}"
+          pg_socket_dir: "{{ to_pg_socket_dir }}"
+          version_label: "TO"
+
+      - name: Check the upgrade actually changed what it was asked to
+        include_tasks:
+          file: assert_upgrade_versions.yml
 
     rescue:
       - name: Record upgrade test failure

@@ -124,19 +124,5 @@
       to_pg_socket_dir: "{{ from_pg_socket_dir }}"
       cacheable: true
 
-  - name: Update pg_tde extension after minor upgrade (if version changed)
-    become: true
-    become_user: postgres
-    shell: psql -d postgres -c "ALTER EXTENSION pg_tde UPDATE;"
-    args:
-      executable: /bin/bash
-    environment:
-      PGHOST: "{{ from_pg_socket_dir }}"
-      PGPORT: "5432"
-      PATH:   "{{ from_pg_bin_dir }}:{{ ansible_env.PATH }}"
-    ignore_errors: true
-    register: ext_update_minor
-
-  - name: Show ALTER EXTENSION result
-    debug:
-      var: ext_update_minor.stdout_lines
+  # ALTER EXTENSION pg_tde UPDATE runs from main.yml, after the data has been
+  # read once with the new library on the old extension catalog.
