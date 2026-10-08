@@ -81,7 +81,7 @@
     dest: /tmp/pgbackrest
   vars:
     repo: "{{ lookup('env', 'COMPONENT_REPO') }}"
-    version: "{{ lookup('env', 'COMPONENT_VERSION') }}"
+    version: "{{ lookup('env', 'COMPONENT_REF') | default(lookup('env', 'COMPONENT_VERSION'), true) }}"
 
 - name: Add user postgres to sudoers
   user:
