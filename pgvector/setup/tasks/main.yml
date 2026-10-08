@@ -130,7 +130,7 @@
       dest: /tmp/pgvector
     vars:
       repo: "{{ lookup('env', 'COMPONENT_REPO') }}"
-      version: "{{ lookup('env', 'COMPONENT_VERSION') }}"
+      version: "{{ lookup('env', 'COMPONENT_REF') | default(lookup('env', 'COMPONENT_VERSION'), true) }}"
     become_user: postgres
 
   - name: Build pgvector from sources
