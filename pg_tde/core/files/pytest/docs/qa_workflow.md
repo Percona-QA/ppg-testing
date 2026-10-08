@@ -1,10 +1,7 @@
 # pg_tde QA — End-to-End Workflow
 
 > **Audience:** Build team, release management, engineering leadership  
-> **Executive summary:** [qa_workflow_executive_summary.md](qa_workflow_executive_summary.md)  
-> **Test coverage summary:** [qa_test_coverage_executive_summary.md](qa_test_coverage_executive_summary.md)  
-> **Modules by area (no filenames):** [qa_test_modules.md](qa_test_modules.md)  
-> **Platform example:** Ubuntu 26.04 x86_64 (same flow applies to other Linux targets in `package_testing/`)
+> **Platform example:** Ubuntu 26.04 x86_64
 
 This document describes the full QA cycle for **Percona PostgreSQL with pg_tde**:
 from build-team handover through package validation to production promotion.
@@ -17,8 +14,7 @@ QA validates that pg_tde packages are correct, upgrade-safe, and compatible with
 supported external key providers (KMIP, Vault KV, OpenBao) before they move from
 **testing** to **release** in Percona repositories.
 
-The primary harness is **pytest** under `postgresql/pytest/`. Legacy bash
-automation and Vagrant smoke tests provide Jenkins parity and multi-OS coverage.
+The harness is **pytest** under `pg_tde/core/files/pytest/`.
 
 ---
 
@@ -82,11 +78,6 @@ flowchart TB
         L[vendor-signoff checklist]
     end
 
-    subgraph QA_RELEASE["QA — Release smoke"]
-        M[package_testing]
-        N[tarball_testing]
-    end
-
     subgraph PROD["Production"]
         O[Promote to release]
         P[Customer packages]
@@ -98,9 +89,8 @@ flowchart TB
     F --> G --> H
     F --> I --> J
     G --> K --> L
-    F --> M --> N
     L --> O
-    N --> O --> P
+    O --> P
 ```
 
 ---
@@ -123,12 +113,12 @@ QA should record at handover:
 ## 5. Phase 1 — Lab setup (Ubuntu example)
 
 **Where:** QA VM (e.g. AWS Ubuntu)  
-**Repo:** `git clone https://github.com/percona/percona-qa.git`
+**Repo:** `git clone https://github.com/Percona-QA/ppg-testing.git && cd ppg-testing`
 
 ### Path A — Package install (production parity) — default for release QA
 
 ```bash
-cd percona-qa/postgresql/pytest
+cd pg_tde/core/files/pytest
 bash setup_test_env.sh --install-pkgs \
   --pg-major 18 \
   --pg-repo-line 18.4 \
@@ -155,7 +145,7 @@ See `setup_test_env.sh --help` for all options.
 ### Path B — Source build (pre-package / dev)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 bash build_from_source.sh          # or --tde-only, --clean
 source /home/ubuntu/pgwork/pg_env.sh
 bash setup_test_env.sh --install-dir "$INSTALL_DIR"
@@ -167,12 +157,12 @@ Default workdir: `/home/ubuntu/pgwork` (`pginst/18`, `pg_tde`, `tde_build`).
 ### Path C — Docker (isolated)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 bash run_tests.sh                  # package image
 bash run_tests.sh --source         # source build in container
 ```
 
-See [docker/README.md](docker/README.md).
+See [docker/README.md](../docker/README.md).
 
 ---
 
@@ -182,7 +172,7 @@ See [docker/README.md](docker/README.md).
 
 | Layer | Location | Scale |
 |-------|----------|-------|
-| Primary suite | `tests/` | ~29 modules, 500+ tests |
+| Primary suite | `tests/` | [Test count](test_sections.md#test-count) |
 | Section control | `--skip-sections` | [test_sections.md](test_sections.md) |
 | Full catalog | `coverage_reports/test_catalog_2026-08-05.md` | Per-test inventory |
 | Coverage (RHEL / PG-2609) | `coverage_reports/coverage_2026-08-05.md` | Platform + symlink regressions |
@@ -191,7 +181,7 @@ See [docker/README.md](docker/README.md).
 ### Recommended order (fresh VM)
 
 ```bash
-cd postgresql/pytest && source .env.sh
+cd pg_tde/core/files/pytest && source .env.sh
 
 # Core (skip long upgrade sections on first pass)
 pytest tests/ -v --skip-sections=upgrade,minor_upgrade,slow
@@ -264,12 +254,9 @@ Template: `config/kmip_profiles.example.env`.
 | Tool | Path |
 |------|------|
 | Staged workflow | `run_major_upgrade_workflow.sh` |
-| Bash matrix | `run_tde_upgrade_parallel.sh` |
 | Pytest | `pytest -m upgrade tests/test_tde_pg_upgrade.py -v` |
 
 Docs: [major_upgrade.md](major_upgrade.md), [ci_upgrade_scenarios.md](ci_upgrade_scenarios.md)
-
-**Jenkins:** `tde-upgrade-parallel` on `https://pg.cd.percona.com/` (VPN)
 
 ### 8b. Minor upgrade (in-place patch, e.g. 18.4.1 → 18.4.2)
 
@@ -287,38 +274,7 @@ Data dir: `PG_TDE_UPGRADE_DATA_DIR` (default `/var/lib/pg_tde_minor_upgrade`).
 
 ---
 
-## 9. Phase 5 — Legacy automation and TAP
-
-| Layer | Path | When |
-|-------|------|------|
-| Bash automation | `postgresql/automation/wrapper/test_runner.sh` | Jenkins major-upgrade matrix |
-| Upgrade testing | `postgresql/upgrade_testing/wrapper/` | Additional upgrade scripts |
-| TAP Perl | `postgresql/t/` | Installcheck-world parity with upstream pg_tde |
-
-pg_tde engineering runs meson TAP (`t/kmip.pl`, etc.) in the pg_tde repo; percona-qa
-pytest is the deeper integration layer on Percona packages.
-
----
-
-## 10. Phase 6 — Multi-OS release smoke
-
-**Where:** Vagrant (QA or release engineer)  
-**Paths:** `postgresql/package_testing/`, `postgresql/tarball_testing/`
-
-```bash
-cd postgresql/package_testing
-REPO=testing PG_VERSION=18.4 bash package_test.sh
-
-cd postgresql/tarball_testing
-PG_VERSION=18.4 bash tarball_test.sh
-```
-
-Matrix includes Debian 11/12, OL8/9, Ubuntu 22/24 (and variants). Each OS:
-provision → install → SQL smoke → uninstall.
-
----
-
-## 11. Phase 7 — Sign-off and production promotion
+## 9. Phase 5 — Sign-off and production promotion
 
 ### QA exit criteria
 
@@ -327,10 +283,9 @@ provision → install → SQL smoke → uninstall.
 | Core pytest green | `pytest tests/` log |
 | Cosmian KMIP | `run_kmip_revalidation.sh` |
 | OpenBao / Vault KV | `run_openbao_revalidation.sh`, `run_vault_kv_matrix.sh` |
-| Major upgrade | `tde-upgrade-parallel` or `run_tde_upgrade_parallel.sh` |
+| Major upgrade | `pytest -m upgrade` |
 | Minor upgrade | `run_minor_upgrade_workflow.sh` |
 | Vendor KMS (release) | [vendor-signoff.md](kmip/vendor-signoff.md) checklist |
-| Multi-OS smoke | `package_testing` / `tarball_testing` |
 
 ### Promotion path
 
@@ -343,25 +298,10 @@ tier promotion and publishing.
 
 ---
 
-## 12. Jenkins / CI reference
-
-| Job | Purpose |
-|-----|---------|
-| `tde-upgrade-parallel` | Major upgrade bash matrix |
-| `pg-tde-kmip-ci` | Cosmian KMIP every build |
-| `pg-tde-kmip-fortanix` | Weekly Fortanix sign-off |
-| `pg-tde-kmip-thales` | Weekly Thales sign-off |
-| `pg-tde-kmip-akeyless` | Weekly Akeyless sign-off |
-
-Host: `https://pg.cd.percona.com/` (Percona VPN). Pipeline definitions are documented
-in [ci_upgrade_scenarios.md](ci_upgrade_scenarios.md) and [kmip/ci-strategy.md](kmip/ci-strategy.md).
-
----
-
-## 13. One-day quick reference (Ubuntu VM)
+## 10. One-day quick reference (Ubuntu VM)
 
 ```bash
-cd percona-qa/postgresql/pytest
+cd pg_tde/core/files/pytest
 bash setup_test_env.sh --install-pkgs --pg-major 18 --pg-repo-line 18.4 --repo-component testing
 source .env.sh
 
@@ -375,12 +315,12 @@ KMIP_PROFILE=akeyless ./scripts/run_kmip_matrix.sh
 
 # Upgrades (when both versions installed)
 bash run_minor_upgrade_workflow.sh
-bash run_tde_upgrade_parallel.sh
+bash run_major_upgrade_workflow.sh --old-pg-major 17 --new-pg-major 18
 ```
 
 ---
 
-## 14. Documentation map
+## 11. Documentation map
 
 | Topic | File |
 |-------|------|
@@ -393,7 +333,7 @@ bash run_tde_upgrade_parallel.sh
 | Vendor KMS sign-off | [kmip/vendor-signoff.md](kmip/vendor-signoff.md) |
 | Vault KV | [vault.md](vault.md) |
 | Key provider layout | [key_provider_matrix.md](key_provider_matrix.md) |
-| Docker tests | [docker/README.md](docker/README.md) |
+| Docker tests | [docker/README.md](../docker/README.md) |
 | io_uring host setup | [io_uring_system_setup.md](io_uring_system_setup.md) |
 | Full test catalog | [coverage_reports/test_catalog_2026-08-05.md](../coverage_reports/test_catalog_2026-08-05.md) |
 | Coverage report (2026-08-05) | [coverage_reports/coverage_2026-08-05.md](../coverage_reports/coverage_2026-08-05.md) |
@@ -403,7 +343,7 @@ bash run_tde_upgrade_parallel.sh
 
 ---
 
-## 15. Tool dependency summary
+## 12. Tool dependency summary
 
 ```
 pg_tde build
@@ -413,8 +353,5 @@ pg_tde build
 
 pytest ──┬── Cosmian / OpenBao (auto or scripts/)
          ├── Vendor KMIP matrix (Fortanix, Thales, Akeyless)
-         ├── Upgrade workflows (major + minor)
-         └── Jenkins (pg.cd.percona.com)
-
-package_testing / tarball_testing ──► release promotion
+         └── Upgrade workflows (major + minor)
 ```

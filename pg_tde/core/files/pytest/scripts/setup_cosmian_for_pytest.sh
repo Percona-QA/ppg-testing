@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Export KMIP_* from KMIP_COSMIAN_* for pytest (Percona CI uses Cosmian, not PyKMIP).
+# Export KMIP_* from KMIP_COSMIAN_* for pytest (Percona CI uses Cosmian).
 #
 # Usage (CI injects KMIP_COSMIAN_* as Jenkins secrets, or export manually):
-#   cd postgresql/pytest
+#   cd pg_tde/core/files/pytest
 #   source .env.sh
 #   source scripts/setup_cosmian_for_pytest.sh
 #   ./scripts/run_kmip_revalidation.sh
@@ -22,7 +22,7 @@ _cosmian_setup_fail() {
     echo "ERROR: no Cosmian KMIP available." >&2
     echo "" >&2
     echo "Option A — install local cosmian_kms (pg_tde CI parity):" >&2
-    echo "  cd postgresql/pytest" >&2
+    echo "  cd pg_tde/core/files/pytest" >&2
     echo "  ./scripts/install_cosmian_kms.sh" >&2
     echo "  source scripts/setup_cosmian_for_pytest.sh" >&2
     echo "" >&2

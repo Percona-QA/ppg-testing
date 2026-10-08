@@ -14,7 +14,7 @@ in [kmip/vault-kmip-engine.md](kmip/vault-kmip-engine.md) / `tests/test_vault_km
 
 | Module | Marker(s) | Server |
 |--------|-----------|--------|
-| `tests/test_vault_providers.py::TestHashicorpVaultKeyProvider` | `vault` | Vault dev / `setup_vault.sh` / Docker |
+| `tests/test_vault_providers.py::TestHashicorpVaultKeyProvider` | `vault` | Vault dev / `setup_vault_for_pytest.sh` / Docker |
 | `tests/test_vault_providers.py::TestOpenBaoKeyProvider` | `vault`, `openbao` | `install_openbao.sh` + `setup_openbao_for_pytest.sh` |
 | `tests/test_openbao_key_providers.py` | `vault`, `openbao` | same (+ KMIP for scenarios 4–8) |
 
@@ -23,7 +23,7 @@ Legacy smoke: `tests/test_encryption.py::TestKeyManagement::test_vault_key_provi
 ## Quick start — Docker Vault (fastest)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 docker compose up -d vault
 export VAULT_ADDR=http://127.0.0.1:8200
 export VAULT_TOKEN=root
@@ -36,7 +36,7 @@ pytest tests/test_vault_providers.py::TestHashicorpVaultKeyProvider -v
 ## Quick start — automation Vault (SSL)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
 source scripts/setup_vault_for_pytest.sh
 pytest tests/test_vault_providers.py::TestHashicorpVaultKeyProvider -v
@@ -47,7 +47,7 @@ pytest tests/test_vault_providers.py::TestHashicorpVaultKeyProvider -v
 Same package as **pg_tde** `ci_scripts/ubuntu-deps.sh` (v2.5.4). No Go build required.
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 ./scripts/install_openbao.sh
 ```
 
@@ -64,7 +64,7 @@ bao version
 ## OpenBao (namespace tests)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
 source scripts/setup_openbao_for_pytest.sh
 ./scripts/run_openbao_revalidation.sh
@@ -73,7 +73,7 @@ source scripts/setup_openbao_for_pytest.sh
 `setup_openbao_for_pytest.sh` starts `bao server -dev`, creates namespace `pg_tde_ns1`,
 enables KV v2 mount `pg_tde`, and exports `VAULT_KV_ONLY_TOKEN_FILE` for PG-1959.
 
-KMIP-backed scenarios (open_bao_tests 2–8): `run_openbao_revalidation.sh` auto-sources
+KMIP-backed scenarios: `run_openbao_revalidation.sh` auto-sources
 `setup_cosmian_for_pytest.sh` when KMIP is not already configured.
 
 ```bash
@@ -101,20 +101,7 @@ pytest tests/ -m openbao -v
 pytest tests/ --skip-sections=vault -v
 ```
 
-## Bash parity
-
-| Bash script | Pytest |
-|-------------|--------|
-| `pg_tde_hashicorp_vault_mount_permission_warning_test.sh` | `tests/test_vault_hashicorp_parity.py::TestHashicorpVaultMountPermissionWarning` |
-| `pg_tde_change_database_key_provider_vault_v2.sh` | `tests/test_vault_hashicorp_parity.py::TestHashicorpVaultChangeDatabaseKeyProviderV2` |
-| `pg_tde_openbao_vault_mount_permission_warning_test.sh` | `tests/test_external_key_provider_regressions.py::test_vault_kv_only_token_without_mount_metadata` |
-| `pg_tde_open_bao_tests.sh` scenarios 1–3 | `tests/test_vault_providers.py::TestOpenBaoKeyProvider` |
-| `pg_tde_open_bao_tests.sh` scenarios 4–10, 12 | `tests/test_openbao_key_providers.py` |
-| `pg_tde_open_bao_tests.sh` scenario 11 | `tests/test_external_key_provider_regressions.py::test_vault_delete_provider_after_server_key_on_file` |
-| `pg_tde_functions_test.sh` | `tests/test_key_provider_lifecycle.py` (full s1–12); vault slices also in `tests/test_vault_providers.py::TestHashicorpVaultKeyProvider` |
-| `t/064_delete_key_providers.pl` | `test_delete_*_vault_*` |
-
-### Run parity suites
+## Parity suites
 
 ```bash
 source scripts/setup_vault_for_pytest.sh
@@ -133,9 +120,9 @@ pytest tests/test_openbao_key_providers.py -v
 
 `setup_openbao_for_pytest.sh` exports `VAULT_KV_ONLY_TOKEN_FILE` when `bin/bao` is available.
 
-## Jenkins / ppg-testing
+## Running in CI
 
-Add optional stages:
+Optional stages:
 
 1. **vault** — `docker compose up vault` or `setup_vault_for_pytest.sh`, then `pytest -m vault`.
 2. **openbao** — `install_openbao.sh`, `setup_openbao_for_pytest.sh`, `run_openbao_revalidation.sh`.
@@ -148,7 +135,7 @@ When Vault is already running (namespaces, `pg_tde` KV mount, KMIP engine), use 
 bash revalidation suite instead of `setup_vault_for_pytest.sh`:
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 cp scripts/config/hashicorp_vault.example.env /tmp/my_vault.env
 # Edit: INSTALL_DIR, VAULT_TOKEN_FILE=/tmp/token_ent, VAULT_NAMESPACE=ns1/, KMIP cert paths
 
@@ -172,7 +159,7 @@ HC_VAULT_SUITES=kmip ./scripts/run_hashicorp_vault_revalidation.sh
 ### Pytest only (manual / external Vault server)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
 ./scripts/run_hashicorp_vault_pytest.sh
 ```

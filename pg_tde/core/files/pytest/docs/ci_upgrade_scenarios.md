@@ -1,130 +1,101 @@
-# CI upgrade scenarios — `tde-upgrade-parallel` + 18.4.1 → 18.4.2
+# Upgrade CI and runbook — `pg_tde/upgrade` role + local pytest runs
 
-Runbook for matching Percona Jenkins job
-[`tde-upgrade-parallel`](https://pg.cd.percona.com/job/tde-upgrade-parallel/)
-and the in-place **18.4.1 → 18.4.2** patch bump.
+> **Status:** the CI flow in section 1 (staged checker, `tde-upgrade` /
+> `tde-upgrade-parallel` jobs, key-provider / HA / checksum parameters) lives on
+> branch `pg-tde-upgrade-harden` and is **not merged to `main` yet**. Sections A
+> and B run from this directory and do not depend on it.
 
-Full pytest/bash catalog: [`upgrade_matrix.md`](upgrade_matrix.md).
-
----
-
-## Two upgrade types in this doc
-
-| Track | Jenkins-style name | PostgreSQL | Data dir | Tooling in this repo |
-|-------|-------------------|------------|----------|----------------------|
-| **A — Major parallel** | `tde-upgrade-parallel` | Different major (typ. **17 → 18**) | New cluster via `pg_tde_upgrade` | Bash runners + `tests/test_tde_pg_upgrade.py` |
-| **B — Minor patch** | (same job or separate minor job) | Same major (**18 → 18**) | **Same** `$PGDATA` | `run_minor_upgrade_workflow.sh` + `tests/test_tde_minor_upgrade.py` |
+Full pytest catalog: [`upgrade_matrix.md`](upgrade_matrix.md).
 
 ---
 
-## A. `tde-upgrade-parallel` (major upgrade matrix)
+## 1. CI: the `pg_tde/upgrade` Ansible role
 
-Jenkins build [#122 parameters](https://pg.cd.percona.com/job/tde-upgrade-parallel/122/parameters/)
-is not readable without VPN/login from outside Percona. The job name and repo layout
-imply a **parallel matrix of major-version upgrade bash scripts** driven by:
+Ansible owns *getting there* (real Percona repos, packages, systemd, `pg_tde_upgrade`).
+pytest owns *checking it*: the role calls the staged checker
+[`tests/test_tde_upgrade_check.py`](../tests/test_tde_upgrade_check.py) against the
+packaged service cluster through `PGHOST`/`PGPORT`. Jenkins jobs are generated from
+`pg_tde/upgrade/scenario.yml` (`tools/gen_jenkins.py`):
 
-| Parameter (typical) | Maps to |
-|---------------------|---------|
-| `OLD_SERVER_BUILD_PATH` / `OLD_INSTALL_DIR` | Source PG (e.g. `/usr/lib/postgresql/17`) |
-| `NEW_SERVER_BUILD_PATH` / `INSTALL_DIR` | Target PG (e.g. `/usr/lib/postgresql/18`) |
-| `TESTNAME` | Comma-separated `.sh` under `automation/tests/` or `upgrade_testing/tests/` |
-| `IO_METHOD` | `worker` (default), `sync`, or `io_uring` |
-| `SKIP_TEST` | Comma-separated basenames to skip |
+| Job | Purpose |
+|-----|---------|
+| `tde-upgrade` | one platform, one upgrade |
+| `tde-upgrade-parallel` | the same upgrade across the platform matrix |
 
-Confirm exact parameter names on the Jenkins **Build with Parameters** page before
-filing a CI ticket.
+### 1.1 Flow
 
-### A.1 Bash scripts (Jenkins / manual parity)
+| Step | What happens |
+|------|--------------|
+| Install FROM | `FROM_VERSION` server packages + pg_tde (packages, or built from `FROM_TDE_BRANCH`) |
+| `prepare` | extension, global provider + server key, WAL encryption on; role restarts the server |
+| `setup` | seed the standard dataset, check it is encrypted on disk, write `upgrade_check_state.json` |
+| Upgrade | `server_minor` / `tde_only`: package swap + restart. `server_major`: `pg_tde_upgrade --check`, then `--link` |
+| `verify-before-alter` | read-only: data, encryption state, providers and keys unchanged with the new library on the old extension catalog |
+| `ALTER EXTENSION pg_tde UPDATE` | every database; failures fail the job |
+| `verify` | same checks, `extversion`, ciphertext on disk, writes, new tde tables, key rotation |
+| `verify-replica` | `HA=true` only: replica in recovery, caught up, same data/keys, encrypted on disk and in WAL |
 
-#### Automation suite (`postgresql/automation/`)
+The job also fails on a no-op upgrade (expected `version()` / `pg_tde_version()` must
+differ from the state file when a bump is expected).
 
-Each script is a self-contained major-upgrade scenario. Run via `test_runner.sh`:
+### 1.2 Parameters
+
+| Parameter | Meaning |
+|-----------|---------|
+| `FROM_VERSION`, `TO_VERSION` | e.g. `ppg-17.10`, `ppg-18.4` |
+| `UPGRADE_TYPE` | `server_minor`, `server_major` (`pg_tde_upgrade --link`), `tde_only` |
+| `TDE_UPGRADE` | also upgrade pg_tde during a server upgrade (ignored for `tde_only`) |
+| `FROM_REPO`, `TO_REPO` | `testing` / `experimental` / `release` |
+| `INSTALL_FROM_PACKAGES` | pg_tde from packages (default) or built from `FROM_TDE_BRANCH` / `TO_TDE_BRANCH` |
+| `USE_OBS_REPO`, `OBS_HOST`, `OBS_PROJECT` | install the TO version from OBS |
+| `KEY_PROVIDER` | `file`, or `vault` / `openbao` / `kmip` (KMS started in docker by the role; `tde_b` always stays on a file provider) |
+| `HA` | add a streaming replica; rolling upgrade for minor / `tde_only`, rebuilt after a major |
+| `DATA_CHECKSUMS` | `default` / `on` / `off` for the FROM cluster; with checksums on, the upgraded cluster is checked offline with `pg_tde_checksums` |
+| `RUN_PYTEST_UPGRADE_SECTION`, `PYTEST_UPGRADE_TESTS` | `server_major` only: also run the pytest major-upgrade tests (default `tests/test_tde_pg_upgrade.py`) on the packaged FROM and TO binaries (about 6 min) |
+| `FROM/TO_PKG_RELEASE`, `FROM/TO_TDE_PKG_VERSION` | pin server build increment / pg_tde package version |
+| `FROM/TO_PERCONA_SERVER_VERSION` | assert `SELECT version()` reports this patch version |
+| `DESTROY_ENV` | `false` keeps the VM for debugging |
+
+The authoritative list, with defaults, is `params:` in `pg_tde/upgrade/scenario.yml`.
+
+### 1.3 Running the checker by hand
+
+The stages are selected with `--upgrade-stage` (`prepare`, `setup`,
+`verify-before-alter`, `verify`, `verify-replica`); without it the module is skipped.
 
 ```bash
-cd postgresql/automation/wrapper
-
-OLD=/usr/lib/postgresql/17    # or dev tree: /home/ubuntu/pgwork/pginst/17
-NEW=/usr/lib/postgresql/18    # or dev tree: /home/ubuntu/pgwork/pginst/18
-IO=worker
-
-run_one() {
-  bash test_runner.sh \
-    --server_build_path "$NEW" \
-    --old_server_build_path "$OLD" \
-    --testname "$1" \
-    --io_method "$IO"
-}
-
-# Core smoke
-run_one pg_tde_upgrade_test.sh
-
-# Flavour permutations
-run_one pg_tde_upgrade_ppg_to_psp.sh      # 4 scenarios: PG-2240, ALTER EXT, multi-DB, --check
-run_one pg_tde_upgrade_psp_to_psp.sh      # PSP 17→18: data + multi-DB keys
-run_one pg_tde_upgrade_access_method.sh   # 5 heap↔tde_heap permutations
-run_one pg_tde_upgrade_wal_encryption.sh  # 4 WAL enc on/off paths
-run_one pg_tde_upgrade_scenarios_test.sh  # 7: multi-DB, mixed AM+FK, schema, TOAST, partitions, global KP, --check
+cd pg_tde/core/files/pytest && source .env.sh
+pytest tests/test_tde_upgrade_check.py --upgrade-stage=setup \
+    --upgrade-check-dir=/var/lib/pg_tde_upgrade_check
 ```
 
-#### Upgrade-testing suite (`postgresql/upgrade_testing/`)
+Options: `--upgrade-check-dir` (default `/var/lib/pg_tde_upgrade_check`),
+`--replica-port` (for `verify-replica`). Skip it with `--skip-sections=upgrade_check`.
 
-Uses `pg_tde_upgrade_runner.sh` (always calls `pg_tde_upgrade` wrapper):
+---
 
-```bash
-cd postgresql/upgrade_testing/wrapper
+## Two upgrade types run from this directory
 
-OLD=/usr/lib/postgresql/17
-NEW=/usr/lib/postgresql/18
-IO=worker
+| Track | Name | PostgreSQL | Data dir | Tooling in this repo |
+|-------|------|------------|----------|----------------------|
+| **A — Major** | `pytest -m upgrade` | Different major (typ. **17 → 18**) | New cluster via `pg_tde_upgrade` | `tests/test_tde_pg_upgrade.py` + `tests/test_upgrade.py` |
+| **B — Minor patch** | `run_minor_upgrade_workflow.sh` | Same major (**18 → 18**) | **Same** `$PGDATA` | `run_minor_upgrade_workflow.sh` + `tests/test_tde_minor_upgrade.py` |
 
-bash pg_tde_upgrade_runner.sh \
-  --old_server_build_path "$OLD" \
-  --new_server_build_path "$NEW" \
-  --testname pg_tde_upgrade_basic_test.sh,pg_tde_upgrade_wal_encryption.sh \
-  --io_method "$IO"
-```
+These use two side-by-side install trees or a staged local workflow, not the
+packaged service cluster the role upgrades.
 
-#### Run all major bash scripts in one loop (local “parallel” prep)
+---
 
-```bash
-cd postgresql/automation/wrapper
-OLD=/usr/lib/postgresql/17
-NEW=/usr/lib/postgresql/18
+## A. Major upgrade (pytest, local)
 
-for t in \
-  pg_tde_upgrade_test.sh \
-  pg_tde_upgrade_ppg_to_psp.sh \
-  pg_tde_upgrade_psp_to_psp.sh \
-  pg_tde_upgrade_access_method.sh \
-  pg_tde_upgrade_wal_encryption.sh \
-  pg_tde_upgrade_scenarios_test.sh
-do
-  echo "======== $t ========"
-  bash test_runner.sh \
-    --server_build_path "$NEW" \
-    --old_server_build_path "$OLD" \
-    --testname "$t" \
-    --io_method worker \
-  || exit 1
-done
+See [`upgrade_matrix.md`](upgrade_matrix.md) for the per-class breakdown.
 
-cd ../../upgrade_testing/wrapper
-bash pg_tde_upgrade_runner.sh \
-  --old_server_build_path "$OLD" \
-  --new_server_build_path "$NEW" \
-  --testname pg_tde_upgrade_basic_test.sh,pg_tde_upgrade_wal_encryption.sh \
-  --io_method worker
-```
+### A.1 Pytest run
 
-Jenkins runs these as **parallel stages** (one script per executor); locally the
-loop above is sequential but exercises the same scenarios.
-
-### A.2 Pytest parity (recommended on dev trees)
-
-Single command covering all major TDE regression (48 tests) + plain `pg_upgrade` (47):
+Single command covering all major TDE regression + plain `pg_upgrade`:
 
 ```bash
-cd postgresql/pytest && source .env.sh
+cd pg_tde/core/files/pytest && source .env.sh
 
 export OLD_INSTALL_DIR=/home/ubuntu/pgwork/pginst/17   # adjust
 export INSTALL_DIR=/home/ubuntu/pgwork/pginst/18
@@ -136,7 +107,7 @@ pytest -m upgrade \
   -v --tb=short
 ```
 
-#### Version-specific subsets
+### A.2 Version-specific subsets
 
 | Old / new pg_tde.control | Run these classes | Skip reason for others |
 |--------------------------|-------------------|------------------------|
@@ -150,10 +121,10 @@ grep default_version "$OLD_INSTALL_DIR"/share/*/extension/pg_tde.control
 grep default_version "$INSTALL_DIR"/share/*/extension/pg_tde.control
 ```
 
-#### Staged VM workflow (packages, Debian/RHEL)
+### A.3 Staged VM workflow (packages, Debian/RHEL)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 sudo mkdir -p /var/lib/pg_tde_major_upgrade && sudo chown "$USER" /var/lib/pg_tde_major_upgrade
 
 bash run_major_upgrade_workflow.sh \
@@ -162,21 +133,6 @@ bash run_major_upgrade_workflow.sh \
 ```
 
 See [`major_upgrade.md`](major_upgrade.md) for `--method debian`, split phases, and troubleshooting.
-
-### A.3 Script → pytest mapping (quick reference)
-
-| Bash script | Pytest class(es) |
-|-------------|------------------|
-| `pg_tde_upgrade_test.sh` | `TestUpgradeBashScriptParity`, `TestPspToPspUpgrade` |
-| `pg_tde_upgrade_ppg_to_psp.sh` | `TestPpgToPspUpgrade` |
-| `pg_tde_upgrade_psp_to_psp.sh` | `TestPspToPspUpgrade` |
-| `pg_tde_upgrade_access_method.sh` | `TestUpgradeAccessMethodPermutations` |
-| `pg_tde_upgrade_wal_encryption.sh` | `TestUpgradeWalEncryptionPaths` |
-| `pg_tde_upgrade_scenarios_test.sh` | `TestPgTdeUpgradeComplexSchema`, `TestTdeUpgradeExtremeCornerCases` |
-| `upgrade_testing/.../basic_test.sh` | `TestUpgradeBashScriptParity::test_upgrade_database_key_provider_and_partitions` |
-| `upgrade_testing/.../wal_encryption.sh` | `TestUpgradeBashScriptParity::test_upgrade_with_wal_encryption_left_on` |
-
----
 
 ## B. 18.4.1 → 18.4.2 (in-place patch / minor bump)
 
@@ -189,7 +145,7 @@ This is **not** `pg_upgrade` and **not** `tests/test_upgrade.py`.
 ### B.1 Automated full workflow (recommended)
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 
 sudo mkdir -p /var/lib/pg_tde_minor_upgrade
 sudo chown "$USER" /var/lib/pg_tde_minor_upgrade
@@ -271,19 +227,17 @@ psql -c "SELECT pg_tde_version();"
 
 ---
 
-## Combined CI checklist
+## Combined local checklist
 
-Use this when reproducing Jenkins #122 **and** the 18.4.1→18.4.2 bump on one VM.
+Use this to run the local major pytest suites **and** the 18.4.1→18.4.2 bump on one VM.
 
 | # | Track | Action | Pass criterion |
 |---|-------|--------|----------------|
-| 1 | Major | All 6 `automation/tests/pg_tde_upgrade_*.sh` green | Each script exits 0 |
-| 2 | Major | Both `upgrade_testing/tests/*.sh` green | Row counts match pre/post upgrade |
-| 3 | Major | `pytest -m upgrade tests/test_tde_pg_upgrade.py` | 48 tests pass (minus expected skips for your control-version pair) |
-| 4 | Major | `run_major_upgrade_workflow.sh` (optional VM smoke) | Debian or pytest method completes verify |
-| 5 | Minor | `run_minor_upgrade_workflow.sh` 18.4.1→18.4.2 | Setup + Verify green |
-| 6 | Minor | `--with-pg2381` | PG-2381 churn scenario green (needs pg_tde with PR #582) |
-| 7 | Minor | Non-staged HA/ALTER EXTENSION tests | 4 classes pass on 18.4.2 |
+| 1 | Major | `pytest -m upgrade tests/test_tde_pg_upgrade.py` | All tests pass (minus expected skips for your control-version pair) |
+| 2 | Major | `run_major_upgrade_workflow.sh` (optional VM smoke) | Debian or pytest method completes verify |
+| 3 | Minor | `run_minor_upgrade_workflow.sh` 18.4.1→18.4.2 | Setup + Verify green |
+| 4 | Minor | `--with-pg2381` | PG-2381 churn scenario green (needs pg_tde with PR #582) |
+| 5 | Minor | Non-staged HA/ALTER EXTENSION tests | All pass on 18.4.2 |
 
 ---
 
@@ -292,7 +246,7 @@ Use this when reproducing Jenkins #122 **and** the 18.4.1→18.4.2 bump on one V
 | Item | Major (17→18) | Minor (18.4.1→18.4.2) |
 |------|---------------|------------------------|
 | Flags | `--old-install-dir` + `--install-dir` | `--upgrade-data-dir` (staged) |
-| Persistent data | Ephemeral `/tmp` in bash; optional `/var/lib/pg_tde_major_upgrade` | `/var/lib/pg_tde_minor_upgrade` |
+| Persistent data | Ephemeral pytest temp dirs; optional `/var/lib/pg_tde_major_upgrade` | `/var/lib/pg_tde_minor_upgrade` |
 | Skip section | `--skip-sections=upgrade` | `--skip-sections=minor_upgrade` |
 | io_uring | `--io-method=io_uring` only when build + host allow | same |
 
@@ -302,7 +256,6 @@ Use this when reproducing Jenkins #122 **and** the 18.4.1→18.4.2 bump on one V
 
 | Path | Role |
 |------|------|
-| `run_tde_upgrade_parallel.sh` | Local driver for major bash matrix (section A.1) |
 | `run_minor_upgrade_workflow.sh` | 18.4.1→18.4.2 staged driver (section B.1) |
 | `run_major_upgrade_workflow.sh` | PG 17→18 staged driver |
 | `docs/upgrade_matrix.md` | Full test catalog |

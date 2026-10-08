@@ -2,7 +2,7 @@
 # Start Vault (SSL dev setup from automation) and export pytest env vars.
 #
 # Alternative for a quick local run:
-#   docker compose -f postgresql/pytest/docker-compose.yml up -d vault
+#   docker compose -f pg_tde/core/files/pytest/docker-compose.yml up -d vault
 #   export VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root VAULT_SECRET_MOUNT=secret
 #
 set -euo pipefail

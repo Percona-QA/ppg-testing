@@ -3,10 +3,10 @@
 #
 # Parity with:
 #   postgresql/automation/tests/pg_tde_checksums_test.sh
-#   postgresql/pytest/tests/test_tde_cli_tools.py::TestPgTdeChecksumsCLI
+#   pg_tde/core/files/pytest/tests/test_tde_cli_tools.py::TestPgTdeChecksumsCLI
 #
 # Usage:
-#   cd postgresql/pytest
+#   cd pg_tde/core/files/pytest
 #   source .env.sh                    # sets INSTALL_DIR
 #   ./scripts/verify_pg_tde_checksums.sh
 #

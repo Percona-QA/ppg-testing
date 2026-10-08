@@ -2,8 +2,7 @@
 
 > **Documentation index:** [README.md](README.md)
 
-Detailed inventory of KMIP-related tests in `postgresql/pytest` (and related bash/TAP
-automation). Use this when signing off a KMS vendor, validating [PR #595](https://github.com/percona/pg_tde/pull/595) / [PG-2125](https://perconadev.atlassian.net/browse/PG-2125), or onboarding to the lab.
+Detailed inventory of KMIP-related tests in `pg_tde/core/files/pytest`. Use this when signing off a KMS vendor, validating [PR #595](https://github.com/percona/pg_tde/pull/595) / [PG-2125](https://perconadev.atlassian.net/browse/PG-2125), or onboarding to the lab.
 
 **Related docs:** [quickstart.md](quickstart.md), [../key_provider_matrix.md](../key_provider_matrix.md), [vendor-signoff.md](vendor-signoff.md), [advanced-scenarios.md](advanced-scenarios.md), [vault-kmip-engine.md](vault-kmip-engine.md).
 
@@ -11,19 +10,18 @@ automation). Use this when signing off a KMS vendor, validating [PR #595](https:
 
 ## Summary
 
-| Layer | Module / script | Tests | Profile scope | Marker |
-|-------|-----------------|------:|---------------|--------|
-| Shared matrix | `tests/test_kmip_common_matrix.py` | 9 | All `KMIP_REVALIDATE_PROFILES` | `kmip`, `kmip_matrix` |
-| Full checklist | `tests/test_kmip_server_revalidation.py` | 1×N profiles | All profiles | `kmip`, `kmip_revalidation` |
-| Extended / advanced | `tests/test_kmip.py` | 26 | Single profile (`kmip_config`) | `kmip`, `encryption` |
-| PG-2125 regression | `tests/test_external_key_provider_regressions.py` | 4 | Single profile | `kmip`, `bug` |
-| Vault KMIP engine | `tests/test_vault_kmip.py` | 2 | `vault_kmip` only | `kmip`, `vault_kmip`, `bug` |
-| OpenBao + KMIP mix | `tests/test_openbao_key_providers.py` | 5 scenarios | KMIP + OpenBao | `vault`, `openbao`, `kmip` |
-| OpenBao multi-DB | `tests/test_vault_providers.py` | 2 | KMIP + OpenBao | `vault`, `openbao` |
-| Offline CLI (kmip) | `tests/test_change_key_provider.py` | 1 | No live server | `encryption` |
-| Offline CLI (kmip) | `tests/test_kmip.py` | 1 | Live KMIP | `kmip` |
-| Bash revalidation | `scripts/scenarios/hashicorp_vault_kmip.sh` | 4 scenarios | Vault Enterprise KMIP | — |
-| TAP (legacy) | `postgresql/t/*.pl` | several | External KMIP lab | — |
+| Layer | Module / script | Profile scope | Marker |
+|-------|-----------------|---------------|--------|
+| Shared matrix | `tests/test_kmip_common_matrix.py` | All `KMIP_REVALIDATE_PROFILES` | `kmip`, `kmip_matrix` |
+| Full checklist | `tests/test_kmip_server_revalidation.py` | All profiles | `kmip`, `kmip_revalidation` |
+| Extended / advanced | `tests/test_kmip.py` | Single profile (`kmip_config`) | `kmip`, `encryption` |
+| PG-2125 regression | `tests/test_external_key_provider_regressions.py` | Single profile | `kmip`, `bug` |
+| Vault KMIP engine | `tests/test_vault_kmip.py` | `vault_kmip` only | `kmip`, `vault_kmip`, `bug` |
+| OpenBao + KMIP mix | `tests/test_openbao_key_providers.py` | KMIP + OpenBao | `vault`, `openbao`, `kmip` |
+| OpenBao multi-DB | `tests/test_vault_providers.py` | KMIP + OpenBao | `vault`, `openbao` |
+| Offline CLI (kmip) | `tests/test_change_key_provider.py` | No live server | `encryption` |
+| Offline CLI (kmip) | `tests/test_kmip.py` | Live KMIP | `kmip` |
+| Bash revalidation | `scripts/scenarios/hashicorp_vault_kmip.sh` | Vault Enterprise KMIP | — |
 
 **Default KMIP server:** `cosmian` (no vendor license). Override with `KMIP_PROFILE=vault_kmip` (or `fortanix`, `thales`, `akeyless`).
 
@@ -141,14 +139,12 @@ pytest tests/test_kmip.py -v
 
 ### `TestKmipBashParityScenarios`
 
-Ports `pg_tde_functions_test.sh` / TAP KMIP scenarios.
-
-| Test | Bash / TAP source | Description |
-|------|-------------------|-------------|
-| `test_multiple_databases_file_and_kmip_providers` | functions_test s2, `t/066` | `db1` file key; `db2` KMIP key; restart |
-| `test_kmip_global_default_principal_key_two_databases` | functions_test s3 (file stand-in) | Global default KMIP key; `test1` local file key; `test2` inherits default |
-| `test_default_principal_key_local_vault_and_global_kmip_survives_restart` | functions_test s3 (exact) | Local vault on `test1` + global KMIP default; list providers; restart; re-query |
-| `test_kmip_database_scoped_provider` | functions_test s4 | Database-local KMIP provider on `sbtest2` |
+| Test | Description |
+|------|-------------|
+| `test_multiple_databases_file_and_kmip_providers` | `db1` file key; `db2` KMIP key; restart |
+| `test_kmip_global_default_principal_key_two_databases` | Global default KMIP key; `test1` local file key; `test2` inherits default |
+| `test_default_principal_key_local_vault_and_global_kmip_survives_restart` | Local vault on `test1` + global KMIP default; list providers; restart; re-query |
+| `test_kmip_database_scoped_provider` | Database-local KMIP provider on `sbtest2` |
 
 ### `TestKmipDefaultPrincipalKeyAcrossRestarts`
 
@@ -306,22 +302,7 @@ Also: `tests/test_vault_providers.py` — `test_openbao_global_vault_multi_db_wi
 
 ---
 
-## 9. Legacy TAP / automation (not pytest)
-
-| File | KMIP coverage |
-|------|----------------|
-| `t/066_multiple_db_diff_key_prov.pl` | Multi-DB different providers |
-| `t/069_change_database_key_provider_and_verify_data_integrity.pl` | Change DB provider to KMIP |
-| `t/070_change_global_key_provider_and_verify_data_integrity.pl` | Global KMIP provider change |
-| `t/071_global_key_rotation_and_verification.pl` | Global default key rotation to KMIP |
-| `t/072_data_migration_between_key_providers.pl` | DB-scoped KMIP after migration |
-| `automation/tests/pg_tde_functions_test.sh` | KMIP scenarios 2–4 |
-| `automation/tests/change_pg_tde_key_provider.sh` | Change provider under load (kmip type) |
-| `automation/tests/pg_tde_rewind_extended.sh` | Optional KMIP provider change during rewind |
-
----
-
-## 10. Pytest markers
+## 9. Pytest markers
 
 | Marker | Meaning |
 |--------|---------|
@@ -338,7 +319,7 @@ Tests skip when `KMIP_*` env is unset or KMS is unreachable (except CLI negative
 
 ---
 
-## 11. Quick command reference
+## 10. Quick command reference
 
 ```bash
 # Default Cosmian — full matrix
@@ -368,11 +349,11 @@ KMIP_PROFILE=fortanix pytest tests/test_kmip_common_matrix.py tests/test_kmip_se
 
 ---
 
-## 12. Coverage gaps (intentional)
+## 11. Coverage gaps (intentional)
 
 | Area | Status |
 |------|--------|
-| Cross-provider type migration (file → kmip → vault) in one pytest | Partial — TAP `t/069`; Vault leg needs Vault server |
+| Cross-provider type migration (file → kmip → vault) in one pytest | Partial — Vault leg needs Vault server |
 | Every vendor on `test_kmip.py` extended suite | No — extended suite is single-profile; matrix covers all profiles |
 | Vault KMIP Register -2 strict pass | Opt-in via `VAULT_KMIP_REQUIRE_REGISTER_SUCCESS=1` |
 | Fortanix / Thales / Akeyless in CI | Manual / scheduled jobs with vendor credentials |
