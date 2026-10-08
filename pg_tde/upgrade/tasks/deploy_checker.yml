@@ -53,7 +53,12 @@
     become_user: postgres
     shell: |
       set -e
-      python3 -m venv .venv
+      # RHEL8-family: python3 is 3.6, too old for pytest>=7.4 (redhat_tasks.yml
+      # installs python3.9 beside it)
+      PY=python3
+      command -v python3.9 >/dev/null 2>&1 && [ "{{ ansible_os_family }}" = RedHat ] \
+        && [ "{{ ansible_distribution_major_version }}" = 8 ] && PY=python3.9
+      $PY -m venv .venv
       .venv/bin/python -m pip install --quiet --upgrade pip
       .venv/bin/python -m pip install --quiet "pytest>=7.4"
     args:
