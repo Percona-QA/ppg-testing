@@ -5,7 +5,7 @@
 # Prerequisite: a running Vault API (e.g. source scripts/setup_vault_for_pytest.sh).
 #
 # Usage:
-#   cd postgresql/pytest
+#   cd pg_tde/core/files/pytest
 #   source scripts/setup_vault_for_pytest.sh    # optional: local SSL dev Vault
 #   source scripts/setup_vault_kmip_for_pytest.sh
 #   pytest tests/test_vault_kmip.py -v

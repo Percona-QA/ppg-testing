@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Quick io_uring readiness check (build + system) with optional auto-fix.
 # Works on Ubuntu/Debian and RHEL/OL/Rocky (same checks; OS-aware INSTALL_DIR).
-# Full runbook: postgresql/pytest/docs/io_uring_system_setup.md
+# Full runbook: pg_tde/core/files/pytest/docs/io_uring_system_setup.md
 #
 # Usage:
 #   ./scripts/check_io_uring_ready.sh              # check + apply memlock/sysctl
@@ -47,7 +47,7 @@ echo "OS family  : ${PG_OS_FAMILY} (${PG_OS_ID:-unknown})"
 echo "INSTALL_DIR: ${INSTALL_DIR}"
 echo "USER       : ${USER_NAME}"
 echo "Mode       : $([[ "$APPLY" == 1 ]] && echo 'check + apply' || echo 'check-only')"
-echo "Doc        : postgresql/pytest/docs/io_uring_system_setup.md"
+echo "Doc        : pg_tde/core/files/pytest/docs/io_uring_system_setup.md"
 echo
 
 if [[ ! -x "$INSTALL_DIR/bin/initdb" ]]; then
@@ -218,5 +218,5 @@ fi
 if [[ "$KERN_OK" != 1 ]]; then
   echo "  - kernel: sudo sysctl -w kernel.io_uring_disabled=0"
 fi
-echo "Doc: postgresql/pytest/docs/io_uring_system_setup.md"
+echo "Doc: pg_tde/core/files/pytest/docs/io_uring_system_setup.md"
 exit 1

@@ -2,7 +2,7 @@
 # Run all shared key-provider matrix tests (KMIP + Vault KV + file keyring).
 #
 # Usage:
-#   cd postgresql/pytest && source .env.sh
+#   cd pg_tde/core/files/pytest && source .env.sh
 #   ./scripts/run_key_provider_matrix.sh
 #
 # Subsets:

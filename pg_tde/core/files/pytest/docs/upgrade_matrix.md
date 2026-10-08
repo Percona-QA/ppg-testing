@@ -9,7 +9,7 @@ Related runbooks:
 |-------|----------|-----------------|
 | Major PG 17→18 + `pg_tde_upgrade` | [`major_upgrade.md`](major_upgrade.md) | `run_major_upgrade_workflow.sh` |
 | In-place bump (e.g. **18.4.1 → 18.4.2**) | [`minor_upgrade.md`](minor_upgrade.md) | `run_minor_upgrade_workflow.sh` |
-| Jenkins `tde-upgrade-parallel` CI | [`ci_upgrade_scenarios.md`](ci_upgrade_scenarios.md) | `run_tde_upgrade_parallel.sh --pytest-only` |
+| Upgrade CI (`pg_tde/upgrade` role) + local runbook | [`ci_upgrade_scenarios.md`](ci_upgrade_scenarios.md) | `pytest -m upgrade` |
 | Skip whole areas | [`test_sections.md`](test_sections.md) | `--skip-sections=upgrade` / `minor_upgrade` |
 
 ---
@@ -413,8 +413,7 @@ Methods: `pytest` (smoke via `TestPspToPspUpgrade`), `debian` (`initdb` under `/
 | `tests/test_tde_minor_upgrade.py` | In-place pg_tde bump |
 | `run_major_upgrade_workflow.sh` | Staged major upgrade driver |
 | `run_minor_upgrade_workflow.sh` | Staged minor upgrade driver (default **18.4.1 → 18.4.2**) |
-| `run_tde_upgrade_parallel.sh` | Local driver for the Jenkins `tde-upgrade-parallel` job; use `--pytest-only` |
-| `docs/ci_upgrade_scenarios.md` | CI runbook: Jenkins job + 18.4.1→18.4.2 |
+| `docs/ci_upgrade_scenarios.md` | Upgrade runbook: major pytest + 18.4.1→18.4.2 |
 | `docs/major_upgrade.md` | Major upgrade runbook |
 | `docs/minor_upgrade.md` | Minor upgrade runbook |
 | `docs/upgrade_matrix.md` | This document |

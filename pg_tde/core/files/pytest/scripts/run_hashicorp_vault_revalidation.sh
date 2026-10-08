@@ -6,7 +6,7 @@
 #   - Vault KMIP secrets engine (TCP 5696 + client certs)
 #
 # Usage on your testing system:
-#   cd postgresql/pytest
+#   cd pg_tde/core/files/pytest
 #   cp scripts/config/hashicorp_vault.example.env /tmp/my_vault.env
 #   # edit INSTALL_DIR, VAULT_TOKEN_FILE, KMIP cert paths, etc.
 #   source /tmp/my_vault.env

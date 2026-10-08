@@ -258,8 +258,6 @@ Template: `config/kmip_profiles.example.env`.
 
 Docs: [major_upgrade.md](major_upgrade.md), [ci_upgrade_scenarios.md](ci_upgrade_scenarios.md)
 
-**Jenkins:** `tde-upgrade-parallel` on `https://pg.cd.percona.com/` (VPN)
-
 ### 8b. Minor upgrade (in-place patch, e.g. 18.4.1 → 18.4.2)
 
 | Tool | Path |
@@ -285,7 +283,7 @@ Data dir: `PG_TDE_UPGRADE_DATA_DIR` (default `/var/lib/pg_tde_minor_upgrade`).
 | Core pytest green | `pytest tests/` log |
 | Cosmian KMIP | `run_kmip_revalidation.sh` |
 | OpenBao / Vault KV | `run_openbao_revalidation.sh`, `run_vault_kv_matrix.sh` |
-| Major upgrade | `tde-upgrade-parallel` or `pytest -m upgrade` |
+| Major upgrade | `pytest -m upgrade` |
 | Minor upgrade | `run_minor_upgrade_workflow.sh` |
 | Vendor KMS (release) | [vendor-signoff.md](kmip/vendor-signoff.md) checklist |
 
@@ -300,17 +298,7 @@ tier promotion and publishing.
 
 ---
 
-## 10. Jenkins / CI reference
-
-| Job | Purpose |
-|-----|---------|
-| `tde-upgrade-parallel` | Major upgrade matrix |
-
-Host: `https://pg.cd.percona.com/` (Percona VPN). See [ci_upgrade_scenarios.md](ci_upgrade_scenarios.md).
-
----
-
-## 11. One-day quick reference (Ubuntu VM)
+## 10. One-day quick reference (Ubuntu VM)
 
 ```bash
 cd pg_tde/core/files/pytest
@@ -332,7 +320,7 @@ bash run_major_upgrade_workflow.sh --old-pg-major 17 --new-pg-major 18
 
 ---
 
-## 12. Documentation map
+## 11. Documentation map
 
 | Topic | File |
 |-------|------|
@@ -355,7 +343,7 @@ bash run_major_upgrade_workflow.sh --old-pg-major 17 --new-pg-major 18
 
 ---
 
-## 13. Tool dependency summary
+## 12. Tool dependency summary
 
 ```
 pg_tde build
@@ -365,6 +353,5 @@ pg_tde build
 
 pytest ──┬── Cosmian / OpenBao (auto or scripts/)
          ├── Vendor KMIP matrix (Fortanix, Thales, Akeyless)
-         ├── Upgrade workflows (major + minor)
-         └── Jenkins (pg.cd.percona.com)
+         └── Upgrade workflows (major + minor)
 ```

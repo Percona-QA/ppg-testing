@@ -11,7 +11,7 @@
 #              (config in PGDATA; pg_createcluster split layout is incompatible)
 #
 # Usage:
-#   cd postgresql/pytest
+#   cd pg_tde/core/files/pytest
 #   bash run_major_upgrade_workflow.sh
 #   bash run_major_upgrade_workflow.sh --method debian --cluster-name pg_tde_major_test
 #   bash run_major_upgrade_workflow.sh --setup-only
@@ -431,7 +431,7 @@ run_pytest_smoke() {
 
     local tests=(
         "tests/test_tde_pg_upgrade.py::TestPspToPspUpgrade::test_tde_heap_data_survives"
-        "tests/test_tde_pg_upgrade.py::TestPspToPspUpgrade::test_check_mode_with_wal_enc_on"
+        "tests/test_tde_pg_upgrade.py::TestUpgradeWalEncryptionPaths::test_check_mode_with_wal_enc_on"
         "tests/test_upgrade.py::TestUpgradePostMaintenance::test_analyze_all_after_upgrade"
     )
 

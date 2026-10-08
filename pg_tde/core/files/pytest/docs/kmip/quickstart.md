@@ -6,9 +6,8 @@ KMIP (Key Management Interoperability Protocol) is a **separate** key provider
 from HashiCorp Vault / OpenBao. pg_tde talks to a KMIP server over TLS using
 `pg_tde_add_global_key_provider_kmip` / `pg_tde_add_database_key_provider_kmip`.
 
-**Automated KMIP testing uses Cosmian KMS**, not PyKMIP (abandoned upstream),
-matching pg_tde's own CI. Vendor KMS servers (Fortanix, Thales, Akeyless) are
-for scheduled sign-off: [vendor-signoff.md](vendor-signoff.md).
+**Automated KMIP testing uses Cosmian KMS**, matching pg_tde's own CI. Vendor KMS servers (Fortanix, Thales, Akeyless)
+are for scheduled sign-off: [vendor-signoff.md](vendor-signoff.md).
 
 Recent pg_tde builds ([PR #595](https://github.com/percona/pg_tde/pull/595))
 use the C++ **libkmip** submodule (`subprojects/libkmip`, `kmipclient::Kmip`)
@@ -81,8 +80,8 @@ source scripts/setup_cosmian_for_pytest.sh   # local cosmian_kms or remote KMIP_
 `setup_cosmian_for_pytest.sh` picks a server in this order:
 
 1. Existing `KMIP_*` variables, if already set
-2. Local `cosmian_kms` on `PATH` → `setup_cosmian_local_for_pytest.sh`
-3. Remote lab from `KMIP_COSMIAN_*`
+2. `KMIP_COSMIAN_HOST` set → remote lab from `KMIP_COSMIAN_*` (wins over a local binary)
+3. Otherwise, local `cosmian_kms` found → `setup_cosmian_local_for_pytest.sh`
 4. Otherwise it fails with install / lab instructions
 
 **Local Cosmian only (pg_tde CI parity):**

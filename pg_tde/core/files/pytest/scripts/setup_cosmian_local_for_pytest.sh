@@ -4,7 +4,7 @@
 # Requires cosmian_kms on PATH (pg_tde ci_scripts/ubuntu-deps.sh installs v5.21.0).
 #
 # Usage:
-#   cd postgresql/pytest
+#   cd pg_tde/core/files/pytest
 #   source scripts/setup_cosmian_local_for_pytest.sh
 #   ./scripts/run_kmip_revalidation.sh
 #

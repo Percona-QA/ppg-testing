@@ -5,7 +5,7 @@
 # Requires Vault Enterprise with the KMIP engine enabled.
 #
 # Usage (external lab — your Enterprise server + certs on disk):
-#   cd postgresql/pytest
+#   cd pg_tde/core/files/pytest
 #   source .env.sh
 #   export KMIP_VAULT_HOST=127.0.0.1
 #   export KMIP_VAULT_CLIENT_CERT=/tmp/client_cert.pem
