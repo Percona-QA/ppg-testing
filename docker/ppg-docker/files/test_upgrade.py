@@ -121,17 +121,18 @@ NEW_RPM_PACKAGES = NEW_SETTINGS["rpm_packages"]
 
 
 def _expected_ubi_major_version(tag):
-    """Derive expected RHEL/UBI major version from an image tag.
+    """Derive expected RHEL/UBI major version from an image tag or, for OBS
+    images with bare tags, a repository path component ('.../ubi8').
 
     Lenient variant of test_docker.py's _expected_ubi_major_version (which
     fails fast on malformed tags) — this file only uses the result to pick
     an RPM name override, so it just falls back to '9' on anything
     unrecognized rather than raising.
     """
-    tag = tag.lower()
-    if "ubi" not in tag:
-        return "9"
-    match = re.search(r"ubi(\d+)", tag)
+    match = re.search(r"ubi(\d+)", tag.lower())
+    if not match:
+        repo_ubi = [part for part in DOCKER_REPO.lower().split("/") if re.fullmatch(r"ubi\d+", part)]
+        match = re.fullmatch(r"ubi(\d+)", repo_ubi[-1]) if repo_ubi else None
     return match.group(1) if match else "9"
 
 
