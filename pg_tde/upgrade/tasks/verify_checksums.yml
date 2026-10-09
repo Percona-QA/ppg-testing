@@ -1,0 +1,68 @@
+---
+# Data checksums on: verify every page offline with pg_tde_checksums --check
+# (plain pg_checksums cannot read encrypted pages), on the upgraded primary
+# and, with HA=true, the replica. Each is stopped for the check and started
+# again. Skipped when the cluster runs without checksums.
+#
+# Caller must pass the TO side: pg_bin_dir, pg_data_dir, pg_service,
+# pg_socket_dir (Debian: pg_data_dir is /var/lib/postgresql/<major>/main).
+
+  - name: Read data_checksums
+    become: true
+    become_user: postgres
+    command: psql -d postgres -tA -c "SHOW data_checksums;"
+    environment:
+      PGHOST: "{{ pg_socket_dir }}"
+      PGPORT: "5432"
+      PATH:   "{{ pg_bin_dir }}:{{ ansible_env.PATH }}"
+    register: checksums_state
+    changed_when: false
+
+  - name: Offline checksum verification
+    when: checksums_state.stdout | trim == 'on'
+    block:
+      - name: Stop the replica for the checksum check
+        include_tasks:
+          file: replica.yml
+        vars:
+          replica_action: stop
+        when: ha | bool
+
+      # By cluster, not by service: after a Debian major upgrade the TO cluster
+      # runs from pg_ctlcluster, outside the postgresql umbrella unit, and a
+      # service stop would be a no-op.
+      - name: Stop the primary for the checksum check (RHEL)
+        service:
+          name: "{{ pg_service }}"
+          state: stopped
+        become: true
+        when: ansible_os_family == "RedHat"
+
+      - name: Stop the primary for the checksum check (Debian)
+        command: pg_ctlcluster {{ pg_data_dir.split('/')[-2] }} main stop
+        become: true
+        when: ansible_os_family == "Debian"
+
+      - name: pg_tde_checksums --check
+        become: true
+        become_user: postgres
+        command: "{{ pg_bin_dir }}/pg_tde_checksums --check -D {{ item }}"
+        loop: "{{ [pg_data_dir] + ([checker_dir ~ '/replica'] if ha | bool else []) }}"
+        register: checksums_check
+        changed_when: false
+
+      - name: Show pg_tde_checksums result
+        debug:
+          msg: "{{ checksums_check.results | map(attribute='stdout_lines') | list }}"
+
+      - name: Start the primary again
+        include_tasks:
+          file: restart_and_wait.yml
+
+      - name: Start the replica again
+        include_tasks:
+          file: replica.yml
+        vars:
+          replica_action: "{{ item }}"
+        loop: [start, wait]
+        when: ha | bool

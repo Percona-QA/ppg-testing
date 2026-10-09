@@ -10,12 +10,25 @@
 #
 # After the upgrade the to_pg_* facts are aligned to the from_pg_* values since
 # both the FROM and TO versions share the same major version number.
+#
+# HA=true: rolling instead of stop/swap/start -- the primary stays up during
+# the package swap, the replica restarts first (ha_rolling.yml).
 
   - name: Stop PostgreSQL before minor upgrade
     service:
       name: "{{ from_pg_service }}"
       state: stopped
     become: true
+    when: not (ha | bool)
+
+  - name: HA rolling upgrade - hold
+    include_tasks:
+      file: ha_rolling.yml
+    vars:
+      ha_phase:      hold
+      pg_bin_dir:    "{{ from_pg_bin_dir }}"
+      pg_socket_dir: "{{ from_pg_socket_dir }}"
+    when: ha | bool
 
   # Switch the Percona repo to the TO minor version so package updates pull the right build
   - name: Enable Percona repo for TO version
@@ -92,6 +105,15 @@
       - not (tde_upgrade | bool)
       - not (install_from_packages | bool)
 
+  - name: HA rolling upgrade - replica_first
+    include_tasks:
+      file: ha_rolling.yml
+    vars:
+      ha_phase:      replica_first
+      pg_bin_dir:    "{{ from_pg_bin_dir }}"
+      pg_socket_dir: "{{ from_pg_socket_dir }}"
+    when: ha | bool
+
   # Use restarted, not started: on Debian the server-package postinst auto-starts
   # the cluster during the package update (before pg_tde is updated), so a plain
   # "started" would be a no-op and the old pg_tde .so would stay loaded. A restart
@@ -115,28 +137,24 @@
     retries: 12
     delay: 5
 
+  - name: HA rolling upgrade - release
+    include_tasks:
+      file: ha_rolling.yml
+    vars:
+      ha_phase:      release
+      pg_bin_dir:    "{{ from_pg_bin_dir }}"
+      pg_socket_dir: "{{ from_pg_socket_dir }}"
+    when: ha | bool
+
   # For a minor upgrade the major version is unchanged — align to_pg_ facts.
   - name: Align to_pg_ path facts with from_pg_ (minor upgrade shares the same major)
     set_fact:
       to_pg_bin_dir:    "{{ from_pg_bin_dir }}"
       to_pg_lib_dir:    "{{ from_pg_lib_dir }}"
+      to_pg_install_dir: "{{ from_pg_install_dir }}"
       to_pg_service:    "{{ from_pg_service }}"
       to_pg_socket_dir: "{{ from_pg_socket_dir }}"
       cacheable: true
 
-  - name: Update pg_tde extension after minor upgrade (if version changed)
-    become: true
-    become_user: postgres
-    shell: psql -d postgres -c "ALTER EXTENSION pg_tde UPDATE;"
-    args:
-      executable: /bin/bash
-    environment:
-      PGHOST: "{{ from_pg_socket_dir }}"
-      PGPORT: "5432"
-      PATH:   "{{ from_pg_bin_dir }}:{{ ansible_env.PATH }}"
-    ignore_errors: true
-    register: ext_update_minor
-
-  - name: Show ALTER EXTENSION result
-    debug:
-      var: ext_update_minor.stdout_lines
+  # ALTER EXTENSION pg_tde UPDATE runs from main.yml, after the data has been
+  # read once with the new library on the old extension catalog.

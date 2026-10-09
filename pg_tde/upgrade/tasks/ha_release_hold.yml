@@ -1,0 +1,17 @@
+---
+# Remove the policy-rc.d that ha_rolling.yml installs, and only that one (its
+# marker line), so a host's own policy-rc.d is never touched. Also run from
+# main.yml's always: a failed run must not leave services blocked.
+
+  - name: Remove the HA policy-rc.d (Debian)
+    shell: |
+      f=/usr/sbin/policy-rc.d
+      if [ -f "$f" ] && grep -q 'pg_tde/upgrade HA rolling upgrade' "$f"; then
+        rm -f "$f" && echo removed
+      fi
+    args:
+      executable: /bin/sh
+    register: ha_hold_removed
+    changed_when: "'removed' in ha_hold_removed.stdout"
+    become: true
+    when: ansible_os_family == 'Debian'

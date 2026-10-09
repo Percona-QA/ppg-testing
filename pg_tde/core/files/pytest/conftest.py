@@ -227,6 +227,29 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         ),
     )
     parser.addoption(
+        "--upgrade-stage",
+        default=os.environ.get("PG_TDE_UPGRADE_STAGE", ""),
+        choices=["", "prepare", "setup", "verify-before-alter", "verify", "verify-replica"],
+        help=(
+            "Stage of tests/test_tde_upgrade_check.py to run against the "
+            "cluster at PGHOST/PGPORT (prepare, setup, verify-before-alter, "
+            "verify). Unset: those tests are skipped."
+        ),
+    )
+    parser.addoption(
+        "--replica-port",
+        default=os.environ.get("PG_TDE_UPGRADE_REPLICA_PORT", ""),
+        help="Port of the streaming replica checked by --upgrade-stage=verify-replica.",
+    )
+    parser.addoption(
+        "--upgrade-check-dir",
+        default=os.environ.get("PG_TDE_UPGRADE_CHECK_DIR", "/var/lib/pg_tde_upgrade_check"),
+        help=(
+            "Directory shared by the --upgrade-stage runs: keyring files, "
+            "canary and the state written by the setup stage."
+        ),
+    )
+    parser.addoption(
         "--skip-sections",
         default=os.environ.get("SKIP_SECTIONS", ""),
         metavar="LIST",
@@ -261,6 +284,14 @@ def run_dir(request) -> Path:
 
 
 def pytest_configure(config):
+    # Registered here, not only in a marker list, so --strict-markers runs
+    # accept them wherever that list lives.
+    config.addinivalue_line(
+        "markers", "upgrade_check: staged upgrade checker (tests/test_tde_upgrade_check.py)"
+    )
+    config.addinivalue_line(
+        "markers", "stages(*names): run only in these --upgrade-stage stages"
+    )
     if config.getoption("--list-test-sections"):
         from lib.test_sections import TEST_SECTIONS, section_names
 

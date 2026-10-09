@@ -19,26 +19,25 @@
 # Debian: pg_createcluster creates the new data dir; config lives under
 #         /etc/postgresql/<ver>/main, so pg_tde_upgrade is told where to find
 #         it via --old-options/--new-options '-c config_file=...'.
-# Both initialize the new cluster with --no-data-checksums to match the FROM
-# cluster (pg_upgrade requires matching checksum settings). --no-data-checksums
-# only exists as an initdb option from PG 18 onward (checksums became
-# default-on there); for TO major < 18, checksums already default to off, so
-# the flag is omitted entirely rather than passed unconditionally.
+# Both initialize the new cluster with the FROM cluster's data_checksums
+# setting (pg_upgrade requires them to match). initdb defaults differ by major
+# (on from PG 18, off before), so the flag is only passed when the default
+# would be wrong: --no-data-checksums only exists from PG 18 onward.
 #
 # Steps:
 #   1.  Enable TO repo (percona-release, or OBS when USE_OBS_REPO is set)
 #   2.  Install TO PostgreSQL packages
 #   3.  Install or build pg_tde for TO version
 #   4.  Stop FROM cluster(s)
-#   5.  Create TO data dir (RHEL initdb / Debian pg_createcluster), no checksums
-#   6.  Stop the auto-started TO cluster
-#   7.  Add pg_tde to TO cluster postgresql.conf  ← BEFORE pg_tde_upgrade
-#   8.  pg_tde_upgrade --link
-#   9.  Drop old FROM cluster (Debian)
-#  10.  Start TO cluster
-#  11.  Wait for TO cluster to be ready
-#  12.  ALTER EXTENSION pg_tde UPDATE
-#  13.  vacuumdb --all --analyze-in-stages
+#   5.  Create TO data dir (RHEL initdb / Debian pg_createcluster), checksums as FROM
+#   6.  Add pg_tde to TO cluster postgresql.conf  ← BEFORE pg_tde_upgrade
+#   7.  pg_tde_upgrade --link --check, then pg_tde_upgrade --link
+#   8.  Drop old FROM cluster (Debian)
+#   9.  Start TO cluster
+#  10.  Wait for TO cluster to be ready
+#  11.  vacuumdb --all --analyze-in-stages
+# ALTER EXTENSION pg_tde UPDATE runs from main.yml, after the data has been read
+# once with the new library on the old extension catalog.
 
   # --- Enable repo for TO major version ---
   - name: Enable Percona repo for TO major version
@@ -110,6 +109,51 @@
       - not (install_from_packages | bool)
       - tde_upgrade | bool
 
+  - name: Read FROM cluster data_checksums setting
+    become: true
+    become_user: postgres
+    command: psql -d postgres -tA -c "SHOW data_checksums;"
+    environment:
+      PGHOST: "{{ from_pg_socket_dir }}"
+      PGPORT: "5432"
+      PATH:   "{{ from_pg_bin_dir }}:{{ ansible_env.PATH }}"
+    register: from_checksums_result
+    changed_when: false
+
+  # pg_tde.wal_encrypt lives in the FROM cluster's postgresql.auto.conf, which
+  # pg_upgrade does not carry over. Like shared_preload_libraries it has to be
+  # set on the TO cluster by hand -- after pg_tde_upgrade, as the empty target
+  # has no server key yet and would not start with it on.
+  - name: Read FROM cluster pg_tde.wal_encrypt setting
+    become: true
+    become_user: postgres
+    command: psql -d postgres -tA -c "SHOW pg_tde.wal_encrypt;"
+    environment:
+      PGHOST: "{{ from_pg_socket_dir }}"
+      PGPORT: "5432"
+      PATH:   "{{ from_pg_bin_dir }}:{{ ansible_env.PATH }}"
+    register: from_wal_encrypt_result
+    changed_when: false
+
+  - name: Pick initdb checksum option for the TO cluster
+    set_fact:
+      to_initdb_checksum_opt: >-
+        {%- set on = from_checksums_result.stdout | trim == 'on' -%}
+        {%- if on and to_major_version | int < 18 -%}--data-checksums
+        {%- elif not on and to_major_version | int >= 18 -%}--no-data-checksums
+        {%- endif -%}
+
+  # HA: a standby cannot follow a pg_tde_upgrade'd primary. It is dropped here
+  # and rebuilt from the new primary once that is up.
+  - name: HA - drop the FROM replica
+    include_tasks:
+      file: replica.yml
+    vars:
+      replica_action: drop
+      pg_bin_dir:     "{{ from_pg_bin_dir }}"
+      pg_socket_dir:  "{{ from_pg_socket_dir }}"
+    when: ha | bool
+
   # ==========================================================================
   # Stop FROM cluster(s)
   # ==========================================================================
@@ -129,38 +173,37 @@
     when: ansible_os_family == "Debian"
 
   # ==========================================================================
-  # Create TO data directory (no checksums, to match the FROM cluster)
+  # Create TO data directory (checksums as the FROM cluster)
   # ==========================================================================
 
+  # RHEL packages never initdb on their own, so the data dir is created here
+  # and the service is not started.
   - name: Initialize TO data directory (RHEL)
     command: /usr/pgsql-{{ to_major_version }}/bin/postgresql-{{ to_major_version }}-setup initdb
+    args:
+      creates: "{{ to_pg_data_dir }}/PG_VERSION"
     become: true
     environment:
-      PGSETUP_INITDB_OPTIONS: "{{ '--no-data-checksums' if to_major_version | int >= 18 else '' }}"
+      PGSETUP_INITDB_OPTIONS: "{{ to_initdb_checksum_opt }}"
     when: ansible_os_family == "RedHat"
-    ignore_errors: true
 
-  - name: Stop auto-started TO cluster before upgrade (RHEL)
-    service:
-      name: "{{ to_pg_service }}"
-      state: stopped
+  # postgresql-common creates (and starts) a <ver>/main cluster when the server
+  # package is installed, with initdb defaults -- checksums ON from PG 18. Drop
+  # it and create our own, so the TO cluster really matches the FROM cluster's
+  # checksum setting instead of depending on what the package postinst did.
+  - name: Drop the package-created TO cluster (Debian)
+    command: pg_dropcluster --stop {{ to_major_version }} main
+    args:
+      removes: "/etc/postgresql/{{ to_major_version }}/main/postgresql.conf"
     become: true
-    when: ansible_os_family == "RedHat"
-    ignore_errors: true
+    when: ansible_os_family == "Debian"
 
   - name: Create TO cluster data directory (Debian)
     command: >-
       pg_createcluster {{ to_major_version }} main
-      {{ '-- --no-data-checksums' if to_major_version | int >= 18 else '' }}
+      {{ ('-- ' ~ to_initdb_checksum_opt) if to_initdb_checksum_opt | length > 0 else '' }}
     become: true
     when: ansible_os_family == "Debian"
-    ignore_errors: true
-
-  - name: Stop auto-started TO cluster before upgrade (Debian)
-    command: pg_ctlcluster {{ to_major_version }} main stop
-    become: true
-    when: ansible_os_family == "Debian"
-    ignore_errors: true
 
   # ==========================================================================
   # Configure pg_tde in the TO cluster BEFORE pg_tde_upgrade.
@@ -183,22 +226,43 @@
   # told where to find postgresql.conf via -c config_file=... for both clusters.
   # ==========================================================================
 
+  - name: Compose pg_tde_upgrade command line
+    set_fact:
+      pg_tde_upgrade_cmd: >-
+        {{ to_pg_bin_dir }}/pg_tde_upgrade
+        --old-bindir={{ from_pg_bin_dir }}
+        --new-bindir={{ to_pg_bin_dir }}
+        --old-datadir={{ from_pg_data_dir }}
+        --new-datadir={{ to_pg_data_dir }}
+        {% if ansible_os_family == 'Debian' %}
+        --old-options '-c config_file=/etc/postgresql/{{ from_major_version }}/main/postgresql.conf'
+        --new-options '-c config_file=/etc/postgresql/{{ to_major_version }}/main/postgresql.conf'
+        {% endif %}
+        --link
+
+  # The dry run customers are told to do first; it must pass on its own, not
+  # just as a side effect of the real run.
+  - name: Run pg_tde_upgrade --check from {{ from_major_version }} to {{ to_major_version }}
+    become: true
+    become_user: postgres
+    shell: |
+      set -o pipefail
+      {{ pg_tde_upgrade_cmd }} --check 2>&1 | tee /tmp/pg_upgrade_check.log
+    args:
+      executable: /bin/bash
+      chdir: /tmp
+    register: pg_upgrade_check_result
+
+  - name: Show pg_tde_upgrade --check output
+    debug:
+      var: pg_upgrade_check_result.stdout_lines
+
   - name: Run pg_tde_upgrade --link from {{ from_major_version }} to {{ to_major_version }}
     become: true
     become_user: postgres
     shell: |
       set -o pipefail
-      {{ to_pg_bin_dir }}/pg_tde_upgrade \
-        --old-bindir={{ from_pg_bin_dir }} \
-        --new-bindir={{ to_pg_bin_dir }} \
-        --old-datadir={{ from_pg_data_dir }} \
-        --new-datadir={{ to_pg_data_dir }} \
-        {% if ansible_os_family == 'Debian' %}
-        --old-options '-c config_file=/etc/postgresql/{{ from_major_version }}/main/postgresql.conf' \
-        --new-options '-c config_file=/etc/postgresql/{{ to_major_version }}/main/postgresql.conf' \
-        {% endif %}
-        --link \
-        2>&1 | tee /tmp/pg_upgrade.log
+      {{ pg_tde_upgrade_cmd }} 2>&1 | tee /tmp/pg_upgrade.log
     args:
       executable: /bin/bash
       chdir: /tmp
@@ -229,8 +293,18 @@
     # --stop: same debian 11/12 hazard as in tde debian_depends.yml -- a
     # cluster still running outside systemd makes a bare drop refuse
     command: pg_dropcluster --stop {{ from_major_version }} main
-    ignore_errors: true
     when: ansible_os_family == "Debian"
+
+  # Only pg_tde.wal_encrypt is carried: it is the one setting the seed puts in
+  # postgresql.auto.conf (checker prepare stage). Any other server-level GUC set
+  # with ALTER SYSTEM on the FROM cluster must be added here as well.
+  - name: Carry pg_tde.wal_encrypt over to the TO cluster
+    lineinfile:
+      path: "{{ to_pg_conf }}"
+      regexp: '^\s*#?\s*pg_tde\.wal_encrypt\s*='
+      line: "pg_tde.wal_encrypt = on"
+    become: true
+    when: from_wal_encrypt_result.stdout | trim == 'on'
 
   # pg_createcluster picks the next free port, and because the FROM cluster's
   # config still reserves 5432, the TO cluster is assigned 5433. The downstream
@@ -287,22 +361,15 @@
     retries: 15
     delay: 5
 
-  - name: Update pg_tde extension catalog in upgraded cluster
-    become: true
-    become_user: postgres
-    shell: psql -d postgres -c "ALTER EXTENSION pg_tde UPDATE;"
-    args:
-      executable: /bin/bash
-    environment:
-      PGHOST: "{{ to_pg_socket_dir }}"
-      PGPORT: "5432"
-      PATH:   "{{ to_pg_bin_dir }}:{{ ansible_env.PATH }}"
-    ignore_errors: true
-    register: ext_update_major
-
-  - name: Show ALTER EXTENSION result
-    debug:
-      var: ext_update_major.stdout_lines
+  - name: HA - rebuild the replica from the upgraded primary (TO)
+    include_tasks:
+      file: replica.yml
+    vars:
+      replica_action: "{{ item }}"
+      pg_bin_dir:     "{{ to_pg_bin_dir }}"
+      pg_socket_dir:  "{{ to_pg_socket_dir }}"
+    loop: [create, wait]
+    when: ha | bool
 
   - name: Run post-upgrade vacuum analyze on all databases
     become: true
@@ -314,4 +381,3 @@
       PGHOST: "{{ to_pg_socket_dir }}"
       PGPORT: "5432"
       PATH:   "{{ to_pg_bin_dir }}:{{ ansible_env.PATH }}"
-    ignore_errors: true

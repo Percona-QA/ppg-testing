@@ -152,6 +152,17 @@
     retries: 3
     delay: 30
 
+  # RHEL/Rocky/OL 8 ship Python 3.6 as the default python3, too old for the
+  # pytest that drives the staged upgrade checker (deploy_checker.yml). Install
+  # 3.9 beside it and let the checker's venv use it; python3 itself stays put,
+  # since Ansible and yum run on it.
+  - name: Install Python 3.9 for the upgrade checker (RHEL8-family python3 is 3.6)
+    become: true
+    yum:
+      name: python39
+      state: present
+    when: ansible_distribution_major_version == "8"
+
   - name: Install liburing (required for io_uring builds)
     yum:
       name:
