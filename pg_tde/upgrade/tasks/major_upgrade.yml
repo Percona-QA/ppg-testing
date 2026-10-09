@@ -295,6 +295,9 @@
     command: pg_dropcluster --stop {{ from_major_version }} main
     when: ansible_os_family == "Debian"
 
+  # Only pg_tde.wal_encrypt is carried: it is the one setting the seed puts in
+  # postgresql.auto.conf (checker prepare stage). Any other server-level GUC set
+  # with ALTER SYSTEM on the FROM cluster must be added here as well.
   - name: Carry pg_tde.wal_encrypt over to the TO cluster
     lineinfile:
       path: "{{ to_pg_conf }}"
