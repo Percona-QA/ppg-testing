@@ -16,6 +16,7 @@
       DEFAULT=$(psql -d postgres -tA -c \
         "SELECT default_version FROM pg_available_extensions WHERE name = 'pg_tde';")
       echo "pg_tde default_version: $DEFAULT"
+      UPDATED=0
       for DB in $(psql -d postgres -tA -c \
           "SELECT datname FROM pg_database WHERE datallowconn ORDER BY datname;"); do
         HAS=$(psql -d "$DB" -tA -c "SELECT count(*) FROM pg_extension WHERE extname = 'pg_tde';")
@@ -28,7 +29,14 @@
           echo "FAIL: $DB extversion $AFTER != default_version $DEFAULT"
           exit 1
         fi
+        UPDATED=$((UPDATED + 1))
       done
+      # pg_tde is created in at least one database by the prepare
+      # stage; zero means the loop matched nothing and nothing was verified.
+      if [ "$UPDATED" -eq 0 ]; then
+        echo "FAIL: no database has the pg_tde extension"
+        exit 1
+      fi
     args:
       executable: /bin/bash
     environment:
