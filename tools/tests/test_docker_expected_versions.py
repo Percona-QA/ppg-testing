@@ -4,8 +4,7 @@ OBS QA passes the versions OBS builds as package=version lines keyed by OBS
 source package name (percona-pgbackrest=2.59.2). The Docker settings key the
 packages installed in the image, whose names carry the PG major
 (percona-pgaudit18, percona-postgis35_18-client); apply_expected_versions maps
-one to the other. Covers ppg-docker and the custom settings (shared by
-ppg-docker-custom and ppg-docker-custom-upgrade, which must stay identical).
+one to the other. Covers the ppg-docker and ppg-docker-custom settings.
 """
 
 import importlib.util
@@ -53,11 +52,6 @@ def settings(request, monkeypatch):
 
 def _entry(settings):
     return dict(settings.ppg_versions[RELEASE])
-
-
-def test_custom_copies_are_identical():
-    upgrade = DOCKER / "ppg-docker-custom-upgrade" / "files" / "settings.py"
-    assert SETTINGS["custom"].read_text() == upgrade.read_text()
 
 
 def test_no_spec_changes_nothing(settings):

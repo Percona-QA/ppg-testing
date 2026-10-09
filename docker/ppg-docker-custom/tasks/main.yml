@@ -1,29 +1,61 @@
 ---
-- name: Set Facts.
+# DOCKER_TEST_TYPE picks what this role runs:
+#   server  (default) the custom image test suite against one image
+#   upgrade           run_upgrade.sh: the suite on the OLD image, pg_upgrade
+#                     via the custom mediator image, then the suite on the NEW image
+# Tags are used as given: Docker Hub and OBS publish multi-arch images, so
+# docker pulls the host's architecture from the plain tag.
+- name: Set common facts
   set_fact:
-    DOCKER_REPOSITORY: "{{ lookup('env', 'REPOSITORY') }}"
-    PPG_VERSION: "{{ lookup('env', 'SERVER_VERSION')}}"
-    TAG: "{{ lookup('env', 'DOCKER_TAG')}}"
+    DOCKER_TEST_TYPE: "{{ lookup('env', 'DOCKER_TEST_TYPE') | default('server', true) | lower }}"
+    # Image prefix typed into the job: drop stray whitespace and trailing "/"
+    # so "<prefix>/<image>:<tag>" stays a valid reference.
+    DOCKER_REPOSITORY: "{{ lookup('env', 'REPOSITORY') | trim | regex_replace('/+$', '') }}"
     cacheable: true
 
-- name: Assign TAG based on architecture and version
-  set_fact:
-    TAG: >-
-      {{
-        TAG if ansible_architecture == 'x86_64' and not TAG|regex_search('multi')
-        else TAG if ansible_architecture == 'aarch64' and (not TAG|regex_search('multi') and TAG|regex_search('-arm64$'))
-        else TAG|string + '-arm64' if ansible_architecture == 'aarch64' and not TAG|regex_search('multi')
-        else TAG
-      }}
-  # The -arm64 tag suffix is a Docker Hub convention; a registry-qualified
-  # prefix (host.name/...: OBS) publishes multi-arch images under the tag as given.
-  when:
-    - "ansible_architecture == 'x86_64' or ansible_architecture == 'aarch64'"
-    - "DOCKER_REPOSITORY.split('/')[0] is not search('[.:]')"
+- name: Fail on an unknown DOCKER_TEST_TYPE
+  fail:
+    msg: "DOCKER_TEST_TYPE={{ DOCKER_TEST_TYPE }} is not supported; use server or upgrade."
+  when: DOCKER_TEST_TYPE not in ['server', 'upgrade']
 
-- name: Print PPG_VERSION and TAG
+- name: Fail when REPOSITORY is empty
+  fail:
+    msg: "REPOSITORY is empty; set an image prefix such as percona, perconalab, or an OBS registry path."
+  when: DOCKER_REPOSITORY | length == 0
+
+- include_tasks: "{{ role_path }}/../../tasks/check_docker_repository.yml"
+
+- name: Set server test facts
+  set_fact:
+    PPG_VERSION: "{{ lookup('env', 'SERVER_VERSION') }}"
+    TAG: "{{ lookup('env', 'DOCKER_TAG') }}"
+    cacheable: true
+  when: DOCKER_TEST_TYPE == 'server'
+
+- name: Set upgrade test facts
+  set_fact:
+    OLD_VERSION: "{{ lookup('env', 'OLD_SERVER_VERSION') | default('17.10', true) }}"
+    NEW_VERSION: "{{ lookup('env', 'NEW_SERVER_VERSION') | default('18.4', true) }}"
+    OLD_TAG: "{{ lookup('env', 'OLD_VERSION_DOCKER_TAG') | default(lookup('env', 'OLD_VERSION'), true) }}"
+    NEW_TAG: "{{ lookup('env', 'NEW_VERSION_DOCKER_TAG') | default(lookup('env', 'NEW_VERSION'), true) }}"
+    UPGRADE_TAG: "{{ lookup('env', 'UPGRADE_DOCKER_TAG') | default('18-17-16', true) }}"
+    # Old image, new image and the pg_upgrade mediator may live under different
+    # prefixes (on OBS each PG major is its own project); each defaults to REPOSITORY.
+    OLD_REPOSITORY: "{{ (lookup('env', 'OLD_REPOSITORY') | trim | regex_replace('/+$', '')) or DOCKER_REPOSITORY }}"
+    NEW_REPOSITORY: "{{ (lookup('env', 'NEW_REPOSITORY') | trim | regex_replace('/+$', '')) or DOCKER_REPOSITORY }}"
+    UPGRADE_REPOSITORY: "{{ (lookup('env', 'UPGRADE_REPOSITORY') | trim | regex_replace('/+$', '')) or DOCKER_REPOSITORY }}"
+    cacheable: true
+  when: DOCKER_TEST_TYPE == 'upgrade'
+
+- name: Print server test settings
   debug:
     msg: "PPG_VERSION: {{ PPG_VERSION }}, TAG: {{ TAG }}"
+  when: DOCKER_TEST_TYPE == 'server'
+
+- name: Print upgrade test settings
+  debug:
+    msg: "Upgrade: PG {{ OLD_VERSION }} → PG {{ NEW_VERSION }}; OLD_TAG: {{ OLD_TAG }}, NEW_TAG: {{ NEW_TAG }}, UPGRADE_TAG: {{ UPGRADE_TAG }}"
+  when: DOCKER_TEST_TYPE == 'upgrade'
 
 - name: Yum update
   become: true
@@ -51,7 +83,7 @@
     state: present
   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "10"
 
-- name: Add Docker CE repository RHEL 8,9
+- name: Add Docker CE repository RHEL 8, 9, 10
   become: true
   command: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
   when: ansible_os_family == "RedHat"
@@ -168,19 +200,22 @@
     state: directory
     mode: 0755
 
-- name: Copy PostgreSQL test files to remote
+- name: Copy docker test files to remote
   copy:
-    src: "{{ item }}"
-    dest: "/tmp/docker_test/{{ item }}"
+    src: "{{ item.src }}"
+    dest: "/tmp/docker_test/{{ item.src }}"
     owner: root
     group: root
-    mode: 0644
+    mode: "{{ item.mode }}"
   loop:
-    - settings.py
-    - test_docker.py
-    - test_patroni_ha.py
-    - test_pgbackrest.py
-    - test_labels_licences.py
+    - { src: pytest.ini,               mode: "0644" }
+    - { src: settings.py,              mode: "0644" }
+    - { src: test_docker.py,           mode: "0644" }
+    - { src: test_patroni_ha.py,       mode: "0644" }
+    - { src: test_pgbackrest.py,       mode: "0644" }
+    - { src: test_labels_licences.py,  mode: "0644" }
+    - { src: test_upgrade.py,          mode: "0644" }
+    - { src: run_upgrade.sh,           mode: "0755" }
 
 - name: Ensure Python virtual environment exists
   ansible.builtin.command: python3 -m venv validation
@@ -196,56 +231,29 @@
     update_cache: yes
   when: ansible_os_family == "Debian"
 
-- name: Create python venv and run docker tests
-  shell: |
-    #Activate virtual environment
-    source validation/bin/activate
+- name: Run the {{ DOCKER_TEST_TYPE }} tests
+  include_tasks: "run_{{ DOCKER_TEST_TYPE }}.yml"
 
-    #Install dependencies
-    pip install --upgrade pip
-    pip install psycopg2-binary pytest-testinfra requests pytest pytest-order
-
-    #Run test without shared_preload_libraries  (default)
-    pytest test_labels_licences.py \
-       test_docker.py \
-       test_patroni_ha.py \
-       test_pgbackrest.py \
-       -vv -s -rpfs
-  args:
-    executable: /bin/bash
-    chdir: /tmp/docker_test
-  become: true
-  environment:
-    VERSION: "{{ PPG_VERSION }}"
-    DOCKER_REPOSITORY: "{{ DOCKER_REPOSITORY }}"
-    TAG: "{{ TAG }}"
-    EXPECTED_VERSIONS: "{{ lookup('env', 'EXPECTED_VERSIONS') }}"
-    PPG_LABEL_MAINTAINER: "{{ ppg_label_maintainer | default('Percona Development <info@percona.com>') }}"
-    PPG_LABEL_VENDOR: "{{ ppg_label_vendor | default('Percona') }}"
-    PPG_LABEL_NAME_POSTGRESQL: "{{ ppg_label_name_postgresql | default('Percona Distribution for PostgreSQL') }}"
-  ignore_errors: true
-  register: results
-
-- name: Show stdout of Docker tests
+- name: Show stdout of {{ DOCKER_TEST_TYPE }} tests
   debug:
     var: results.stdout_lines
 
-- name: Show stderr if Docker tests fails
+- name: Show stderr if {{ DOCKER_TEST_TYPE }} tests fail
   debug:
     var: results.stderr_lines
   when:
     - results is defined
     - results.rc != 0
 
-- name: Dump docker container logs if Docker tests failed
+- name: Dump docker container logs if {{ DOCKER_TEST_TYPE }} tests failed
   include_tasks: ../../../../tasks/dump_docker_logs.yml
   when:
     - results is defined
     - results.rc != 0
 
-- name: Fail the playbook if Docker tests failed
+- name: Fail the playbook if {{ DOCKER_TEST_TYPE }} tests failed
   fail:
-    msg: "Docker tests failed with return code {{ results.rc }}"
+    msg: "{{ DOCKER_TEST_TYPE | capitalize }} tests failed with return code {{ results.rc }}"
   when:
     - results is defined
     - results.rc != 0
