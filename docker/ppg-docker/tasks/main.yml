@@ -40,6 +40,11 @@
     OLD_TAG: "{{ lookup('env', 'OLD_VERSION_DOCKER_TAG') | default(lookup('env', 'OLD_VERSION'), true) }}"
     NEW_TAG: "{{ lookup('env', 'NEW_VERSION_DOCKER_TAG') | default(lookup('env', 'NEW_VERSION'), true) }}"
     UPGRADE_TAG: "{{ lookup('env', 'UPGRADE_DOCKER_TAG') | default('18-17-16-15-14', true) }}"
+    # Old image, new image and the pg_upgrade mediator may live under different
+    # prefixes (on OBS each PG major is its own project); each defaults to REPOSITORY.
+    OLD_REPOSITORY: "{{ (lookup('env', 'OLD_REPOSITORY') | trim | regex_replace('/+$', '')) or DOCKER_REPOSITORY }}"
+    NEW_REPOSITORY: "{{ (lookup('env', 'NEW_REPOSITORY') | trim | regex_replace('/+$', '')) or DOCKER_REPOSITORY }}"
+    UPGRADE_REPOSITORY: "{{ (lookup('env', 'UPGRADE_REPOSITORY') | trim | regex_replace('/+$', '')) or DOCKER_REPOSITORY }}"
     cacheable: true
   when: DOCKER_TEST_TYPE == 'upgrade'
 

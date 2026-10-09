@@ -75,6 +75,12 @@ NEW_VERSION="$(_trim "${NEW_VERSION:-18.4}")"
 OLD_MAJOR="${OLD_VERSION%%.*}"
 NEW_MAJOR="${NEW_VERSION%%.*}"
 DOCKER_REPOSITORY="$(_trim "${DOCKER_REPOSITORY:-perconalab}")"
+# The old image, the new image and the pg_upgrade mediator can live under
+# different prefixes (on OBS each PG major is its own project); each
+# defaults to DOCKER_REPOSITORY.
+OLD_REPOSITORY="$(_trim "${OLD_REPOSITORY:-$DOCKER_REPOSITORY}")"; OLD_REPOSITORY="${OLD_REPOSITORY%/}"
+NEW_REPOSITORY="$(_trim "${NEW_REPOSITORY:-$DOCKER_REPOSITORY}")"; NEW_REPOSITORY="${NEW_REPOSITORY%/}"
+UPGRADE_REPOSITORY="$(_trim "${UPGRADE_REPOSITORY:-$DOCKER_REPOSITORY}")"; UPGRADE_REPOSITORY="${UPGRADE_REPOSITORY%/}"
 OLD_TAG="$(_trim "${OLD_TAG:-$OLD_VERSION}")"
 NEW_TAG="$(_trim "${NEW_TAG:-$NEW_VERSION}")"
 : "${UPGRADE_TAG:?UPGRADE_TAG is required. e.g. UPGRADE_TAG=18-17-16-15-14}"
@@ -93,9 +99,16 @@ if [ "${UPGRADE_TAG}" = "v2" ]; then
     echo ""
 fi
 
-OLD_IMAGE="$DOCKER_REPOSITORY/percona-distribution-postgresql:$OLD_TAG"
-NEW_IMAGE="$DOCKER_REPOSITORY/percona-distribution-postgresql:$NEW_TAG"
-UPGRADE_IMAGE="$DOCKER_REPOSITORY/percona-distribution-postgresql-upgrade:$UPGRADE_TAG"
+# The PostGIS variant upgrades the -with-postgis images, as the test suites
+# (test_docker.py, test_upgrade.py) do for WITH_POSTGIS=true.
+SERVER_IMAGE_NAME="percona-distribution-postgresql"
+if [ "${WITH_POSTGIS,,}" = "true" ]; then
+    SERVER_IMAGE_NAME="percona-distribution-postgresql-with-postgis"
+fi
+OLD_IMAGE="$OLD_REPOSITORY/$SERVER_IMAGE_NAME:$OLD_TAG"
+NEW_IMAGE="$NEW_REPOSITORY/$SERVER_IMAGE_NAME:$NEW_TAG"
+
+UPGRADE_IMAGE="$UPGRADE_REPOSITORY/percona-distribution-postgresql-upgrade:$UPGRADE_TAG"
 
 # Named Docker volumes — avoids all bind-mount permission issues in CI.
 # Each run gets a unique suffix so parallel jobs do not collide.
@@ -144,6 +157,9 @@ echo "  NEW_VERSION        : $NEW_VERSION"
 echo "  OLD_MAJOR          : $OLD_MAJOR"
 echo "  NEW_MAJOR          : $NEW_MAJOR"
 echo "  DOCKER_REPOSITORY  : $DOCKER_REPOSITORY"
+echo "  OLD_REPOSITORY     : $OLD_REPOSITORY"
+echo "  NEW_REPOSITORY     : $NEW_REPOSITORY"
+echo "  UPGRADE_REPOSITORY : $UPGRADE_REPOSITORY"
 echo "  OLD_TAG            : $OLD_TAG"
 echo "  NEW_TAG            : $NEW_TAG"
 echo "  UPGRADE_TAG        : $UPGRADE_TAG"
@@ -170,7 +186,7 @@ _print_header "Phase 1: Testing PG $OLD_VERSION (pre-upgrade)"
 
 VERSION=$OLD_VERSION \
 TAG=$OLD_TAG \
-DOCKER_REPOSITORY=$DOCKER_REPOSITORY \
+DOCKER_REPOSITORY=$OLD_REPOSITORY \
 WITH_POSTGIS=$WITH_POSTGIS \
 UPGRADE_DATA_DIR="$OLD_VOL" \
 pytest \
@@ -299,6 +315,9 @@ if [ $PHASE2_RC -eq 0 ]; then
     OLD_VERSION=$OLD_VERSION \
     NEW_VERSION=$NEW_VERSION \
     DOCKER_REPOSITORY=$DOCKER_REPOSITORY \
+    OLD_REPOSITORY=$OLD_REPOSITORY \
+    NEW_REPOSITORY=$NEW_REPOSITORY \
+    UPGRADE_REPOSITORY=$UPGRADE_REPOSITORY \
     OLD_TAG=$OLD_TAG \
     NEW_TAG=$NEW_TAG \
     UPGRADE_TAG=$UPGRADE_TAG \
@@ -320,7 +339,7 @@ _print_header "Phase 3: Testing PG $NEW_VERSION (post-upgrade)"
 
 VERSION=$NEW_VERSION \
 TAG=$NEW_TAG \
-DOCKER_REPOSITORY=$DOCKER_REPOSITORY \
+DOCKER_REPOSITORY=$NEW_REPOSITORY \
 WITH_POSTGIS=$WITH_POSTGIS \
 UPGRADE_DATA_DIR="$NEW_VOL" \
 pytest \

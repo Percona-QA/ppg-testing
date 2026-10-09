@@ -66,6 +66,11 @@ OLD_MAJOR = OLD_MAJOR_MINOR.split(".")[0]
 NEW_MAJOR = NEW_MAJOR_MINOR.split(".")[0]
 
 DOCKER_REPO = os.environ.get("DOCKER_REPOSITORY", "perconalab")
+# Old image, new image and the pg_upgrade mediator may live under different
+# prefixes (on OBS each PG major is its own project).
+OLD_REPO = (os.environ.get("OLD_REPOSITORY") or DOCKER_REPO).rstrip("/")
+NEW_REPO = (os.environ.get("NEW_REPOSITORY") or DOCKER_REPO).rstrip("/")
+UPGRADE_REPO = (os.environ.get("UPGRADE_REPOSITORY") or DOCKER_REPO).rstrip("/")
 IMG_TAG_OLD = os.environ.get("OLD_TAG", OLD_MAJOR_MINOR)
 IMG_TAG_NEW = os.environ.get("NEW_TAG", NEW_MAJOR_MINOR)
 UPGRADE_IMG_TAG = os.environ.get("UPGRADE_TAG", "v2")
@@ -89,13 +94,13 @@ TELEMETRY_AGENT_REMOVED_MIN_VERSIONS = {
 UPGRADE_NEW_VOL = os.environ.get("UPGRADE_NEW_VOL")
 
 if IS_WITH_POSTGIS:
-    OLD_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-with-postgis:{IMG_TAG_OLD}"
-    NEW_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-with-postgis:{IMG_TAG_NEW}"
+    OLD_IMAGE = f"{OLD_REPO}/percona-distribution-postgresql-with-postgis:{IMG_TAG_OLD}"
+    NEW_IMAGE = f"{NEW_REPO}/percona-distribution-postgresql-with-postgis:{IMG_TAG_NEW}"
 else:
-    OLD_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG_OLD}"
-    NEW_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql:{IMG_TAG_NEW}"
+    OLD_IMAGE = f"{OLD_REPO}/percona-distribution-postgresql:{IMG_TAG_OLD}"
+    NEW_IMAGE = f"{NEW_REPO}/percona-distribution-postgresql:{IMG_TAG_NEW}"
 
-UPGRADE_IMAGE = f"{DOCKER_REPO}/percona-distribution-postgresql-upgrade:{UPGRADE_IMG_TAG}"
+UPGRADE_IMAGE = f"{UPGRADE_REPO}/percona-distribution-postgresql-upgrade:{UPGRADE_IMG_TAG}"
 PG_OLD_BIN_DIR = f"/usr/pgsql-{OLD_MAJOR}/bin"
 PG_NEW_BIN_DIR = f"/usr/pgsql-{NEW_MAJOR}/bin"
 PG_DATA_DIR = "/data/db"

@@ -15,7 +15,11 @@
         else TAG|string + '-arm64' if ansible_architecture == 'aarch64' and not TAG|regex_search('multi')
         else TAG
       }}
-  when: "ansible_architecture == 'x86_64' or ansible_architecture == 'aarch64'"
+  # The -arm64 tag suffix is a Docker Hub convention; a registry-qualified
+  # prefix (host.name/...: OBS) publishes multi-arch images under the tag as given.
+  when:
+    - "ansible_architecture == 'x86_64' or ansible_architecture == 'aarch64'"
+    - "DOCKER_REPOSITORY.split('/')[0] is not search('[.:]')"
 
 - name: Print PPG_VERSION and TAG
   debug:
