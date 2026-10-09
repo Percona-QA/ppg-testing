@@ -15,7 +15,11 @@
         else TAG|string + '-arm64' if ansible_architecture == 'aarch64' and not TAG|regex_search('multi')
         else TAG
       }}
-  when: "ansible_architecture == 'x86_64' or ansible_architecture == 'aarch64'"
+  # The -arm64 tag suffix is a Docker Hub convention; a registry-qualified
+  # prefix (host.name/...: OBS) publishes multi-arch images under the tag as given.
+  when:
+    - "ansible_architecture == 'x86_64' or ansible_architecture == 'aarch64'"
+    - "DOCKER_REPOSITORY.split('/')[0] is not search('[.:]')"
 
 - name: Print PPG_VERSION and TAG
   debug:
@@ -215,6 +219,7 @@
     VERSION: "{{ PPG_VERSION }}"
     DOCKER_REPOSITORY: "{{ DOCKER_REPOSITORY }}"
     TAG: "{{ TAG }}"
+    EXPECTED_VERSIONS: "{{ lookup('env', 'EXPECTED_VERSIONS') }}"
     PPG_LABEL_MAINTAINER: "{{ ppg_label_maintainer | default('Percona Development <info@percona.com>') }}"
     PPG_LABEL_VENDOR: "{{ ppg_label_vendor | default('Percona') }}"
     PPG_LABEL_NAME_POSTGRESQL: "{{ ppg_label_name_postgresql | default('Percona Distribution for PostgreSQL') }}"

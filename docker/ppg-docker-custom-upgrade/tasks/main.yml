@@ -7,6 +7,11 @@
     OLD_TAG: "{{ lookup('env', 'OLD_VERSION_DOCKER_TAG') | default(lookup('env', 'OLD_VERSION'), true) }}"
     NEW_TAG: "{{ lookup('env', 'NEW_VERSION_DOCKER_TAG') | default(lookup('env', 'NEW_VERSION'), true) }}"
     UPGRADE_TAG: "{{ lookup('env', 'UPGRADE_DOCKER_TAG') | default('18-17-16', true) }}"
+    # Old image, new image and the pg_upgrade mediator may live under different
+    # prefixes (on OBS each PG major is its own project); each defaults to REPOSITORY.
+    OLD_REPOSITORY: "{{ (lookup('env', 'OLD_REPOSITORY') | trim | regex_replace('/+$', '')) or lookup('env', 'REPOSITORY') }}"
+    NEW_REPOSITORY: "{{ (lookup('env', 'NEW_REPOSITORY') | trim | regex_replace('/+$', '')) or lookup('env', 'REPOSITORY') }}"
+    UPGRADE_REPOSITORY: "{{ (lookup('env', 'UPGRADE_REPOSITORY') | trim | regex_replace('/+$', '')) or lookup('env', 'REPOSITORY') }}"
     cacheable: true
 
 - name: Print upgrade pair
@@ -22,7 +27,11 @@
         else OLD_TAG|string + '-arm64' if ansible_architecture == 'aarch64' and not OLD_TAG|regex_search('multi')
         else OLD_TAG
       }}
-  when: "ansible_architecture == 'x86_64' or ansible_architecture == 'aarch64'"
+  # The -arm64 tag suffix is a Docker Hub convention; a registry-qualified
+  # prefix (host.name/...: OBS) publishes multi-arch images under the tag as given.
+  when:
+    - "ansible_architecture == 'x86_64' or ansible_architecture == 'aarch64'"
+    - "OLD_REPOSITORY.split('/')[0] is not search('[.:]')"
 
 - name: Assign NEW_TAG based on architecture
   set_fact:
@@ -33,7 +42,11 @@
         else NEW_TAG|string + '-arm64' if ansible_architecture == 'aarch64' and not NEW_TAG|regex_search('multi')
         else NEW_TAG
       }}
-  when: "ansible_architecture == 'x86_64' or ansible_architecture == 'aarch64'"
+  # The -arm64 tag suffix is a Docker Hub convention; a registry-qualified
+  # prefix (host.name/...: OBS) publishes multi-arch images under the tag as given.
+  when:
+    - "ansible_architecture == 'x86_64' or ansible_architecture == 'aarch64'"
+    - "NEW_REPOSITORY.split('/')[0] is not search('[.:]')"
 
 - name: Print resolved tags
   debug:
@@ -222,6 +235,9 @@
     OLD_VERSION: "{{ OLD_VERSION }}"
     NEW_VERSION: "{{ NEW_VERSION }}"
     DOCKER_REPOSITORY: "{{ DOCKER_REPOSITORY }}"
+    OLD_REPOSITORY: "{{ OLD_REPOSITORY }}"
+    NEW_REPOSITORY: "{{ NEW_REPOSITORY }}"
+    UPGRADE_REPOSITORY: "{{ UPGRADE_REPOSITORY }}"
     OLD_TAG: "{{ OLD_TAG }}"
     NEW_TAG: "{{ NEW_TAG }}"
     UPGRADE_TAG: "{{ UPGRADE_TAG }}"
