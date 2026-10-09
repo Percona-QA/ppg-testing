@@ -1,3 +1,5 @@
+import re
+import os
 pgrepack = {
     "16.13": {"version": "1.5.3", "binary_version": "pg_repack 1.5.3"},
     "17.9": {"version": "1.5.3", "binary_version": "pg_repack 1.5.3"},
@@ -979,4 +981,72 @@ ppg_versions = {
 
 
 def get_settings(ppg_version):
-    return ppg_versions[ppg_version]
+    return apply_expected_versions(
+        ppg_versions[ppg_version], os.environ.get("EXPECTED_VERSIONS", ""), ppg_version.split(".")[0]
+    )
+
+# Expected package versions given at run time (OBS QA): EXPECTED_VERSIONS holds
+# package=version lines keyed by OBS source package name (e.g.
+# percona-pgbackrest=2.59.2), the versions OBS builds for the image under test.
+# The tables above key the packages installed in the image, whose names carry
+# the PG major ({m}); this maps one to the other. Without EXPECTED_VERSIONS the
+# tables are used as before. Packages not listed here are ignored.
+EXPECTED_VERSION_PACKAGES = {
+    "percona-pgbackrest": ("percona-pgbackrest",),
+    "percona-patroni": ("percona-patroni",),
+    "percona-pgaudit": ("percona-pgaudit{m}",),
+    "percona-pgaudit_set_user": ("percona-pgaudit{m}_set_user",),
+    "percona-pg_repack": ("percona-pg_repack{m}",),
+    "percona-wal2json": ("percona-wal2json{m}",),
+    "percona-pg_stat_monitor": ("percona-pg_stat_monitor{m}",),
+    "percona-pg_tde": ("percona-pg_tde{m}",),
+    "percona-pg_cron": ("percona-pg_cron_{m}",),
+    "percona-pgvector": ("percona-pgvector_{m}", "percona-pgvector_{m}-llvmjit"),
+    "percona-pg_oidc_validator": ("percona-pg_oidc_validator{m}",),
+}
+
+
+def _expected_version_keys(entry, name, major):
+    """Image package keys of *entry* that OBS package *name* provides."""
+    if name == "percona-postgresql":
+        # The server RPMs (percona-postgresql18, -server, -libs, ...) have no
+        # entry of their own: the tests fall back to the release "version"
+        # (18.6), while OBS builds them as PG_PACKAGE_VERSION (18.6.1).
+        pattern = re.compile(r"percona-postgresql%s(-[a-z]+)?" % re.escape(major))
+        return [k for k in entry.get("rpm_packages", []) if pattern.fullmatch(k)]
+    if name == "percona-postgis":
+        # percona-postgis35_18, percona-postgis35_18-client, ...
+        pattern = re.compile(r"percona-postgis\d+_%s(-[a-z]+)?" % re.escape(major))
+        return [k for k in entry if pattern.fullmatch(k)]
+    return [t.format(m=major) for t in EXPECTED_VERSION_PACKAGES.get(name, ())]
+
+
+def apply_expected_versions(entry, spec, major):
+    """Return *entry* with the versions in *spec* (EXPECTED_VERSIONS) applied.
+
+    Fields derived from the version (binary_version, extension_version, ...)
+    contain the version string, which is replaced too: "pgBackRest 2.59.1"
+    becomes "pgBackRest 2.59.2". A line that is not package=version raises.
+    """
+    if not spec or not spec.strip():
+        return entry
+    entry = dict(entry)
+    for item in re.split(r"[\s,]+", spec.strip()):
+        name, sep, new = item.partition("=")
+        name, new = name.strip(), new.strip()
+        if not sep or not name or not new:
+            raise ValueError(f"EXPECTED_VERSIONS: {item!r} is not package=version")
+        for key in _expected_version_keys(entry, name, major):
+            old = entry.get(key)
+            if old is None and name == "percona-postgresql":
+                entry[key] = {"version": new}
+                continue
+            if not isinstance(old, dict) or "version" not in old:
+                continue
+            old_version = old["version"]
+            entry[key] = {
+                field: value.replace(old_version, new) if isinstance(value, str) else value
+                for field, value in old.items()
+            }
+            entry[key]["version"] = new
+    return entry
