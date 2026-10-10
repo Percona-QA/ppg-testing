@@ -8,6 +8,9 @@
     # Image prefix (percona, perconalab, or an OBS registry path); stray
     # whitespace and trailing "/" are dropped to keep image refs valid
     DOCKER_REPOSITORY: "{{ lookup('env', 'REPOSITORY') | trim | regex_replace('/+$', '') | default('percona', true) }}"
+    # Prefix of the PostgreSQL server image, if not REPOSITORY: on OBS the
+    # component images and the server images are in different projects.
+    SERVER_REPOSITORY: "{{ (lookup('env', 'SERVER_REPOSITORY') | trim | regex_replace('/+$', '')) or DOCKER_REPOSITORY }}"
     # Get PostgreSQL server version from environment
     PG_SERVER_VERSION: "{{ lookup('env', 'SERVER_VERSION') | default('18.3', true) }}"
     # Get PostgreSQL server image tag from environment
@@ -32,7 +35,7 @@
     # pgbackrest_test_log_dir: "{{ pgbackrest_test_project_dir }}/logs"
     
     # Docker images - constructed from repository and tags
-    postgres_test_image: "{{ DOCKER_REPOSITORY }}/percona-distribution-postgresql:{{ PG_IMAGE_TAG }}"
+    postgres_test_image: "{{ SERVER_REPOSITORY }}/percona-distribution-postgresql:{{ PG_IMAGE_TAG }}"
     pgbackrest_test_image: "{{ DOCKER_REPOSITORY }}/percona-pgbackrest:{{ PGBACKREST_IMAGE_TAG }}"
     pg_bin_path: "{{ pg_bin | default('/usr/pgsql-' ~ PG_MAJOR ~ '/bin') }}"
     postgres_container_name: "ppg_server_primary"
