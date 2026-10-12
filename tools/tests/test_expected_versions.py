@@ -79,6 +79,8 @@ def test_malformed_lines_fail_loudly(settings, spec):
 def test_every_mapped_key_exists_in_a_real_release(settings):
     current = settings.get_settings("rocky-9")["ppg-18.6"]
     for key in settings.EXPECTED_VERSION_PACKAGES.values():
+        if key in settings.EXPECTED_VERSION_CREATE:
+            continue  # absent from the tables by design, created on demand
         assert key in current, key
 
 
@@ -87,3 +89,23 @@ def test_get_settings_applies_only_to_the_release_under_test(settings, monkeypat
     all_settings = settings.get_settings("rocky-9")
     assert all_settings["ppg-18.6"]["pgbackrest"]["binary_version"] == "pgBackRest 2.59.2"
     assert all_settings["ppg-18.4"]["pgbackrest"]["version"] != "2.59.2"
+
+
+def test_credcheck_entry_is_created_only_when_given(settings):
+    assert "credcheck" not in settings.apply_expected_versions(ENTRY, "percona-pgbackrest=2.59.2")
+    out = settings.apply_expected_versions(ENTRY, "percona-credcheck=5.0")
+    assert out["credcheck"] == {"version": "5.0"}
+
+
+def test_flat_fields_follow(settings):
+    entry = {**ENTRY, "PGSM_version": "2.4.0", "PGSM_package_version": "2.4.0", "PGSM_sql_version": "2.4.0",
+             "postgis_version": "3.5.7", "postgis_package_version": "3.5.7", "postgis_major_version": "3.5"}
+    out = settings.apply_expected_versions(entry, "percona-pg_stat_monitor=2.4.1 percona-postgis=3.6.0")
+    assert (out["PGSM_version"], out["PGSM_package_version"]) == ("2.4.1", "2.4.1")
+    assert out["PGSM_sql_version"] == "2.4.0"  # SQL version is not the package version
+    assert (out["postgis_version"], out["postgis_major_version"]) == ("3.6.0", "3.6")
+
+
+def test_flat_fields_absent_from_the_release_stay_absent(settings):
+    out = settings.apply_expected_versions(ENTRY, "percona-postgis=3.6.0")
+    assert "postgis_version" not in out
