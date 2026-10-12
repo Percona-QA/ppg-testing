@@ -1840,3 +1840,99 @@ def test_patroni_bootstraps_and_manages_postgres(host, running_patroni, get_psql
     status = host.run(f"curl -s --connect-timeout 3 --max-time 5 http://127.0.0.1:{PATRONI_RESTAPI_PORT}/patroni")
     assert status.rc == 0, status.stderr
     assert '"state":"running"' in status.stdout.replace(" ", ""), status.stdout
+
+
+# --- Version checks for extensions that only had presence checks -------------
+# A SQL extension's control file records the version CREATE EXTENSION installs
+# (default_version). For pgaudit and set_user it equals the package version
+# (pgaudit 16.1/17.1/18.0, set_user 4.2.0); credcheck writes 5.0 as 5.0.0;
+# percona_pg_telemetry records its SQL version (1.2). Reading the control file
+# needs no running server and no shared_preload_libraries (pgaudit's CREATE
+# EXTENSION would). pg_oidc_validator (a validator module) and wal2json (an
+# output plugin) have no control file and no recorded version: presence only.
+
+def _control_default_version(host, server_path, extension):
+    """default_version from share/extension/<extension>.control, or None."""
+    control = host.file(f"{server_path}/share/extension/{extension}.control")
+    if not control.exists:
+        return None
+    for line in control.content_string.splitlines():
+        key, _, value = line.partition("=")
+        if key.strip() == "default_version":
+            return value.strip().strip("'\"")
+    return None
+
+
+def _same_version(found, expected):
+    """Numeric comparison that treats 5.0 and 5.0.0 as equal."""
+    def parts(v):
+        nums = [int(p) for p in str(v).split(".") if p.isdigit()]
+        while nums and nums[-1] == 0:
+            nums.pop()
+        return nums
+    return str(found) == str(expected) or (parts(found) and parts(found) == parts(expected))
+
+
+def _expected(entry_key, field="version"):
+    value = pg_versions.get(entry_key)
+    if isinstance(value, dict):
+        value = value.get(field)
+    if not value:
+        pytest.skip(f"no expected {entry_key} version for {os.getenv('VERSION')} "
+                    "(add it to settings.py or pass EXPECTED_VERSIONS)")
+    return value
+
+
+def test_pgaudit_version(host, get_server_path):
+    expected = _expected("pgaudit")
+    with host.sudo():
+        found = _control_default_version(host, get_server_path, "pgaudit")
+    assert found, "pgaudit.control not found or without default_version"
+    assert _same_version(found, expected), f"pgaudit: expected {expected}, found {found}"
+
+
+def test_set_user_version(host, get_server_path):
+    expected = _expected("set_user")
+    with host.sudo():
+        found = _control_default_version(host, get_server_path, "set_user")
+    assert found, "set_user.control not found or without default_version"
+    assert _same_version(found, expected), f"set_user: expected {expected}, found {found}"
+
+
+def test_credcheck_is_installed(host, get_server_path):
+    with host.sudo():
+        for path in (f"{get_server_path}/share/extension/credcheck.control",
+                     f"{get_server_path}/lib/credcheck.so"):
+            assert host.file(path).exists, f"{path} does not exist."
+
+
+def test_credcheck_version(host, get_server_path):
+    expected = _expected("credcheck")
+    with host.sudo():
+        found = _control_default_version(host, get_server_path, "credcheck")
+    assert found, "credcheck.control not found or without default_version"
+    assert _same_version(found, expected), f"credcheck: expected {expected}, found {found}"
+
+
+@pytest.mark.skipif(int(MAJOR_VER) >= 18, reason="pg-telemetry ships in the tarball for PG 17 and earlier")
+def test_pg_telemetry_is_installed(host, get_server_path):
+    with host.sudo():
+        for path in (f"{get_server_path}/share/extension/percona_pg_telemetry.control",
+                     f"{get_server_path}/lib/percona_pg_telemetry.so"):
+            assert host.file(path).exists, f"{path} does not exist."
+
+
+@pytest.mark.skipif(int(MAJOR_VER) >= 18, reason="pg-telemetry ships in the tarball for PG 17 and earlier")
+def test_pg_telemetry_version(host, get_server_path):
+    expected = _expected("pg_telemetry_version")
+    with host.sudo():
+        found = _control_default_version(host, get_server_path, "percona_pg_telemetry")
+    assert found, "percona_pg_telemetry.control not found or without default_version"
+    assert _same_version(found, expected), f"pg-telemetry: expected {expected}, found {found}"
+
+
+@pytest.mark.skipif(int(MAJOR_VER) < 18, reason="pg_oidc_validator ships in the tarball for PG 18 and later")
+def test_pg_oidc_validator_is_installed(host, get_server_path):
+    path = f"{get_server_path}/lib/pg_oidc_validator.so"
+    with host.sudo():
+        assert host.file(path).exists, f"{path} does not exist."

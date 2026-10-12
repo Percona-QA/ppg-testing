@@ -52,6 +52,19 @@ EXPECTED_VERSION_PACKAGES = {
     "percona-pgpool-II": "pgpool",
     "percona-pgvector": "pgvector",
     "percona-wal2json": "wal2json",
+    "percona-credcheck": "credcheck",
+}
+
+# Components the release tables do not list (credcheck): EXPECTED_VERSIONS
+# creates their entry, so a version check has something to compare with.
+EXPECTED_VERSION_CREATE = {"credcheck"}
+
+# Components kept as flat fields of the release entry rather than a sub-dict:
+# OBS package name -> fields set to the version. postgis_major_version is the
+# major.minor of the PostGIS version (3.5.7 -> 3.5).
+EXPECTED_VERSION_FLAT = {
+    "percona-pg_stat_monitor": ("PGSM_version", "PGSM_package_version"),
+    "percona-postgis": ("postgis_version", "postgis_package_version"),
 }
 
 
@@ -75,7 +88,18 @@ def apply_expected_versions(entry, spec):
         name, new = name.strip(), new.strip()
         if not sep or not name or not new:
             raise ValueError(f"EXPECTED_VERSIONS: {item!r} is not package=version")
+        flat = EXPECTED_VERSION_FLAT.get(name)
+        if flat:
+            for field in flat:
+                if field in entry:
+                    entry[field] = new
+            if name == "percona-postgis" and "postgis_major_version" in entry:
+                entry["postgis_major_version"] = ".".join(new.split(".")[:2])
+            continue
         key = EXPECTED_VERSION_PACKAGES.get(name)
+        if key is not None and key not in entry and key in EXPECTED_VERSION_CREATE:
+            entry[key] = {"version": new}
+            continue
         if key is None or key not in entry:
             continue
         old = entry[key]
