@@ -126,6 +126,31 @@ def _percona_version(pg_versions):
     return None
 
 
+_PRERELEASE_RE = re.compile(r"[~-]?(alpha|beta|rc)\d*", re.IGNORECASE)
+
+
+def is_prerelease(pg_versions):
+    """True for alpha, beta and rc builds (e.g. 19.0.1~beta4): the server and
+    psql then report a pre-release string like 19beta4 instead of the
+    release version the tables hold."""
+    return bool(_PRERELEASE_RE.search(str(pg_versions.get("percona-version") or "")))
+
+
+_PRERELEASE_TAG_RE = re.compile(r"~?(alpha|beta|rc)(\d+)", re.IGNORECASE)
+
+
+def prerelease_server_version(pg_versions):
+    """What the server and psql report for a pre-release of a new major, taken
+    from the package version: 19.0.1~beta4 -> '19beta4', 19.0.1~rc1 -> '19rc1'.
+    A pre-release only exists for Major.0, so None when there is no
+    alpha/beta/rc marker, or when the version is not Major.0 (19.1, 20.1, ...)."""
+    version = str(pg_versions.get("version") or "")
+    tag = _PRERELEASE_TAG_RE.search(str(pg_versions.get("percona-version") or ""))
+    if not tag or not re.fullmatch(r"\d+\.0", version):
+        return None
+    return f"{version.split('.')[0]}{tag.group(1).lower()}{tag.group(2)}"
+
+
 def expected_pkg_versions(pg_versions):
     expected = [pg_versions["version"]]
     percona_version = _percona_version(pg_versions)

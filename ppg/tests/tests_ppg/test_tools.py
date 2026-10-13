@@ -686,9 +686,15 @@ def test_postgis_extenstions_list(installed_extensions_list, host):
     _skip_if_postgis_unavailable(pg_versions)
 
     dist = host.system_info.distribution
-    POSTGIS_DEB_EXTENSIONS = ['postgis_tiger_geocoder-3','postgis_sfcgal-3','postgis_raster-3','postgis_topology-3',
-        'address_standardizer_data_us','postgis_tiger_geocoder','postgis_raster','postgis_topology','postgis_sfcgal',
-        'address_standardizer-3','postgis-3','address_standardizer','postgis','address_standardizer_data_us-3']
+    # The core extensions are listed under both their plain and their '-3' names.
+    POSTGIS_DEB_EXTENSIONS = ['postgis_sfcgal-3','postgis_raster-3','postgis_topology-3','postgis-3',
+        'postgis_raster','postgis_topology','postgis_sfcgal','postgis',
+        'address_standardizer_data_us','postgis_tiger_geocoder','address_standardizer']
+    # From PostGIS 3.7 address_standardizer and the tiger geocoder are packages of
+    # their own and only ship the plain names; before that they came with the
+    # '-3' names of the bundled packages.
+    if version.parse(str(pg_versions["postgis_major_version"])) < version.parse("3.7"):
+        POSTGIS_DEB_EXTENSIONS += ['postgis_tiger_geocoder-3','address_standardizer-3','address_standardizer_data_us-3']
     POSTGIS_RHEL_EXTENSIONS = ['postgis_sfcgal','address_standardizer','postgis_tiger_geocoder','postgis',
         'postgis_topology','postgis_raster','address_standardizer_data_us']
     if is_rpm(dist):

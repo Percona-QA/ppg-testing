@@ -203,12 +203,29 @@ def test_pg_config_server_version(host):
 @pytest.mark.upgrade
 def test_postgresql_query_version(postgresql_query_version):
     assert postgresql_query_version.rc == 0, postgresql_query_version.stderr
-    assert postgresql_query_version.stdout.strip("\n") == pg_versions['version'], postgresql_query_version.stdout
+    expected = pg_versions['version']
+    if settings.is_prerelease(pg_versions):
+        # a beta/rc of a new major reports e.g. 19beta4, not 19.0
+        expected = settings.prerelease_server_version(pg_versions)
+        assert expected, (
+            f"{pg_versions['percona-version']} is an alpha/beta/rc build, which only exists for Major.0, "
+            f"but the server version is {pg_versions['version']}"
+        )
+    assert postgresql_query_version.stdout.strip("\n") == expected, postgresql_query_version.stdout
 
 
 @pytest.mark.upgrade
 def test_postgres_client_string(host):
-    if int(settings.MAJOR_VER) >= 17:
+    if settings.is_prerelease(pg_versions):
+        # psql prints the pre-release string (19beta4) and the Percona version without the ~beta suffix
+        server_version = settings.prerelease_server_version(pg_versions)
+        assert server_version, (
+            f"{pg_versions['percona-version']} is an alpha/beta/rc build, which only exists for Major.0, "
+            f"but the server version is {pg_versions['version']}"
+        )
+        percona_version = pg_versions['percona-version'].split("~")[0]
+        assert f"psql (PostgreSQL) {server_version} - Percona Server for PostgreSQL {percona_version}" in host.check_output('psql -V')
+    elif int(settings.MAJOR_VER) >= 17:
         assert f"psql (PostgreSQL) {pg_versions['version']} - Percona Server for PostgreSQL {pg_versions['percona-version']}" in host.check_output('psql -V')
     else:
         assert f"psql (PostgreSQL) {pg_versions['version']} - Percona Distribution" in host.check_output('psql -V')
