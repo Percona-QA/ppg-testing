@@ -1,4 +1,5 @@
 import json
+import datetime
 import os
 import re
 import time
@@ -47,6 +48,7 @@ PATRONI_PYTHON312_MIN_VERSIONS = {
     16: version.parse("16.15"),
     17: version.parse("17.11"),
     18: version.parse("18.5"),
+    19: version.parse("19.0"),
 }
 
 # Versions an in-place upgrade must originate FROM before the python3.12
@@ -61,6 +63,7 @@ PATRONI_PYTHON312_UPGRADE_FROM_MIN_VERSIONS = {
     16: version.parse("16.15"),
     17: version.parse("17.11"),
     18: version.parse("18.6"),
+    19: version.parse("19.0"),
 }
 
 # Minimum PostgreSQL versions where pg_cron is available
@@ -76,10 +79,11 @@ TELEMETRY_WEAK_DEP_MIN_VERSIONS = {
     16: version.parse("16.15"),
     17: version.parse("17.11"),
     18: version.parse("18.5"),
+    19: version.parse("19.0"),
 }
 
 # Minimum PostgreSQL versions where pg_tde_upgrade binary is available
-PG_TDE_UPGRADE_MIN_VERSIONS = {major: BASELINE_2026Q2[major] for major in (17, 18)}
+PG_TDE_UPGRADE_MIN_VERSIONS = {major: BASELINE_2026Q2[major] for major in (17, 18, 19)}
 
 # Minimum PostgreSQL versions where libpgpoolpcp3 replaces libpgpool2 on Debian/Ubuntu
 LIBPGPOOLPCP3_MIN_VERSIONS = BASELINE_2026Q2
@@ -91,6 +95,7 @@ PG_GATHER_MIN_VERSIONS = {
     16: version.parse("16.11"),
     17: version.parse("17.7"),
     18: version.parse("18.1"),
+    19: version.parse("19.0"),
 }
 
 # Minimum PostgreSQL versions where PostGIS is available
@@ -633,6 +638,8 @@ def test_postgis_package_version(host):
 
     dist = host.system_info.distribution.lower()
     release = host.system_info.release
+    # RPM package names embed the PostGIS major.minor: 3.5 -> postgis35
+    postgis_pkg = "percona-postgis" + str(pg_versions["postgis_major_version"]).replace(".", "")
 
     if is_deb(dist):
         package_names = [
@@ -643,21 +650,21 @@ def test_postgis_package_version(host):
         ]
     else:
         package_names = [
-            f"percona-postgis35_{MAJOR_VER}",
-            f"percona-postgis35_{MAJOR_VER}-client",
-            f"percona-postgis35_{MAJOR_VER}-debuginfo",
-            f"percona-postgis35_{MAJOR_VER}-devel",
-            f"percona-postgis35_{MAJOR_VER}-docs",
-            f"percona-postgis35_{MAJOR_VER}-gui",
-            f"percona-postgis35_{MAJOR_VER}-llvmjit",
-            f"percona-postgis35_{MAJOR_VER}-utils",
+            f"{postgis_pkg}_{MAJOR_VER}",
+            f"{postgis_pkg}_{MAJOR_VER}-client",
+            f"{postgis_pkg}_{MAJOR_VER}-debuginfo",
+            f"{postgis_pkg}_{MAJOR_VER}-devel",
+            f"{postgis_pkg}_{MAJOR_VER}-docs",
+            f"{postgis_pkg}_{MAJOR_VER}-gui",
+            f"{postgis_pkg}_{MAJOR_VER}-llvmjit",
+            f"{postgis_pkg}_{MAJOR_VER}-utils",
         ]
 
         # Add version-specific debug packages
         if release.startswith(("8", "9")):
             package_names.extend([
-                f"percona-postgis35_{MAJOR_VER}-client-debuginfo",
-                f"percona-postgis35_{MAJOR_VER}-gui-debuginfo",
+                f"{postgis_pkg}_{MAJOR_VER}-client-debuginfo",
+                f"{postgis_pkg}_{MAJOR_VER}-gui-debuginfo",
             ])
 
     for pkg_name in package_names:
@@ -1553,7 +1560,7 @@ def test_pg_oidc_validator_package_version(host):
 
     # Determine package name based on OS family
     dist = host.system_info.distribution.lower()
-    pkg_name = "percona-pg-oidc-validator18" if is_deb(dist) else "percona-pg_oidc_validator18"
+    pkg_name = f"percona-pg-oidc-validator{MAJOR_VER}" if is_deb(dist) else f"percona-pg_oidc_validator{MAJOR_VER}"
 
     pkg = host.package(pkg_name)
     assert pkg.is_installed, f"Package {pkg_name} is not installed"
@@ -1713,3 +1720,247 @@ def test_pg_cron_extension(host):
                 f"{psql} \"SELECT count(*) FROM pg_extension WHERE extname = 'pg_cron';\""
             ).stdout.strip()
             assert final_count == "0", "Failed to drop pg_cron extension cleanly"
+
+
+def _same_numeric_version(found, expected):
+    """True when 5.0 and 5.0.0 are given for the same version."""
+    def parts(v):
+        nums = [int(p) for p in str(v).split(".") if p.isdigit()]
+        while nums and nums[-1] == 0:
+            nums.pop()
+        return nums
+    return str(found) == str(expected) or (bool(parts(found)) and parts(found) == parts(expected))
+
+
+CREDCHECK_MAJOR = 19  # credcheck is installed and preloaded for PG 19 only so far
+
+
+def _credcheck_expected():
+    """credcheck runs on PG 19 only for now, and only on releases that list it."""
+    if int(MAJOR_VER) != CREDCHECK_MAJOR:
+        pytest.skip(f"credcheck tests run on PG {CREDCHECK_MAJOR} only, found {MAJOR_VER}")
+    entry = pg_versions.get("credcheck")
+    if not entry:
+        pytest.skip(f"credcheck is not expected on {pg_versions.get('version')}")
+    return entry["version"]
+
+
+def test_credcheck_package_version(host):
+    """Verify the credcheck packages are installed with the expected version."""
+    expected_version = _credcheck_expected()
+    dist = host.system_info.distribution.lower()
+    if is_deb(dist):
+        package_names = [f"percona-postgresql-{MAJOR_VER}-credcheck"]
+    else:
+        package_names = [f"percona-credcheck{MAJOR_VER}", f"percona-credcheck{MAJOR_VER}-llvmjit"]
+
+    for pkg_name in package_names:
+        pkg = host.package(pkg_name)
+        assert pkg.is_installed, f"Package {pkg_name} is not installed"
+        assert expected_version in pkg.version, (
+            f"Version mismatch for {pkg_name}: expected {expected_version}, got {pkg.version}"
+        )
+
+
+def test_credcheck_extension_available(host):
+    """credcheck is listed by the server with the expected extension version.
+
+    The control file writes 5.0 as 5.0.0. credcheck is not preloaded by the
+    install tasks, so this reads pg_available_extensions instead of creating it.
+    """
+    expected_version = _credcheck_expected()
+    with host.sudo("postgres"):
+        result = host.run(
+            "psql -tAc \"SELECT default_version FROM pg_available_extensions WHERE name = 'credcheck';\""
+        )
+    assert result.rc == 0, result.stderr
+    found = result.stdout.strip()
+    assert found, "credcheck is not in pg_available_extensions"
+    assert _same_numeric_version(found, expected_version), (
+        f"credcheck extension version mismatch: expected {expected_version}, got {found}"
+    )
+
+
+# --- credcheck functional checks ---------------------------------------------
+# credcheck's checks run in a utility-statement hook. The install tasks put it
+# in shared_preload_libraries, but most cases still LOAD it into their own
+# superuser session and set the policy with SET, so they do not depend on the
+# preload and leave nothing configured for the other tests. The cases that need
+# the preload (shared-memory state such as the password reuse history) run
+# without LOAD.
+
+CREDCHECK_ROLE_PREFIX = "cc_func_"
+
+
+def _credcheck_psql(host, statements):
+    """Run statements in one superuser session with credcheck loaded."""
+    with host.sudo("postgres"):
+        return host.run("psql -X -v ON_ERROR_STOP=1 -c %s", "LOAD 'credcheck'; " + statements)
+
+
+@pytest.fixture
+def credcheck_roles(host):
+    """Skips unless credcheck is expected; drops the roles the test created."""
+    _credcheck_expected()
+    yield
+    drop_all = (
+        "DO $$ DECLARE r record; BEGIN "
+        "FOR r IN SELECT rolname FROM pg_roles WHERE rolname LIKE 'cc\\_func\\_%' LOOP "
+        "EXECUTE format('DROP ROLE %I', r.rolname); END LOOP; END $$;"
+    )
+    with host.sudo("postgres"):
+        host.run("psql -X -c %s", drop_all)
+
+
+def _credcheck_role_exists(host, role):
+    with host.sudo("postgres"):
+        result = host.run("psql -X -tAc %s", f"SELECT count(*) FROM pg_roles WHERE rolname = '{role}';")
+    assert result.rc == 0, result.stderr
+    return result.stdout.strip() == "1"
+
+
+def test_credcheck_gucs_registered_on_load(host, credcheck_roles):
+    """Loading credcheck registers its settings with their defaults."""
+    with host.sudo("postgres"):
+        result = host.run(
+            "psql -X -tAc %s",
+            "LOAD 'credcheck'; SELECT name, setting FROM pg_settings "
+            "WHERE name IN ('credcheck.password_min_length', 'credcheck.username_min_length', "
+            "'credcheck.password_contain_username', 'credcheck.no_password_logging') ORDER BY name;",
+        )
+    assert result.rc == 0, result.stderr
+    assert result.stdout.split() == [
+        "LOAD",
+        "credcheck.no_password_logging|on",
+        "credcheck.password_contain_username|on",
+        "credcheck.password_min_length|1",
+        "credcheck.username_min_length|1",
+    ], result.stdout
+
+
+CREDCHECK_REJECTED = [
+    ("password_min_length", "12", "CREATE ROLE cc_func_len PASSWORD 'Short1'",
+     "password length should match the configured credcheck.password_min_length (12)"),
+    ("password_min_digit", "2", "CREATE ROLE cc_func_digit PASSWORD 'LongEnough1'",
+     "password does not contain the configured credcheck.password_min_digit characters (2)"),
+    ("password_min_special", "1", "CREATE ROLE cc_func_special PASSWORD 'LongEnough12'",
+     "password does not contain the configured credcheck.password_min_special characters (1)"),
+    ("password_min_upper", "2", "CREATE ROLE cc_func_upper PASSWORD 'longenough12'",
+     "password does not contain the configured credcheck.password_min_upper characters (2)"),
+    ("password_not_contain", "'secret'", "CREATE ROLE cc_func_notcontain PASSWORD 'mysecret123'",
+     "password contains the configured credcheck.password_not_contain unauthorized characters: secret"),
+    ("username_min_length", "20", "CREATE ROLE cc_func_short",
+     "username length should match the configured credcheck.username_min_length (20)"),
+]
+
+
+@pytest.mark.parametrize("guc,value,statement,message", CREDCHECK_REJECTED,
+                         ids=[case[0] for case in CREDCHECK_REJECTED])
+def test_credcheck_rejects_policy_violation(host, credcheck_roles, guc, value, statement, message):
+    result = _credcheck_psql(host, f"SET credcheck.{guc} = {value}; {statement};")
+    assert result.rc != 0, f"{statement!r} was accepted with credcheck.{guc} = {value}"
+    assert message in result.stderr, result.stderr
+    role = statement.split()[2]
+    assert not _credcheck_role_exists(host, role), f"{role} was created despite the error"
+
+
+def test_credcheck_rejects_password_containing_username(host, credcheck_roles):
+    """credcheck.password_contain_username is on by default."""
+    result = _credcheck_psql(host, "CREATE ROLE cc_func_same PASSWORD 'xxcc_func_samexx';")
+    assert result.rc != 0, "password containing the username was accepted"
+    assert "password should not contain username" in result.stderr, result.stderr
+    assert not _credcheck_role_exists(host, "cc_func_same")
+
+
+def test_credcheck_accepts_compliant_credentials(host, credcheck_roles):
+    """A role that meets every configured rule is created."""
+    result = _credcheck_psql(
+        host,
+        "SET credcheck.username_min_length = 8; "
+        "SET credcheck.password_min_length = 12; "
+        "SET credcheck.password_min_digit = 2; "
+        "SET credcheck.password_min_upper = 1; "
+        "SET credcheck.password_min_special = 1; "
+        "SET credcheck.password_not_contain = 'secret'; "
+        "CREATE ROLE cc_func_good LOGIN PASSWORD 'Str0ngPassw0rd!';",
+    )
+    assert result.rc == 0, result.stderr
+    assert _credcheck_role_exists(host, "cc_func_good")
+
+
+def test_credcheck_valid_until_policy(host, credcheck_roles):
+    """With credcheck.password_valid_max a role needs a VALID UNTIL within the limit."""
+    within_limit = (datetime.date.today() + datetime.timedelta(days=10)).isoformat()
+    cases = [
+        ("cc_func_noexp", "", "require a VALID UNTIL option"),
+        ("cc_func_far", "VALID UNTIL '2099-01-01'", "require a VALID UNTIL option with a date NOT beyond 30 days"),
+    ]
+    for role, clause, message in cases:
+        result = _credcheck_psql(
+            host,
+            f"SET credcheck.password_valid_max = 30; CREATE ROLE {role} PASSWORD 'ValidPass123' {clause};",
+        )
+        assert result.rc != 0, f"{role} was accepted"
+        assert message in result.stderr, result.stderr
+        assert not _credcheck_role_exists(host, role)
+
+    result = _credcheck_psql(
+        host,
+        "SET credcheck.password_valid_max = 30; "
+        f"CREATE ROLE cc_func_ok PASSWORD 'ValidPass123' VALID UNTIL '{within_limit}';",
+    )
+    assert result.rc == 0, result.stderr
+    assert _credcheck_role_exists(host, "cc_func_ok")
+
+
+def test_credcheck_policy_does_not_leak_between_sessions(host, credcheck_roles):
+    """SET only lasts for its session: a new session is back to the defaults."""
+    result = _credcheck_psql(host, "SET credcheck.password_min_length = 30;")
+    assert result.rc == 0, result.stderr
+    result = _credcheck_psql(host, "CREATE ROLE cc_func_default PASSWORD 'short';")
+    assert result.rc == 0, result.stderr
+    assert _credcheck_role_exists(host, "cc_func_default")
+
+
+def test_credcheck_is_preloaded(host, credcheck_roles):
+    """The install tasks added credcheck to shared_preload_libraries."""
+    with host.sudo("postgres"):
+        result = host.run("psql -X -tAc %s", "SHOW shared_preload_libraries;")
+        assert result.rc == 0, result.stderr
+        libraries = [lib.strip() for lib in result.stdout.strip().split(",")]
+        assert "credcheck" in libraries, result.stdout
+        # a plain session, no LOAD: the settings exist because of the preload
+        result = host.run("psql -X -tAc %s", "SHOW credcheck.password_min_length;")
+    assert result.rc == 0, result.stderr
+    assert result.stdout.strip() == "1"
+
+
+def test_credcheck_enforces_without_load(host, credcheck_roles):
+    """A plain session is checked too, since the hooks come from the preload."""
+    with host.sudo("postgres"):
+        result = host.run(
+            "psql -X -v ON_ERROR_STOP=1 -c %s",
+            "SET credcheck.password_min_length = 12; CREATE ROLE cc_func_noload PASSWORD 'short';",
+        )
+    assert result.rc != 0, "weak password accepted in a session that did not LOAD credcheck"
+    assert "credcheck.password_min_length (12)" in result.stderr, result.stderr
+    assert not _credcheck_role_exists(host, "cc_func_noload")
+
+
+def test_credcheck_password_reuse_history(host, credcheck_roles):
+    """Shared-memory history, so it only works with the preload."""
+    base = "SET credcheck.password_reuse_history = 2; "
+    setup = _credcheck_psql(
+        host,
+        "CREATE ROLE cc_func_reuse PASSWORD 'FirstPass123'; "
+        "ALTER ROLE cc_func_reuse PASSWORD 'SecondPass123';",
+    )
+    assert setup.rc == 0, setup.stderr
+    # the history is recorded while the policy is on, so redo the changes with it set
+    result = _credcheck_psql(host, base + "ALTER ROLE cc_func_reuse PASSWORD 'ThirdPass123';")
+    assert result.rc == 0, result.stderr
+    result = _credcheck_psql(host, base + "ALTER ROLE cc_func_reuse PASSWORD 'ThirdPass123';")
+    assert result.rc != 0, "reusing the current password was accepted"
+    assert "Cannot use this credential following the password reuse policy" in result.stderr, result.stderr
+    result = _credcheck_psql(host, base + "ALTER ROLE cc_func_reuse PASSWORD 'BrandNewPass123';")
+    assert result.rc == 0, result.stderr

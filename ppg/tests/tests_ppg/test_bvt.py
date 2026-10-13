@@ -400,8 +400,8 @@ def test_rpm_package_provides(host, percona_package, vanila_package):
 
 
 def test_build_with_liburing(host):
-    if settings.MAJOR_VER != "18":
-        pytest.skip("Skipping, test only for PostgreSQL 18 version")
+    if int(settings.MAJOR_VER) < 18:
+        pytest.skip("Skipping, test only for PostgreSQL 18 and newer")
 
     distribution = host.system_info.distribution.lower()
     if is_rpm(distribution) and \
@@ -409,7 +409,7 @@ def test_build_with_liburing(host):
         pytest.skip(f"liburing not supported on {distribution} 8 for postgres {settings.MAJOR_VER}")
 
     output = host.check_output("pg_config --configure")
-    assert '--with-liburing' in output, "PostgreSQL 18 was built without --with-liburing"
+    assert '--with-liburing' in output, f"PostgreSQL {settings.MAJOR_VER} was built without --with-liburing"
 
 
 # wal_compression algorithm -> minimum PostgreSQL major version that supports it
