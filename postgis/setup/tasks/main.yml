@@ -7,17 +7,6 @@
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
       postgis_rhel_package_name_prefix: "percona-postgis{{ '37' if major_version | int >= 19 else '35' }}_{{ major_version }}"
-      # percona-postgis35 (PG <= 18) depends on the Percona-built gdal311/geos311/proj95,
-      # which install into their own prefixes. percona-postgis37 (PG 19+) depends on the
-      # plain EPEL/system geos/proj and gdal3.4 (gdal on EL8) under /usr, so there is
-      # nothing to add to PATH/PKG_CONFIG_PATH and the packages are named differently.
-      postgis_gis_path: "{{ '/usr/gdal311/bin:/usr/geos311/bin:' if major_version | int < 19 else '' }}"
-      postgis_gis_pkg_config_path: "{{ '/usr/gdal311/lib/pkgconfig:/usr/geos311/lib64/pkgconfig:/usr/proj95/lib64/pkgconfig:' if major_version | int < 19 else '' }}"
-      postgis_gis_build_packages: >-
-        {{ ['gdal311', 'gdal311-devel', 'geos311', 'geos311-devel', 'proj95', 'proj95-devel']
-           if major_version | int < 19 else
-           ['geos', 'geos-devel', 'proj', 'proj-devel',
-            ('gdal3.4-devel' if ansible_distribution_major_version | int >= 9 else 'gdal-devel')] }}
 
   - name: Configure repository
     include_tasks: ../../../../tasks/enable_repo.yml
@@ -118,6 +107,39 @@
   - debug:
       msg: "Shipped {{ postgis_rhel_package_name_prefix }} reports: {{ shipped_postgis_full_version.stdout }}"
 
+  # What the installed package really depends on decides which GEOS/PROJ/GDAL
+  # dev packages to build against. Current packages (postgis35 and postgis37
+  # on EL8/9/10) use the system geos/proj and gdal3.4 (gdal on EL8) under /usr;
+  # older builds used the Percona-built gdal311/geos311/proj95 in their own
+  # prefixes. Checking the requires avoids guessing from the PG major.
+  - name: Read what the installed PostGIS package requires
+    command: "rpm -qR {{ postgis_rhel_package_name_prefix }}"
+    register: postgis_requires
+    changed_when: false
+
+  - name: Choose GEOS/PROJ/GDAL build packages and paths to match those requires
+    set_fact:
+      postgis_req_names: "{{ postgis_requires.stdout_lines | map('regex_replace', '\\s.*$', '') | list }}"
+
+  - name: Set GEOS/PROJ/GDAL build package list and search paths
+    set_fact:
+      postgis_gdal311: "{{ 'gdal311-libs' in postgis_req_names }}"
+      postgis_geos311: "{{ 'geos311' in postgis_req_names }}"
+      postgis_proj95: "{{ 'proj95' in postgis_req_names }}"
+
+  - name: Set GEOS/PROJ/GDAL build packages and search paths
+    set_fact:
+      postgis_gis_build_packages: >-
+        {{ (['gdal311', 'gdal311-devel'] if postgis_gdal311 else
+            [('gdal3.4-devel' if ansible_distribution_major_version | int >= 9 else 'gdal-devel')])
+         + (['geos311', 'geos311-devel'] if postgis_geos311 else ['geos', 'geos-devel'])
+         + (['proj95', 'proj95-devel'] if postgis_proj95 else ['proj', 'proj-devel']) }}
+      postgis_gis_path: "{{ ('/usr/gdal311/bin:' if postgis_gdal311 else '') ~ ('/usr/geos311/bin:' if postgis_geos311 else '') }}"
+      postgis_gis_pkg_config_path: "{{ ('/usr/gdal311/lib/pkgconfig:' if postgis_gdal311 else '') ~ ('/usr/geos311/lib64/pkgconfig:' if postgis_geos311 else '') ~ ('/usr/proj95/lib64/pkgconfig:' if postgis_proj95 else '') }}"
+
+  - debug:
+      msg: "Building against: {{ postgis_gis_build_packages }} (extra PATH '{{ postgis_gis_path }}')"
+
   - name: Install PostGIS build dependencies, version-matched to what {{ postgis_rhel_package_name_prefix }} actually depends on
     yum:
       name: "{{ postgis_gis_build_packages + packages }}"
@@ -136,11 +158,9 @@
         - perl
         - bison
         - flex
-        # GEOS/PROJ/GDAL are added from postgis_gis_build_packages (see the facts at
-        # the top), version-matched to what the shipped package really depends on:
-        # percona-postgis35 (PG <= 18): gdal311-libs >= 3.11.0, geos311 >= 3.11.2,
-        # proj95 >= 9.5.1, from Percona's own repo.
-        # percona-postgis37 (PG 19+): system geos/proj and gdal3.4 (gdal on EL8).
+        # GEOS/PROJ/GDAL come from postgis_gis_build_packages (set above from the
+        # installed package's requires).
+        - gmp-devel
         - SFCGAL
         - SFCGAL-devel
         - json-c-devel
@@ -260,10 +280,10 @@
     environment:
       PATH: "/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
 
-  # PG <= 18: gdal311/geos311/proj95 install to their own prefixes (/usr/gdal311,
-  # /usr/geos311, /usr/proj95), not standard system paths - PATH and
-  # PKG_CONFIG_PATH need these explicitly for ./configure's autodetection.
-  # PG 19+ uses the system packages under /usr, so both stay empty.
+  # gdal311/geos311/proj95, when the package uses them, install to their own
+  # prefixes (/usr/gdal311, /usr/geos311, /usr/proj95), not standard system
+  # paths - PATH and PKG_CONFIG_PATH need these explicitly for ./configure's
+  # autodetection. With the system packages under /usr both stay empty.
   - name: Configure postgis against the already-installed GEOS/PROJ/GDAL/SFCGAL/json-c libraries
     shell: |
       {% if ansible_distribution_major_version == "9" %}
@@ -278,6 +298,9 @@
     environment:
       PATH: "{{ postgis_gis_path }}/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
       PKG_CONFIG_PATH: "{{ postgis_gis_pkg_config_path }}{{ ansible_env.PKG_CONFIG_PATH | default('') }}"
+      # EL8's gmp-devel ships no gmp.pc, so preset what PKG_CHECK_MODULES([GMP]) would set
+      GMP_CFLAGS: "{{ '-I/usr/include' if ansible_distribution_major_version == '8' else '' }}"
+      GMP_LIBS: "{{ '-lgmp' if ansible_distribution_major_version == '8' else '' }}"
     register: postgis_configure
     ignore_errors: true
 
