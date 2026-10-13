@@ -95,6 +95,12 @@ def test_shared_tasks_render():
     # PostGIS RPM prefix: 3.5 for 14-18, 3.7 for 19
     assert 'postgis_rhel_package_name_prefix: "percona-postgis35_18"' in tools18
     assert 'postgis_rhel_package_name_prefix: "percona-postgis37_19"' in files["tasks/install_ppg19_tools.yml"]
+    # address_standardizer and the tiger geocoder are packages of their own from PostGIS 3.7 (19) on
+    for pkg in ("percona-address-standardizer19", "percona-postgis-tiger-geocoder19",
+                "percona-postgresql-19-address-standardizer", "percona-postgresql-19-postgis-tiger-geocoder"):
+        assert pkg in files["tasks/install_ppg19_tools.yml"], pkg
+    assert "address-standardizer" not in tools18
+    assert "tiger-geocoder" not in tools18
     # credcheck packages are installed from 19 on only
     assert "percona-credcheck19" in files["tasks/install_ppg19_tools.yml"]
     assert "percona-postgresql-19-credcheck" in files["tasks/install_ppg19_tools.yml"]

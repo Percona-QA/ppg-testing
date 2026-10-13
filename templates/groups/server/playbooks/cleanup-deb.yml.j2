@@ -38,6 +38,8 @@
 {% endif %}
 {% if major >= 19 %}
           - percona-postgresql-{{ major }}-credcheck
+          - percona-postgresql-{{ major }}-address-standardizer
+          - percona-postgresql-{{ major }}-postgis-tiger-geocoder
 {% endif %}
           - percona-pgbackrest
           - percona-pgbackrest-doc

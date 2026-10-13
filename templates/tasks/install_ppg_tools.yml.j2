@@ -421,6 +421,33 @@
     when: ansible_os_family == "Debian"
 <% endif %>
 
+<% if postgis_split_gate is defined %>
+  # PostGIS 3.7 split address_standardizer (with address_standardizer_data_us) and
+  # postgis_tiger_geocoder out of the percona-postgis packages into packages of their own
+  - name: Install PostGIS split-out packages RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-address-standardizer<< major >>
+      - percona-address-standardizer<< major >>-llvmjit
+      - percona-postgis-tiger-geocoder<< major >>
+    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('<< postgis_split_gate >>', '>=', strict=True))
+
+  - name: Install PostGIS split-out packages Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+        - percona-postgresql-<< major >>-address-standardizer
+        - percona-postgresql-<< major >>-postgis-tiger-geocoder
+    when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('<< postgis_split_gate >>', '>=', strict=True))
+
+<% endif %>
   - name: Install percona-wal2json<< major >> RHEL
     yum:
       name: percona-wal2json<< major >>

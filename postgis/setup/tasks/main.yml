@@ -59,6 +59,19 @@
       svc_name: postgresql-{{ major_version }}
       svc_state: started
 
+  # PostGIS 3.7 (PG 19+) ships address_standardizer(_data_us) and postgis_tiger_geocoder as packages of their own
+  - name: Install address_standardizer and tiger geocoder packages
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-address-standardizer{{ major_version }}
+      - percona-address-standardizer{{ major_version }}-llvmjit
+      - percona-postgis-tiger-geocoder{{ major_version }}
+    when: major_version | int >= 19
+
   - name: CREATE EXTENSION postgis/postgis_raster/postgis_sfcgal/fuzzystrmatch/address_standardizer(_data_us)/postgis_tiger_geocoder/postgis_topology
     become_user: postgres
     command: psql -c "CREATE EXTENSION {{ item }};"

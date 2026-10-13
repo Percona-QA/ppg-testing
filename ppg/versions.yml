@@ -536,6 +536,7 @@ instances:
       cron_gate: '18.3'
       postgis_pkg: '37'  # percona-postgis37_19 (PostGIS 3.7); 14-18 ship 3.5
       credcheck_gate: '19.0'  # credcheck packages exist from 19 on
+      postgis_split_gate: '19.0'  # PostGIS 3.7 ships address_standardizer and tiger geocoder as packages of their own
       oidc_gate: '19.0'  # pg_oidc_validator is in 19 from the first release (18 had it from 18.2)
       base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'', ''pg_tde'']'
   psp-16:

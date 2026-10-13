@@ -117,7 +117,6 @@ POSTGIS_EXTENSIONS = [
     "postgis_topology",
 ]
 
-
 @pytest.fixture()
 def pgaudit(host):
     dist = host.system_info.distribution
@@ -735,6 +734,28 @@ def test_postgis_extensions_create_drop(host):
         for ext in reversed(extensions):
             result = host.run(f"psql -c 'DROP EXTENSION IF EXISTS {ext} CASCADE;'")
             assert result.rc == 0, f"Failed to drop {ext}: {result.stderr}"
+
+
+def test_postgis_split_packages_installed(host):
+    """From PostGIS 3.7 (PG 19) address_standardizer and the tiger geocoder are
+    packages of their own, installed next to the percona-postgis packages."""
+    if version.parse(str(pg_versions["postgis_major_version"])) < version.parse("3.7"):
+        pytest.skip("address_standardizer and the tiger geocoder are part of percona-postgis here")
+
+    dist = host.system_info.distribution.lower()
+    if is_deb(dist):
+        package_names = [
+            f"percona-postgresql-{MAJOR_VER}-address-standardizer",
+            f"percona-postgresql-{MAJOR_VER}-postgis-tiger-geocoder",
+        ]
+    else:
+        package_names = [
+            f"percona-address-standardizer{MAJOR_VER}",
+            f"percona-address-standardizer{MAJOR_VER}-llvmjit",
+            f"percona-postgis-tiger-geocoder{MAJOR_VER}",
+        ]
+    for pkg_name in package_names:
+        assert host.package(pkg_name).is_installed, f"Package not installed: {pkg_name}"
 
 
 def test_postgis_extension_version(host):
