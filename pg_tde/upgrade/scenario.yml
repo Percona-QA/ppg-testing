@@ -30,6 +30,7 @@ params:
 - name: TO_VERSION
   kind: string
   default: ppg-18.4
+  quote: '"'
   description: PostgreSQL version to upgrade to, e.g. ppg-18.4 (minor) or ppg-19.0 (major).
     A release sweep's VERSION is used when this is left unset.
 - name: UPGRADE_TYPE
@@ -98,6 +99,7 @@ params:
   - vault
   - openbao
   - kmip
+  quote: '"'
   description: Key provider for the staged checker's global and tde_a keys. file, or a
     KMS the role starts in a docker container (hashicorp/vault, openbao or Cosmian KMIP);
     tde_b always keeps a file provider.
