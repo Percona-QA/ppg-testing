@@ -85,6 +85,9 @@ def test_shared_tasks_render():
     base18 = files["tasks/install_ppg18.yml"]
     assert "percona-postgresql-common-dev" in base18
     assert "Determine required PostgreSQL dev package" not in base18
+    # PG 19 moved libpgport.a and the other static libraries into -static
+    assert "percona-postgresql19-static" in files["tasks/install_ppg19.yml"]
+    assert "percona-postgresql18-static" not in base18
     base17 = files["tasks/install_ppg17.yml"]
     assert "version('17.4', '<=', strict=True)" in base17
     tools14 = files["tasks/install_ppg14_tools.yml"]

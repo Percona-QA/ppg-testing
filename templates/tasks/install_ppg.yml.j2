@@ -82,6 +82,10 @@
 <% if major >= 18 %>
         - percona-postgresql-common-dev
 <% endif %>
+<% if major >= 19 %>
+        # PG 19 moved libpgport.a and the other static libraries out of -devel
+        - percona-postgresql<< major >>-static
+<% endif %>
     when: ansible_os_family == "RedHat"
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
