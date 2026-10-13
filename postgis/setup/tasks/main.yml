@@ -135,6 +135,13 @@
          + (['geos311', 'geos311-devel'] if postgis_geos311 else ['geos', 'geos-devel'])
          + (['proj95', 'proj95-devel'] if postgis_proj95 else ['proj', 'proj-devel']) }}
       postgis_gis_path: "{{ ('/usr/gdal311/bin:' if postgis_gdal311 else '') ~ ('/usr/geos311/bin:' if postgis_geos311 else '') }}"
+      # The EPEL libgdal.so (3.4) was linked against the distro libpq, whose symbols carry
+      # the version tag RHPG_9.6. At configure time ld resolves libgdal's libpq.so.5
+      # to Percona's copy (/usr/pgsql-N/lib is in ld.so.conf.d), which has no such
+      # versions, and reports "undefined reference to PQstatus@RHPG_9.6" for every
+      # PQ*/lo_* symbol, so configure says "could not find GDAL". The symbols resolve
+      # fine at runtime (the server already loads libgdal), so let ld defer them.
+      postgis_configure_ldflags: "{{ '' if postgis_gdal311 else '-Wl,--allow-shlib-undefined' }}"
       postgis_gis_pkg_config_path: "{{ ('/usr/gdal311/lib/pkgconfig:' if postgis_gdal311 else '') ~ ('/usr/geos311/lib64/pkgconfig:' if postgis_geos311 else '') ~ ('/usr/proj95/lib64/pkgconfig:' if postgis_proj95 else '') }}"
 
   - debug:
@@ -299,6 +306,7 @@
       PATH: "{{ postgis_gis_path }}/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
       PKG_CONFIG_PATH: "{{ postgis_gis_pkg_config_path }}{{ ansible_env.PKG_CONFIG_PATH | default('') }}"
       # EL8's gmp-devel ships no gmp.pc, so preset what PKG_CHECK_MODULES([GMP]) would set
+      LDFLAGS: "{{ postgis_configure_ldflags }}"
       GMP_CFLAGS: "{{ '-I/usr/include' if ansible_distribution_major_version == '8' else '' }}"
       GMP_LIBS: "{{ '-lgmp' if ansible_distribution_major_version == '8' else '' }}"
     register: postgis_configure
