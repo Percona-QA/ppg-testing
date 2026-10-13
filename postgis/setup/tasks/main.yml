@@ -212,9 +212,9 @@
 
   - name: Record the actual build-time library versions we're about to compile against
     shell: |
-      export PATH="{{ postgis_gis_path }}$PATH"
-      export PKG_CONFIG_PATH="{{ postgis_gis_pkg_config_path }}${PKG_CONFIG_PATH:-}"
-      # EPEL's gdal3.4 renames its binaries with a gdal3.4- prefix
+      export PATH="${GIS_PATH}$PATH"
+      export PKG_CONFIG_PATH="${GIS_PKG_CONFIG_PATH}${PKG_CONFIG_PATH:-}"
+      # the EPEL gdal3.4 package renames its binaries with a gdal3.4- prefix
       GDALINFO=$(command -v gdal3.4-gdalinfo || command -v gdalinfo || echo gdalinfo)
       echo "geos-config:     $(geos-config --version 2>&1 || echo 'not found')"
       echo "gdal-config:     $(gdal-config --version 2>&1 || echo 'not found')"
@@ -225,6 +225,9 @@
       echo "sfcgal (pkg-config): $(pkg-config --modversion sfcgal 2>&1 || echo 'not found')"
     args:
       executable: /bin/bash
+    environment:
+      GIS_PATH: "{{ postgis_gis_path }}"
+      GIS_PKG_CONFIG_PATH: "{{ postgis_gis_pkg_config_path }}"
     register: build_time_lib_versions
     changed_when: false
     ignore_errors: true
@@ -363,8 +366,8 @@
   # Kept as a safety and diagnosis net for reference in case of a failure
   - name: Diagnose raster2pgsql's ability to read a real test raster directly (bypassing the regress harness)
     shell: |
-      export PATH="{{ postgis_gis_path }}$PATH"
-      # EPEL's gdal3.4 renames its binaries with a gdal3.4- prefix
+      export PATH="${GIS_PATH}$PATH"
+      # the EPEL gdal3.4 package renames its binaries with a gdal3.4- prefix
       GDALINFO=$(command -v gdal3.4-gdalinfo || command -v gdalinfo || echo gdalinfo)
       echo "=== gdalinfo --version ==="
       $GDALINFO --version 2>&1 || echo "gdalinfo not found or failed"
@@ -376,6 +379,8 @@
       /tmp/postgis/raster/loader/raster2pgsql /tmp/postgis/raster/test/regress/loader/testraster2.tif diag_raster_check 2>&1 || echo "raster2pgsql failed, rc=$?"
     args:
       executable: /bin/bash
+    environment:
+      GIS_PATH: "{{ postgis_gis_path }}"
     register: postgis_raster_diag
     when: postgis_installcheck is defined and postgis_installcheck.rc != 0
     ignore_errors: true
