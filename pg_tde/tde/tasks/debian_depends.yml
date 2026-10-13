@@ -216,6 +216,21 @@
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
+  # PostGIS 3.7 (PG 19+) ships address_standardizer(_data_us) and postgis_tiger_geocoder as packages of their own
+  - name: Install address_standardizer and tiger geocoder packages Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      postgres_version: "{{ major_version }}"
+      packages:
+        - percona-postgresql-{{ postgres_version }}-address-standardizer
+        - percona-postgresql-{{ postgres_version }}-postgis-tiger-geocoder
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+    when: major_version | int >= 19
+
   - name: Install pg-stat-monitor Debian/Ubuntu Package
     apt:
       name: "{{ packages }}"
