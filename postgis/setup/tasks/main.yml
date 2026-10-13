@@ -6,7 +6,7 @@
 
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
-      postgis_rhel_package_name_prefix: "percona-postgis35_{{ major_version }}"
+      postgis_rhel_package_name_prefix: "percona-postgis{{ '37' if major_version | int >= 19 else '35' }}_{{ major_version }}"
 
   - name: Configure repository
     include_tasks: ../../../../tasks/enable_repo.yml
