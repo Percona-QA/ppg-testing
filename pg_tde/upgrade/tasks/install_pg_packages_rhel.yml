@@ -40,3 +40,15 @@
       update_cache: true
     environment:
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+
+  # PG 19 moved libpgport.a and the other static libraries out of -devel into a
+  # new -static subpackage; building pg_tde (meson) links pgport.
+  - name: Install percona-postgresql{{ pg_major }}-static (PG 19+, needed to build pg_tde)
+    yum:
+      name: "percona-postgresql{{ pg_major }}-static{{ pg_pin_suffix }}"
+      state: "{{ 'present' if (pkg_release | default('') | length > 0) else 'latest' }}"
+      allow_downgrade: true
+      update_cache: true
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+    when: pg_major | int >= 19

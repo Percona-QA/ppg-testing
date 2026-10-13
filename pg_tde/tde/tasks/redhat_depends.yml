@@ -375,6 +375,18 @@
       PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
     when: ansible_distribution_major_version == "9" or ansible_distribution_major_version == "10"
 
+  # PG 19 moved libpgport.a, libpgcommon.a and the other static libraries out of
+  # -devel into a new -static subpackage. pg_tde's meson build links pgport,
+  # so without it meson setup fails with "C static library 'pgport' not found".
+  - name: Install percona-postgresql static libraries (PG 19+, needed to build pg_tde)
+    become: true
+    yum:
+      name: "percona-postgresql{{ major_version }}-static"
+      state: latest
+    environment:
+      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
+    when: major_version | int >= 19
+
   - name: Install Percona PostgreSQL development packages
     ansible.builtin.dnf:
       name: "{{ 'percona-postgresql-server-dev-all' if (pg_version_to_install is version('17.0', '>=') and pg_version_to_install is version('17.4', '<=')) else 'percona-postgresql-common-dev' }}"
