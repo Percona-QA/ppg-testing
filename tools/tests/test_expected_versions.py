@@ -109,3 +109,24 @@ def test_flat_fields_follow(settings):
 def test_flat_fields_absent_from_the_release_stay_absent(settings):
     out = settings.apply_expected_versions(ENTRY, "percona-postgis=3.6.0")
     assert "postgis_version" not in out
+
+
+@pytest.mark.parametrize("version,percona_version,server_version", [
+    ("19.0", "19.0.1~beta4", "19beta4"),
+    ("19.0", "19.0.1~rc1", "19rc1"),
+    ("20.0", "20.0.1~alpha2", "20alpha2"),
+    ("19.0", "19.0.1", None),            # final release: no pre-release marker
+    ("18.6", "18.6.1", None),
+    ("19.1", "19.1.1~beta2", None),      # a marker is only valid on Major.0
+    ("20.1", "20.1.1~rc1", None),
+])
+def test_prerelease_server_version_only_for_major_dot_zero(settings, version, percona_version, server_version):
+    entry = {"version": version, "percona-version": percona_version}
+    assert settings.prerelease_server_version(entry) == server_version
+
+
+def test_is_prerelease_is_true_for_any_marker(settings):
+    assert settings.is_prerelease({"percona-version": "19.0.1~beta4"})
+    assert settings.is_prerelease({"percona-version": "19.1.1~rc1"})   # the tests then fail, 19.1 has no pre-release
+    assert not settings.is_prerelease({"percona-version": "19.0.1"})
+    assert not settings.is_prerelease({})
