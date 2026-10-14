@@ -14,6 +14,7 @@ BASELINE_2026Q2 = {
     16: version.parse("16.14"),
     17: version.parse("17.10"),
     18: version.parse("18.4"),
+    19: version.parse("19.0"),
 }
 
 

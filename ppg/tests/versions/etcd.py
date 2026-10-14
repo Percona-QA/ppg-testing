@@ -42,4 +42,5 @@ etcd = {
     "16.15": {"version": "3.5.33", "binary_version": "3.5.33"},
     "17.11": {"version": "3.5.33", "binary_version": "3.5.33"},
     "18.6": {"version": "3.5.33", "binary_version": "3.5.33"},
+    "19.0": {"version": "3.5.33", "binary_version": "3.5.33"},
 }

@@ -36,6 +36,9 @@
           - percona-postgresql-{{ major }}-postgis-3-scripts
           - percona-pg-gather
 {% endif %}
+{% if major >= 19 %}
+          - percona-postgresql-{{ major }}-credcheck
+{% endif %}
           - percona-pgbackrest
           - percona-pgbackrest-doc
           - percona-patroni

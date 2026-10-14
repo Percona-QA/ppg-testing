@@ -8,13 +8,13 @@
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
       pgaudit_rhel_package_name: "percona-pgaudit<< major >>"
-      postgis_rhel_package_name_prefix: "percona-postgis35_<< major >>"
+      postgis_rhel_package_name_prefix: "percona-postgis<< postgis_pkg | default('35') >>_<< major >>"
     when: (pg_version_to_install | string is version('<< vars_gate >>', '>=', strict=True))
 <% else %>
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
       pgaudit_rhel_package_name: "percona-pgaudit<< major >>"
-      postgis_rhel_package_name_prefix: "percona-postgis35_<< major >>"
+      postgis_rhel_package_name_prefix: "percona-postgis<< postgis_pkg | default('35') >>_<< major >>"
 <% endif %>
 
   - debug:
@@ -539,7 +539,7 @@
     vars:
       packages:
       - percona-pg_oidc_validator<< major >>
-    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('<< major >>.2', '>=', strict=True))
+    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('<< oidc_gate | default(major ~ ".2") >>', '>=', strict=True))
 
   - name: Install pg_oidc_validator packages Debian
     apt:
@@ -549,7 +549,30 @@
     vars:
       packages:
       - percona-pg-oidc-validator<< major >>
-    when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('<< major >>.2', '>=', strict=True))
+    when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('<< oidc_gate | default(major ~ ".2") >>', '>=', strict=True))
+
+<% endif %>
+<% if credcheck_gate is defined %>
+  - name: Install credcheck packages RHEL
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-credcheck<< major >>
+      - percona-credcheck<< major >>-llvmjit
+    when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('<< credcheck_gate >>', '>=', strict=True))
+
+  - name: Install credcheck packages Debian
+    apt:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - percona-postgresql-<< major >>-credcheck
+    when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('<< credcheck_gate >>', '>=', strict=True))
 
 <% endif %>
   - name: Install pg_cron packages RHEL
@@ -588,6 +611,11 @@
           + (['pg_cron'] if (
               pg_version_to_install | string is version('<< cron_gate >>', '>', strict=True)
             ) else [])
+<% if credcheck_gate is defined %>
+          + (['credcheck'] if (
+              pg_version_to_install | string is version('<< credcheck_gate >>', '>=', strict=True)
+            ) else [])
+<% endif %>
         }}
       pg_conf_path: "{{ '/etc/postgresql/<< major >>/main/postgresql.conf' if ansible_os_family == 'Debian' else '/var/lib/pgsql/<< major >>/data/postgresql.conf' }}"
     ansible.builtin.lineinfile:
@@ -606,7 +634,7 @@
       block: |
         oauth_validator_libraries = 'pg_oidc_validator'
         pg_oidc_validator.authn_field = 'sub'
-    when: (ansible_os_family in ["Debian", "RedHat"] and pg_version_to_install | string is version('<< major >>.2', '>=', strict=True))
+    when: (ansible_os_family in ["Debian", "RedHat"] and pg_version_to_install | string is version('<< oidc_gate | default(major ~ ".2") >>', '>=', strict=True))
 
 <% endif %>  - name: Remove pg_hba.conf debian
     file:
@@ -656,7 +684,7 @@
       state: present
     when:
       - ansible_os_family == "RedHat"
-      - pg_version_to_install | string is version('<< major >>.2', '>=', strict=True)
+      - pg_version_to_install | string is version('<< oidc_gate | default(major ~ ".2") >>', '>=', strict=True)
 
   - name: Add OIDC entry to pg_hba.conf Debian
     lineinfile:
@@ -665,7 +693,7 @@
       state: present
     when:
       - ansible_os_family == "Debian"
-      - pg_version_to_install | string is version('<< major >>.2', '>=', strict=True)
+      - pg_version_to_install | string is version('<< oidc_gate | default(major ~ ".2") >>', '>=', strict=True)
 
 <% endif %>  - name: Restart Postgres RHEL
     include_tasks: "{{ role_path }}/../../tasks/start_postgres_with_diagnostics.yml"
