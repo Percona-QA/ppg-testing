@@ -383,7 +383,7 @@
   # Kept as a safety and diagnosis net for reference in case of a failure
   - name: Find regression diff/error files if the suite failed
     shell: >
-      find /tmp/postgis /tmp/pgis_reg \( -name "*.diffs" -o -name "*.err" \)
+      find /tmp/postgis /tmp/pgis_reg \( -name "*.diffs" -o -name "*.err" -o -name "test_*_diff" \)
       -exec sh -c 'echo "=== {} ==="; cat "{}"' \; 2>/dev/null
     register: postgis_diffs
     when: postgis_installcheck is defined and postgis_installcheck.rc != 0
