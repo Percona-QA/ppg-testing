@@ -19,10 +19,13 @@ testinfra_hosts = testinfra.utils.ansible_runner.AnsibleRunner(
 # specific, attributable failure instead of a generic "some query broke".
 
 
-def _psql(host, sql, dbname="postgres"):
+def _psql(host, sql, dbname="postgres", search_path=None):
+    # search_path is set for this one session through PGOPTIONS, for objects (like
+    # the tiger geocoder's) that only work with their schema on the search_path.
+    env = "PGOPTIONS='-c search_path={}' ".format(search_path) if search_path else ""
     with host.sudo("postgres"):
         result = host.run(
-            "psql -tA -d {} -c \"{}\"".format(dbname, sql.replace('"', '\\"'))
+            env + "psql -tA -d {} -c \"{}\"".format(dbname, sql.replace('"', '\\"'))
         )
     assert result.rc == 0, result.stderr
     return result.stdout.strip()
@@ -268,10 +271,12 @@ def test_postgis_topology_create_topology(host):
 
 
 def test_tiger_geocoder_normalize_address(host):
+    # postgis_tiger_geocoder is non-relocatable and installs into the "tiger" schema,
+    # and its functions refer to tiger objects (types, helpers) unqualified, so the
+    # schema must be on the search_path, as the PostGIS docs require for the geocoder.
     result = _psql(
         host,
-        # postgis_tiger_geocoder is non-relocatable and installs into the "tiger" schema
-        # (schema = tiger in its control file), which is not on the default search_path.
-        "SELECT (na).address FROM tiger.normalize_address('1 Devonshire Place, Boston, MA 02109') AS na;",
+        "SELECT (na).address FROM normalize_address('1 Devonshire Place, Boston, MA 02109') AS na;",
+        search_path="public,tiger",
     )
-    assert result, "normalize_address returned no output"
+    assert result == "1", "expected house number 1, got {!r}".format(result)
