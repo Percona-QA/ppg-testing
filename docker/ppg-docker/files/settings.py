@@ -653,8 +653,11 @@ DOCKER_LIST_EXTENSIONS = [
     "plpgsql",
 ]
 
+# PG 14/15: adminpack still present; pg_logicalinspect not yet available.
+DOCKER_LIST_EXTENSIONS_PG14_15 = [e for e in DOCKER_LIST_EXTENSIONS if e != "pg_logicalinspect"]
+
 # PG 16: adminpack still present; pg_logicalinspect not yet available.
-DOCKER_LIST_EXTENSIONS_PG16 = [e for e in DOCKER_LIST_EXTENSIONS if e != "pg_logicalinspect"]
+DOCKER_LIST_EXTENSIONS_PG16 = DOCKER_LIST_EXTENSIONS_PG14_15
 
 # PG 17: adminpack removed; pg_logicalinspect not yet available.
 DOCKER_LIST_EXTENSIONS_PG17 = [
@@ -699,6 +702,9 @@ DOCKER_RPM_PACKAGES_TEMPLATE_PG17PLUS = DOCKER_RPM_PACKAGES_TEMPLATE + [
     "percona-pg_tde{}",
 ]
 
+# psp-16 images ship the PG 17+ package set (pg_tde included), plain ppg-16 does not.
+# fill_template_form is defined below, so the overrides are completed after it.
+
 # PG 18 additionally ships percona-pg_oidc_validator (and inherits pg_tde from PG17PLUS).
 DOCKER_RPM_PACKAGES_TEMPLATE_PG18 = DOCKER_RPM_PACKAGES_TEMPLATE_PG17PLUS + [
     "percona-pg_oidc_validator{}",
@@ -720,6 +726,12 @@ def fill_template_form(template, pg_version):
     :return:
     """
     return [t.format(pg_version) for t in template]
+
+
+for _psp16_version in ("16.14", "16.15"):
+    PSP_OVERRIDES.setdefault(_psp16_version, {})["rpm_packages"] = fill_template_form(
+        DOCKER_RPM_PACKAGES_TEMPLATE_PG17PLUS, "16"
+    )
 
 
 def fill_provides_template_form(provides_template, pg_version):
@@ -760,7 +772,7 @@ ppg_versions = {
         "percona-postgis35_14-utils": postgis["14.22"],
         "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "14"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "14"),
-        "extensions": DOCKER_LIST_EXTENSIONS,
+        "extensions": DOCKER_LIST_EXTENSIONS_PG14_15,
         "binaries": ['clusterdb', 'createdb', 'createuser',
                     'dropdb', 'dropuser', 'pg_basebackup',
                     'pg_config', 'pg_dump', 'pg_dumpall',
@@ -794,7 +806,7 @@ ppg_versions = {
         "percona-postgis35_15-utils": postgis["15.17"],
         "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "15"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "15"),
-        "extensions": DOCKER_LIST_EXTENSIONS,
+        "extensions": DOCKER_LIST_EXTENSIONS_PG14_15,
         "binaries": ['clusterdb', 'createdb', 'createuser',
                     'dropdb', 'dropuser', 'pg_basebackup',
                     'pg_config', 'pg_dump', 'pg_dumpall',
@@ -974,7 +986,7 @@ ppg_versions = {
         "percona-postgis35_14-utils": postgis["14.23"],
         "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "14"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "14"),
-        "extensions": DOCKER_LIST_EXTENSIONS,
+        "extensions": DOCKER_LIST_EXTENSIONS_PG14_15,
         "binaries": ['clusterdb', 'createdb', 'createuser',
                     'dropdb', 'dropuser', 'pg_basebackup',
                     'pg_config', 'pg_dump', 'pg_dumpall',
@@ -1008,7 +1020,7 @@ ppg_versions = {
         "percona-postgis35_15-utils": postgis["15.18"],
         "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "15"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "15"),
-        "extensions": DOCKER_LIST_EXTENSIONS,
+        "extensions": DOCKER_LIST_EXTENSIONS_PG14_15,
         "binaries": ['clusterdb', 'createdb', 'createuser',
                     'dropdb', 'dropuser', 'pg_basebackup',
                     'pg_config', 'pg_dump', 'pg_dumpall',
@@ -1047,10 +1059,8 @@ ppg_versions = {
         "percona-postgis35_16-gui": postgis["16.14"],
         "percona-postgis35_16-llvmjit": postgis["16.14"],
         "percona-postgis35_16-utils": postgis["16.14"],
-        # PG17PLUS is misnamed here but its content (base + percona-pg_tde{}) is
-        # exactly what a psp-16 image needs too; plain ppg-16.14 runs simply
-        # never hit a "psp" tag so IS_PSP-gated pg_tde checks stay skipped.
-        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE_PG17PLUS, "16"),
+        # plain ppg-16 has no pg_tde; PSP_OVERRIDES adds it for psp-16 images
+        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "16"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "16"),
         "extensions": DOCKER_LIST_EXTENSIONS_PG16,
         "binaries": [
@@ -1198,7 +1208,7 @@ ppg_versions = {
         "percona-postgis35_14-utils": postgis["14.24"],
         "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "14"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "14"),
-        "extensions": DOCKER_LIST_EXTENSIONS,
+        "extensions": DOCKER_LIST_EXTENSIONS_PG14_15,
         "binaries": ['clusterdb', 'createdb', 'createuser',
                     'dropdb', 'dropuser', 'pg_basebackup',
                     'pg_config', 'pg_dump', 'pg_dumpall',
@@ -1232,7 +1242,7 @@ ppg_versions = {
         "percona-postgis35_15-utils": postgis["15.19"],
         "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "15"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "15"),
-        "extensions": DOCKER_LIST_EXTENSIONS,
+        "extensions": DOCKER_LIST_EXTENSIONS_PG14_15,
         "binaries": ['clusterdb', 'createdb', 'createuser',
                     'dropdb', 'dropuser', 'pg_basebackup',
                     'pg_config', 'pg_dump', 'pg_dumpall',
@@ -1267,7 +1277,8 @@ ppg_versions = {
         "percona-postgis35_16-gui": postgis["16.15"],
         "percona-postgis35_16-llvmjit": postgis["16.15"],
         "percona-postgis35_16-utils": postgis["16.15"],
-        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE_PG17PLUS, "16"),
+        # plain ppg-16 has no pg_tde; PSP_OVERRIDES adds it for psp-16 images
+        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "16"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "16"),
         "extensions": DOCKER_LIST_EXTENSIONS_PG16,
         "binaries": [
