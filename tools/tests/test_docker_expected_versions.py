@@ -114,7 +114,7 @@ def test_server_rpms_untouched_without_expected_versions(settings):
 # --- custom (extras) image -----------------------------------------------------
 
 EXTRAS = ["percona-timescaledb", "percona-h3-pg", "percona-pgrouting", "percona-hll", "percona-ip4r",
-          "percona-pg_partman", "percona-pg_similarity", "percona-pgvectorscale", "percona-rum",
+          "percona-pg_partman", "percona-pgvectorscale", "percona-rum",
           "percona-postgresql-unit", "percona-postgresql_anonymizer"]
 
 
@@ -152,6 +152,15 @@ def test_every_package_the_custom_tests_read_is_mapped(custom):
     mapped = set()
     for name in list(custom.EXPECTED_VERSION_PACKAGES) + ["percona-postgis", "percona-postgresql"]:
         mapped.update(custom._expected_version_keys(entry, name, "18"))
-    missing = sorted(prefix + "18" for prefix in read if prefix + "18" not in mapped)
+    # pg_similarity: the test checks the SQL extension version, not the package
+    # version, so it deliberately keeps the table value (see settings.py).
+    not_from_obs = {"percona-pg_similarity_18"}
+    missing = sorted(prefix + "18" for prefix in read if prefix + "18" not in mapped | not_from_obs)
     assert read, "no pkg_key reads found in test_docker.py"
     assert not missing, f"read by test_docker.py but not mapped from EXPECTED_VERSIONS: {missing}"
+
+
+def test_pg_similarity_keeps_the_table_value(custom, monkeypatch):
+    # OBS QA sends the tag name for it; it must not reach the test
+    monkeypatch.setenv("EXPECTED_VERSIONS", "percona-pg_similarity=pg_similarity_1_0")
+    assert custom.get_settings(RELEASE)["percona-pg_similarity_18"]["version"] == "1.0"

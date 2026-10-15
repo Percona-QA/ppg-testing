@@ -1004,14 +1004,16 @@ EXPECTED_VERSION_PACKAGES = {
     "percona-pgvector": ("percona-pgvector_{m}", "percona-pgvector_{m}-llvmjit"),
     "percona-pg_oidc_validator": ("percona-pg_oidc_validator{m}",),
     # Extensions only the custom (extras) image contains, built in
-    # ppg:staging:<major>:extras.
+    # ppg:staging:<major>:extras. Not pg_similarity: its test checks the SQL
+    # extension version (1.0), which is not the package version (1.0.0), and its
+    # OBS source declares no version (only the tag pg_similarity_1_0); it keeps
+    # the table value.
     "percona-timescaledb": ("percona-timescaledb_{m}",),
     "percona-h3-pg": ("percona-h3-pg_{m}",),
     "percona-pgrouting": ("percona-pgrouting_{m}",),
     "percona-hll": ("percona-hll_{m}",),
     "percona-ip4r": ("percona-ip4r_{m}",),
     "percona-pg_partman": ("percona-pg_partman_{m}",),
-    "percona-pg_similarity": ("percona-pg_similarity_{m}",),
     "percona-pgvectorscale": ("percona-pgvectorscale_{m}",),
     "percona-rum": ("percona-rum_{m}",),
     "percona-postgresql-unit": ("percona-postgresql-unit_{m}",),
