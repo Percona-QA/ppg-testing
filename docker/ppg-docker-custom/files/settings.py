@@ -1003,6 +1003,19 @@ EXPECTED_VERSION_PACKAGES = {
     "percona-pg_cron": ("percona-pg_cron_{m}",),
     "percona-pgvector": ("percona-pgvector_{m}", "percona-pgvector_{m}-llvmjit"),
     "percona-pg_oidc_validator": ("percona-pg_oidc_validator{m}",),
+    # Extensions only the custom (extras) image contains, built in
+    # ppg:staging:<major>:extras.
+    "percona-timescaledb": ("percona-timescaledb_{m}",),
+    "percona-h3-pg": ("percona-h3-pg_{m}",),
+    "percona-pgrouting": ("percona-pgrouting_{m}",),
+    "percona-hll": ("percona-hll_{m}",),
+    "percona-ip4r": ("percona-ip4r_{m}",),
+    "percona-pg_partman": ("percona-pg_partman_{m}",),
+    "percona-pg_similarity": ("percona-pg_similarity_{m}",),
+    "percona-pgvectorscale": ("percona-pgvectorscale_{m}",),
+    "percona-rum": ("percona-rum_{m}",),
+    "percona-postgresql-unit": ("percona-postgresql-unit_{m}",),
+    "percona-postgresql_anonymizer": ("percona-postgresql_anonymizer_{m}",),
 }
 
 
