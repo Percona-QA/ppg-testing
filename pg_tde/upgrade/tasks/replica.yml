@@ -1,0 +1,146 @@
+---
+# HA=true: a streaming replica of the service cluster on the same host, made
+# with pg_tde_basebackup and run with pg_ctl as postgres (not a systemd /
+# pg_ctlcluster service, so package scripts never start or stop it). Same host
+# means the same key provider files, KMS endpoints and paths on both nodes.
+#
+# Caller must pass:
+#   replica_action - create | start | restart | stop | drop | wait
+#   pg_bin_dir     - bin dir of the PostgreSQL the replica runs on
+#   pg_socket_dir  - socket dir (primary on 5432, replica on replica_port)
+#
+# create  pg_tde_basebackup from the primary (-R, WAL streamed, -E when the
+#         primary encrypts WAL), plus the config a Debian PGDATA lacks
+# restart pg_ctl restart: re-execs postgres from pg_bin_dir, i.e. the new
+#         binaries after a package swap
+# wait    replica streaming and replayed past a fresh write on the primary
+
+  - name: Replica ({{ replica_action }}) - settings
+    set_fact:
+      replica_dir: "{{ checker_dir }}/replica"
+      replica_log: "{{ checker_dir }}/replica.log"
+
+  - name: Replica - read the primary's pg_tde.wal_encrypt
+    become: true
+    become_user: postgres
+    command: psql -d postgres -tA -c "SHOW pg_tde.wal_encrypt;"
+    environment:
+      PGHOST: "{{ pg_socket_dir }}"
+      PGPORT: "5432"
+      PATH:   "{{ pg_bin_dir }}:{{ ansible_env.PATH }}"
+    register: replica_primary_wal_encrypt
+    changed_when: false
+    when: replica_action == 'create'
+
+  # -E encrypts the streamed WAL on the way in, which needs the server key in
+  # the destination before the stream starts: pg_tde_basebackup asks for the
+  # source's PGDATA/pg_tde to be copied there first (without -E it creates
+  # pg_tde itself and refuses an existing one).
+  - name: Replica - seed pg_tde/ for encrypted WAL streaming
+    become: true
+    become_user: postgres
+    shell: |
+      set -e
+      src=$(psql -X -tA -h {{ pg_socket_dir }} -p 5432 -d postgres -c "SHOW data_directory;")
+      install -d -m 0700 {{ replica_dir }}
+      cp -a "$src/pg_tde" {{ replica_dir }}/pg_tde
+    args:
+      executable: /bin/bash
+    environment:
+      PATH: "{{ pg_bin_dir }}:{{ ansible_env.PATH }}"
+    when:
+      - replica_action == 'create'
+      - replica_primary_wal_encrypt.stdout | trim == 'on'
+
+  - name: Replica - pg_tde_basebackup from the primary
+    become: true
+    become_user: postgres
+    command: >-
+      {{ pg_bin_dir }}/pg_tde_basebackup
+      -h {{ pg_socket_dir }} -p 5432
+      -D {{ replica_dir }} -R -X stream -c fast
+      {{ '-E' if replica_primary_wal_encrypt.stdout | trim == 'on' else '' }}
+    when: replica_action == 'create'
+
+  # Debian keeps postgresql.conf / pg_hba.conf outside PGDATA, so the backup
+  # has none; on RHEL they are copied and the appended lines win.
+  - name: Replica - postgresql.conf
+    become: true
+    become_user: postgres
+    shell: |
+      set -e
+      conf={{ replica_dir }}/postgresql.conf
+      [ -f "$conf" ] || echo "shared_preload_libraries = 'pg_tde'" > "$conf"
+      cat >> "$conf" <<EOF
+      # pg_tde/upgrade HA replica
+      port = {{ replica_port }}
+      # Explicit, from the live value on the primary: that may live in a
+      # postgresql.conf outside PGDATA (Debian) that the backup does not copy,
+      # and a standby without it writes the streamed WAL to disk unencrypted.
+      pg_tde.wal_encrypt = {{ replica_primary_wal_encrypt.stdout | trim }}
+      listen_addresses = ''
+      unix_socket_directories = '{{ pg_socket_dir }}'
+      hot_standby = on
+      logging_collector = off
+      EOF
+      [ -f {{ replica_dir }}/pg_hba.conf ] || echo "local all all peer" > {{ replica_dir }}/pg_hba.conf
+    args:
+      executable: /bin/bash
+    when: replica_action == 'create'
+
+  - name: Replica - {{ replica_action }}
+    become: true
+    become_user: postgres
+    command: >-
+      {{ pg_bin_dir }}/pg_ctl -D {{ replica_dir }} -l {{ replica_log }} -w -t 120
+      {{ {'create': 'start', 'start': 'start', 'restart': 'restart -m fast',
+          'stop': 'stop -m fast', 'drop': 'stop -m fast'}[replica_action] }}
+    register: replica_pg_ctl
+    # stop/drop of a replica that is not running is fine
+    failed_when:
+      - replica_pg_ctl.rc != 0
+      - not (replica_action in ['stop', 'drop'] and 'Is server running' in (replica_pg_ctl.stderr | default('')))
+    when: replica_action in ['create', 'start', 'restart', 'stop', 'drop']
+
+  - name: Replica - remove data directory
+    file:
+      path: "{{ replica_dir }}"
+      state: absent
+    become: true
+    when: replica_action == 'drop'
+
+  # A fresh write on the primary must arrive: proves streaming of the
+  # (encrypted) WAL, not just that the replica is up. ha_probe lives in the
+  # postgres database, outside the checker's tde_* databases.
+  - name: Replica - write on the primary, wait for the replica to replay it
+    become: true
+    become_user: postgres
+    shell: |
+      set -e
+      marker="probe-$(date +%s%N)"
+      psql -X -tA -p 5432 -d postgres -v ON_ERROR_STOP=1 -c \
+        "CREATE TABLE IF NOT EXISTS ha_probe (v text); INSERT INTO ha_probe VALUES ('$marker');"
+      for i in $(seq 1 60); do
+        status=$(psql -X -tA -p {{ replica_port }} -d postgres -c "SELECT status FROM pg_stat_wal_receiver;" 2>/dev/null || true)
+        seen=$(psql -X -tA -p {{ replica_port }} -d postgres -c "SELECT count(*) FROM ha_probe WHERE v = '$marker';" 2>/dev/null || true)
+        if [ "$status" = streaming ] && [ "$seen" = 1 ]; then
+          echo "replica streaming, replayed $marker"
+          exit 0
+        fi
+        sleep 2
+      done
+      echo "replica not streaming/caught up: status='$status' seen='$seen'"
+      exit 1
+    args:
+      executable: /bin/bash
+    environment:
+      PGHOST: "{{ pg_socket_dir }}"
+      PATH:   "{{ pg_bin_dir }}:{{ ansible_env.PATH }}"
+    register: replica_wait
+    changed_when: false
+    when: replica_action == 'wait'
+
+  - name: Replica - wait result
+    debug:
+      var: replica_wait.stdout_lines
+    when: replica_action == 'wait'

@@ -1,0 +1,78 @@
+---
+# Deploy the vendored pg_tde pytest suite (pg_tde/core/files/pytest) and a
+# minimal venv for tests/test_tde_upgrade_check.py, the staged checker that
+# seeds the FROM cluster and verifies the TO cluster (see run_checker.yml).
+# Only pytest is needed: the checker talks to the service cluster with psql.
+
+  # One tarball instead of a recursive copy: copy transfers the ~200 files one
+  # by one (several ssh round trips each, ~10 min). Unpacked as root and
+  # chowned, not with become_user: postgres -- a transfer to an unprivileged
+  # become user needs setfacl (acl package) on the target.
+  - name: Create a controller-side temp file for the pytest suite
+    tempfile:
+      suffix: .tgz
+    register: suite_tgz
+    delegate_to: localhost
+    become: false
+
+  - name: Pack the pg_tde pytest suite on the controller
+    command: >-
+      tar -czf {{ suite_tgz.path }}
+      --exclude=__pycache__ --exclude=.venv --exclude=coverage_reports
+      -C {{ role_path }}/../core/files/pytest .
+    delegate_to: localhost
+    become: false
+    changed_when: false
+
+  - name: Create the pytest suite directory
+    file:
+      path: "{{ checker_src }}"
+      state: directory
+      owner: postgres
+      group: postgres
+      mode: "0755"
+    become: true
+
+  - name: Deploy pg_tde pytest suite
+    unarchive:
+      src: "{{ suite_tgz.path }}"
+      dest: "{{ checker_src }}"
+      owner: postgres
+      group: postgres
+    become: true
+
+  - name: Remove the controller-side pytest suite tarball
+    file:
+      path: "{{ suite_tgz.path }}"
+      state: absent
+    delegate_to: localhost
+    become: false
+
+  - name: Create pytest venv for the upgrade checker
+    become: true
+    become_user: postgres
+    shell: |
+      set -e
+      # RHEL8-family: python3 is 3.6, too old for pytest>=7.4 (redhat_tasks.yml
+      # installs python3.9 beside it)
+      PY=python3
+      command -v python3.9 >/dev/null 2>&1 && [ "{{ ansible_os_family }}" = RedHat ] \
+        && [ "{{ ansible_distribution_major_version }}" = 8 ] && PY=python3.9
+      $PY -m venv .venv
+      .venv/bin/python -m pip install --quiet --upgrade pip
+      .venv/bin/python -m pip install --quiet "pytest>=7.4"
+    args:
+      executable: /bin/bash
+      chdir: "{{ checker_src }}"
+      creates: "{{ checker_src }}/.venv/bin/pytest"
+
+  # Keyrings, canary and state live here, not under /tmp: the key provider
+  # config inside PGDATA points at these files across the upgrade.
+  - name: Create upgrade checker directory
+    file:
+      path: "{{ checker_dir }}"
+      state: directory
+      owner: postgres
+      group: postgres
+      mode: "0700"
+    become: true

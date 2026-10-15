@@ -13,6 +13,7 @@ TEST_SECTIONS: Dict[str, FrozenSet[str]] = {
     "rewind": frozenset({"rewind"}),
     "upgrade": frozenset({"upgrade"}),
     "minor_upgrade": frozenset({"minor_upgrade"}),
+    "upgrade_check": frozenset({"upgrade_check"}),
     "migration": frozenset({"migration"}),
     "encryption": frozenset({"encryption"}),
     "replication": frozenset({"replication"}),

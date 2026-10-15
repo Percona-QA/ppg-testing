@@ -1,0 +1,52 @@
+---
+# Read the server and pg_tde versions of the running cluster into
+# upgrade_versions[version_label], for assert_upgrade_versions.yml. The
+# capture_*_version.yml tasks log the same things for humans; this one keeps
+# them as facts so the FROM and TO sides can be compared.
+#
+# Caller must pass:
+#   pg_major      - PostgreSQL major version, for the package names
+#   pg_bin_dir    - PostgreSQL bin directory
+#   pg_socket_dir - directory for the Unix socket (PGHOST)
+#   version_label - "FROM" or "TO"
+
+  - name: Read server and pg_tde versions ({{ version_label }})
+    become: true
+    become_user: postgres
+    shell: |
+      set -o pipefail
+      q() { psql -d postgres -tA -c "$1" 2>/dev/null || true; }
+      echo "server_version_num=$(q 'SHOW server_version_num;')"
+      echo "tde_binary=$(q 'SELECT pg_tde_version();')"
+      echo "tde_extversion=$(q "SELECT extversion FROM pg_extension WHERE extname = 'pg_tde';")"
+      if command -v rpm >/dev/null 2>&1; then
+        pkg() { rpm -q "$1" >/dev/null 2>&1 && rpm -q --qf '%{VERSION}-%{RELEASE}' "$1"; }
+        echo "server_pkg=$(pkg percona-postgresql{{ pg_major }}-server)"
+        echo "tde_pkg=$(pkg percona-pg_tde{{ pg_major }})"
+      else
+        pkg() { dpkg-query -W -f='${Version}' "$1" 2>/dev/null; }
+        echo "server_pkg=$(pkg percona-postgresql-{{ pg_major }})"
+        echo "tde_pkg=$(pkg percona-pg-tde{{ pg_major }})"
+      fi
+    args:
+      executable: /bin/bash
+    environment:
+      PGHOST: "{{ pg_socket_dir }}"
+      PGPORT: "5432"
+      PATH:   "{{ pg_bin_dir }}:{{ ansible_env.PATH }}"
+    register: read_versions_result
+    changed_when: false
+
+  - name: Record versions ({{ version_label }})
+    set_fact:
+      upgrade_versions: >-
+        {{ upgrade_versions | default({}) | combine({version_label: dict(
+             read_versions_result.stdout_lines
+             | select('search', '=')
+             | map('split', '=', 1)
+             | list)}) }}
+      cacheable: true
+
+  - name: Show versions ({{ version_label }})
+    debug:
+      var: upgrade_versions[version_label]

@@ -1,0 +1,99 @@
+---
+# Fail when the upgrade did not do what UPGRADE_TYPE / TDE_UPGRADE asked for,
+# so a run that silently upgraded nothing (e.g. TO repo had no newer build)
+# can't pass. Compares upgrade_versions.FROM / .TO from read_versions.yml.
+#
+#   server_major : server major moved from FROM_VERSION's to TO_VERSION's
+#   server_minor : server package build changed, major unchanged
+#   tde_only     : server package unchanged
+#   tde_only, or server_minor + TDE_UPGRADE=true : pg_tde package changed
+#                  (packages path; on the source path the branch may legitimately
+#                  report the same version, so it's only reported)
+#   packages path: the loaded pg_tde library reports the installed package version,
+#                  i.e. the restart really picked up the new .so
+
+  - name: Pick FROM/TO versions
+    set_fact:
+      v_from: "{{ upgrade_versions['FROM'] }}"
+      v_to:   "{{ upgrade_versions['TO'] }}"
+      tde_change_expected: >-
+        {{ upgrade_type == 'tde_only' or (upgrade_type == 'server_minor' and tde_upgrade | bool) }}
+
+  - name: Assert server major version (server_major)
+    assert:
+      that:
+        - (v_from.server_version_num | int) // 10000 == from_major_version | int
+        - (v_to.server_version_num | int) // 10000 == to_major_version | int
+      fail_msg: >-
+        server_version_num FROM={{ v_from.server_version_num }} TO={{ v_to.server_version_num }},
+        expected majors {{ from_major_version }} -> {{ to_major_version }}
+    when: upgrade_type == 'server_major'
+
+  - name: Assert server package changed (server_minor)
+    assert:
+      that:
+        - v_from.server_pkg | length > 0
+        - v_to.server_pkg != v_from.server_pkg
+        - (v_to.server_version_num | int) // 10000 == (v_from.server_version_num | int) // 10000
+      fail_msg: >-
+        server_minor upgrade did not change the server package
+        ({{ v_from.server_pkg }} -> {{ v_to.server_pkg }}); check that {{ to_repo }}
+        has a newer build than {{ from_repo }}.
+    when: upgrade_type == 'server_minor'
+
+  - name: Assert server package unchanged (tde_only)
+    assert:
+      that:
+        - v_to.server_pkg == v_from.server_pkg
+      fail_msg: "tde_only upgrade changed the server package ({{ v_from.server_pkg }} -> {{ v_to.server_pkg }})"
+    when: upgrade_type == 'tde_only'
+
+  - name: Assert pg_tde package changed (packages path)
+    assert:
+      that:
+        - v_from.tde_pkg | length > 0
+        - v_to.tde_pkg != v_from.tde_pkg
+      fail_msg: >-
+        pg_tde upgrade expected but the pg_tde package did not change
+        ({{ v_from.tde_pkg }} -> {{ v_to.tde_pkg }}): {{ tde_source }} has no newer
+        pg_tde than the installed one{{
+        '' if upgrade_type == 'tde_only' else ' (or run with TDE_UPGRADE=false)' }}.
+    vars:
+      # Where the new pg_tde came from: OBS when USE_OBS_REPO; otherwise
+      # TO_REPO, except tde_only, which updates from the FROM repo (PG-2789).
+      tde_source: >-
+        {{ 'OBS ' ~ to_version_str if use_obs_repo
+           else (from_version_str ~ ' ' ~ from_repo if upgrade_type == 'tde_only'
+                 else to_version_str ~ ' ' ~ to_repo) }}
+    when:
+      - tde_change_expected | bool
+      - install_from_packages | bool
+
+  - name: Report pg_tde library versions (source path)
+    debug:
+      msg: >-
+        pg_tde FROM '{{ v_from.tde_binary }}' ({{ from_tde_branch }}) ->
+        TO '{{ v_to.tde_binary }}' ({{ to_tde_branch }})
+        {{ '(unchanged)' if v_from.tde_binary == v_to.tde_binary else '' }}
+    when:
+      - tde_change_expected | bool
+      - not (install_from_packages | bool)
+
+  # Package version "2.1.2-1.el9" / "1:2.1.2-1.noble" -> upstream "2.1.2";
+  # pg_tde_version() reports "pg_tde 2.1.2". Skipped when pg_tde_version() is
+  # not available in the build.
+  - name: Assert loaded pg_tde library matches the installed package ({{ item }})
+    assert:
+      that:
+        - upgrade_versions[item].tde_binary is search('pg_tde ' ~ (tde_upstream | replace('.', '\\.')) ~ '(\\s|$)')
+      fail_msg: >-
+        {{ item }}: pg_tde_version() reports '{{ upgrade_versions[item].tde_binary }}' but the
+        installed package is {{ upgrade_versions[item].tde_pkg }}: the server is running
+        a stale pg_tde library.
+    vars:
+      tde_upstream: "{{ upgrade_versions[item].tde_pkg | regex_replace('^[0-9]+:', '') | regex_replace('-.*$', '') }}"
+    loop: ["FROM", "TO"]
+    when:
+      - install_from_packages | bool
+      - upgrade_versions[item].tde_pkg | length > 0
+      - upgrade_versions[item].tde_binary | length > 0

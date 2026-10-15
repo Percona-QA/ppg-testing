@@ -1,0 +1,50 @@
+---
+# Run ALTER EXTENSION pg_tde UPDATE in every database that has pg_tde and fail
+# unless each one ends up at the default_version of the installed control file.
+# This is the step that breaks when a new pg_tde ships a bad upgrade script, so
+# it must never be ignore_errors.
+#
+# Caller must pass:
+#   pg_bin_dir    - PostgreSQL bin directory
+#   pg_socket_dir - directory for the Unix socket (PGHOST)
+
+  - name: ALTER EXTENSION pg_tde UPDATE in every database
+    become: true
+    become_user: postgres
+    shell: |
+      set -eo pipefail
+      DEFAULT=$(psql -d postgres -tA -c \
+        "SELECT default_version FROM pg_available_extensions WHERE name = 'pg_tde';")
+      echo "pg_tde default_version: $DEFAULT"
+      UPDATED=0
+      for DB in $(psql -d postgres -tA -c \
+          "SELECT datname FROM pg_database WHERE datallowconn ORDER BY datname;"); do
+        HAS=$(psql -d "$DB" -tA -c "SELECT count(*) FROM pg_extension WHERE extname = 'pg_tde';")
+        [ "$HAS" = "1" ] || continue
+        BEFORE=$(psql -d "$DB" -tA -c "SELECT extversion FROM pg_extension WHERE extname = 'pg_tde';")
+        psql -v ON_ERROR_STOP=1 -d "$DB" -c "ALTER EXTENSION pg_tde UPDATE;"
+        AFTER=$(psql -d "$DB" -tA -c "SELECT extversion FROM pg_extension WHERE extname = 'pg_tde';")
+        echo "$DB: extversion $BEFORE -> $AFTER"
+        if [ "$AFTER" != "$DEFAULT" ]; then
+          echo "FAIL: $DB extversion $AFTER != default_version $DEFAULT"
+          exit 1
+        fi
+        UPDATED=$((UPDATED + 1))
+      done
+      # pg_tde is created in at least one database by the prepare
+      # stage; zero means the loop matched nothing and nothing was verified.
+      if [ "$UPDATED" -eq 0 ]; then
+        echo "FAIL: no database has the pg_tde extension"
+        exit 1
+      fi
+    args:
+      executable: /bin/bash
+    environment:
+      PGHOST: "{{ pg_socket_dir }}"
+      PGPORT: "5432"
+      PATH:   "{{ pg_bin_dir }}:{{ ansible_env.PATH }}"
+    register: ext_update_result
+
+  - name: Show ALTER EXTENSION result
+    debug:
+      var: ext_update_result.stdout_lines

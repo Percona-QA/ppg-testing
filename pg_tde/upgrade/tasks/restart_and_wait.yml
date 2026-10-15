@@ -1,0 +1,25 @@
+---
+# Restart the PostgreSQL service and wait until it accepts connections.
+# Caller must pass:
+#   pg_service    - systemd service name
+#   pg_bin_dir    - PostgreSQL bin directory (for pg_isready)
+#   pg_socket_dir - directory for the Unix socket
+
+  - name: Restart {{ pg_service }}
+    service:
+      name: "{{ pg_service }}"
+      state: restarted
+    become: true
+
+  - name: Wait for {{ pg_service }} to be ready
+    become: true
+    become_user: postgres
+    shell: pg_isready -h {{ pg_socket_dir }} -p 5432
+    args:
+      executable: /bin/bash
+    environment:
+      PATH: "{{ pg_bin_dir }}:{{ ansible_env.PATH }}"
+    register: pg_ready
+    until: pg_ready.rc == 0
+    retries: 12
+    delay: 5
