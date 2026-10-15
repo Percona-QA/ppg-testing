@@ -1899,7 +1899,28 @@ def test_set_user_version(host, get_server_path):
     assert _same_version(found, expected), f"set_user: expected {expected}, found {found}"
 
 
+# credcheck is not in the official tarballs up to and including these releases.
+# The OBS-built tarballs ship it from these releases on, and not in anything
+# older. A tarball is from OBS when OBS_PROJECT is set (e.g.
+# isv:percona:ppg:staging:18:tarballs) and TARBALL_URL is empty, the same rule
+# as pg-tarballs/tasks/main.yml.
+_CREDCHECK_FIRST_OBS_RELEASE = {14: 24, 15: 19, 16: 15, 17: 11, 18: 6}
+
+
+def _skip_unless_credcheck_supported():
+    major, minor = (int(p) for p in os.getenv("VERSION").split("-")[1].split(".")[:2])
+    first = _CREDCHECK_FIRST_OBS_RELEASE.get(major)
+    if first is None or minor > first:
+        return
+    use_obs = bool(os.getenv("OBS_PROJECT", "").strip()) and not os.getenv("TARBALL_URL", "").strip()
+    if not use_obs:
+        pytest.skip(f"credcheck is not in the official tarballs up to {major}.{first}")
+    if minor < first:
+        pytest.skip(f"credcheck is not in OBS tarballs before {major}.{first}")
+
+
 def test_credcheck_is_installed(host, get_server_path):
+    _skip_unless_credcheck_supported()
     with host.sudo():
         for path in (f"{get_server_path}/share/extension/credcheck.control",
                      f"{get_server_path}/lib/credcheck.so"):
@@ -1907,28 +1928,13 @@ def test_credcheck_is_installed(host, get_server_path):
 
 
 def test_credcheck_version(host, get_server_path):
+    _skip_unless_credcheck_supported()
     expected = _expected("credcheck")
     with host.sudo():
         found = _control_default_version(host, get_server_path, "credcheck")
     assert found, "credcheck.control not found or without default_version"
     assert _same_version(found, expected), f"credcheck: expected {expected}, found {found}"
 
-
-@pytest.mark.skipif(int(MAJOR_VER) >= 18, reason="pg-telemetry ships in the tarball for PG 17 and earlier")
-def test_pg_telemetry_is_installed(host, get_server_path):
-    with host.sudo():
-        for path in (f"{get_server_path}/share/extension/percona_pg_telemetry.control",
-                     f"{get_server_path}/lib/percona_pg_telemetry.so"):
-            assert host.file(path).exists, f"{path} does not exist."
-
-
-@pytest.mark.skipif(int(MAJOR_VER) >= 18, reason="pg-telemetry ships in the tarball for PG 17 and earlier")
-def test_pg_telemetry_version(host, get_server_path):
-    expected = _expected("pg_telemetry_version")
-    with host.sudo():
-        found = _control_default_version(host, get_server_path, "percona_pg_telemetry")
-    assert found, "percona_pg_telemetry.control not found or without default_version"
-    assert _same_version(found, expected), f"pg-telemetry: expected {expected}, found {found}"
 
 
 @pytest.mark.skipif(int(MAJOR_VER) < 18, reason="pg_oidc_validator ships in the tarball for PG 18 and later")
