@@ -109,3 +109,49 @@ def test_server_rpms_follow_percona_postgresql(settings):
 def test_server_rpms_untouched_without_expected_versions(settings):
     entry = _entry(settings)
     assert not any(isinstance(entry.get(k), dict) for k in entry["rpm_packages"] if k.startswith("percona-postgresql18"))
+
+
+# --- custom (extras) image -----------------------------------------------------
+
+EXTRAS = ["percona-timescaledb", "percona-h3-pg", "percona-pgrouting", "percona-hll", "percona-ip4r",
+          "percona-pg_partman", "percona-pg_similarity", "percona-pgvectorscale", "percona-rum",
+          "percona-postgresql-unit", "percona-postgresql_anonymizer"]
+
+
+@pytest.fixture
+def custom(monkeypatch):
+    monkeypatch.delenv("EXPECTED_VERSIONS", raising=False)
+    return _load(SETTINGS["custom"])
+
+
+@pytest.mark.parametrize("package", EXTRAS)
+def test_custom_extras_follow_obs(custom, package):
+    entry = dict(custom.ppg_versions[RELEASE])
+    key = f"{package}_18"
+    assert key in entry, f"{key} not in the {RELEASE} table"
+    out = custom.apply_expected_versions(entry, f"{package}=99.9.9", "18")
+    assert out[key]["version"] == "99.9.9"
+
+
+def test_custom_extras_take_what_obs_builds(custom, monkeypatch):
+    # what OBS QA sends for ppg:staging:18:extras:containers (excerpt)
+    monkeypatch.setenv("EXPECTED_VERSIONS", "percona-pgvectorscale=0.9.0\npercona-postgresql_anonymizer=3.1.1\n"
+                       "percona-timescaledb=2.28.1\npercona-pgrouting=4.0.1\npercona-pg_partman=5.4.3")
+    out = custom.get_settings(RELEASE)
+    assert out["percona-pgvectorscale_18"]["version"] == "0.9.0"          # table: 0.9.1
+    assert out["percona-postgresql_anonymizer_18"]["version"] == "3.1.1"  # table: 3.2.2
+    assert out["percona-timescaledb_18"]["version"] == "2.28.1"
+
+
+def test_every_package_the_custom_tests_read_is_mapped(custom):
+    """A new extension test in test_docker.py needs its OBS package mapped too."""
+    import re
+    tests = (DOCKER / "ppg-docker-custom" / "files" / "test_docker.py").read_text()
+    read = set(re.findall(r'pkg_key = f"(percona-[^"{]+)\{MAJOR_VER\}"', tests))
+    entry = dict(custom.ppg_versions[RELEASE])
+    mapped = set()
+    for name in list(custom.EXPECTED_VERSION_PACKAGES) + ["percona-postgis", "percona-postgresql"]:
+        mapped.update(custom._expected_version_keys(entry, name, "18"))
+    missing = sorted(prefix + "18" for prefix in read if prefix + "18" not in mapped)
+    assert read, "no pkg_key reads found in test_docker.py"
+    assert not missing, f"read by test_docker.py but not mapped from EXPECTED_VERSIONS: {missing}"
