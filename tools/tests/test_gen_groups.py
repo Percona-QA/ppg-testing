@@ -11,10 +11,13 @@ DATA = gen_groups.load_versions()
 
 def test_expected_group_names():
     names = sorted(gen_groups.group_name(i, t) for i, t in gen_groups.all_groups(DATA))
-    assert len(names) == 30
+    assert len(names) == 33
     assert "pg-14" in names
     assert "pg-18-major-upgrade" in names
     assert "psp-16-meta-ha" in names
+    # pg-19 is limited to server + upgrades through `types:` in versions.yml
+    assert [n for n in names if n.startswith("pg-19")] == [
+        "pg-19", "pg-19-major-upgrade", "pg-19-minor-upgrade"]
 
 
 @pytest.mark.parametrize("instance,type_name", list(gen_groups.all_groups(DATA)))
@@ -78,10 +81,13 @@ def test_write_header_marks_files(tmp_path, monkeypatch):
 def test_shared_tasks_render():
     files = gen_groups.render_shared_tasks(DATA)
     assert sorted(files) == sorted(
-        ["tasks/install_ppg%d%s.yml" % (m, s) for m in range(14, 19) for s in ("", "_tools")])
+        ["tasks/install_ppg%d%s.yml" % (m, s) for m in range(14, 20) for s in ("", "_tools")])
     base18 = files["tasks/install_ppg18.yml"]
     assert "percona-postgresql-common-dev" in base18
     assert "Determine required PostgreSQL dev package" not in base18
+    # PG 19 moved libpgport.a and the other static libraries into -static
+    assert "percona-postgresql19-static" in files["tasks/install_ppg19.yml"]
+    assert "percona-postgresql18-static" not in base18
     base17 = files["tasks/install_ppg17.yml"]
     assert "version('17.4', '<=', strict=True)" in base17
     tools14 = files["tasks/install_ppg14_tools.yml"]
@@ -89,6 +95,20 @@ def test_shared_tasks_render():
     assert "base_extensions: ['pg_stat_monitor', 'pgaudit', 'set_user']" in tools14
     tools18 = files["tasks/install_ppg18_tools.yml"]
     assert "percona-pg_oidc_validator18" in tools18
+    # PostGIS RPM prefix: 3.5 for 14-18, 3.7 for 19
+    assert 'postgis_rhel_package_name_prefix: "percona-postgis35_18"' in tools18
+    assert 'postgis_rhel_package_name_prefix: "percona-postgis37_19"' in files["tasks/install_ppg19_tools.yml"]
+    # credcheck packages are installed from 19 on only
+    assert "percona-credcheck19" in files["tasks/install_ppg19_tools.yml"]
+    assert "percona-postgresql-19-credcheck" in files["tasks/install_ppg19_tools.yml"]
+    assert "credcheck" not in tools18
+    # credcheck is preloaded unconditionally for 19 (version gate only)
+    assert "['credcheck']" in files["tasks/install_ppg19_tools.yml"]
+    assert "CREDCHECK_PRELOAD" not in files["tasks/install_ppg19_tools.yml"]
+    assert "['credcheck']" not in tools18
+    # pg_oidc_validator install gate: <major>.2 by default, 19.0 for pg-19
+    assert "version('18.2', '>='" in tools18
+    assert "version('19.0', '>='" in files["tasks/install_ppg19_tools.yml"]
     for content in files.values():
         yaml.safe_load(content)
 
@@ -122,6 +142,8 @@ def test_minor_upgrade_from_defaults_stay_in_the_same_major():
     """minor-upgrade goes minor -> minor inside one major: same flavor, same
     major, and strictly older than the version it upgrades to."""
     for name, inst in DATA["instances"].items():
+        if "minor-upgrade" not in inst.get("types", gen_groups.TYPES):
+            continue
         to = inst["default_version"]
         got = inst["minor-upgrade"]["default_from_version"]
         prefix = to.rsplit(".", 1)[0] + "."
@@ -129,7 +151,12 @@ def test_minor_upgrade_from_defaults_stay_in_the_same_major():
             "ppg/versions.yml: %s minor-upgrade default_from_version is %r, "
             "expected an older minor of %r (i.e. %s<minor>)"
             % (name, got, to, prefix))
-        assert int(got.rsplit(".", 1)[1]) < int(to.rsplit(".", 1)[1]), (
+        to_minor = int(to.rsplit(".", 1)[1])
+        if to_minor == 0:
+            # first minor of a new major: nothing older exists, FROM == TO
+            assert got == to
+            continue
+        assert int(got.rsplit(".", 1)[1]) < to_minor, (
             "ppg/versions.yml: %s minor-upgrade default_from_version %r is not "
             "older than default_version %r -- an upgrade test needs an older "
             "FROM version" % (name, got, to))

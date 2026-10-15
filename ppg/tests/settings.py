@@ -15,6 +15,7 @@ from .versions.wal2json import wal2json
 from .versions.pg_gather import pg_gather
 from .versions.etcd import etcd
 from .versions.pgvector import pgvector
+from .versions.credcheck import credcheck
 
 # VERSION is "<product>-<major>.<minor>" where product is ppg or psp
 # (e.g. ppg-16.14, psp-16.14) — take the major regardless of product.
@@ -123,6 +124,31 @@ def _percona_version(pg_versions):
     if int(MAJOR_VER) >= 17:
         return pg_versions.get("percona-version")
     return None
+
+
+_PRERELEASE_RE = re.compile(r"[~-]?(alpha|beta|rc)\d*", re.IGNORECASE)
+
+
+def is_prerelease(pg_versions):
+    """True for alpha, beta and rc builds (e.g. 19.0.1~beta4): the server and
+    psql then report a pre-release string like 19beta4 instead of the
+    release version the tables hold."""
+    return bool(_PRERELEASE_RE.search(str(pg_versions.get("percona-version") or "")))
+
+
+_PRERELEASE_TAG_RE = re.compile(r"~?(alpha|beta|rc)(\d+)", re.IGNORECASE)
+
+
+def prerelease_server_version(pg_versions):
+    """What the server and psql report for a pre-release of a new major, taken
+    from the package version: 19.0.1~beta4 -> '19beta4', 19.0.1~rc1 -> '19rc1'.
+    A pre-release only exists for Major.0, so None when there is no
+    alpha/beta/rc marker, or when the version is not Major.0 (19.1, 20.1, ...)."""
+    version = str(pg_versions.get("version") or "")
+    tag = _PRERELEASE_TAG_RE.search(str(pg_versions.get("percona-version") or ""))
+    if not tag or not re.fullmatch(r"\d+\.0", version):
+        return None
+    return f"{version.split('.')[0]}{tag.group(1).lower()}{tag.group(2)}"
 
 
 def expected_pkg_versions(pg_versions):
@@ -2727,6 +2753,58 @@ def get_settings(distro_type):
             "pg_telemetry_package_version": "1.2.0",
             "PG_TDE_version": "pg_tde 2.2.2",
             "PG_TDE_package_version": "2.2.2",
+            "PG_TDE_sql_version": "2.2",
+            "PG_OIDC_VALIDATOR_version": "1.1.0",
+            "PG_OIDC_VALIDATOR_package_version": "1.1.0",
+            "PG_CRON_version": "1.6.8",
+            "PG_CRON_package_version": "1.6.8",
+            "PG_CRON_sql_version": "1.6",
+        },
+        "ppg-19.0": {
+            "version": "19.0",
+            "percona-version": "19.0.1~beta4",
+            "deb_pkg_ver": ppg_versions["ppg-19.0"]["deb_pkg_ver"],
+            "deb_packages": ppg_versions["ppg-19.0"]["deb_packages"],
+            "percona-postgresql-common": "293",
+            "percona-postgresql-client-common": "293",
+            "libpq_version": "190000",
+            "pgaudit": pgaudit["ppg-19.0"],
+            "pgbackrest": pgbackrest["ppg-19.0"],
+            "patroni": patroni["ppg-19.0"],
+            "pgrepack": pgrepack["ppg-19.0"],
+            "pgbadger": pgbadger["19.0"],
+            "pgbouncer": pgbouncer["19.0"],
+            "pgpool": pgpool["19.0"],
+            "wal2json": wal2json["19.0"],
+            "set_user": set_user["19.0"],
+            "haproxy": haproxy["19.0"],
+            "pg_gather": pg_gather["19.0"],
+            "etcd": etcd["19.0"],
+            "pgvector": pgvector["19.0"],
+            "credcheck": credcheck["19.0"],
+            "pgrepack_package_rpm": "percona-pg_repack19",
+            "pgrepack_package_deb": "percona-postgresql-19-repack",
+            "libpq": "Version of libpq: 190000",
+            "deb_provides": ppg_versions["ppg-19.0"]["deb_provides"],
+            "rpm7_provides": ppg_versions["ppg-19.0"]["rpm7_provides"],
+            "rpm_provides": ppg_versions["ppg-19.0"]["rpm_provides"],
+            "rpm_packages": ppg_versions["ppg-19.0"]["rpm_packages"],
+            "rpm7_packages": ppg_versions["ppg-19.0"]["rpm7_packages"],
+            "rhel_files": ppg_versions["ppg-19.0"]["rhel_files"],
+            "deb_files": ppg_versions["ppg-19.0"]["deb_files"],
+            "extensions": ppg_versions["ppg-19.0"]["extensions"],
+            "languages": ppg_versions["ppg-19.0"]["languages"],
+            "binaries": ppg_versions["ppg-19.0"]["binaries"],
+            "PGSM_version": "2.4.1",
+            "PGSM_package_version": "2.4.1",
+            "PGSM_sql_version": "2.4",
+            "postgis_major_version": "3.7",
+            "postgis_version": "3.7.0rc2",
+            "postgis_package_version": "3.7.0rc2",
+            "pg_telemetry_version": "1.2",
+            "pg_telemetry_package_version": "1.2.0",
+            "PG_TDE_version": "pg_tde 2.2.2",
+            "PG_TDE_package_version": "2.3.0~dev",
             "PG_TDE_sql_version": "2.2",
             "PG_OIDC_VALIDATOR_version": "1.1.0",
             "PG_OIDC_VALIDATOR_package_version": "1.1.0",

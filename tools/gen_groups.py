@@ -70,7 +70,14 @@ def validate(data):
                 "'default_version: %s-%s.<minor>' (the VERSION param default, "
                 "the newest minor with fixtures in ppg/tests/versions/ppg.py)"
                 % (name, inst.get("flavor", "ppg"), inst.get("major", "??")))
+        unknown = set(inst.get("types", ())) - set(TYPES)
+        if unknown:
+            raise ValueError(
+                "ppg/versions.yml: instance %s lists unknown types %s, "
+                "valid ones are %s" % (name, sorted(unknown), sorted(TYPES)))
         for type_name in FROM_VERSION_TYPES:
+            if type_name not in inst.get("types", TYPES):
+                continue
             section = inst.get(type_name) or {}
             if not section.get("default_from_version"):
                 raise ValueError(
@@ -160,9 +167,10 @@ def render_group(data, instance, type_name):
 
 
 def all_groups(data):
-    for instance in data["instances"]:
+    for instance, inst in data["instances"].items():
         for type_name in TYPES:
-            yield instance, type_name
+            if type_name in inst.get("types", TYPES):
+                yield instance, type_name
 
 
 def render_shared_tasks(data):

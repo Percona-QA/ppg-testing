@@ -513,6 +513,31 @@ instances:
       pgpool_switch: '18.4'
       cron_gate: '18.3'
       base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'', ''pg_tde'']'
+  pg-19:
+    major: 19
+    flavor: ppg
+    default_version: ppg-19.0
+    types:  # no meta-server / meta-ha groups for 19
+    - server
+    - minor-upgrade
+    - major-upgrade
+    server:
+      subnet: aws2
+    minor-upgrade:
+      default_from_version: ppg-19.0  # first 19 minor, nothing older to start from
+      remove_conflicting_dev: '18.5'
+      dev_switch_cutoff: '18.1'
+    major-upgrade:
+      default_from_version: ppg-18.6  # = pg-18 default_version, bump both
+      remove_conflicting_dev: '18.5'
+    install: {}
+    install_tools:
+      pgpool_switch: '18.4'
+      cron_gate: '18.3'
+      postgis_pkg: '37'  # percona-postgis37_19 (PostGIS 3.7); 14-18 ship 3.5
+      credcheck_gate: '19.0'  # credcheck packages exist from 19 on
+      oidc_gate: '19.0'  # pg_oidc_validator is in 19 from the first release (18 had it from 18.2)
+      base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'', ''pg_tde'']'
   psp-16:
     major: 16
     flavor: psp
