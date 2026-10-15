@@ -118,8 +118,16 @@ NEW_CONTAINER = f"ppg_upgrade_new_{OLD_MAJOR}_{NEW_MAJOR}"
 SENTINEL_TABLE = "upgrade_sentinel"
 SENTINEL_VALUE = f"upgraded_from_pg{OLD_MAJOR}_to_pg{NEW_MAJOR}"
 
-OLD_SETTINGS = settings.get_settings(OLD_MAJOR_MINOR)
-NEW_SETTINGS = settings.get_settings(NEW_MAJOR_MINOR)
+
+
+def _is_psp(major, tag):
+    """Same rule as test_docker.py: PG 17+ images ship pg_tde, and so do the
+    psp-16 images, which share their version numbers with plain ppg-16."""
+    return int(major) >= 17 or "psp" in tag.lower()
+
+
+OLD_SETTINGS = settings.get_settings(OLD_MAJOR_MINOR, _is_psp(OLD_MAJOR, IMG_TAG_OLD))
+NEW_SETTINGS = settings.get_settings(NEW_MAJOR_MINOR, _is_psp(NEW_MAJOR, IMG_TAG_NEW))
 NEW_EXTENSIONS = NEW_SETTINGS["extensions"]
 NEW_BINARIES = NEW_SETTINGS["binaries"]
 NEW_RPM_PACKAGES = NEW_SETTINGS["rpm_packages"]
