@@ -284,25 +284,27 @@ def _expected_ubi_major_version():
     return '9'
 
 
-# RPM package names that were renamed on some UBI majors. Keyed by the
-# canonical name used in settings.py / pg_docker_versions; only the
-# `host.package()` lookup uses the resolved name, so version lookups still
-# key off the canonical name below. No-op today (this role isn't tested
-# against UBI10 tags yet), but keeps behavior correct if that changes.
-RPM_NAME_OVERRIDES_BY_UBI_MAJOR = {
-    # RHEL10 defaults to Python 3.12, so python3-etcd was rebuilt as
-    # python3.12-etcd (python3-ydiff was not renamed the same way).
-    "python3-etcd": {"10": "python3.12-etcd"},
+# RPM package names that differ between builds. Keyed by the canonical name
+# used in settings.py / pg_docker_versions; only the `host.package()` lookup
+# uses the resolved name, so version lookups still key off the canonical name.
+# Patroni's Python dependencies follow the Python it is built with: the
+# released packages use the system python3 (python3-etcd); the OBS spec builds
+# Patroni with Python 3.12 on RHEL 8-10, and the OBS UBI 9 image ships
+# python3.12-etcd (while keeping python3-ydiff). Rather than encode each
+# build's rule, accept whichever candidate is installed.
+RPM_NAME_CANDIDATES = {
+    "python3-etcd": ("python3-etcd", "python3.12-etcd"),
+    "python3-ydiff": ("python3-ydiff", "python3.12-ydiff"),
 }
 
 
-def _installed_package_name(package):
-    """Resolve the RPM package name actually installed for the current UBI
-    major, accounting for names that changed between UBI variants."""
-    overrides = RPM_NAME_OVERRIDES_BY_UBI_MAJOR.get(package)
-    if not overrides:
-        return package
-    return overrides.get(_expected_ubi_major_version(), package)
+def _installed_package_name(host, package):
+    """The installed RPM name for canonical *package*: the first installed
+    candidate, else the canonical name (so a failure names what was expected)."""
+    for candidate in RPM_NAME_CANDIDATES.get(package, ()):
+        if host.package(candidate).is_installed:
+            return candidate
+    return package
 
 
 def test_base_image_matches_ubi_tag(host):
@@ -530,7 +532,7 @@ def test_rpm_package_is_installed(host, package):
     if "oidc_validator" in package and int(MAJOR_VER) < 18:
         pytest.skip(f"Skipping {package} for PostgreSQL {MAJOR_VER} (only supported on 18.2+).")
 
-    installed_name = _installed_package_name(package)
+    installed_name = _installed_package_name(host, package)
     pkg = host.package(installed_name)
 
     # 2. Verify Installation
