@@ -6,7 +6,7 @@
 # KMIP docs index: docs/kmip/README.md
 #
 # Usage:
-#   cd postgresql/pytest && source .env.sh
+#   cd pg_tde/core/files/pytest && source .env.sh
 #
 #   # Cosmian (CI default)
 #   source scripts/setup_cosmian_for_pytest.sh

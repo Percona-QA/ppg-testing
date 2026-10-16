@@ -6,8 +6,8 @@ KMIP (Key Management Interoperability Protocol) is a **separate** key provider
 from HashiCorp Vault / OpenBao. pg_tde talks to a KMIP server over TLS using
 `pg_tde_add_global_key_provider_kmip` / `pg_tde_add_database_key_provider_kmip`.
 
-**Automated KMIP testing uses Cosmian KMS**, not PyKMIP (abandoned upstream).
-See [ci-strategy.md](ci-strategy.md) § Why Cosmian, not PyKMIP.
+**Automated KMIP testing uses Cosmian KMS**, matching pg_tde's own CI. Vendor KMS servers (Fortanix, Thales, Akeyless)
+are for scheduled sign-off: [vendor-signoff.md](vendor-signoff.md).
 
 Recent pg_tde builds ([PR #595](https://github.com/percona/pg_tde/pull/595))
 use the C++ **libkmip** submodule (`subprojects/libkmip`, `kmipclient::Kmip`)
@@ -28,7 +28,7 @@ for register / locate / get / validate instead of the legacy C libkmip BIO API.
 Same package as **pg_tde** `ci_scripts/ubuntu-deps.sh` (v5.21.0):
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 ./scripts/install_cosmian_kms.sh
 ```
 
@@ -52,7 +52,7 @@ command -v cosmian_kms || ls -l /usr/sbin/cosmian_kms
 Then:
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
 source scripts/setup_cosmian_for_pytest.sh
 ./scripts/run_kmip_revalidation.sh
@@ -62,7 +62,7 @@ Build pg_tde from a tree that includes PR #595 (or `main` after merge) when
 validating the new client:
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 ./build_from_source.sh --tde-ref libkmip-rework   # or main after merge
 ```
 
@@ -71,11 +71,18 @@ cd postgresql/pytest
 **CI / Cosmian (recommended):**
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
-source scripts/setup_cosmian_for_pytest.sh   # local cosmian_kms or KMIP_COSMIAN_* from Jenkins
+source scripts/setup_cosmian_for_pytest.sh   # local cosmian_kms or remote KMIP_COSMIAN_*
 ./scripts/run_kmip_revalidation.sh
 ```
+
+`setup_cosmian_for_pytest.sh` picks a server in this order:
+
+1. Existing `KMIP_*` variables, if already set
+2. `KMIP_COSMIAN_HOST` set → remote lab from `KMIP_COSMIAN_*` (wins over a local binary)
+3. Otherwise, local `cosmian_kms` found → `setup_cosmian_local_for_pytest.sh`
+4. Otherwise it fails with install / lab instructions
 
 **Local Cosmian only (pg_tde CI parity):**
 
@@ -84,7 +91,6 @@ source scripts/setup_cosmian_local_for_pytest.sh
 pytest tests/test_kmip.py -v
 ```
 
-CI vs vendor labs: **[ci-strategy.md](ci-strategy.md)**.  
 Advanced scenarios: **[advanced-scenarios.md](advanced-scenarios.md)** (classes in `tests/test_kmip.py`).
 
 ### Vendor lab (no local Cosmian)
@@ -124,14 +130,14 @@ pytest tests/ --skip-sections=kmip -v   # omit entire KMIP section
 
 ## What pytest covers
 
-| Module | Bash / TAP reference | PR #595 operations exercised |
-|--------|----------------------|------------------------------|
-| `TestKmipKeyProviderBasics` | functions_test smoke | validate, register, locate+get, restart |
-| `TestKmipBashParityScenarios` | functions_test §2–4, t/066 | multi-DB, default key, DB scope |
-| `TestKmipDeleteKeyProvider` | t/064 | catalog delete rules |
-| `TestKmipChangeKeyProviderCLI` | change_key_provider utility | offline KMIP connection update (keys on server) |
-| `TestKmipLibkmipClientPr595` | — | bad host errors; `ldd` C++ link check |
-| `TestKmipServerRevalidation` | — | **per-server matrix** after libkmip rewrite |
+| Module | PR #595 operations exercised |
+|--------|------------------------------|
+| `TestKmipKeyProviderBasics` | validate, register, locate+get, restart |
+| `TestKmipBashParityScenarios` | multi-DB, default key, DB scope |
+| `TestKmipDeleteKeyProvider` | catalog delete rules |
+| `TestKmipChangeKeyProviderCLI` | offline KMIP connection update (keys on server) |
+| `TestKmipLibkmipClientPr595` | bad host errors; `ldd` C++ link check |
+| `TestKmipServerRevalidation` | **per-server matrix** after libkmip rewrite |
 
 ### Revalidate all supported KMIP servers
 
@@ -149,13 +155,13 @@ Vault / OpenBao: `tests/test_vault_providers.py` and [../vault.md](../vault.md).
 
 Vault **KMIP engine** (customer ``register symmetric key: -2``): [vault-kmip-engine.md](vault-kmip-engine.md).
 
-## Jenkins / ppg-testing
+## Running in CI
 
-**Every build:** Cosmian via `setup_cosmian_for_pytest.sh` + `run_kmip_revalidation.sh`
-(`KMIP_COSMIAN_*` Jenkins credentials).
+**Regression:** Cosmian via `setup_cosmian_for_pytest.sh` + `run_kmip_revalidation.sh`
+(local `cosmian_kms`, or `KMIP_COSMIAN_*` for a remote server).
 
-**Scheduled / release:** one job per vendor (`KMIP_REVALIDATE_PROFILES=fortanix`, etc.).
-See [ci-strategy.md](ci-strategy.md).
+**Vendor sign-off:** one run per vendor (`KMIP_REVALIDATE_PROFILES=fortanix`, etc.);
+see [vendor-signoff.md](vendor-signoff.md).
 
 ## Jira regressions
 

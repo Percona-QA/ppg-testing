@@ -2,7 +2,7 @@
 # Run OpenBao pytest suite (namespace + pg_tde_open_bao_tests parity).
 #
 # Usage:
-#   cd postgresql/pytest
+#   cd pg_tde/core/files/pytest
 #   source .env.sh
 #   ./scripts/run_openbao_revalidation.sh
 #

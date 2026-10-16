@@ -2,7 +2,7 @@
 # Start local OpenBao (dev mode) and export pytest env vars (namespace + mount).
 #
 # Usage:
-#   cd postgresql/pytest
+#   cd pg_tde/core/files/pytest
 #   source .env.sh
 #   source scripts/setup_openbao_for_pytest.sh
 #   pytest -m openbao -v

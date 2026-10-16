@@ -3,7 +3,7 @@
 # Supports Ubuntu/Debian (.deb) and RHEL/OL/Rocky (.rpm).
 #
 # Usage (run directly — do not source):
-#   cd postgresql/pytest
+#   cd pg_tde/core/files/pytest
 #   ./scripts/install_openbao.sh
 #
 # After install:
@@ -68,6 +68,6 @@ echo "OpenBao installed:"
 bao version 2>/dev/null || bao --version
 echo ""
 echo "Next:"
-echo "  cd postgresql/pytest"
+echo "  cd pg_tde/core/files/pytest"
 echo "  source scripts/setup_openbao_for_pytest.sh"
 echo "  ./scripts/run_openbao_revalidation.sh"

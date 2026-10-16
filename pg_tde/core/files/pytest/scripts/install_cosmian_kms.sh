@@ -3,7 +3,7 @@
 # Ubuntu/Debian: official .deb. RHEL: try RPM, else extract static tarball if published.
 #
 # Usage (run directly — do not source):
-#   cd postgresql/pytest
+#   cd pg_tde/core/files/pytest
 #   ./scripts/install_cosmian_kms.sh
 #
 # After install:
@@ -94,6 +94,6 @@ command -v cosmian_kms 2>/dev/null || echo "  /usr/sbin/cosmian_kms"
 ls -la /usr/sbin/cosmian_kms 2>/dev/null || true
 echo ""
 echo "Next:"
-echo "  cd postgresql/pytest"
+echo "  cd pg_tde/core/files/pytest"
 echo "  source scripts/setup_cosmian_for_pytest.sh"
 echo "  ./scripts/run_kmip_revalidation.sh"

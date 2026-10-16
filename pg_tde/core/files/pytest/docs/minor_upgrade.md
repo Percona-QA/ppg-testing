@@ -64,7 +64,7 @@ Staged tests **skip** if `--upgrade-data-dir` / `PG_TDE_UPGRADE_DATA_DIR` is not
 Run pytest from the framework root:
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 ```
 
 ---
@@ -101,7 +101,7 @@ Re-running a **Setup** test calls `_reset_scenario_root()` and **deletes only th
 
 ## Automated script (recommended on CI / fresh VM)
 
-From `postgresql/pytest`:
+From `pg_tde/core/files/pytest`:
 
 ```bash
 sudo mkdir -p /var/lib/pg_tde_minor_upgrade
@@ -133,7 +133,7 @@ Install **pg_tde 2.1.x** (or whatever you treat as “source”) on the target P
 export PG_TDE_UPGRADE_DATA_DIR=/var/lib/pg_tde_minor_upgrade
 export INSTALL_DIR=/usr/lib/postgresql/17   # example: PG 17 + pg_tde 2.1
 
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 
 # Single node: 500-row tde_heap table, WAL encryption on
 pytest tests/test_tde_minor_upgrade.py::TestPgTdeMinorUpgradeSetup::test_prepare_persistent_state_for_minor_upgrade \
@@ -287,7 +287,6 @@ The `single_pg2381` scenario runs drop/recreate plus `VACUUM FULL` before upgrad
 
 - Staged minor: Setup + Verify under `single_pg2381/`
 - Major upgrade regression: `tests/test_tde_pg_upgrade.py::TestPg2381EmptyKeyMigration`
-- Shell repros: `postgresql/bugs/pg_tde_upgrade_issue.sh`, `PG_tde_upgrade_21_22_report.md`
 
 Install builds that include the fix before expecting green PG-2381 tests.
 
@@ -342,4 +341,3 @@ Major-upgrade CI instead passes `--old-install-dir` and `--install-dir` in a **s
 | `tests/test_tde_pg_upgrade.py` | Major upgrade + `TestPg2381EmptyKeyMigration` + in-place multidb test |
 | `conftest.py` | `--upgrade-data-dir`, `upgrade_data_dir` fixture |
 | `lib/cluster.py` | `PgCluster`, upgrade helpers |
-| `postgresql/bugs/` | Shell repro scripts and reports |
