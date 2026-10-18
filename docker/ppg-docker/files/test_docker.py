@@ -636,13 +636,18 @@ def test_openssl_version_matches_ubi(host):
     ubi_major = _expected_ubi_major_version()
     expected = EXPECTED_OPENSSL_MAJOR[ubi_major]
 
-    result = host.run("openssl version")
-    assert result.rc == 0, f"openssl version failed: {result.stderr}"
-    # Output: "OpenSSL 1.1.1k  FIPS ..." or "OpenSSL 3.0.7 ..."
-    actual_major = result.stdout.strip().split()[1].split('.')[0]
+    # The library PostgreSQL links against (openssl-libs), not the openssl
+    # command: the command comes from the 'openssl' package, which only some
+    # images have (pg_tde requires it, so PG 17+), while every image has the
+    # library.
+    result = host.run("rpm -q --qf '%{VERSION}' openssl-libs")
+    assert result.rc == 0, f"openssl-libs is not installed: {result.stdout}{result.stderr}"
+    # Output: "1.1.1k" or "3.0.7"
+    version = result.stdout.strip()
+    actual_major = version.split('.')[0]
     assert actual_major == expected, (
         f"OpenSSL version mismatch for UBI {ubi_major}: "
-        f"expected major {expected}, got '{result.stdout.strip()}'"
+        f"expected major {expected}, got openssl-libs {version}"
     )
 
 
