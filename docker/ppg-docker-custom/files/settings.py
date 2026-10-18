@@ -31,9 +31,9 @@ pg_stat_monitor = {
     "16.14": {"version": "2.3.2"},
     "17.10": {"version": "2.3.2"},
     "18.4": {"version": "2.3.2"},
-    "16.15": {"version": "2.4.0"},
-    "17.11": {"version": "2.4.0"},
-    "18.6": {"version": "2.4.0"},
+    "16.15": {"version": "2.4.1"},
+    "17.11": {"version": "2.4.1"},
+    "18.6": {"version": "2.4.1"},
 }
 
 set_user = {
@@ -79,9 +79,9 @@ pgbackrest = {
     "16.14": {"version": "2.58.0", "binary_version": "pgBackRest 2.58.0"},
     "17.10": {"version": "2.58.0", "binary_version": "pgBackRest 2.58.0"},
     "18.4": {"version": "2.58.0", "binary_version": "pgBackRest 2.58.0"},
-    "16.15": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
-    "17.11": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
-    "18.6": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.1"},
+    "16.15": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.2"},
+    "17.11": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.2"},
+    "18.6": {"version": "2.59.1", "binary_version": "pgBackRest 2.59.2"},
 }
 
 pgvector = {
