@@ -1043,40 +1043,10 @@ class TestUpgradeImageExtensionFiles:
             f"{label}: .so missing at {so_path!r} in upgrade image (PG {major})"
         )
 
-    @pytest.mark.parametrize(
-        "major",
-        list(_UPGRADE_IMAGE_PG_VERSIONS.keys()),
-        ids=[f"pg{m}" for m in _UPGRADE_IMAGE_PG_VERSIONS],
-    )
-    def test_pg_telemetry_package_installed(self, upgrade_image_host, major):
-        """``percona-pg-telemetry{major}`` must be present in the upgrade image
-        for PG 14–17.  Telemetry is not available from PG 18 onwards."""
-        if int(major) >= 18:
-            pytest.skip(
-                f"percona-pg-telemetry not available for PG {major} — skipping"
-            )
-        result = upgrade_image_host.run(f"rpm -q percona-pg-telemetry{major}")
-        assert result.rc == 0, (
-            f"percona-pg-telemetry{major} should be installed in upgrade image "
-            f"(PG {major})"
-        )
-
-    def test_telemetry_agent_installed(self, upgrade_image_host):
-        """``percona-telemetry-agent`` must be present in the upgrade image.
-
-        The image also bundles PG 12/13 (not just the 14-18 majors this file
-        otherwise tracks) to bridge those older upgrade paths. Their
-        telemetry packages (percona-pg-telemetry12/13) predate PG-2615 and
-        still hard-depend on the agent -- confirmed via ``rpm -q
-        --whatrequires percona-telemetry-agent`` against the real image --
-        so it is pulled in regardless of where PG 14-17 stand on the
-        weak-dependency cutoff. Unlike test_pg_telemetry_agent_installed in
-        TestPostUpgradePackages, this one is intentionally NOT version-gated
-        on PG-2615: gating it the same way would make it silently skip once
-        14-17 all pass their cutoffs, even though PG 12/13 keep the
-        assertion valid."""
-        result = upgrade_image_host.run("rpm -q percona-telemetry-agent")
-        assert result.rc == 0, (
-            "percona-telemetry-agent should be installed in upgrade image"
-        )
+    # No telemetry checks on the upgrade image: it ships no telemetry, by
+    # design. The build team removed percona-telemetry-agent as a dependency
+    # entirely; percona-pg-telemetry<N> is now a dummy package that the server
+    # packages only recommend (to smooth package upgrades) and that pg_upgrade
+    # does not need. PG 12/13, whose telemetry required the agent, are not in
+    # the OBS upgrade image (no 12/13 packages in OBS staging).
 
