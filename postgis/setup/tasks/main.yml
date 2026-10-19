@@ -94,9 +94,50 @@
   - debug:
       msg: "Shipped percona-postgis35_{{ major_version }} reports: {{ shipped_postgis_full_version.stdout }}"
 
+  # percona-postgis35_XX requires the PGDG-style versioned GIS packages by
+  # name (e.g. geos315, proj98, gdal313-libs, libgeotiff17 on EL9/EL10;
+  # proj96/gdal38-libs on EL8). Derive the matching -devel packages and
+  # install prefixes from the shipped package instead of hardcoding versions.
+  - name: Derive the GIS stack (devel packages and prefixes) from the shipped percona-postgis package
+    shell: >-
+      rpm -q --requires {{ postgis_rhel_package_name_prefix }}
+      | awk '{print $1}'
+      | grep -E '^(geos|proj|gdal|libgeotiff)[0-9]+(-libs)?$'
+      | sort -u
+    register: postgis_gis_requires
+    changed_when: false
+    failed_when: false
+
+  - name: Set GIS stack facts from the shipped package requirements
+    set_fact:
+      gis_base_names: "{{ postgis_gis_requires.stdout_lines | map('regex_replace', '-libs$', '') | list }}"
+
+  - name: Fail clearly if the shipped package does not declare versioned geos/proj/gdal requirements
+    fail:
+      msg: >-
+        {{ postgis_rhel_package_name_prefix }} declares no versioned geos/proj/gdal requirement
+        (got: {{ postgis_gis_requires.stdout_lines }}); this role expects the PGDG-style GIS stack
+        (geosNNN/projNN/gdalNNN) and cannot derive the build dependencies from an older package.
+    when: >-
+      (gis_base_names | select('match', '^geos') | list | length == 0) or
+      (gis_base_names | select('match', '^proj') | list | length == 0) or
+      (gis_base_names | select('match', '^gdal') | list | length == 0)
+
+  - name: Set GIS devel packages and prefix facts
+    set_fact:
+      gis_devel_pkgs: "{{ (gis_base_names | map('regex_replace', '$', '-devel') | list) + (gis_base_names | select('match', '^gdal') | list) }}"
+      gis_geos_prefix: "/usr/{{ gis_base_names | select('match', '^geos') | first }}"
+      gis_proj_prefix: "/usr/{{ gis_base_names | select('match', '^proj') | first }}"
+      gis_gdal_prefix: "/usr/{{ gis_base_names | select('match', '^gdal') | first }}"
+
+  - name: Set GIS PATH and PKG_CONFIG_PATH facts
+    set_fact:
+      gis_path: "{{ gis_gdal_prefix }}/bin:{{ gis_geos_prefix }}/bin"
+      gis_pkg_config_path: "{{ gis_gdal_prefix }}/lib/pkgconfig:{{ gis_geos_prefix }}/lib64/pkgconfig:{{ gis_proj_prefix }}/lib64/pkgconfig"
+
   - name: Install PostGIS build dependencies, version-matched to what percona-postgis35 actually depends on
     yum:
-      name: "{{ packages }}"
+      name: "{{ packages + gis_devel_pkgs }}"
       state: present
       update_cache: yes
     vars:
@@ -112,15 +153,9 @@
         - perl
         - bison
         - flex
-        # Version-matched to percona-postgis35_XX's real declared
-        # dependencies (gdal311-libs >= 3.11.0, geos311 >= 3.11.2,
-        # proj95 >= 9.5.1) - from Percona's own repo, not EPEL/base RHEL.
-        - gdal311
-        - gdal311-devel
-        - geos311
-        - geos311-devel
-        - proj95
-        - proj95-devel
+        # The versioned geos/proj/gdal -devel packages (plus gdal for gdalinfo)
+        # are derived from percona-postgis35_XX's real declared dependencies
+        # (see gis_devel_pkgs above) - from Percona's own repo, not EPEL/base RHEL.
         - SFCGAL
         - SFCGAL-devel
         - json-c-devel
@@ -192,8 +227,8 @@
 
   - name: Record the actual build-time library versions we're about to compile against
     shell: |
-      export PATH="/usr/gdal311/bin:/usr/geos311/bin:$PATH"
-      export PKG_CONFIG_PATH="/usr/gdal311/lib/pkgconfig:/usr/geos311/lib64/pkgconfig:/usr/proj95/lib64/pkgconfig"
+      export PATH="{{ gis_path }}:$PATH"
+      export PKG_CONFIG_PATH="{{ gis_pkg_config_path }}"
       echo "geos-config:     $(geos-config --version 2>&1 || echo 'not found')"
       echo "gdal-config:     $(gdal-config --version 2>&1 || echo 'not found')"
       echo "gdalinfo formats: $(gdalinfo --formats 2>&1 | grep -i tif || echo 'no tif/GTiff driver')"
@@ -227,6 +262,23 @@
       version: "{{ lookup('env', 'COMPONENT_REF') | default(lookup('env', 'COMPONENT_VERSION'), true) }}"
     become_user: postgres
 
+  # 3.5.7's own regression tests predate SFCGAL 2.3 (two stable-3.5 commits
+  # fix the sfcgal expected output) and GEOS 3.15 (PGDG's geos315 backport
+  # patch, also carried by the percona-postgis package). Apply them so
+  # installcheck compares like with like. Delete when 3.5.8 is tagged.
+  - name: Apply stable-3.5 regress fixes needed by 3.5.7 with SFCGAL 2.3 and GEOS 3.15
+    shell: |
+      set -euo pipefail
+      for c in 8b3fcf54a572b5e84071d8fc6661003e3113b35f fb149e149967fa10bed9d823d043c3c83d3b9b81; do
+        curl -fsSL "https://gitea.osgeo.org/postgis/postgis/commit/$c.patch" | git apply --include='sfcgal/regress/*'
+      done
+      curl -fsSL "https://raw.githubusercontent.com/pgdg-packaging/pgdg-rpms/e38918e895bcd74d083b33ccb440f3afd21a5c97/rpm/redhat/main/non-common/postgis35/main/postgis35-3.5.7-geos315-backport.patch" | git apply
+    args:
+      chdir: /tmp/postgis
+      executable: /bin/bash
+    become_user: postgres
+    when: lookup('env', 'COMPONENT_REF') == '3.5.7'
+
   - name: Autogen postgis
     shell: ./autogen.sh
     args:
@@ -235,9 +287,10 @@
     environment:
       PATH: "/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
 
-  # gdal311/geos311/proj95 install to their own prefixes (/usr/gdal311,
-  # /usr/geos311, /usr/proj95), not standard system paths - PATH
-  # PKG_CONFIG_PATH need these explicitly for ./configure's autodetection
+  # The PGDG-style geos/proj/gdal packages install to their own prefixes
+  # (e.g. /usr/geos315, /usr/proj98, /usr/gdal313; derived into gis_*_prefix
+  # above), not standard system paths - PATH and PKG_CONFIG_PATH need these
+  # explicitly for ./configure's autodetection
   - name: Configure postgis against the already-installed GEOS/PROJ/GDAL/SFCGAL/json-c libraries
     shell: |
       {% if ansible_distribution_major_version == "9" %}
@@ -250,8 +303,8 @@
       executable: /bin/bash
     become_user: postgres
     environment:
-      PATH: "/usr/gdal311/bin:/usr/geos311/bin:/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
-      PKG_CONFIG_PATH: "/usr/gdal311/lib/pkgconfig:/usr/geos311/lib64/pkgconfig:/usr/proj95/lib64/pkgconfig:{{ ansible_env.PKG_CONFIG_PATH | default('') }}"
+      PATH: "{{ gis_path }}:/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
+      PKG_CONFIG_PATH: "{{ gis_pkg_config_path }}:{{ ansible_env.PKG_CONFIG_PATH | default('') }}"
     register: postgis_configure
     ignore_errors: true
 
@@ -286,7 +339,7 @@
       executable: /bin/bash
     become_user: postgres
     environment:
-      PATH: "/usr/gdal311/bin:/usr/geos311/bin:/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
+      PATH: "{{ gis_path }}:/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
     register: postgis_build
     ignore_errors: true
 
@@ -316,7 +369,7 @@
       executable: /bin/bash
     become_user: postgres
     environment:
-      PATH: "/usr/gdal311/bin:/usr/geos311/bin:/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
+      PATH: "{{ gis_path }}:/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
     register: postgis_installcheck
     ignore_errors: true
 
@@ -340,7 +393,7 @@
   # Kept as a safety and diagnosis net for reference in case of a failure
   - name: Diagnose raster2pgsql's ability to read a real test raster directly (bypassing the regress harness)
     shell: |
-      export PATH="/usr/gdal311/bin:/usr/geos311/bin:$PATH"
+      export PATH="{{ gis_path }}:$PATH"
       echo "=== gdalinfo --version ==="
       gdalinfo --version 2>&1 || echo "gdalinfo not found or failed"
       echo "=== gdalinfo --formats (checking for GTiff driver specifically) ==="
