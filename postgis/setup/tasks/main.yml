@@ -95,6 +95,16 @@
     become_user: postgres
     command: psql -c "ALTER DATABASE postgres SET \"postgis.gdal_enabled_drivers\" = 'ENABLE_ALL';"
 
+  # The standalone postgis_tiger_geocoder used with PostGIS 3.7 (2025.x) does
+  # not add tiger to the search_path, and its README tells users to do it after
+  # install: its functions still reference unqualified tiger types such as
+  # norm_addy. (The bundled 3.5 extension does this itself; upstream
+  # schema-qualifies everything from 2026.1.)
+  - name: Add tiger to the database search_path (standalone tiger geocoder, PG 19+)
+    become_user: postgres
+    command: psql -c "ALTER DATABASE postgres SET search_path = public, tiger;"
+    when: (major_version | int) >= 19
+
   # PostGIS's own upstream regression suite, run via `make installcheck`
   # against the already-installed Percona package (same principle as
   # pg_audit/pg_repack/wal2json/pgvector: build from source only to get the
