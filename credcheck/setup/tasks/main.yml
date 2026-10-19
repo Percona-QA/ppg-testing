@@ -26,8 +26,6 @@
       - percona-postgresql{{ major_version }}-llvmjit
       - percona-credcheck{{ major_version }}
       - percona-credcheck{{ major_version }}-llvmjit
-    environment:
-      PERCONA_TELEMETRY_URL: "https://check-dev.percona.com/v1/telemetry/GenericReport"
 
   # perl-IPC-Run and prove run the upstream TAP tests (t/)
   - name: Install build dependencies and the TAP test Perl modules
@@ -134,6 +132,46 @@
 
   - debug:
       msg: "Shipped percona-credcheck{{ major_version }} reports: {{ shipped_credcheck.stdout }}"
+
+  # Fail fast if the installed package is not the version under test.
+  # Expected: the percona-credcheck line of EXPECTED_VERSIONS (OBS package
+  # versions, when the job passes them on), else COMPONENT_REF when it is a
+  # release tag: OBS QA sends the tag the package is built from (v5.0 -> 5.0).
+  # Neither (e.g. a manual run on a branch): the check is skipped.
+  - name: Read the installed percona-credcheck package version
+    command: rpm -q --qf '%{VERSION}' percona-credcheck{{ major_version }}
+    register: credcheck_rpm_version
+    changed_when: false
+
+  - name: Work out the expected credcheck version
+    set_fact:
+      credcheck_expected_version: "{{ from_expected_versions or from_component_ref }}"
+    vars:
+      from_expected_versions: >-
+        {{ lookup('env', 'EXPECTED_VERSIONS').splitlines()
+           | select('match', '^percona-credcheck=')
+           | map('regex_replace', '^percona-credcheck=', '')
+           | first | default('') }}
+      component_ref: "{{ lookup('env', 'COMPONENT_REF') }}"
+      from_component_ref: >-
+        {{ component_ref | regex_replace('^v', '')
+           if component_ref is match('^v?[0-9]+([.][0-9]+)+$') else '' }}
+
+  - name: Check the installed credcheck version
+    assert:
+      that:
+        - credcheck_rpm_version.stdout == credcheck_expected_version
+      fail_msg: >-
+        percona-credcheck{{ major_version }} {{ credcheck_rpm_version.stdout }} is installed,
+        but {{ credcheck_expected_version }} is expected
+      success_msg: "percona-credcheck{{ major_version }} {{ credcheck_rpm_version.stdout }} as expected"
+    when: credcheck_expected_version | length > 0
+
+  - debug:
+      msg: >-
+        No expected credcheck version (no EXPECTED_VERSIONS entry, and COMPONENT_REF
+        '{{ lookup('env', 'COMPONENT_REF') }}' is not a release tag): version check skipped
+    when: credcheck_expected_version | length == 0
 
   - name: Clone credcheck sources matching the packaged version
     git:
