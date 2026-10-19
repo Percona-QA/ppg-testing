@@ -270,6 +270,8 @@ def test_postgis_topology_create_topology(host):
 def test_tiger_geocoder_normalize_address(host):
     result = _psql(
         host,
-        "SELECT (na).address FROM normalize_address('1 Devonshire Place, Boston, MA 02109') AS na;",
+        # Schema-qualified: the standalone postgis_tiger_geocoder (PostGIS 3.7+)
+        # no longer adds tiger to the database search_path; 3.5 also lives in tiger.
+        "SELECT (na).address FROM tiger.normalize_address('1 Devonshire Place, Boston, MA 02109') AS na;",
     )
     assert result, "normalize_address returned no output"
