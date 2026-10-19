@@ -110,16 +110,6 @@
   become: true
   shell: sed -i 's/16/{{ major_version }}/' /etc/patroni/patroni.yml
 
-- name: Enable and start patroni with wait
-  include_tasks: ../../../../tasks/start_service_with_diagnostics.yml
-  vars:
-    svc_name: patroni
-    svc_state: started
-    svc_daemon_reload: true
-    svc_async: 180
-    svc_poll: 5
-    log_search_dir: /var/lib/pgsql
-
 - name: Copy postgresql1.yml for patroni service
   copy:
     src: postgresql1.yml
@@ -253,11 +243,19 @@
     svc_name: etcd
     svc_state: started
 
+# Node 0 starts only once etcd runs: the packaged patroni.service is
+# Type=notify (TimeoutSec=30), so systemd waits until Patroni is ready, which
+# it cannot be without its DCS. As the first node it also bootstraps the
+# cluster, hence the longer wait. The daemon-reload picks up the unit files
+# copied above.
 - name: Start patroni
   include_tasks: ../../../../tasks/start_service_with_diagnostics.yml
   vars:
     svc_name: patroni
     svc_state: started
+    svc_daemon_reload: true
+    svc_async: 180
+    svc_poll: 5
     log_search_dir: /var/lib/pgsql
 
 - name: Start patroni1
