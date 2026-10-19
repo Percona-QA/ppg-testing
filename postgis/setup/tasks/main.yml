@@ -49,6 +49,20 @@
       - "{{postgis_rhel_package_name_prefix}}-llvmjit"
       - "{{postgis_rhel_package_name_prefix}}-utils"
 
+  # PostGIS 3.7 (PG 19+) splits address_standardizer and the tiger geocoder
+  # into their own packages, which percona-postgis37_XX only Suggests.
+  - name: install the split-out PostGIS extension packages (PG 19+)
+    yum:
+      name: "{{ packages }}"
+      state: latest
+      update_cache: yes
+    vars:
+      packages:
+      - "percona-address-standardizer{{ major_version }}"
+      - "percona-address-standardizer{{ major_version }}-llvmjit"
+      - "percona-postgis-tiger-geocoder{{ major_version }}"
+    when: (major_version | int) >= 19
+
   - name: Initialize Postgres RHEL
     become: true
     command: /usr/pgsql-{{ major_version }}/bin/postgresql-{{ major_version }}-setup initdb
