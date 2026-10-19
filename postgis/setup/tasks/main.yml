@@ -150,6 +150,10 @@
     set_fact:
       gis_path: "{{ gis_gdal_prefix }}/bin:{{ gis_geos_prefix }}/bin"
       gis_pkg_config_path: "{{ gis_gdal_prefix }}/lib/pkgconfig:{{ gis_geos_prefix }}/lib64/pkgconfig:{{ gis_proj_prefix }}/lib64/pkgconfig"
+      # The PGDG-style libraries are found via RUNPATH, not ld.so.conf.d, so the
+      # tools we build here (shp2pgsql, pgsql2shp, raster2pgsql) need the same
+      # rpaths percona-postgis.spec passes, or they fail to load libgdal/libproj.
+      gis_ldflags: "-Wl,-rpath,{{ gis_gdal_prefix }}/lib -Wl,-rpath,{{ gis_geos_prefix }}/lib64 -Wl,-rpath,{{ gis_proj_prefix }}/lib64"
 
   - name: Install PostGIS build dependencies, version-matched to what percona-postgis35 actually depends on
     yum:
@@ -321,6 +325,7 @@
     environment:
       PATH: "{{ gis_path }}:/usr/pgsql-{{ major_version }}/bin:{{ ansible_env.PATH }}"
       PKG_CONFIG_PATH: "{{ gis_pkg_config_path }}:{{ ansible_env.PKG_CONFIG_PATH | default('') }}"
+      LDFLAGS: "{{ gis_ldflags }}"
     register: postgis_configure
     ignore_errors: true
 
