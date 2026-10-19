@@ -97,17 +97,18 @@
 # member "postgresql0" (config below) -- this is a genuine 3-node cluster:
 # patroni (=node 0), patroni1, patroni2. There is no separate
 # patroni0.service in this role.
+# The packaged patroni.service runs /usr/bin/patroni /etc/patroni/patroni.yml.
 - name: Copy postgresql0.yml for patroni service
   copy:
     src: postgresql0.yml
-    dest: /etc/patroni/postgresql.yml
+    dest: /etc/patroni/patroni.yml
     owner: postgres
     group: postgres
     mode: 0644
 
-- name: Replace server version in postgresql.yml
+- name: Replace server version in patroni.yml
   become: true
-  shell: sed -i 's/16/{{ major_version }}/' /etc/patroni/postgresql.yml
+  shell: sed -i 's/16/{{ major_version }}/' /etc/patroni/patroni.yml
 
 - name: Enable and start patroni with wait
   include_tasks: ../../../../tasks/start_service_with_diagnostics.yml
