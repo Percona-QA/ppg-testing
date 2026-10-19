@@ -6,7 +6,9 @@
 
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
-      postgis_rhel_package_name_prefix: "percona-postgis35_{{ major_version }}"
+      # PostGIS RPM major per PG major, as in obs-packaging's POSTGIS_RPM_MAJOR
+      # macro: PG 19+ ships PostGIS 3.7, PG 14-18 ship 3.5.
+      postgis_rhel_package_name_prefix: "percona-postgis{{ '37' if (major_version | int) >= 19 else '35' }}_{{ major_version }}"
 
   - name: Configure repository
     include_tasks: ../../../../tasks/enable_repo.yml
@@ -92,7 +94,7 @@
     register: shipped_postgis_full_version
 
   - debug:
-      msg: "Shipped percona-postgis35_{{ major_version }} reports: {{ shipped_postgis_full_version.stdout }}"
+      msg: "Shipped {{ postgis_rhel_package_name_prefix }} reports: {{ shipped_postgis_full_version.stdout }}"
 
   # percona-postgis35_XX requires the PGDG-style versioned GIS packages by
   # name (e.g. geos315, proj98, gdal313-libs, libgeotiff17 on EL9/EL10;
