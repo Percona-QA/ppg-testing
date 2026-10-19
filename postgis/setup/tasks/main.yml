@@ -179,6 +179,8 @@
         - SFCGAL
         - SFCGAL-devel
         - json-c-devel
+        # PostGIS 3.7 (PG 19+) requires GMP
+        - gmp-devel
         - protobuf-c-devel
         - libxml2-devel
         - sqlite-devel
