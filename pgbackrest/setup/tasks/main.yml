@@ -41,6 +41,8 @@
       - libbz2-dev
       - libyaml-dev
       - meson
+      - python3-yaml       # test/test.py (pgBackRest 2.60+)
+      - python3-coverage   # test/test.py (pgBackRest 2.60+)
       - libz-dev
       - libyaml-dev
       - libssh2-1-dev
@@ -155,14 +157,34 @@
   # not pgbackrest's own behavior), and `doc` (tests pgbackrest's man-page/
   # reference-doc generation tooling - doc/command/build/* - unrelated to
   # backup/restore correctness and not something we ship or use).
+  #
+  # pgBackRest 2.60.0 replaced test/test.pl with test/test.py: --psql-bin,
+  # --log-level-test-file and --no-coverage-report are gone, module names are
+  # paths (--module=common selects common/...), `build` is now a test of the
+  # project's Python build tooling, and integration tests always need
+  # containers, so --vm=none skips them (the packaged-binary functional test
+  # below covers the real binary). test.pl is kept for older refs.
+- name: Find the pgbackrest test runner
+  stat:
+    path: /tmp/pgbackrest/test/test.py
+  register: pgbackrest_test_py
+
 - name: Run pgbackrest regression
   become_user: postgres
-  command: pgbackrest/test/test.pl --psql-bin=/usr/lib/postgresql/{{ major_version }}/bin \
-    --no-valgrind --log-level-test-file=off --no-coverage-report \
-    --module=common --module=protocol --module=config --module=storage \
-    --module=postgres --module=build --module=info \
-    --module=db --module=command --module=integration \
-    --vm-out --vm=none --no-coverage --test-path /tmp
+  command: "{{ pgbackrest_test_py.stat.exists | ternary(test_py_cmd, test_pl_cmd) }}"
+  vars:
+    test_py_cmd: >-
+      pgbackrest/test/test.py --vm=none --vm-out --no-valgrind --no-coverage
+      --module=common --module=protocol --module=config --module=storage
+      --module=postgres --module=info --module=db --module=command
+      --test-path=/tmp
+    test_pl_cmd: >-
+      pgbackrest/test/test.pl --psql-bin=/usr/lib/postgresql/{{ major_version }}/bin
+      --no-valgrind --log-level-test-file=off --no-coverage-report
+      --module=common --module=protocol --module=config --module=storage
+      --module=postgres --module=build --module=info
+      --module=db --module=command --module=integration
+      --vm-out --vm=none --no-coverage --test-path /tmp
   args:
     chdir: "/tmp"
   ignore_errors: true
