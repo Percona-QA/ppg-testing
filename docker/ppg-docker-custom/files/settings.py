@@ -980,10 +980,36 @@ ppg_versions = {
 
 
 
+def _spec_major(spec):
+    """PG major a versions list describes (its percona-postgresql line), or None."""
+    for line in spec.splitlines():
+        name, _, version = line.strip().partition("=")
+        if name == "percona-postgresql" and version:
+            return version.split(".")[0]
+    return None
+
+
+def expected_versions_for(major):
+    """The EXPECTED_VERSIONS list for PG *major*.
+
+    Upgrade runs get one list per image: EXPECTED_VERSIONS (new major) and
+    OLD_EXPECTED_VERSIONS (old major); one process may look up both (e.g.
+    test_upgrade.py's OLD_SETTINGS and NEW_SETTINGS). Each list names its major
+    in its percona-postgresql line: use the one for *major*. A list known to
+    describe another major is not applied (the tables are used instead); a
+    list that does not say is applied as before.
+    """
+    lists = [os.environ.get("EXPECTED_VERSIONS", ""), os.environ.get("OLD_EXPECTED_VERSIONS", "")]
+    for spec in lists:
+        if spec and _spec_major(spec) == major:
+            return spec
+    first = lists[0]
+    return first if first and _spec_major(first) is None else ""
+
+
 def get_settings(ppg_version):
-    return apply_expected_versions(
-        ppg_versions[ppg_version], os.environ.get("EXPECTED_VERSIONS", ""), ppg_version.split(".")[0]
-    )
+    major = ppg_version.split(".")[0]
+    return apply_expected_versions(ppg_versions[ppg_version], expected_versions_for(major), major)
 
 # Expected package versions given at run time (OBS QA): EXPECTED_VERSIONS holds
 # package=version lines keyed by OBS source package name (e.g.

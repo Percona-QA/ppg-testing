@@ -15,6 +15,10 @@
     OLD_TAG: "{{ OLD_TAG }}"
     NEW_TAG: "{{ NEW_TAG }}"
     UPGRADE_TAG: "{{ UPGRADE_TAG }}"
+    # Per-image package versions from OBS QA (empty: the settings.py tables);
+    # settings.py picks the list matching each version's major.
+    EXPECTED_VERSIONS: "{{ lookup('env', 'EXPECTED_VERSIONS') }}"
+    OLD_EXPECTED_VERSIONS: "{{ lookup('env', 'OLD_EXPECTED_VERSIONS') }}"
     WITH_POSTGIS: "{{ WITH_POSTGIS }}"
     PPG_LABEL_MAINTAINER: "{{ ppg_label_maintainer | default('Percona Development <info@percona.com>') }}"
     PPG_LABEL_VENDOR: "{{ ppg_label_vendor | default('Percona') }}"
