@@ -1062,6 +1062,20 @@ def _expected_version_keys(entry, name, major):
     return [t.format(m=major) for t in EXPECTED_VERSION_PACKAGES.get(name, ())]
 
 
+# RPM package names that differ between builds. Keyed by the canonical name
+# used in settings.py / pg_docker_versions; only the `host.package()` lookup
+# uses the resolved name, so version lookups still key off the canonical name.
+# Patroni's Python dependencies follow the Python it is built with: the
+# released packages use the system python3 (python3-etcd); the OBS spec builds
+# Patroni with Python 3.12 on RHEL 8-10, and the OBS UBI 9 image ships
+# python3.12-etcd (while keeping python3-ydiff). Rather than encode each
+# build's rule, accept whichever candidate is installed.
+RPM_NAME_CANDIDATES = {
+    "python3-etcd": ("python3-etcd", "python3.12-etcd"),
+    "python3-ydiff": ("python3-ydiff", "python3.12-ydiff"),
+}
+
+
 def apply_expected_versions(entry, spec, major):
     """Return *entry* with the versions in *spec* (EXPECTED_VERSIONS) applied.
 

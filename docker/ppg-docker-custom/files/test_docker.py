@@ -284,18 +284,8 @@ def _expected_ubi_major_version():
     return '9'
 
 
-# RPM package names that differ between builds. Keyed by the canonical name
-# used in settings.py / pg_docker_versions; only the `host.package()` lookup
-# uses the resolved name, so version lookups still key off the canonical name.
-# Patroni's Python dependencies follow the Python it is built with: the
-# released packages use the system python3 (python3-etcd); the OBS spec builds
-# Patroni with Python 3.12 on RHEL 8-10, and the OBS UBI 9 image ships
-# python3.12-etcd (while keeping python3-ydiff). Rather than encode each
-# build's rule, accept whichever candidate is installed.
-RPM_NAME_CANDIDATES = {
-    "python3-etcd": ("python3-etcd", "python3.12-etcd"),
-    "python3-ydiff": ("python3-ydiff", "python3.12-ydiff"),
-}
+# RPM package names that differ between builds: see settings.RPM_NAME_CANDIDATES.
+RPM_NAME_CANDIDATES = settings.RPM_NAME_CANDIDATES
 
 
 def _installed_package_name(host, package):

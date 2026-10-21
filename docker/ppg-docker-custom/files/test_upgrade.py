@@ -546,7 +546,11 @@ class TestPostUpgradePackages:
 
     def test_new_version_rpm_packages_installed(self, upgrade_pipeline):
         new_host = upgrade_pipeline["new_host"]
-        missing = [pkg for pkg in NEW_RPM_PACKAGES if new_host.run(f"rpm -q {pkg}").rc != 0]
+        missing = [
+            pkg for pkg in NEW_RPM_PACKAGES
+            if not any(new_host.run(f"rpm -q {name}").rc == 0
+                       for name in settings.RPM_NAME_CANDIDATES.get(pkg, (pkg,)))
+        ]
         assert not missing, f"RPM packages not installed in new image: {missing}"
 
     def test_data_directory_path(self, upgrade_pipeline):
@@ -1026,15 +1030,12 @@ class TestUpgradeImageExtensionFiles:
         )
 
     def test_telemetry_packages_not_installed(self, upgrade_image_host):
-        """The upgrade mediator image ships PG 16, 17, and 18 simultaneously.
-        None of the version-specific telemetry packages nor the telemetry agent
-        should be installed in it."""
-        excluded = [
-            "percona-telemetry-agent",
-            "percona-pg-telemetry16",
-            "percona-pg-telemetry17",
-            "percona-pg-telemetry18",
-        ]
+        """The upgrade mediator image ships PG 16, 17, and 18 simultaneously;
+        the telemetry agent must not be installed in it. The agent is no longer
+        a dependency of any package. percona-pg-telemetry<N> is now a dummy
+        package that the server packages recommend (to smooth package
+        upgrades), so it may be present and is not checked."""
+        excluded = ["percona-telemetry-agent"]
         installed = [pkg for pkg in excluded if upgrade_image_host.run(f"rpm -q {pkg}").rc == 0]
         assert not installed, (
             f"Packages that should not be installed in the upgrade mediator image: {installed}"
