@@ -164,3 +164,39 @@ def test_pg_similarity_keeps_the_table_value(custom, monkeypatch):
     # OBS QA sends the tag name for it; it must not reach the test
     monkeypatch.setenv("EXPECTED_VERSIONS", "percona-pg_similarity=pg_similarity_1_0")
     assert custom.get_settings(RELEASE)["percona-pg_similarity_18"]["version"] == "1.0"
+
+
+def _load(path):
+    spec = importlib.util.spec_from_file_location("settings_" + path.parent.parent.name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+@pytest.mark.parametrize("role", sorted(SETTINGS))
+def test_binary_version_contains_version(role):
+    """apply_expected_versions updates binary_version by replacing the old
+    version inside it; an entry whose binary_version does not contain its
+    version (e.g. version 2.59.1, binary_version "pgBackRest 2.59.2") keeps
+    the stale binary version and fails the image test against OBS builds."""
+    bad = [
+        f"{rel} {pkg}: version {v['version']!r}, binary_version {v['binary_version']!r}"
+        for rel, entry in _load(SETTINGS[role]).ppg_versions.items()
+        for pkg, v in entry.items()
+        if isinstance(v, dict) and "version" in v and isinstance(v.get("binary_version"), str)
+        and v["version"] not in v["binary_version"]
+    ]
+    assert not bad, "binary_version must contain version:\n  " + "\n  ".join(bad)
+
+
+@pytest.mark.parametrize("role", sorted(SETTINGS))
+def test_expected_versions_update_pgbackrest_binary_version(role):
+    """The case that failed for PG 16: OBS builds pgBackRest 2.60.0."""
+    mod = _load(SETTINGS[role])
+    for rel in ("16.15", "17.11", "18.6"):
+        entry = mod.apply_expected_versions(
+            {k: dict(v) if isinstance(v, dict) else v for k, v in mod.ppg_versions[rel].items()},
+            "percona-pgbackrest=2.60.0", rel.split(".")[0])
+        assert entry["percona-pgbackrest"]["version"] == "2.60.0"
+        if "binary_version" in entry["percona-pgbackrest"]:
+            assert entry["percona-pgbackrest"]["binary_version"] == "pgBackRest 2.60.0", rel
