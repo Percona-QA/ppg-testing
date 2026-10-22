@@ -623,17 +623,37 @@ def _build_archive_cluster(
 
 
 def _wait_for_segment_archive(
-    archive_dir: Path, timeout: int = 30
+    archive_dir: Path, timeout: int = 30, cluster=None, segment: Optional[str] = None
 ) -> Optional[Path]:
-    """Wait until at least one 24-character WAL segment lands in archive_dir."""
+    """Wait until a WAL segment is fully archived in archive_dir; return it.
+
+    A segment appears in archive_dir while archive_command (``cp``) is still
+    writing it, so its presence alone does not mean it is complete: a read
+    can see only the start of the file. With *cluster*, wait for PostgreSQL's
+    own confirmation instead: pg_stat_archiver.last_archived_wal changes only
+    after archive_command succeeds, and no segment is left waiting in
+    pg_wal/archive_status (``*.ready``). With *segment*, also until that
+    segment (or a later one) is the last archived. Without *cluster*, the
+    first WAL-named file found is returned, as before.
+    """
     deadline = time.time() + timeout
     while time.time() < deadline:
-        segs = [
-            p for p in archive_dir.iterdir()
-            if p.is_file() and len(p.name) == 24 and "." not in p.name
-        ]
-        if segs:
-            return sorted(segs)[-1]
+        if cluster is not None:
+            last = (cluster.fetchone(
+                "SELECT last_archived_wal FROM pg_stat_archiver") or "").strip()
+            waiting = list(
+                (cluster.data_dir / "pg_wal" / "archive_status").glob("*.ready"))
+            if last and not waiting and (segment is None or last >= segment):
+                path = archive_dir / last
+                if path.is_file():
+                    return path
+        else:
+            segs = [
+                p for p in archive_dir.iterdir()
+                if p.is_file() and len(p.name) == 24 and "." not in p.name
+            ]
+            if segs:
+                return sorted(segs)[-1]
         time.sleep(0.5)
     return None
 
@@ -706,7 +726,9 @@ class TestPgTdeArchiveDecryptRestoreEncrypt:
             src_bytes_pre_switch = src_seg.read_bytes()
 
             cluster.execute("SELECT pg_switch_wal()")
-            archived = _wait_for_segment_archive(archive_dir, timeout=30)
+            archived = _wait_for_segment_archive(
+                archive_dir, timeout=30, cluster=cluster, segment=seg_name_before
+            )
             assert archived is not None, (
                 "No WAL segment was archived within 30s — "
                 f"check archive_command. archive_dir contents: "
@@ -766,7 +788,7 @@ class TestPgTdeArchiveDecryptRestoreEncrypt:
             )
             cluster.execute("CHECKPOINT")
             cluster.execute("SELECT pg_switch_wal()")
-            _wait_for_segment_archive(archive_dir, timeout=15)
+            _wait_for_segment_archive(archive_dir, timeout=15, cluster=cluster)
 
             # Take a cold copy of $PGDATA as our "base backup".
             cluster.stop()
@@ -780,7 +802,7 @@ class TestPgTdeArchiveDecryptRestoreEncrypt:
             time.sleep(1)
             cluster.execute("DROP TABLE rt_t")
             cluster.execute("SELECT pg_switch_wal()")
-            _wait_for_segment_archive(archive_dir, timeout=30)
+            _wait_for_segment_archive(archive_dir, timeout=30, cluster=cluster)
             cluster.stop()
 
             # Restore the backup into a new $PGDATA on a new port; wire
