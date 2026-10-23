@@ -26,7 +26,7 @@
 # the flag is omitted entirely rather than passed unconditionally.
 #
 # Steps:
-#   1.  Enable TO repo (percona-release, or OBS when USE_OBS_REPO is set)
+#   1.  Remove the FROM OBS repo, enable the TO OBS repo
 #   2.  Install TO PostgreSQL packages
 #   3.  Install or build pg_tde for TO version
 #   4.  Stop FROM cluster(s)
@@ -40,15 +40,9 @@
 #  12.  ALTER EXTENSION pg_tde UPDATE
 #  13.  vacuumdb --all --analyze-in-stages
 
-  # --- Enable repo for TO major version ---
-  - name: Enable Percona repo for TO major version
-    command: percona-release enable-only {{ to_repo_version }} {{ to_repo }}
-    when: not use_obs_repo
-
   - name: Switch to the OBS repo for TO major version
     include_tasks:
       file: switch_to_obs_repo.yml
-    when: use_obs_repo
 
   # --- Install TO PostgreSQL packages ---
   - name: Install PostgreSQL TO version packages (RHEL)
@@ -69,46 +63,13 @@
       pkg_release:     "{{ to_pkg_release }}"
     when: ansible_os_family == "Debian"
 
-  # --- Install or build pg_tde for TO version ---
-  - name: Install pg_tde packages for TO version (packages path)
+  # --- Install pg_tde for TO version ---
+  - name: Install pg_tde packages for TO version
     include_tasks:
       file: install_tde_packages.yml
     vars:
       pg_major: "{{ to_major_version }}"
       tde_pkg_version: "{{ to_tde_pkg_version }}"
-    when: install_from_packages | bool
-
-  - name: Build pg_tde from FROM_TDE_BRANCH against TO PG (source, TDE_UPGRADE=false)
-    include_tasks:
-      file: build_tde_source.yml
-    vars:
-      tde_branch_to_build: "{{ from_tde_branch }}"
-      tde_src_dest:        "/tmp/pg_tde_to"
-      tde_build_dest:      "/tmp/pg_tde_to-build"
-      pg_config_path:      "{{ to_pg_config_bin }}"
-      pg_bin_dir:          "{{ to_pg_bin_dir }}"
-      pg_lib_dir:          "{{ to_pg_lib_dir }}"
-      tde_build_log:       "/tmp/tde-to-build.log"
-      tde_install_log:     "/tmp/tde-to-install.log"
-    when:
-      - not (install_from_packages | bool)
-      - not (tde_upgrade | bool)
-
-  - name: Build pg_tde from TO_TDE_BRANCH against TO PG (source, TDE_UPGRADE=true)
-    include_tasks:
-      file: build_tde_source.yml
-    vars:
-      tde_branch_to_build: "{{ to_tde_branch }}"
-      tde_src_dest:        "/tmp/pg_tde_to"
-      tde_build_dest:      "/tmp/pg_tde_to-build"
-      pg_config_path:      "{{ to_pg_config_bin }}"
-      pg_bin_dir:          "{{ to_pg_bin_dir }}"
-      pg_lib_dir:          "{{ to_pg_lib_dir }}"
-      tde_build_log:       "/tmp/tde-to-build.log"
-      tde_install_log:     "/tmp/tde-to-install.log"
-    when:
-      - not (install_from_packages | bool)
-      - tde_upgrade | bool
 
   # ==========================================================================
   # Stop FROM cluster(s)

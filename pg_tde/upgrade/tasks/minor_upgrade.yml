@@ -2,11 +2,9 @@
 # Perform a minor PostgreSQL version upgrade (same major, new minor).
 # This is a package-update followed by a service restart — no pg_upgrade needed.
 #
-# Handles four sub-scenarios driven by tde_upgrade and install_from_packages:
-#   packages + TDE_UPGRADE=false  → update PG packages only
-#   packages + TDE_UPGRADE=true   → update PG packages + pg_tde packages
-#   source   + TDE_UPGRADE=false  → update PG packages, recompile same TDE branch
-#   source   + TDE_UPGRADE=true   → update PG packages, recompile from TO_TDE_BRANCH
+# Packages only, the TO side from OBS:
+#   TDE_UPGRADE=false  → update PG packages only
+#   TDE_UPGRADE=true   → update PG packages + pg_tde packages
 #
 # After the upgrade the to_pg_* facts are aligned to the from_pg_* values since
 # both the FROM and TO versions share the same major version number.
@@ -17,18 +15,12 @@
       state: stopped
     become: true
 
-  # Switch the Percona repo to the TO minor version so package updates pull the right build
-  - name: Enable Percona repo for TO version
-    command: percona-release enable-only {{ to_repo_version }} {{ to_repo }}
-    when: not use_obs_repo
-
   - name: Switch to the OBS repo for TO version
     include_tasks:
       file: switch_to_obs_repo.yml
-    when: use_obs_repo
 
-  # Update the server packages via the shared (pin-aware) install tasks. TO_PKG_RELEASE
-  # pins a specific Percona build increment (e.g. 18.4-2); empty = latest in the channel.
+  # Update the server packages to the newest OBS build (the shared install tasks
+  # support pins, but nothing is pinned).
   - name: Update PostgreSQL {{ from_major_version }} server packages (RHEL)
     include_tasks:
       file: install_pg_packages_rhel.yml
@@ -47,50 +39,14 @@
       pkg_release:     "{{ to_pkg_release }}"
     when: ansible_os_family == "Debian"
 
-  # --- pg_tde from packages + TDE_UPGRADE=true: update pg_tde package ---
-  - name: Update pg_tde packages to latest (packages path, TDE_UPGRADE=true)
+  # --- TDE_UPGRADE=true: update the pg_tde package ---
+  - name: Update pg_tde packages to latest (TDE_UPGRADE=true)
     include_tasks:
       file: install_tde_packages.yml
     vars:
       pg_major: "{{ from_major_version }}"
       tde_pkg_version: "{{ to_tde_pkg_version }}"
-    when:
-      - tde_upgrade | bool
-      - install_from_packages | bool
-
-  # --- pg_tde from source + TDE_UPGRADE=true: rebuild from TO_TDE_BRANCH ---
-  - name: Rebuild pg_tde from TO_TDE_BRANCH (source path, TDE_UPGRADE=true)
-    include_tasks:
-      file: build_tde_source.yml
-    vars:
-      tde_branch_to_build: "{{ to_tde_branch }}"
-      tde_src_dest:        "/tmp/pg_tde_to"
-      tde_build_dest:      "/tmp/pg_tde_to-build"
-      pg_config_path:      "{{ from_pg_config_bin }}"
-      pg_bin_dir:          "{{ from_pg_bin_dir }}"
-      pg_lib_dir:          "{{ from_pg_lib_dir }}"
-      tde_build_log:       "/tmp/tde-to-build.log"
-      tde_install_log:     "/tmp/tde-to-install.log"
-    when:
-      - tde_upgrade | bool
-      - not (install_from_packages | bool)
-
-  # --- pg_tde from source + TDE_UPGRADE=false: recompile same branch against updated PG minor ---
-  - name: Recompile pg_tde from FROM_TDE_BRANCH against updated PG minor (source path, TDE_UPGRADE=false)
-    include_tasks:
-      file: build_tde_source.yml
-    vars:
-      tde_branch_to_build: "{{ from_tde_branch }}"
-      tde_src_dest:        "/tmp/pg_tde_from"
-      tde_build_dest:      "/tmp/pg_tde_from-build"
-      pg_config_path:      "{{ from_pg_config_bin }}"
-      pg_bin_dir:          "{{ from_pg_bin_dir }}"
-      pg_lib_dir:          "{{ from_pg_lib_dir }}"
-      tde_build_log:       "/tmp/tde-from-rebuild.log"
-      tde_install_log:     "/tmp/tde-from-reinstall.log"
-    when:
-      - not (tde_upgrade | bool)
-      - not (install_from_packages | bool)
+    when: tde_upgrade | bool
 
   # Use restarted, not started: on Debian the server-package postinst auto-starts
   # the cluster during the package update (before pg_tde is updated), so a plain

@@ -1,8 +1,7 @@
 ---
 # pg_tde-only upgrade: the PostgreSQL version is unchanged
-# (FROM_VERSION == TO_VERSION). Only pg_tde itself is upgraded — from
-# FROM_TDE_BRANCH to TO_TDE_BRANCH on the source path, or to the latest
-# available package on the packages path.
+# (FROM_VERSION == TO_VERSION). Only pg_tde itself is upgraded: from the
+# released package (repo.percona.com) to the OBS-built one.
 #
 # No pg_upgrade / pg_tde_upgrade is needed: the data directory and PostgreSQL
 # binaries are untouched. We stop the server, rebuild/reinstall pg_tde, restart
@@ -14,38 +13,18 @@
       state: stopped
     become: true
 
-  # No repo switch on the percona-release path: pg_tde updates from the FROM repo.
-  # With USE_OBS_REPO the new pg_tde package comes from OBS instead.
-  - name: Switch to the OBS repo for the pg_tde update (packages path)
+  # The new pg_tde package comes from OBS.
+  - name: Switch to the OBS repo for the pg_tde update
     include_tasks:
       file: switch_to_obs_repo.yml
-    when:
-      - use_obs_repo
-      - install_from_packages | bool
 
-  # --- packages path: update pg_tde package to latest ---
-  - name: Update pg_tde packages to latest (packages path)
+  # --- update the pg_tde package to the OBS build ---
+  - name: Update pg_tde packages to latest
     include_tasks:
       file: install_tde_packages.yml
     vars:
       pg_major: "{{ from_major_version }}"
       tde_pkg_version: "{{ to_tde_pkg_version }}"
-    when: install_from_packages | bool
-
-  # --- source path: rebuild pg_tde from TO_TDE_BRANCH against the same PG ---
-  - name: Rebuild pg_tde from TO_TDE_BRANCH (source path)
-    include_tasks:
-      file: build_tde_source.yml
-    vars:
-      tde_branch_to_build: "{{ to_tde_branch }}"
-      tde_src_dest:        "/tmp/pg_tde_to"
-      tde_build_dest:      "/tmp/pg_tde_to-build"
-      pg_config_path:      "{{ from_pg_config_bin }}"
-      pg_bin_dir:          "{{ from_pg_bin_dir }}"
-      pg_lib_dir:          "{{ from_pg_lib_dir }}"
-      tde_build_log:       "/tmp/tde-to-build.log"
-      tde_install_log:     "/tmp/tde-to-install.log"
-    when: not (install_from_packages | bool)
 
   # restarted (not started) so the cluster always reloads the freshly-installed
   # pg_tde shared library, even if something left it running.

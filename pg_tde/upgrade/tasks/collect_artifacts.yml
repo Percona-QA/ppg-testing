@@ -14,22 +14,14 @@
       # Scenario parameters — written first so they survive even total failures
       cat > "$ARTIFACT_DIR/scenario-params.txt" <<PARAMS
       UPGRADE_TYPE=$UPGRADE_TYPE
-      INSTALL_FROM_PACKAGES=$INSTALL_FROM_PACKAGES
+      TDE_UPGRADE=$TDE_UPGRADE
+      FROM_SOURCE=$FROM_SOURCE
       FROM_REPO=$FROM_REPO
-      TO_REPO=$TO_REPO
-      USE_OBS_REPO=$USE_OBS_REPO
+      FROM_OBS_PROJECT=$FROM_OBS_PROJECT
       OBS_HOST=$OBS_HOST
       OBS_PROJECT=$OBS_PROJECT
-      FROM_TDE_BRANCH=$FROM_TDE_BRANCH
-      TO_TDE_BRANCH=$TO_TDE_BRANCH
-      TDE_UPGRADE=$TDE_UPGRADE
-      TDE_REPO=$TDE_REPO
-      FROM_PKG_RELEASE=$FROM_PKG_RELEASE
-      TO_PKG_RELEASE=$TO_PKG_RELEASE
-      FROM_TDE_PKG_VERSION=$FROM_TDE_PKG_VERSION
-      TO_TDE_PKG_VERSION=$TO_TDE_PKG_VERSION
-      FROM_PERCONA_SERVER_VERSION=$FROM_PERCONA_SERVER_VERSION
-      TO_PERCONA_SERVER_VERSION=$TO_PERCONA_SERVER_VERSION
+      EXPECTED_TO_SERVER_VERSION=$EXPECTED_TO_SERVER_VERSION
+      EXPECTED_TO_TDE_VERSION=$EXPECTED_TO_TDE_VERSION
       PARAMS
 
       # pg_upgrade logs
@@ -81,22 +73,14 @@
     UNIT_RHEL: "postgresql-*"
     UNIT_DEB: "postgresql@*"
     UPGRADE_TYPE:          "{{ upgrade_type }}"
-    INSTALL_FROM_PACKAGES: "{{ install_from_packages }}"
+    TDE_UPGRADE:           "{{ tde_upgrade }}"
+    FROM_SOURCE:           "{{ from_source }}"
     FROM_REPO:             "{{ from_repo }}"
-    TO_REPO:               "{{ to_repo }}"
-    USE_OBS_REPO:          "{{ use_obs_repo | default(false) }}"
+    FROM_OBS_PROJECT:      "{{ from_obs_project_used | default(from_obs_project) }}"
     OBS_HOST:              "{{ obs_host | default(lookup('env', 'OBS_HOST')) }}"
     OBS_PROJECT:           "{{ obs_project | default(lookup('env', 'OBS_PROJECT')) }}"
-    FROM_TDE_BRANCH:       "{{ from_tde_branch }}"
-    TO_TDE_BRANCH:         "{{ to_tde_branch }}"
-    TDE_UPGRADE:           "{{ tde_upgrade }}"
-    TDE_REPO:              "{{ tde_repo }}"
-    FROM_PKG_RELEASE:      "{{ from_pkg_release }}"
-    TO_PKG_RELEASE:        "{{ to_pkg_release }}"
-    FROM_TDE_PKG_VERSION:  "{{ from_tde_pkg_version }}"
-    TO_TDE_PKG_VERSION:    "{{ to_tde_pkg_version }}"
-    FROM_PERCONA_SERVER_VERSION: "{{ from_percona_server_version }}"
-    TO_PERCONA_SERVER_VERSION:   "{{ to_percona_server_version }}"
+    EXPECTED_TO_SERVER_VERSION: "{{ expected_to_server_version }}"
+    EXPECTED_TO_TDE_VERSION:    "{{ expected_to_tde_version }}"
   become: true
   ignore_errors: true
 

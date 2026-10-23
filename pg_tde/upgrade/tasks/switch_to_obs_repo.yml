@@ -1,10 +1,38 @@
 ---
-# OBS only carries the latest minor of each major, so it can only serve the TO
-# side of an upgrade; the FROM side always comes from percona-release. Disable
-# the FROM repo first so the TO packages can only resolve from OBS.
+# Switch from the FROM repo to the TO OBS project, so the TO packages can only
+# resolve from OBS. The FROM repo is removed first:
+#   - repo.percona.com (minor and pg_tde-only upgrades): percona-release disable;
+#   - OBS (major upgrade, the previous major's project): its repo files.
+# Installed FROM packages stay installed (a major upgrade needs both majors).
 
   - name: Disable the FROM percona-release repo
     command: percona-release disable {{ from_repo_version }} {{ from_repo }}
+    when: from_source == 'release'
+
+  - name: Remove the FROM OBS repo (Debian)
+    file:
+      path: "{{ item }}"
+      state: absent
+    loop:
+      - "/etc/apt/sources.list.d/{{ from_obs_project_used }}.list"
+      - "/etc/apt/trusted.gpg.d/{{ from_obs_safe_id }}.gpg"
+    when:
+      - from_source == 'obs'
+      - ansible_os_family == "Debian"
+
+  - name: Remove the FROM OBS repo (RHEL)
+    file:
+      path: "/etc/yum.repos.d/{{ from_obs_safe_id }}.repo"
+      state: absent
+    when:
+      - from_source == 'obs'
+      - ansible_os_family == "RedHat"
+
+  - name: Clear package metadata after removing the FROM OBS repo (RHEL)
+    command: dnf clean all
+    when:
+      - from_source == 'obs'
+      - ansible_os_family == "RedHat"
 
   - name: Enable the OBS repo for the TO version
     include_tasks: "{{ role_path }}/../../tasks/enable_obs_repo.yml"
