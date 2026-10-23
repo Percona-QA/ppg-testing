@@ -134,6 +134,24 @@ _print_header() {
     echo "================================================================"
 }
 
+# Stop a PostgreSQL container so its cluster can be used by pg_upgrade.
+# docker stop kills the server if it has not shut down within the timeout; a
+# killed server leaves postmaster.pid in the data directory, and pg_upgrade
+# then refuses the cluster ("There seems to be a postmaster servicing the ...
+# cluster"). Allow time for a clean shutdown, say if it was killed, and remove
+# a postmaster.pid left behind (the container is stopped, so it is stale).
+_stop_pg_cleanly() {   # <container> <volume> <image>
+    local container=$1 volume=$2 image=$3 code
+    docker stop -t 60 "$container" > /dev/null
+    code=$(docker inspect -f '{{.State.ExitCode}}' "$container" 2>/dev/null || echo "?")
+    if [ "$code" = "137" ]; then
+        echo "  WARNING: $container did not shut down within 60 s and was killed"
+    fi
+    docker rm "$container" > /dev/null
+    docker run --rm -u 0 --entrypoint sh -v "$volume:/data/db" "$image" -c \
+        'if [ -f /data/db/postmaster.pid ]; then rm -f /data/db/postmaster.pid; echo "  Removed a stale postmaster.pid"; fi'
+}
+
 _wait_for_pg() {
     local container="$1" major="$2"
     local bin_dir="/usr/pgsql-${major}/bin"
@@ -231,8 +249,7 @@ docker exec "$SENTINEL_CONTAINER" \
      INSERT INTO ${SENTINEL_TABLE} VALUES ('${SENTINEL_VALUE}');"
 
 echo "  Sentinel inserted: ${SENTINEL_TABLE}.val = '${SENTINEL_VALUE}'"
-docker stop "$SENTINEL_CONTAINER" > /dev/null
-docker rm   "$SENTINEL_CONTAINER" > /dev/null
+_stop_pg_cleanly "$SENTINEL_CONTAINER" "$OLD_VOL" "$OLD_IMAGE"
 
 # Pre-initialise the new cluster volume before running the mediator.
 # This is required for two reasons:
@@ -272,8 +289,7 @@ docker run -d \
     -v "$NEW_VOL:/data/db" \
     "$NEW_IMAGE"
 _wait_for_pg "$PREINIT_CONTAINER" "$NEW_MAJOR"
-docker stop "$PREINIT_CONTAINER" > /dev/null
-docker rm   "$PREINIT_CONTAINER" > /dev/null
+_stop_pg_cleanly "$PREINIT_CONTAINER" "$NEW_VOL" "$NEW_IMAGE"
 echo "  New cluster pre-initialised in volume $NEW_VOL"
 
 # Run the pg_upgrade mediator.
