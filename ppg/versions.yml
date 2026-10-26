@@ -8,6 +8,9 @@
 # minor for minor-upgrade, the previous major's newest minor for major-upgrade
 # -- that one duplicates another instance's default_version, and only
 # tools/tests/test_gen_groups.py links the two, so bump both together.
+# An upgrade section may add skip_reason (e.g. upgrading from an end-of-life
+# major): the Jenkins upgrade job then skips that scenario, starting no machines,
+# and reports the reason. The scenario itself is still generated.
 # The 'gates' lists are the End-play/fail guards at the top of tasks/main.yml:
 # action end_host/end_play/fail(+msg), distribution or family match,
 # os_version, pg version literal and compare op. Everything else is small
@@ -84,6 +87,7 @@ instances:
       dev_switch_cutoff: '14.17'
     major-upgrade:
       default_from_version: ppg-13.23  # ppg-13 is EOL, dropped from this file: frozen
+      skip_reason: PostgreSQL 13 is end-of-life and no longer supported, so there is no supported major to upgrade from into PG 14
       gates:
       - name: End play on Ubuntu 26 and versions older than 14.23
         action: end_host
