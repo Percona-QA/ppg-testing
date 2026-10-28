@@ -148,7 +148,12 @@
       else
         pip install .
       fi
-      pytest
+      # pgbouncer's pytest config turns every warning into an error; since pytest
+      # 9.2.0 that includes pytest-asyncio's start-up warning about the unset
+      # asyncio_default_fixture_loop_scope, which aborts the run (INTERNALERROR).
+      # All of pgbouncer's async fixtures are function-scoped, so 'function' is
+      # what pytest-asyncio uses for them anyway: no change in behaviour.
+      pytest -o asyncio_default_fixture_loop_scope=function
     args:
       chdir: /tmp/pgbouncer
       executable: /bin/bash
