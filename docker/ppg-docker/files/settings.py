@@ -70,6 +70,7 @@ pgrepack = {
     "16.15": {"version": "1.5.3", "binary_version": "pg_repack 1.5.3"},
     "17.11": {"version": "1.5.3", "binary_version": "pg_repack 1.5.3"},
     "18.6": {"version": "1.5.3", "binary_version": "pg_repack 1.5.3"},
+    "19.0": {"version": "1.5.3", "binary_version": "pg_repack 1.5.3"},
 }
 
 pgaudit = {
@@ -142,6 +143,7 @@ pgaudit = {
     "16.15": {"version": "16.1"},
     "17.11": {"version": "17.1"},
     "18.6": {"version": "18.0"},
+    "19.0": {"version": "18.0"},
 }
 
 pg_stat_monitor = {
@@ -214,6 +216,7 @@ pg_stat_monitor = {
     "16.15": {"version": "2.4.1"},
     "17.11": {"version": "2.4.1"},
     "18.6": {"version": "2.4.1"},
+    "19.0": {"version": "2.4.1"},
 }
 
 set_user = {
@@ -286,6 +289,7 @@ set_user = {
     "16.15": {"version": "4.2.0"},
     "17.11": {"version": "4.2.0"},
     "18.6": {"version": "4.2.0"},
+    "19.0": {"version": "4.2.0"},
 }
 
 wal2json = {
@@ -358,6 +362,7 @@ wal2json = {
     "16.15": {"version": "2.6"},
     "17.11": {"version": "2.6"},
     "18.6": {"version": "2.6"},
+    "19.0": {"version": "2.6"},
 }
 
 pg_telemetry = {
@@ -397,6 +402,7 @@ pg_telemetry = {
     "16.15": {"pg_telemetry_version": "1.2","pg_telemetry_package_version": "1.2.0"},
     "17.11": {"pg_telemetry_version": "1.2","pg_telemetry_package_version": "1.2.0"},
     "18.6": {"pg_telemetry_version": "1.2","pg_telemetry_package_version": "1.2.0"},
+    "19.0": {"pg_telemetry_version": "1.2","pg_telemetry_package_version": "1.2.0"},
 }
 
 patroni = {
@@ -420,6 +426,7 @@ patroni = {
     "16.15": {"version": "4.1.5","binary_version": "patroni 4.1.5"},
     "17.11": {"version": "4.1.5","binary_version": "patroni 4.1.5"},
     "18.6": {"version": "4.1.5","binary_version": "patroni 4.1.5"},
+    "19.0": {"version": "4.1.5","binary_version": "patroni 4.1.5"},
 }
 
 pg_tde = {
@@ -435,6 +442,7 @@ pg_tde = {
     "16.15": {"version": "2.2.2","extension_version": "pg_tde 2.2.2","ext_sql_version": "2.2"},
     "17.11": {"version": "2.2.2","extension_version": "pg_tde 2.2.2","ext_sql_version": "2.2"},
     "18.6": {"version": "2.2.2","extension_version": "pg_tde 2.2.2","ext_sql_version": "2.2"},
+    "19.0": {"version": "2.2.2","extension_version": "pg_tde 2.2.2","ext_sql_version": "2.2"},
 }
 
 pgbackrest = {
@@ -458,6 +466,7 @@ pgbackrest = {
     "16.15": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
     "17.11": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
     "18.6": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
+    "19.0": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
 }
 
 # Some packages/fields are built or reported separately for psp-<major> images
@@ -493,6 +502,7 @@ pgvector = {
     "16.15": {"version": "0.8.6", "extension_version": "0.8.6"},
     "17.11": {"version": "0.8.6", "extension_version": "0.8.6"},
     "18.6": {"version": "0.8.6", "extension_version": "0.8.6"},
+    "19.0": {"version": "0.8.6", "extension_version": "0.8.6"},
 }
 
 pg_cron = {
@@ -511,6 +521,7 @@ pg_cron = {
     "16.15": {"version": "1.6.8", "extension_version": "1.6"},
     "17.11": {"version": "1.6.8", "extension_version": "1.6"},
     "18.6": {"version": "1.6.8", "extension_version": "1.6"},
+    "19.0": {"version": "1.6.8", "extension_version": "1.6"},
 }
 
 postgis = {
@@ -534,6 +545,7 @@ postgis = {
     "16.15": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
     "17.11": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
     "18.6": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
+    "19.0": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
 }
 
 python3_etcd = {
@@ -557,6 +569,7 @@ python3_etcd = {
     "16.15": {"version": "0.4.5"},
     "17.11": {"version": "0.4.5"},
     "18.6": {"version": "0.4.5"},
+    "19.0": {"version": "0.4.5"},
 }
 
 python3_ydiff = {
@@ -580,12 +593,14 @@ python3_ydiff = {
     "16.15": {"version": "1.4.2"},
     "17.11": {"version": "1.4.2"},
     "18.6": {"version": "1.4.2"},
+    "19.0": {"version": "1.4.2"},
 }
 
 pg_oidc_validator = {
     "18.3": {"version": "1.0", "extension_version": "1.0"},
     "18.4": {"version": "1.0", "extension_version": "1.0"},
     "18.6": {"version": "1.1.0", "extension_version": "1.1.0"},
+    "19.0": {"version": "1.1.0", "extension_version": "1.1.0"},
 }
 
 # Base extension list — common across all supported major versions.
@@ -1379,6 +1394,56 @@ ppg_versions = {
         "percona-pg_oidc_validator18": pg_oidc_validator["18.6"],
         "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE_PG18, "18"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "18"),
+        "extensions": DOCKER_LIST_EXTENSIONS_PG18,
+        "binaries": [
+            "clusterdb",
+            "createdb",
+            "createuser",
+            "dropdb",
+            "dropuser",
+            "pg_basebackup",
+            "pg_config",
+            "pg_dump",
+            "pg_dumpall",
+            "pg_isready",
+            "pg_receivewal",
+            "pg_recvlogical",
+            "pg_restore",
+            "pg_verifybackup",
+            "psql",
+            "reindexdb",
+            "vacuumdb",
+        ],
+    },
+    "19.0": {
+        "version": "19.0",
+        "percona-version": "19.0.1",
+        "percona-postgresql-common": "293",
+        "percona-postgresql-client-common": "293",
+        "libpq_version": "190000",
+        "percona-pgaudit19": pgaudit["19.0"],
+        "percona-pg_repack19": pgrepack["19.0"],
+        "percona-wal2json19": wal2json["19.0"],
+        "percona-pg_cron_19": pg_cron["19.0"],
+        "percona-pgaudit19_set_user": set_user["19.0"],
+        "percona-pg_stat_monitor19": pg_stat_monitor["19.0"],
+        "percona-pg-telemetry": pg_telemetry["19.0"],
+        "libpq": "Version of libpq: 190000",
+        "percona-patroni": patroni["19.0"],
+        "percona-pgbackrest": pgbackrest["19.0"],
+        "percona-pgvector_19": pgvector["19.0"],
+        "percona-pgvector_19-llvmjit": pgvector["19.0"],
+        "percona-pg_tde19": pg_tde["19.0"],
+        "python3-etcd": python3_etcd["19.0"],
+        "python3-ydiff": python3_ydiff["19.0"],
+        "percona-postgis35_19": postgis["19.0"],
+        "percona-postgis35_19-client": postgis["19.0"],
+        "percona-postgis35_19-gui": postgis["19.0"],
+        "percona-postgis35_19-llvmjit": postgis["19.0"],
+        "percona-postgis35_19-utils": postgis["19.0"],
+        "percona-pg_oidc_validator19": pg_oidc_validator["19.0"],
+        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE_PG18, "19"),
+        "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "19"),
         "extensions": DOCKER_LIST_EXTENSIONS_PG18,
         "binaries": [
             "clusterdb",

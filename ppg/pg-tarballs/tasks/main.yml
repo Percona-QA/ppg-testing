@@ -40,10 +40,12 @@
         msg: "SSL_VERSION={{ ssl_version }} has no OBS tarball repository; use 1, 3 or 3.5."
       when: obs_tarball_repo | length == 0
 
+    # The version may carry a pre-release suffix (19.0.1~rc1), which the
+    # repository's HTML links may write URL-encoded (%7E).
     - name: Set the repository URL
       ansible.builtin.set_fact:
         obs_tarball_dir: "{{ obs_tarball_base }}/repositories/{{ lookup('env', 'OBS_PROJECT') | trim | regex_replace(':', ':/') }}/{{ obs_tarball_repo }}/"
-        obs_tarball_pattern: "percona-postgresql-{{ major_version }}\\.[0-9.]+-{{ obs_tarball_repo | regex_escape }}-linux-{{ obs_tarball_arch }}\\.tar\\.gz"
+        obs_tarball_pattern: "percona-postgresql-{{ major_version }}\\.[0-9.]+(?:(?:~|%7E)[A-Za-z0-9]+)?-{{ obs_tarball_repo | regex_escape }}-linux-{{ obs_tarball_arch }}\\.tar\\.gz"
 
     - name: List the repository and its architecture folder
       ansible.builtin.uri:
@@ -71,7 +73,7 @@
     - name: Fail when the OBS project has no tarball for this host
       ansible.builtin.fail:
         msg: >-
-          No percona-postgresql-{{ major_version }}.*-{{ obs_tarball_repo }}-linux-{{ obs_tarball_arch }}.tar.gz
+          No percona-postgresql-{{ major_version }}.<version>[~<pre-release>]-{{ obs_tarball_repo }}-linux-{{ obs_tarball_arch }}.tar.gz
           in {{ obs_tarball_dir }} (or its {{ obs_tarball_arch }}/ folder).
       when: tarball_url | length == 0
 
