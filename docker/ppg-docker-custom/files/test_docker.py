@@ -36,7 +36,7 @@ EXCLUDED_TELEMETRY_PACKAGES = ["percona-telemetry-agent"] + [
 ]
 
 # --- PostGIS contrib script paths ---
-POSTGIS_MAJOR_VER = pg_docker_versions[f"percona-postgis35_{MAJOR_VER}"]["major_version"]
+POSTGIS_MAJOR_VER = settings.postgis_entry(pg_docker_versions, MAJOR_VER)["major_version"]
 POSTGIS_CONTRIB_DIR = f"/usr/pgsql-{MAJOR_VER}/share/contrib/postgis-{POSTGIS_MAJOR_VER}"
 POSTGIS_LEGACY_SQL = f"{POSTGIS_CONTRIB_DIR}/legacy.sql"
 POSTGIS_UNINSTALL_LEGACY_SQL = f"{POSTGIS_CONTRIB_DIR}/uninstall_legacy.sql"
@@ -827,7 +827,7 @@ def test_postgis_extension(host):
     print(f"Detected PostGIS Extension Version: {actual_version}")
     # Check expected version
 
-    expected_version = pg_docker_versions.get(f"percona-postgis35_{MAJOR_VER}", {}).get(
+    expected_version = settings.postgis_entry(pg_docker_versions, MAJOR_VER).get(
         "extension_version"
     )
     assert actual_version == expected_version, (

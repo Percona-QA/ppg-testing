@@ -1007,6 +1007,18 @@ def expected_versions_for(major):
     return first if first and _spec_major(first) is None else ""
 
 
+
+def postgis_entry(versions, major):
+    """The PostGIS entry for PG *major* in a settings dict, whatever the
+    PostGIS version in its key (percona-postgis35_18, percona-postgis37_19):
+    the version changes with PostGIS releases. {} if there is none."""
+    pattern = re.compile(r"percona-postgis\d+_%s" % re.escape(str(major)))
+    for key, value in versions.items():
+        if pattern.fullmatch(key) and isinstance(value, dict):
+            return value
+    return {}
+
+
 def get_settings(ppg_version):
     major = ppg_version.split(".")[0]
     return apply_expected_versions(ppg_versions[ppg_version], expected_versions_for(major), major)

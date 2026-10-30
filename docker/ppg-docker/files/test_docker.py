@@ -823,9 +823,7 @@ def test_postgis_extension(host):
     print(f"Detected PostGIS Extension Version: {actual_version}")
     # Check expected version
 
-    expected_version = pg_docker_versions.get(f"percona-postgis35_{MAJOR_VER}", {}).get(
-        "extension_version"
-    )
+    expected_version = settings.postgis_entry(pg_docker_versions, MAJOR_VER).get("extension_version")
     assert actual_version == expected_version, (
         f"Expected {expected_version}, but found {actual_version}"
     )

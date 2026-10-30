@@ -106,7 +106,7 @@ NEW_BINARIES = NEW_SETTINGS["binaries"]
 NEW_RPM_PACKAGES = NEW_SETTINGS["rpm_packages"]
 
 # PostGIS legacy script paths on the NEW image
-_NEW_POSTGIS_MAJOR_VER = NEW_SETTINGS.get(f"percona-postgis35_{NEW_MAJOR}", {}).get(
+_NEW_POSTGIS_MAJOR_VER = settings.postgis_entry(NEW_SETTINGS, NEW_MAJOR).get(
     "major_version", "3.5"
 )
 _NEW_POSTGIS_LEGACY_SQL = (
@@ -983,9 +983,7 @@ class TestUpgradeImageExtensionFiles:
         under the correct versioned contrib directory for each PG major version.
         """
         ver_settings = settings.get_settings(major_minor)
-        postgis_major = ver_settings.get(
-            f"percona-postgis35_{major}", {}
-        ).get("major_version", "3.5")
+        postgis_major = settings.postgis_entry(ver_settings, major).get("major_version", "3.5")
         contrib_dir = (
             f"/usr/pgsql-{major}/share/contrib/postgis-{postgis_major}"
         )
