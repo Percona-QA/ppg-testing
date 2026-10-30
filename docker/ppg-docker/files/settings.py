@@ -545,7 +545,7 @@ postgis = {
     "16.15": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
     "17.11": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
     "18.6": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
-    "19.0": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
+    "19.0": {"version": "3.7.0rc3", "major_version": "3.7", "extension_version": "3.7.0rc3"},
 }
 
 python3_etcd = {
@@ -723,6 +723,17 @@ DOCKER_RPM_PACKAGES_TEMPLATE_PG17PLUS = DOCKER_RPM_PACKAGES_TEMPLATE + [
 # PG 18 additionally ships percona-pg_oidc_validator (and inherits pg_tde from PG17PLUS).
 DOCKER_RPM_PACKAGES_TEMPLATE_PG18 = DOCKER_RPM_PACKAGES_TEMPLATE_PG17PLUS + [
     "percona-pg_oidc_validator{}",
+]
+
+# PG 19 ships PostGIS 3.7 (POSTGIS_RPM_MAJOR 37 in obs-packaging), which also
+# split address_standardizer and postgis_tiger_geocoder into their own
+# packages; the PostGIS image installs them (CONTAINER_POSTGIS_EXTRA_COMPONENTS).
+DOCKER_RPM_PACKAGES_TEMPLATE_PG19 = [
+    t.replace("percona-postgis35_", "percona-postgis37_") for t in DOCKER_RPM_PACKAGES_TEMPLATE_PG18
+] + [
+    "percona-address-standardizer{}",
+    "percona-address-standardizer{}-llvmjit",
+    "percona-postgis-tiger-geocoder{}",
 ]
 
 
@@ -1436,13 +1447,13 @@ ppg_versions = {
         "percona-pg_tde19": pg_tde["19.0"],
         "python3-etcd": python3_etcd["19.0"],
         "python3-ydiff": python3_ydiff["19.0"],
-        "percona-postgis35_19": postgis["19.0"],
-        "percona-postgis35_19-client": postgis["19.0"],
-        "percona-postgis35_19-gui": postgis["19.0"],
-        "percona-postgis35_19-llvmjit": postgis["19.0"],
-        "percona-postgis35_19-utils": postgis["19.0"],
+        "percona-postgis37_19": postgis["19.0"],
+        "percona-postgis37_19-client": postgis["19.0"],
+        "percona-postgis37_19-gui": postgis["19.0"],
+        "percona-postgis37_19-llvmjit": postgis["19.0"],
+        "percona-postgis37_19-utils": postgis["19.0"],
         "percona-pg_oidc_validator19": pg_oidc_validator["19.0"],
-        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE_PG18, "19"),
+        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE_PG19, "19"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "19"),
         "extensions": DOCKER_LIST_EXTENSIONS_PG18,
         "binaries": [
@@ -1464,6 +1475,9 @@ ppg_versions = {
             "reindexdb",
             "vacuumdb",
         ],
+        "percona-address-standardizer19": {"version": "3.7.0"},
+        "percona-address-standardizer19-llvmjit": {"version": "3.7.0"},
+        "percona-postgis-tiger-geocoder19": {"version": "2025.2"},
     },
 }
 
@@ -1520,6 +1534,8 @@ EXPECTED_VERSION_PACKAGES = {
     "percona-pg_cron": ("percona-pg_cron_{m}",),
     "percona-pgvector": ("percona-pgvector_{m}", "percona-pgvector_{m}-llvmjit"),
     "percona-pg_oidc_validator": ("percona-pg_oidc_validator{m}",),
+    "percona-address-standardizer": ("percona-address-standardizer{m}", "percona-address-standardizer{m}-llvmjit"),
+    "percona-postgis-tiger-geocoder": ("percona-postgis-tiger-geocoder{m}",),
 }
 
 

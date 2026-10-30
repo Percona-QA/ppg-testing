@@ -32,6 +32,22 @@ else:
 pg_docker_versions = settings.get_settings(MAJOR_MINOR_VER, IS_PSP)
 DOCKER_RHEL_FILES = pg_docker_versions["rhel_files"]
 DOCKER_RPM_PACKAGES = pg_docker_versions["rpm_packages"]
+
+
+def _server_version_string():
+    """The version PostgreSQL reports (psql -V, SHOW server_version): the
+    release (19.0), or for a pre-release build PostgreSQL's own form, e.g.
+    19rc1 when OBS built percona-postgresql 19.0.1~rc1 (EXPECTED_VERSIONS)."""
+    for line in (settings.expected_versions_for(MAJOR_VER) or "").splitlines():
+        name, _, ver = line.partition("=")
+        if name.strip() == "percona-postgresql":
+            m = re.search(r"~((?:alpha|beta|rc)\d+)$", ver.strip())
+            if m:
+                return f"{MAJOR_VER}{m.group(1)}"
+    return MAJOR_MINOR_VER
+
+
+SERVER_VERSION_STRING = _server_version_string()
 DOCKER_EXTENSIONS = pg_docker_versions["extensions"]
 DOCKER_BINARIES = pg_docker_versions["binaries"]
 
@@ -186,9 +202,9 @@ def test_psql_string(host):
     # 'host' now binds to the container
     psql_output = host.check_output("psql -V")
     if IS_PSP:
-        assert f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Server for PostgreSQL {pg_docker_versions['percona-version']}" in host.check_output('psql -V')
+        assert f"psql (PostgreSQL) {SERVER_VERSION_STRING} - Percona Server for PostgreSQL {pg_docker_versions['percona-version']}" in host.check_output('psql -V')
     else:
-        assert f"psql (PostgreSQL) {MAJOR_MINOR_VER} - Percona Distribution" in host.check_output('psql -V')
+        assert f"psql (PostgreSQL) {SERVER_VERSION_STRING} - Percona Distribution" in host.check_output('psql -V')
 
 
 def test_wait_docker_load(host):
@@ -335,7 +351,7 @@ def test_pg_config_server_version(host):
 
 def test_postgresql_query_version(postgresql_query_version):
     assert postgresql_query_version.rc == 0, postgresql_query_version.stderr
-    assert postgresql_query_version.stdout.strip("\n") == f"{MAJOR_MINOR_VER}", (
+    assert postgresql_query_version.stdout.strip("\n") == SERVER_VERSION_STRING, (
         postgresql_query_version.stdout
     )
 
@@ -475,7 +491,7 @@ def test_rpm_package_is_installed(host, package):
     if not IS_PSP and "pg_tde" in package:
         pytest.skip(f"pg_tde not supported on PostgreSQL {MAJOR_VER} (not a PSP image)")
 
-    if not IS_WITH_POSTGIS and "postgis" in package:
+    if not IS_WITH_POSTGIS and ("postgis" in package or "address-standardizer" in package):
         pytest.skip(f"Docker build is without PostGIS so skipping {package}.")
 
     if "oidc_validator" in package and int(MAJOR_VER) < 18:
@@ -709,8 +725,8 @@ def test_rpm_files(file, host):
 
 
 def test_build_with_liburing(host):
-    if MAJOR_VER not in ["18"]:
-        pytest.skip("Skipping, test only for PostgreSQL 18 version")
+    if int(MAJOR_VER) < 18:
+        pytest.skip(f"Skipping, liburing is used from PostgreSQL 18 on (this is {MAJOR_VER})")
 
     ubi_major = _expected_ubi_major_version()
     if ubi_major == '8':
@@ -718,7 +734,7 @@ def test_build_with_liburing(host):
 
     cmd = "pg_config --configure"
     output = host.check_output(cmd)
-    assert "--with-liburing" in output, "PostgreSQL 18 was built without --with-liburing"
+    assert "--with-liburing" in output, f"PostgreSQL {MAJOR_VER} was built without --with-liburing"
 
 
 # wal_compression algorithm -> minimum PostgreSQL major version that supports it
@@ -1553,8 +1569,8 @@ redhat_percona_telemetry_agent = "/etc/sysconfig/percona-telemetry-agent"
 
 @pytest.mark.parametrize("package", telemetry_packages)
 def test_telemetry_package_is_installed(host, package):
-    if int(MAJOR_VER) in [18]:
-        pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+    if int(MAJOR_VER) >= 18:
+        pytest.skip(f"Skipping on PostgreSQL {MAJOR_VER}: no telemetry from PostgreSQL 18 on.")
     pkg = host.package(package)
     if package == "percona-telemetry-agent" and _telemetry_agent_removed_expected():
         # Assert absence rather than skip -- a skip here would silently miss
@@ -1573,8 +1589,8 @@ def test_telemetry_package_is_installed(host, package):
 
 
 def test_telemetry_agent_service_enabled(host):
-    if int(MAJOR_VER) in [18]:
-        pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+    if int(MAJOR_VER) >= 18:
+        pytest.skip(f"Skipping on PostgreSQL {MAJOR_VER}: no telemetry from PostgreSQL 18 on.")
     if _telemetry_agent_removed_expected():
         assert not host.package("percona-telemetry-agent").is_installed, (
             "percona-telemetry-agent is installed, but PG-2620 removed it as "
@@ -1588,8 +1604,8 @@ def test_telemetry_agent_service_enabled(host):
 
 def test_telemetry_log_directory_exists(host):
     """Test if the directory exists."""
-    if int(MAJOR_VER) in [18]:
-        pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+    if int(MAJOR_VER) >= 18:
+        pytest.skip(f"Skipping on PostgreSQL {MAJOR_VER}: no telemetry from PostgreSQL 18 on.")
     _skip_if_telemetry_agent_unavailable()
     logdir = host.file(log_directory)
     assert logdir.exists, f"Directory {log_directory} does not exist."
@@ -1598,8 +1614,8 @@ def test_telemetry_log_directory_exists(host):
 @pytest.mark.parametrize("file_name", log_files)
 def test_telemetry_log_files_exist(host,file_name):
     """Test if the required files exist within the directory."""
-    if int(MAJOR_VER) in [18]:
-        pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+    if int(MAJOR_VER) >= 18:
+        pytest.skip(f"Skipping on PostgreSQL {MAJOR_VER}: no telemetry from PostgreSQL 18 on.")
     _skip_if_telemetry_agent_unavailable()
     file_path = os.path.join(log_directory, file_name)
     log_file_name = host.file(file_path)
@@ -1608,8 +1624,8 @@ def test_telemetry_log_files_exist(host,file_name):
 
 def get_telemetry_agent_conf_file(host):
     """Determine the percona-telemetry-agent path based on the OS."""
-    if int(MAJOR_VER) in [18]:
-        pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+    if int(MAJOR_VER) >= 18:
+        pytest.skip(f"Skipping on PostgreSQL {MAJOR_VER}: no telemetry from PostgreSQL 18 on.")
     _skip_if_telemetry_agent_unavailable()
     dist = host.system_info.distribution
     # if dist.lower() in ["redhat", "centos", "rhel", "rocky"]:
@@ -1621,8 +1637,8 @@ def get_telemetry_agent_conf_file(host):
 
 def test_telemetry_json_directories_exist(host):
     """Test if the history and pg directories exist."""
-    if int(MAJOR_VER) in [18]:
-        pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+    if int(MAJOR_VER) >= 18:
+        pytest.skip(f"Skipping on PostgreSQL {MAJOR_VER}: no telemetry from PostgreSQL 18 on.")
     _skip_if_telemetry_agent_unavailable()
     for directory in common_directories:
         assert host.file(directory).exists, f"Directory {directory} does not exist."
@@ -1630,24 +1646,24 @@ def test_telemetry_json_directories_exist(host):
 
 def test_telemetry_agent_conf_exists(host):
     """Test if the percona-telemetry-agent conf file exists."""
-    if int(MAJOR_VER) in [18]:
-        pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+    if int(MAJOR_VER) >= 18:
+        pytest.skip(f"Skipping on PostgreSQL {MAJOR_VER}: no telemetry from PostgreSQL 18 on.")
     _skip_if_telemetry_agent_unavailable()
     agent_path = get_telemetry_agent_conf_file(host)
     assert host.file(agent_path).exists, f"{agent_path} does not exist."
 
 
 def test_pg_telemetry_package_version(host):
-    if int(MAJOR_VER) in [18]:
-        pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+    if int(MAJOR_VER) >= 18:
+        pytest.skip(f"Skipping on PostgreSQL {MAJOR_VER}: no telemetry from PostgreSQL 18 on.")
     dist = host.system_info.distribution
     pg_telemetry = host.package(f"percona-pg-telemetry{MAJOR_VER}")
     assert pg_docker_versions["percona-pg-telemetry"]['pg_telemetry_package_version'] in pg_telemetry.version
 
 
 def test_pg_telemetry_extension_version(host):
-    if int(MAJOR_VER) in [18]:
-        pytest.skip("Skipping on PostgreSQL 18, as telemetry not available.")
+    if int(MAJOR_VER) >= 18:
+        pytest.skip(f"Skipping on PostgreSQL {MAJOR_VER}: no telemetry from PostgreSQL 18 on.")
     result = host.run("psql -c 'CREATE EXTENSION IF NOT EXISTS percona_pg_telemetry;'")
     assert result.rc == 0, result.stderr
     result = host.run("psql -c 'SELECT percona_pg_telemetry_version();' | awk 'NR==3{print $1}'")
@@ -1664,6 +1680,7 @@ LLVMJIT_MIN_VERSIONS = {
     16: version.parse("16.14"),
     17: version.parse("17.10"),
     18: version.parse("18.4"),
+    19: version.parse("19.0"),
 }
 
 # Minimum PPG patch versions that ship pg_cron, keyed by major version integer.
@@ -1673,12 +1690,14 @@ PG_CRON_MIN_VERSIONS = {
     16: version.parse("16.14"),
     17: version.parse("17.10"),
     18: version.parse("18.4"),
+    19: version.parse("19.0"),
 }
 
 # Minimum PPG patch versions that ship pg_tde_upgrade binary, keyed by major version integer.
 PG_TDE_UPGRADE_MIN_VERSIONS = {
     17: version.parse("17.10"),
     18: version.parse("18.4"),
+    19: version.parse("19.0"),
 }
 
 # Minimum PPG patch versions where percona-telemetry-agent was removed as a
