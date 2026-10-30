@@ -66,6 +66,11 @@ EXPECTED_VERSION_CREATE = {"credcheck"}
 EXPECTED_VERSION_FLAT = {
     "percona-pg_stat_monitor": ("PGSM_version", "PGSM_package_version"),
     "percona-postgis": ("postgis_version", "postgis_package_version"),
+    # The Percona Server version (17.11.1, 18.6.1, 19.0.1~rc1): the server
+    # packages' version, and for a pre-release the server's own version
+    # string (19rc1) are derived from it. Only entries that have the field
+    # (17 and later) are changed.
+    "percona-postgresql": ("percona-version",),
 }
 
 
@@ -2762,7 +2767,7 @@ def get_settings(distro_type):
         },
         "ppg-19.0": {
             "version": "19.0",
-            "percona-version": "19.0.1~beta4",
+            "percona-version": "19.0.1~rc1",
             "deb_pkg_ver": ppg_versions["ppg-19.0"]["deb_pkg_ver"],
             "deb_packages": ppg_versions["ppg-19.0"]["deb_packages"],
             "percona-postgresql-common": "293",

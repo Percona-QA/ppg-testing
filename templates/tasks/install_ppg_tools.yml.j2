@@ -397,6 +397,13 @@
       - "{{postgis_rhel_package_name_prefix}}-gui-debuginfo"
       - "{{postgis_rhel_package_name_prefix}}-llvmjit"
       - "{{postgis_rhel_package_name_prefix}}-utils"
+<% if (postgis_pkg | default('35') | int) >= 37 %>
+      # PostGIS 3.7 ships address_standardizer and the tiger geocoder as
+      # packages of their own.
+      - percona-address-standardizer<< major >>
+      - percona-address-standardizer<< major >>-llvmjit
+      - percona-postgis-tiger-geocoder<< major >>
+<% endif %>
 <% if postgis_gate is defined %>
     when: (ansible_os_family == "RedHat" and pg_version_to_install | string is version('<< postgis_gate >>', '>=', strict=True))
 <% else %>
@@ -415,6 +422,12 @@
         - percona-postgresql-postgis-scripts
         - percona-postgresql-postgis
         - percona-postgis
+<% if (postgis_pkg | default('35') | int) >= 37 %>
+        # PostGIS 3.7 ships address_standardizer and the tiger geocoder as
+        # packages of their own.
+        - percona-postgresql-<< major >>-address-standardizer
+        - percona-postgresql-<< major >>-postgis-tiger-geocoder
+<% endif %>
 <% if postgis_gate is defined %>
     when: (ansible_os_family == "Debian" and pg_version_to_install | string is version('<< postgis_gate >>', '>=', strict=True))
 <% else %>
