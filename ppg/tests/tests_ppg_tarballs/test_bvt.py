@@ -164,10 +164,18 @@ def test_pg_config_server_version(host,get_server_bin_path):
         pytest.mark.xfail(reason="Maybe dev package not install")
 
 
+def _server_version():
+    """The version the server and psql report: the release (19.0), or for an
+    alpha/beta/rc build PostgreSQL's own form (19rc1), as in the package tests."""
+    if settings.is_prerelease(pg_versions):
+        return settings.prerelease_server_version(pg_versions) or pg_versions['version']
+    return pg_versions['version']
+
+
 @pytest.mark.upgrade
 def test_postgresql_query_version(postgresql_query_version):
     assert postgresql_query_version.rc == 0, postgresql_query_version.stderr
-    assert postgresql_query_version.stdout.strip("\n") == pg_versions['version'], postgresql_query_version.stdout
+    assert postgresql_query_version.stdout.strip("\n") == _server_version(), postgresql_query_version.stdout
 
 
 @pytest.mark.upgrade
@@ -205,8 +213,8 @@ def test_extenstions_list(extension_list, host, extension):
         if extension in ['plpythonu', "plpython2u", 'jsonb_plpython2u', 'ltree_plpython2u', 'jsonb_plpythonu',
                             'ltree_plpythonu', 'hstore_plpythonu', 'hstore_plpython2u']:
             pytest.skip("Skipping extension " + extension + " for DEB based in pg: " + os.getenv("VERSION"))
-    # Skip adminpack extension for PostgreSQL 17,18 
-    if settings.MAJOR_VER in ["17","18"] and extension == 'adminpack':
+    # adminpack was removed in PostgreSQL 17
+    if int(settings.MAJOR_VER) >= 17 and extension == 'adminpack':
         pytest.skip("Skipping adminpack extension as it is dropped in PostgreSQL 17")
     assert extension in extension_list
 
@@ -237,8 +245,8 @@ def test_enable_extension(host, get_psql_binary_path , extension):
         'postgis_topology-3','address_standardizer_data_us','postgis_tiger_geocoder','postgis_raster','postgis_topology',
         'postgis_sfcgal','address_standardizer-3','postgis-3','address_standardizer','postgis','address_standardizer_data_us-3']:
             pytest.skip("Skipping extension " + extension + " due to multiple dependencies. Already being checked in test_tools.py.")
-    # Skip adminpack extension for PostgreSQL 17,18
-    if settings.MAJOR_VER in ["17","18"] and extension == 'adminpack':
+    # adminpack was removed in PostgreSQL 17
+    if int(settings.MAJOR_VER) >= 17 and extension == 'adminpack':
         pytest.skip("Skipping adminpack extension as it is dropped in PostgreSQL 17")
     with host.sudo("postgres"):
         install_extension = host.run(get_psql_binary_path + " -c 'CREATE EXTENSION IF NOT EXISTS \"{}\";'".format(extension))
@@ -277,8 +285,8 @@ def test_drop_extension(host,get_psql_binary_path, extension):
         'postgis_topology-3','address_standardizer_data_us','postgis_tiger_geocoder','postgis_raster','postgis_topology',
         'postgis_sfcgal','address_standardizer-3','postgis-3','address_standardizer','postgis','address_standardizer_data_us-3']:
             pytest.skip("Skipping extension " + extension + " due to multiple dependencies. Already being checked in test_tools.py.")
-    # Skip adminpack extension for PostgreSQL 17, 18
-    if settings.MAJOR_VER in ["17","18"] and extension == 'adminpack':
+    # adminpack was removed in PostgreSQL 17
+    if int(settings.MAJOR_VER) >= 17 and extension == 'adminpack':
         pytest.skip("Skipping adminpack extension as it is dropped in PostgreSQL 17")
     with host.sudo("postgres"):
         drop_extension = host.run(get_psql_binary_path + " -c 'DROP EXTENSION if exists \"{}\" CASCADE;'".format(extension))
@@ -357,9 +365,9 @@ def test_postgres_client_string(host, get_psql_binary_path):
     if settings.MAJOR_VER in ["11"]:
         pytest.skip("Skipping for ppg 11")
     if settings.MAJOR_VER in ["17"]:
-        assert f"psql (PostgreSQL) {pg_versions['version']} - Percona Server for PostgreSQL {pg_versions['percona-version']}" in host.check_output(f"{get_psql_binary_path}  -V")
+        assert f"psql (PostgreSQL) {_server_version()} - Percona Server for PostgreSQL {pg_versions['percona-version']}" in host.check_output(f"{get_psql_binary_path}  -V")
     else:
-        assert f"psql (PostgreSQL) {pg_versions['version']}" in host.check_output(f"{get_psql_binary_path}  -V")
+        assert f"psql (PostgreSQL) {_server_version()}" in host.check_output(f"{get_psql_binary_path}  -V")
 
 
 def test_start_stop_postgresql(start_stop_postgresql):
