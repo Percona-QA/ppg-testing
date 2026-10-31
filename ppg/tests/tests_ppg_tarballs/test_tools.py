@@ -1,4 +1,5 @@
 import os
+import re
 import pytest
 import time
 import testinfra.utils.ansible_runner
@@ -1883,8 +1884,16 @@ def _expected(entry_key, field="version"):
     return value
 
 
+def _pgaudit_extension_version(version):
+    """pgaudit's extension version for a package version. pgaudit's
+    pre-release tags already declare the version they lead to: tag 19beta4 has
+    default_version = '19.0' in pgaudit.control."""
+    m = re.fullmatch(r"(\d+)(?:alpha|beta|rc)\d+", str(version))
+    return f"{m.group(1)}.0" if m else version
+
+
 def test_pgaudit_version(host, get_server_path):
-    expected = _expected("pgaudit")
+    expected = _pgaudit_extension_version(_expected("pgaudit"))
     with host.sudo():
         found = _control_default_version(host, get_server_path, "pgaudit")
     assert found, "pgaudit.control not found or without default_version"
