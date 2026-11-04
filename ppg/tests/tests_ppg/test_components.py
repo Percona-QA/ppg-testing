@@ -90,7 +90,7 @@ def test_deb_package_is_installed(host, package):
     pkg = host.package(package)
     assert pkg.is_installed
     expected = settings.expected_deb_pkg_versions(pg_versions)
-    assert settings.strip_obs_release_suffix(pkg.version) in expected,\
+    assert settings.deb_version_matches(pkg.version, expected),\
         f"Expected version {expected}. Actual version {pkg.version}"
 
 

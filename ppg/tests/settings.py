@@ -122,6 +122,23 @@ def strip_obs_release_suffix(version):
     return _OBS_RELEASE_SUFFIX_RE.sub("", version)
 
 
+# OBS sets every package's Debian revision from one macro (PKG_REVISION), so
+# it differs between packages and changes when the build team bumps it. It is
+# packaging metadata, not the version under test: compare epoch, upstream
+# version and distribution (1:293-2.bookworm and 1:293-1.bookworm match).
+_DEB_REVISION_RE = re.compile(r"-[0-9]+(?=\.[a-z]+$)")
+
+
+def deb_version_key(version):
+    return _DEB_REVISION_RE.sub("", strip_obs_release_suffix(version))
+
+
+def deb_version_matches(version, expected):
+    """True if the installed Debian version matches one of *expected*,
+    ignoring the Debian revision (and OBS's release suffix)."""
+    return deb_version_key(version) in {deb_version_key(v) for v in expected}
+
+
 # From 17 on, packages may carry either the upstream version (e.g. 18.6,
 # repo.percona.com builds) or the Percona Server version (e.g. 18.6.1, OBS
 # builds). Accept either one.
