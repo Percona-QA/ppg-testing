@@ -132,6 +132,22 @@
       PATH: "/usr/lib/postgresql/{{ major_version }}/bin:{{ ansible_env.PATH }}"
     become_user: postgres
 
+  # PostgreSQL 19 no longer accepts standard_conforming_strings = off
+  # ("non-standard string literals are not supported"), but pgbouncer's
+  # test_track_extra_parameters still switches it ON/OFF (1.26.1 and master).
+  # On PG 19+ drop just that parameter from the test's two tables, so it
+  # still checks the other tracked parameters. No-op once upstream adapts.
+  - name: Drop standard_conforming_strings from test_track_extra_parameters (PG 19+)
+    lineinfile:
+      path: /tmp/pgbouncer/test/test_misc.py
+      regexp: "{{ item }}"
+      state: absent
+    loop:
+      - '^\s*"standard_conforming_strings": \["ON", "OFF"\],\s*$'
+      - '^\s*"standard_conforming_strings": \["on", "off"\],\s*$'
+    when: major_version | int >= 19
+    become_user: postgres
+
   # pgbouncer's own test suite (test/utils.py) already supports pointing at
   # an arbitrary binary via the BOUNCER_EXE env var: `BOUNCER_EXE =
   # os.environ.get("BOUNCER_EXE", TEST_DIR / "../pgbouncer")`
