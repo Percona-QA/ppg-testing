@@ -19,20 +19,22 @@
 # Debian: pg_createcluster creates the new data dir; config lives under
 #         /etc/postgresql/<ver>/main, so pg_tde_upgrade is told where to find
 #         it via --old-options/--new-options '-c config_file=...'.
-# Both initialize the new cluster with --no-data-checksums to match the FROM
-# cluster (pg_upgrade requires matching checksum settings). --no-data-checksums
-# only exists as an initdb option from PG 18 onward (checksums became
-# default-on there); for TO major < 18, checksums already default to off, so
-# the flag is omitted entirely rather than passed unconditionally.
+# pg_upgrade requires matching data checksum settings, and initdb enables
+# checksums by default from PG 18. The new cluster keeps initdb's default; just
+# before pg_tde_upgrade (both clusters stopped), checksums are enabled on the
+# FROM cluster if the TO cluster has them and the FROM one does not (17 -> 18).
+# pg_tde_checksums, not pg_checksums: the cluster holds encrypted tables, and
+# pg_tde ships its own encryption-aware version of the tool.
 #
 # Steps:
 #   1.  Remove the FROM OBS repo, enable the TO OBS repo
 #   2.  Install TO PostgreSQL packages
 #   3.  Install or build pg_tde for TO version
 #   4.  Stop FROM cluster(s)
-#   5.  Create TO data dir (RHEL initdb / Debian pg_createcluster), no checksums
+#   5.  Create TO data dir (RHEL initdb / Debian pg_createcluster)
 #   6.  Stop the auto-started TO cluster
 #   7.  Add pg_tde to TO cluster postgresql.conf  ← BEFORE pg_tde_upgrade
+#   7b. Match the FROM cluster's data checksums to the TO cluster
 #   8.  pg_tde_upgrade --link
 #   9.  Drop old FROM cluster (Debian)
 #  10.  Start TO cluster
@@ -90,14 +92,12 @@
     when: ansible_os_family == "Debian"
 
   # ==========================================================================
-  # Create TO data directory (no checksums, to match the FROM cluster)
+  # Create TO data directory (initdb's default data checksums)
   # ==========================================================================
 
   - name: Initialize TO data directory (RHEL)
     command: /usr/pgsql-{{ to_major_version }}/bin/postgresql-{{ to_major_version }}-setup initdb
     become: true
-    environment:
-      PGSETUP_INITDB_OPTIONS: "{{ '--no-data-checksums' if to_major_version | int >= 18 else '' }}"
     when: ansible_os_family == "RedHat"
     ignore_errors: true
 
@@ -112,7 +112,6 @@
   - name: Create TO cluster data directory (Debian)
     command: >-
       pg_createcluster {{ to_major_version }} main
-      {{ '-- --no-data-checksums' if to_major_version | int >= 18 else '' }}
     become: true
     when: ansible_os_family == "Debian"
     ignore_errors: true
@@ -136,6 +135,28 @@
       file: configure_tde_conf.yml
     vars:
       pg_conf: "{{ to_pg_conf }}"
+
+  # pg_upgrade needs the same data checksum setting on both clusters. If the
+  # TO cluster has checksums (initdb's default from PG 18) and the FROM one
+  # does not (17 and earlier), enable them on the FROM cluster. Both are
+  # stopped here. pg_tde_checksums: encryption-aware, from the pg_tde package.
+  - name: Match the FROM cluster's data checksums to the TO cluster
+    become: true
+    become_user: postgres
+    shell: |
+      set -eo pipefail
+      on() { "$1/pg_controldata" -D "$2" | grep -qE '^Data page checksum version:[[:space:]]+[1-9]'; }
+      if on {{ to_bin }} {{ to_data }} && ! on {{ from_bin }} {{ from_data }}; then
+        echo "Enabling data checksums on the FROM cluster to match the TO cluster"
+        {{ from_bin }}/pg_tde_checksums --enable -D {{ from_data }}
+      fi
+    args:
+      executable: /bin/bash
+    vars:
+      from_bin: "{{ ('/usr/pgsql-%s/bin' if ansible_os_family == 'RedHat' else '/usr/lib/postgresql/%s/bin') | format(from_major_version) }}"
+      to_bin: "{{ ('/usr/pgsql-%s/bin' if ansible_os_family == 'RedHat' else '/usr/lib/postgresql/%s/bin') | format(to_major_version) }}"
+      from_data: "{{ ('/var/lib/pgsql/%s/data' if ansible_os_family == 'RedHat' else '/var/lib/postgresql/%s/main') | format(from_major_version) }}"
+      to_data: "{{ ('/var/lib/pgsql/%s/data' if ansible_os_family == 'RedHat' else '/var/lib/postgresql/%s/main') | format(to_major_version) }}"
 
   # ==========================================================================
   # Run pg_tde_upgrade --link
