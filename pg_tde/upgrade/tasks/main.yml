@@ -196,9 +196,12 @@
         when: ansible_os_family == "Debian"
 
       # FROM from repo.percona.com (minor and pg_tde-only upgrades): the version
-      # must be released. A pg_tde-only upgrade keeps the server version, so it
-      # can only run when the OBS server version is also released: skip it
-      # otherwise. For other upgrades a missing release is an error.
+      # must be released. If it is not (404), skip, as ppg-upgrade-parallel
+      # does: before a major's first release (e.g. PG 19 until 19.0 is out)
+      # there is no released minor to upgrade from, and a pg_tde-only upgrade
+      # keeps the server version, so it also needs that version released. The
+      # upgrade then runs by itself once the release exists. Other errors (not
+      # a 404) still fail the uri check below.
       - name: Check the FROM version is released on repo.percona.com
         uri:
           url: "https://repo.percona.com/{{ from_repo_version }}/"
@@ -207,26 +210,21 @@
         register: from_release_check
         when: from_source == 'release'
 
-      - name: Skip the pg_tde-only upgrade (server version not released yet)
+      - name: Skip the upgrade (FROM version not released yet)
         when:
           - from_source == 'release'
-          - upgrade_type == 'tde_only'
           - from_release_check.status == 404
         block:
           - name: Explain the skip
             debug:
               msg: >-
-                {{ from_version_str }} is not released on repo.percona.com yet: a pg_tde-only
-                upgrade needs the same server version released and in OBS. Skipped.
+                {{ from_version_str }} is not released on repo.percona.com yet
+                (https://repo.percona.com/{{ from_repo_version }}/ returned 404):
+                {{ 'a pg_tde-only upgrade needs the same server version released and in OBS'
+                   if upgrade_type == 'tde_only' else 'there is no released minor to upgrade from' }}.
+                Skipped.
           - name: End the play for this host
             meta: end_host
-
-      - name: Fail if the FROM version is not released
-        fail:
-          msg: "{{ from_version_str }} is not on repo.percona.com (https://repo.percona.com/{{ from_repo_version }}/ returned 404)"
-        when:
-          - from_source == 'release'
-          - from_release_check.status == 404
 
       - name: Enable Percona repo for FROM version
         command: percona-release enable-only {{ from_repo_version }} {{ from_repo }}
