@@ -48,12 +48,6 @@
     cmd: "/usr/pgsql-{{ prev }}/bin/postgresql-{{ prev }}-setup initdb"
   become: true
   when: ansible_os_family == "RedHat"
-
-- name: Enable checksums on Percona PostgreSQL {{ prev }} cluster
-  ansible.builtin.command:
-    cmd: "/usr/pgsql-{{ prev }}/bin/pg_checksums --enable -D /var/lib/pgsql/{{ prev }}/data"
-  become: true
-  when: ansible_os_family == "RedHat"
 {% else %}
 - name: Initialize Postgres RHEL
   command: /usr/pgsql-{{ prev }}/bin/postgresql-{{ prev }}-setup initdb
@@ -331,9 +325,9 @@
   when: ansible_os_family == "Debian"
 
 {% if major >= 18 %}
-- name: Create PostgreSQL {{ major }} cluster on Debian with no checksums
+- name: Create PostgreSQL {{ major }} cluster on Debian
   ansible.builtin.command: >
-    /usr/bin/pg_createcluster {{ major }} main --port=5433 -- --no-data-checksums
+    /usr/bin/pg_createcluster {{ major }} main --port=5433
   become: true
   become_user: postgres
   when: ansible_os_family == "Debian"
@@ -381,6 +375,27 @@
 - pause:
     minutes: 1
 {% endif %}
+
+# pg_upgrade needs the same data checksum setting on both clusters. initdb
+# enables checksums by default from PG 18, so an older cluster upgraded into
+# 18 or later has none. Make the old cluster match the new one: if the new
+# cluster has checksums and the old one does not, enable them on the old one
+# (both are stopped here). No-op when both match, e.g. 16 -> 17 or 18 -> 19.
+{% for fam, bin, data in [("RedHat", "/usr/pgsql-%s/bin", "/var/lib/pgsql/%s/data"), ("Debian", "/usr/lib/postgresql/%s/bin", "/var/lib/postgresql/%s/main")] %}
+- name: Match the old cluster's data checksums to the new one ({{ fam }})
+  ansible.builtin.shell: |
+    set -eo pipefail
+    on() { "$1/pg_controldata" -D "$2" | grep -qE '^Data page checksum version:[[:space:]]+[1-9]'; }
+    if on {{ bin % major }} {{ data % major }} && ! on {{ bin % prev }} {{ data % prev }}; then
+      echo "Enabling data checksums on the old cluster to match the new one"
+      {{ bin % prev }}/pg_checksums --enable -D {{ data % prev }}
+    fi
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: postgres
+  when: ansible_os_family == "{{ fam }}"
+{% endfor %}
 
 - name: Execute pg_upgrade RHEL
   command: /usr/pgsql-{{ major }}/bin/pg_upgrade --old-bindir /usr/pgsql-{{ prev }}/bin --new-bindir /usr/pgsql-{{ major }}/bin --old-datadir /var/lib/pgsql/{{ prev }}/data --new-datadir /var/lib/pgsql/{{ major }}/data
