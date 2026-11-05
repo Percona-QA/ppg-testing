@@ -1405,6 +1405,21 @@ ETCD_DATA_DIR = "/tmp/etcd_smoke_data"
 ETCD_PID_PATH = "/tmp/etcd_smoke.pid"
 
 
+def _stop_etcd(host):
+    """Stop the smoke-test etcd and wait until it has exited and released its
+    ports. pkill only sends SIGTERM and returns; etcd needs a moment to shut
+    down (longer on slow machines), and starting the next test's etcd before
+    then fails with 'bind: address already in use'. Call as root."""
+    pid = host.run(f"cat {ETCD_PID_PATH} 2>/dev/null").stdout.strip()
+    _run(host, f"pkill -F {ETCD_PID_PATH}", best_effort=True)
+    ports = (ETCD_CLIENT_PORT, ETCD_PEER_PORT)
+    stopped = lambda: (not pid or host.run(f"kill -0 {pid}").rc != 0) and not any(_port_open(host, p) for p in ports)
+    if not _wait_until(stopped, timeout=20):
+        if pid:
+            _run(host, f"kill -9 {pid}", best_effort=True)
+        _wait_until(lambda: not any(_port_open(host, p) for p in ports), timeout=10)
+
+
 @pytest.fixture()
 def etcd_bin_path(host):
     return os.path.join(INSTALL_PATH, 'percona-etcd', 'bin')
@@ -1416,7 +1431,7 @@ def standalone_etcd(host, etcd_bin_path):
     # by the user we'd sudo to, and kill() on a process you don't own fails
     # with EPERM. pkill -F, not -f -- see _run()'s docstring.
     with host.sudo():
-        _run(host, f"pkill -F {ETCD_PID_PATH}", best_effort=True)
+        _stop_etcd(host)
         _run(host, f"rm -rf {ETCD_DATA_DIR} {ETCD_PID_PATH}", best_effort=True)
     with host.sudo("postgres"):
         _run(
@@ -1454,7 +1469,7 @@ def standalone_etcd(host, etcd_bin_path):
         # failing test, so this is free on a pass and gives the etcd log for
         # any failure in the test body -- not just a setup-time timeout.
         print(f"--- etcd_smoke.log ---\n{host.run('cat /tmp/etcd_smoke.log').stdout}")
-        _run(host, f"pkill -F {ETCD_PID_PATH}", best_effort=True)
+        _stop_etcd(host)
         _run(host, f"rm -rf {ETCD_DATA_DIR} {ETCD_PID_PATH} /tmp/etcd_smoke.log", best_effort=True)
 
 
