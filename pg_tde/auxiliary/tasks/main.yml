@@ -399,6 +399,26 @@
     # Only run if there are actual results in the list
     when: failed_log_outputs.results | default([]) | length > 0
 
+  # The test log shows "pg_ctl: could not start server" but not why: the
+  # server writes the reason to its own log, which test_runner saves per
+  # failed test (failed_tests/<test>_<time>/*server.log). Show the end of
+  # each, so the real error is in the job output, not only in the artifacts.
+  - name: Read the server logs saved for failed tests
+    shell: |
+      for f in $(find /tmp/pgtest/failed_tests -mindepth 2 -maxdepth 2 -name '*server.log' 2>/dev/null | sort); do
+        echo "===== $f"
+        tail -n 25 "$f"
+      done
+    register: failed_server_logs
+    become: true
+    ignore_errors: true
+    when: failed_log_paths | length > 0
+
+  - name: Display the server logs saved for failed tests
+    debug:
+      var: failed_server_logs.stdout_lines
+    when: failed_server_logs.stdout_lines | default([]) | length > 0
+
   - name: Show stderr if test fails
     debug:
       var: regression.stderr_lines
