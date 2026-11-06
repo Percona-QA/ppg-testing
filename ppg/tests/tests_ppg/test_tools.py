@@ -855,10 +855,12 @@ def test_etcd(host):
 
 
 def test_python_etcd(host):
+    # The etcd client for Patroni's Python 3.12 is python3.12-etcd on every
+    # RHEL from 8 on (the empty python3-etcd compat package was dropped).
     dist = host.system_info.distribution
-    if not is_rpm(dist) or "8" not in host.system_info.release:
-        pytest.skip("python3-etcd is only shipped as a package on RHEL 8")
-    package = host.package("python3-etcd")
+    if not is_rpm(dist):
+        pytest.skip("The etcd Python package is checked on RHEL-based platforms")
+    package = host.package("python3.12-etcd")
     assert package.is_installed
 
 

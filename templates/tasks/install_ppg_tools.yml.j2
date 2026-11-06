@@ -731,7 +731,7 @@
       packages:
       - etcd
       - percona-haproxy
-      - python3-etcd
+      - python3.12-etcd
     when: ansible_os_family == "RedHat"
 
   - name: Install patroni related packages Debian

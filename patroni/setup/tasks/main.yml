@@ -53,7 +53,7 @@
     - percona-postgresql{{ major_version }}-server
     - openssl-devel
     - etcd
-    - python3-etcd
+    - python3.12-etcd
     - percona-haproxy
     - percona-patroni
   environment:
