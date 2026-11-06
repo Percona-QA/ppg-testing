@@ -1,7 +1,10 @@
 ---
   - name: Setting facts so that they will be persisted in the fact cache
     ansible.builtin.set_fact:
-      postgis_rhel_package_name_prefix: "percona-postgis35_{{ major_version }}"
+      # PostGIS major per PG major, as obs-packaging's POSTGIS_RPM_MAJOR:
+      # 3.5 up to PG 18, 3.7 for PG 19.
+      postgis_rpm_major: "{{ '37' if major_version | int >= 19 else '35' }}"
+      postgis_rhel_package_name_prefix: "percona-postgis{{ '37' if major_version | int >= 19 else '35' }}_{{ major_version }}"
 
   - debug:
       msg: "Value of postgis_rhel_package_name_prefix is : {{ postgis_rhel_package_name_prefix }}"
@@ -208,11 +211,17 @@
 
   - name: Install percona-postgis RHEL
     yum:
-      name: "{{ packages }}"
+      name: "{{ packages + (postgis37_split_packages if postgis_rpm_major | int >= 37 else []) }}"
       state: latest
       update_cache: yes
     vars:
       postgres_version: "{{ major_version }}"
+      # PostGIS 3.7 ships address_standardizer and the tiger geocoder as
+      # packages of their own.
+      postgis37_split_packages:
+      - "percona-address-standardizer{{ major_version }}"
+      - "percona-address-standardizer{{ major_version }}-llvmjit"
+      - "percona-postgis-tiger-geocoder{{ major_version }}"
       packages:
       - "{{postgis_rhel_package_name_prefix}}"
       - "{{postgis_rhel_package_name_prefix}}-client"
