@@ -344,6 +344,10 @@
       - percona-postgresql{{ postgres_version }}
       - percona-postgresql{{ postgres_version }}-contrib
       - percona-postgresql{{ postgres_version }}-devel
+      # pg_tde's tools link PostgreSQL's static helper libraries
+      # (libpgfeutils.a; on PG 19 also libpgport/libpgcommon), which are in
+      # -static since PG-2890, as in OBS's own pg_tde build (BuildRequires).
+      - percona-postgresql{{ postgres_version }}-static
       - percona-postgresql{{ postgres_version }}-libs
       - percona-postgresql{{ postgres_version }}-plperl
       - percona-postgresql{{ postgres_version }}-plpython3
@@ -368,6 +372,10 @@
       - percona-postgresql{{ postgres_version }}
       - percona-postgresql{{ postgres_version }}-contrib
       - percona-postgresql{{ postgres_version }}-devel
+      # pg_tde's tools link PostgreSQL's static helper libraries
+      # (libpgfeutils.a; on PG 19 also libpgport/libpgcommon), which are in
+      # -static since PG-2890, as in OBS's own pg_tde build (BuildRequires).
+      - percona-postgresql{{ postgres_version }}-static
       - percona-postgresql{{ postgres_version }}-libs
       - percona-postgresql{{ postgres_version }}-plperl
       - percona-postgresql{{ postgres_version }}-plpython3
