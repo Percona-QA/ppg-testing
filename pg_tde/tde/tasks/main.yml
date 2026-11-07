@@ -470,7 +470,7 @@
     - ansible_os_family == 'RedHat'
     - ansible_distribution_major_version == '8'
 
-# wal_archiving.pl fix for RHEL/Rocky/OL on PG17.
+# wal_archiving.pl fix for RHEL/Rocky/OL.
 #
 # On Debian, $primary->stop wins the race: the WAL archiver finishes archiving
 # the shutdown-checkpoint segment before the postmaster kills it. The replica
@@ -483,7 +483,8 @@
 # does not finish the last segment before it is killed. The replica cannot
 # restore the shutdown-checkpoint segment and times out.
 #
-# Two-part fix applied to all RHEL/OL/Rocky 8+ for PG < 18:
+# Two-part fix applied to all RHEL/OL/Rocky 8+, every PG major (the race is
+# not version-specific: it also made PG 19's wal_archiving.pl time out on RHEL):
 #
 # 1. Force pg_switch_wal() before stop and poll until that segment is
 #    archived. This ensures all data WAL up to the switch LSN is in the
@@ -519,7 +520,6 @@
   when:
     - ansible_os_family == 'RedHat'
     - ansible_distribution_major_version | int >= 8
-    - (major_version | int) < 18
     - tde_build_output.rc | default(1) == 0
 
 - name: Patch wal_archiving.pl - use smart shutdown on RHEL so archiver drains before exit
@@ -531,7 +531,6 @@
   when:
     - ansible_os_family == 'RedHat'
     - ansible_distribution_major_version | int >= 8
-    - (major_version | int) < 18
     - tde_build_output.rc | default(1) == 0
 
 # After smart shutdown the WAL archiver has processed all .ready segments,
@@ -582,10 +581,10 @@
 # Percona RPM PostgreSQL sets logging_collector = on by default.  With the
 # logging collector active, recovery messages (including "waiting for WAL to
 # become available") go to pgdata/log/, not to the startup log file that
-# wait_for_log() checks in PG17's test framework.  PG18's framework was
-# updated to search pgdata/log/ too; PG17's was not.
+# wait_for_log() checks. PostgreSQL's wait_for_log() reads only the test's
+# log file, in every version (PG 19's wal_archiving.pl timed out on RHEL).
 # Fix: disable the logging collector on both replicas so all output goes to
-# the startup log where PG17's wait_for_log() can find it.
+# the log file wait_for_log() reads. Applied to every major.
 - name: Patch wal_archiving.pl - disable logging_collector on replica_enc for wait_for_log
   ansible.builtin.replace:
     path: /tmp/pg_tde/t/wal_archiving.pl
@@ -597,7 +596,6 @@
   when:
     - ansible_os_family == 'RedHat'
     - ansible_distribution_major_version | int >= 8
-    - (major_version | int) < 18
     - tde_build_output.rc | default(1) == 0
 
 - name: Patch wal_archiving.pl - disable logging_collector on replica_plain for wait_for_log
@@ -611,7 +609,6 @@
   when:
     - ansible_os_family == 'RedHat'
     - ansible_distribution_major_version | int >= 8
-    - (major_version | int) < 18
     - tde_build_output.rc | default(1) == 0
 
 # run_kmip_vault_server.yml is now used only for OpenSSL 1.x platforms
