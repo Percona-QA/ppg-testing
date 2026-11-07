@@ -1521,6 +1521,27 @@ def postgis_entry(versions, major):
     return {}
 
 
+# credcheck ships in every major from the Q4'26 minor releases on, and the
+# images install percona-credcheck<major>. Add it (package, version entry,
+# extension) to those releases only; extension lists are shared between
+# releases of a major, so each gets its own copy.
+CREDCHECK_FIRST_RELEASE = {"14": "14.24", "15": "15.19", "16": "16.15", "17": "17.11", "18": "18.6", "19": "19.0"}
+
+
+def _release_tuple(release):
+    return tuple(int(x) for x in release.split("."))
+
+
+for _release, _entry in ppg_versions.items():
+    _major = _release.split(".")[0]
+    _first = CREDCHECK_FIRST_RELEASE.get(_major)
+    if _first and _release_tuple(_release) >= _release_tuple(_first):
+        _pkg = f"percona-credcheck{_major}"
+        _entry["rpm_packages"] = list(_entry["rpm_packages"]) + [_pkg]
+        _entry[_pkg] = {"version": "5.0"}
+        _entry["extensions"] = list(_entry["extensions"]) + ["credcheck"]
+
+
 def get_settings(ppg_version, is_psp=False):
     result = dict(ppg_versions[ppg_version])
     if is_psp:
@@ -1535,6 +1556,7 @@ def get_settings(ppg_version, is_psp=False):
 # the PG major ({m}); this maps one to the other. Without EXPECTED_VERSIONS the
 # tables are used as before. Packages not listed here are ignored.
 EXPECTED_VERSION_PACKAGES = {
+    "percona-credcheck": ("percona-credcheck{m}",),
     "percona-pgbackrest": ("percona-pgbackrest",),
     "percona-patroni": ("percona-patroni",),
     "percona-pgaudit": ("percona-pgaudit{m}",),

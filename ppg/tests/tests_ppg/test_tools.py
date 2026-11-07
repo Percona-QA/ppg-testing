@@ -1740,13 +1740,10 @@ def _same_numeric_version(found, expected):
     return str(found) == str(expected) or (bool(parts(found)) and parts(found) == parts(expected))
 
 
-CREDCHECK_MAJOR = 19  # credcheck is installed and preloaded for PG 19 only so far
-
-
 def _credcheck_expected():
-    """credcheck runs on PG 19 only for now, and only on releases that list it."""
-    if int(MAJOR_VER) != CREDCHECK_MAJOR:
-        pytest.skip(f"credcheck tests run on PG {CREDCHECK_MAJOR} only, found {MAJOR_VER}")
+    """credcheck is tested on releases that ship it: 14.24, 15.19, 16.15,
+    17.11, 18.6 and 19.0 on (the release's settings entry lists it, or
+    EXPECTED_VERSIONS does for OBS builds)."""
     entry = pg_versions.get("credcheck")
     if not entry:
         pytest.skip(f"credcheck is not expected on {pg_versions.get('version')}")
@@ -1829,16 +1826,17 @@ def _credcheck_role_exists(host, role):
 
 def test_credcheck_gucs_registered_on_load(host, credcheck_roles):
     """Loading credcheck registers its settings with their defaults."""
+    # -q drops the "LOAD" command tag: psql 15+ prints a result for every
+    # statement in a -c string, psql 14 only the last one.
     with host.sudo("postgres"):
         result = host.run(
-            "psql -X -tAc %s",
+            "psql -X -q -tAc %s",
             "LOAD 'credcheck'; SELECT name, setting FROM pg_settings "
             "WHERE name IN ('credcheck.password_min_length', 'credcheck.username_min_length', "
             "'credcheck.password_contain_username', 'credcheck.no_password_logging') ORDER BY name;",
         )
     assert result.rc == 0, result.stderr
     assert result.stdout.split() == [
-        "LOAD",
         "credcheck.no_password_logging|on",
         "credcheck.password_contain_username|on",
         "credcheck.password_min_length|1",

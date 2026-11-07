@@ -36,9 +36,11 @@
           - percona-postgresql-{{ major }}-postgis-3-scripts
           - percona-pg-gather
 {% endif %}
-{% if major >= 19 %}
+          # credcheck (14.24+, 15.19+, ... 19): remove it before the server,
+          # or apt satisfies its "percona-postgresql-N | postgresql-N"
+          # dependency with the OS's postgresql-N (Ubuntu 26.04 ships 18),
+          # which clashes with Percona's files.
           - percona-postgresql-{{ major }}-credcheck
-{% endif %}
           - percona-pgbackrest
           - percona-pgbackrest-doc
           - percona-patroni

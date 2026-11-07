@@ -253,6 +253,36 @@ def test_insert_data(insert_data):
 # creates ppg_upgrade_data_check (500 rows, id serial + md5(i::text)
 # payload) and runs `pgbench -i -s 1`. Any change to that seed data's shape
 # or row count must be mirrored here.
+# credcheck across an upgrade: tasks/seed_data_integrity.yml creates the
+# credcheck extension (and the ppg_upgrade_credcheck_check marker table) when
+# the FROM release ships credcheck; the upgrade role installs credcheck on the
+# new side. Skipped where nothing was seeded (FROM without credcheck, plain
+# install roles).
+@pytest.fixture()
+def credcheck_upgrade_baseline(host):
+    with host.sudo("postgres"):
+        table = host.check_output(
+            "psql -tAc \"SELECT to_regclass('ppg_upgrade_credcheck_check')\"")
+    if not table.strip():
+        pytest.skip("credcheck was not seeded before the upgrade (FROM release without credcheck)")
+
+
+@pytest.mark.upgrade
+def test_credcheck_extension_preserved_across_upgrade(credcheck_upgrade_baseline, host):
+    with host.sudo("postgres"):
+        ext = host.check_output("psql -tAc \"SELECT extversion FROM pg_extension WHERE extname = 'credcheck'\"")
+    assert ext.strip(), "the credcheck extension is missing after the upgrade"
+
+
+@pytest.mark.upgrade
+def test_credcheck_library_loads_after_upgrade(credcheck_upgrade_baseline, host):
+    # LOAD works without credcheck in shared_preload_libraries, and fails if
+    # the new version's library is missing or doesn't match the server.
+    with host.sudo("postgres"):
+        result = host.run("psql -v ON_ERROR_STOP=1 -c \"LOAD 'credcheck'\"")
+    assert result.rc == 0, result.stderr
+
+
 @pytest.fixture()
 def data_integrity_baseline(host):
     # Plain install roles have no `-m` filter and collect these

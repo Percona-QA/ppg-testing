@@ -207,6 +207,27 @@
   when: ansible_os_family == "Debian"
 
 {% endif %}
+# credcheck was created in the old cluster (tasks/seed_data_integrity.yml):
+# upgrade it with the other packages, as a customer's upgrade would.
+- name: Install credcheck packages RHEL (new version)
+  yum:
+    name:
+      - percona-credcheck{{ major }}
+      - percona-credcheck{{ major }}-llvmjit
+    state: latest
+  when:
+    - upgrade_seeded_credcheck | default(false) | bool
+    - ansible_os_family == "RedHat"
+
+- name: Install credcheck packages Debian (new version)
+  apt:
+    name:
+      - percona-postgresql-{{ major }}-credcheck
+    state: latest
+  when:
+    - upgrade_seeded_credcheck | default(false) | bool
+    - ansible_os_family == "Debian"
+
 - name: Restart postgresql service for RHEL based
   include_tasks: ../../../../tasks/start_postgres_with_diagnostics.yml
   vars:
