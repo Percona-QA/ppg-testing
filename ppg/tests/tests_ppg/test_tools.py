@@ -1740,13 +1740,10 @@ def _same_numeric_version(found, expected):
     return str(found) == str(expected) or (bool(parts(found)) and parts(found) == parts(expected))
 
 
-CREDCHECK_MAJOR = 19  # credcheck is installed and preloaded for PG 19 only so far
-
-
 def _credcheck_expected():
-    """credcheck runs on PG 19 only for now, and only on releases that list it."""
-    if int(MAJOR_VER) != CREDCHECK_MAJOR:
-        pytest.skip(f"credcheck tests run on PG {CREDCHECK_MAJOR} only, found {MAJOR_VER}")
+    """credcheck is tested on releases that ship it: 14.24, 15.19, 16.15,
+    17.11, 18.6 and 19.0 on (the release's settings entry lists it, or
+    EXPECTED_VERSIONS does for OBS builds)."""
     entry = pg_versions.get("credcheck")
     if not entry:
         pytest.skip(f"credcheck is not expected on {pg_versions.get('version')}")

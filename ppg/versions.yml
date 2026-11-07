@@ -131,6 +131,7 @@ instances:
       gather_gate: '14.9'
       pgvector_gate: '14.15'
       cron_gate: '14.22'
+      credcheck_gate: '14.24'  # credcheck ships from this release on (Q4'26 minor releases)
       base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'']'
       pgpool_start_gate: '14.7'
   pg-15:
@@ -248,6 +249,7 @@ instances:
       gather_gate: '15.4'
       pgvector_gate: '15.10'
       cron_gate: '15.17'
+      credcheck_gate: '15.19'  # credcheck ships from this release on (Q4'26 minor releases)
       base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'', ''percona_pg_telemetry'']'
       pgpool_start_gate: '15.2'
   pg-16:
@@ -350,6 +352,7 @@ instances:
       pgpool_switch: '16.14'
       pgvector_gate: '16.6'
       cron_gate: '16.13'
+      credcheck_gate: '16.15'  # credcheck ships from this release on (Q4'26 minor releases)
       base_extensions: '[''percona_pg_telemetry'', ''pg_stat_monitor'', ''pgaudit'', ''set_user'']'
   pg-17:
     major: 17
@@ -455,6 +458,7 @@ instances:
       pgvector_gate: '17.2'
       tde_gate: '17.7'
       cron_gate: '17.9'
+      credcheck_gate: '17.11'  # credcheck ships from this release on (Q4'26 minor releases)
       base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'', ''pg_tde'']'
   pg-18:
     major: 18
@@ -516,6 +520,7 @@ instances:
     install_tools:
       pgpool_switch: '18.4'
       cron_gate: '18.3'
+      credcheck_gate: '18.6'  # credcheck ships from this release on (Q4'26 minor releases)
       base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'', ''pg_tde'']'
   pg-19:
     major: 19

@@ -98,14 +98,16 @@ def test_shared_tasks_render():
     # PostGIS RPM prefix: 3.5 for 14-18, 3.7 for 19
     assert 'postgis_rhel_package_name_prefix: "percona-postgis35_18"' in tools18
     assert 'postgis_rhel_package_name_prefix: "percona-postgis37_19"' in files["tasks/install_ppg19_tools.yml"]
-    # credcheck packages are installed from 19 on only
+    # credcheck is installed and preloaded from its first release per major
+    # (14.24, 15.19, 16.15, 17.11, 18.6, 19.0): version gate only
     assert "percona-credcheck19" in files["tasks/install_ppg19_tools.yml"]
     assert "percona-postgresql-19-credcheck" in files["tasks/install_ppg19_tools.yml"]
-    assert "credcheck" not in tools18
-    # credcheck is preloaded unconditionally for 19 (version gate only)
     assert "['credcheck']" in files["tasks/install_ppg19_tools.yml"]
     assert "CREDCHECK_PRELOAD" not in files["tasks/install_ppg19_tools.yml"]
-    assert "['credcheck']" not in tools18
+    assert "percona-credcheck18" in tools18
+    assert "percona-postgresql-18-credcheck" in tools18
+    assert "['credcheck']" in tools18
+    assert "version('18.6', '>='" in tools18
     # pg_oidc_validator install gate: <major>.2 by default, 19.0 for pg-19
     assert "version('18.2', '>='" in tools18
     assert "version('19.0', '>='" in files["tasks/install_ppg19_tools.yml"]

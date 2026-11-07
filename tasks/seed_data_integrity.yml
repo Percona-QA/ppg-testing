@@ -38,3 +38,33 @@
     msg:
       - "{{ __seed_pgbench_result.stdout_lines }}"
       - "{{ __seed_checksum_result.stdout_lines }}"
+
+# credcheck: if the FROM release ships it (installed by the tools install),
+# create the extension before the upgrade, so the upgrade has to carry it
+# (pg_upgrade needs credcheck on the new side) and the post-upgrade tests in
+# test_bvt.py can check it. Decided at run time: no-op where the FROM
+# release has no credcheck.
+- name: Check whether credcheck is available before upgrade
+  become_user: postgres
+  ansible.builtin.command: psql -tAc "SELECT count(*) FROM pg_available_extensions WHERE name = 'credcheck'"
+  register: __seed_credcheck_available
+  changed_when: false
+
+- name: Remember whether credcheck is seeded for the upgrade
+  ansible.builtin.set_fact:
+    upgrade_seeded_credcheck: "{{ __seed_credcheck_available.stdout | trim == '1' }}"
+
+- name: Create the credcheck extension before upgrade
+  become_user: postgres
+  ansible.builtin.command:
+    argv:
+      - psql
+      - -v
+      - ON_ERROR_STOP=1
+      - -c
+      - "CREATE EXTENSION credcheck"
+      - -c
+      - "CREATE TABLE ppg_upgrade_credcheck_check (extversion text NOT NULL)"
+      - -c
+      - "INSERT INTO ppg_upgrade_credcheck_check SELECT extversion FROM pg_extension WHERE extname = 'credcheck'"
+  when: upgrade_seeded_credcheck | bool
