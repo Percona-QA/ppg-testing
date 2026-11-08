@@ -9,7 +9,7 @@
 #   interface tls-pw-opt → register client → write PEMs (sed newline fix)
 #
 # Usage (run directly — do not source):
-#   cd postgresql/pytest
+#   cd pg_tde/core/files/pytest
 #   export CTM_IP=35.158.186.61
 #   export CTM_ADMIN_PASSWORD='...'
 #   ./scripts/setup_ciphertrust_kmip.sh --cert-dir ~/thales_pgtde_certs

@@ -8,7 +8,7 @@ below). Smoke/bash parity tests are in the same file.
 ## Prerequisites
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
 source scripts/setup_cosmian_for_pytest.sh
 pytest tests/test_kmip.py -v

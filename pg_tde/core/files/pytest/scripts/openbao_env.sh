@@ -168,7 +168,7 @@ openbao_not_configured_message() {
 ERROR: OpenBao pytest environment not configured.
 
 Option A — install and start local OpenBao (recommended):
-  cd postgresql/pytest
+  cd pg_tde/core/files/pytest
   ./scripts/install_openbao.sh
   OPENBAO_FORCE_RESTART=1 source scripts/setup_openbao_for_pytest.sh
 

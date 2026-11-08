@@ -3,7 +3,7 @@
 #
 # Does NOT start Vault or run bash scenarios. Set env from your lab, then:
 #
-#   cd postgresql/pytest
+#   cd pg_tde/core/files/pytest
 #   source .env.sh
 #   ./scripts/run_hashicorp_vault_pytest.sh
 #

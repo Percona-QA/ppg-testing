@@ -1,6 +1,6 @@
 # Docker setup-and-run guide — pg_tde pytest framework
 
-The `pytest/` directory ships a complete Docker setup
+The `pg_tde/core/files/pytest/` directory ships a complete Docker setup
 (`Dockerfile`, `docker-compose.yml`, `docker/entrypoint.sh`) that runs
 the pg_tde pytest framework in an isolated container — no host install
 of PostgreSQL or pg_tde required.
@@ -28,10 +28,10 @@ docker compose version
 df -h /var/lib/docker
 ```
 
-Repository checked out at the standard place:
+From the ppg-testing repo root:
 
 ```bash
-cd ~/Percona/percona-qa/postgresql/pytest
+cd pg_tde/core/files/pytest
 ls Dockerfile docker-compose.yml docker/entrypoint.sh   # all three must exist
 ```
 
@@ -54,7 +54,7 @@ ls Dockerfile docker-compose.yml docker/entrypoint.sh   # all three must exist
 ### Package mode (fastest)
 
 ```bash
-cd ~/Percona/percona-qa/postgresql/pytest
+cd pg_tde/core/files/pytest
 
 # Default: PG 17 + PG 16 for upgrade tests
 docker compose build pg-tde-tests-pkg
@@ -265,7 +265,7 @@ docker compose build --no-cache pg-tde-tests-pkg
 
 ### Iterate on test code
 
-The `pytest/` directory is **bind-mounted** at `/workspace`. You don't need
+The `pg_tde/core/files/pytest/` directory is **bind-mounted** at `/workspace`. You don't need
 to rebuild the image when you edit `tests/*.py`, `lib/*.py`, or `conftest.py`.
 Just re-run `docker compose run --rm pg-tde-tests-pkg pytest ...`.
 

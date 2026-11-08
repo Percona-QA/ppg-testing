@@ -15,7 +15,7 @@ prefix differs:
 Quick check (auto-detects OS default install dir):
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 ./scripts/check_io_uring_ready.sh
 # or: INSTALL_DIR=/usr/lib/postgresql/18 USER_NAME=ubuntu ./scripts/check_io_uring_ready.sh
 ```
@@ -126,7 +126,7 @@ Expected: `SHOW io_method` → `io_uring`.
 
 ## 5. Automated check script
 
-From `postgresql/pytest`. By default it **checks and applies** memlock + sysctl
+From `pg_tde/core/files/pytest`. By default it **checks and applies** memlock + sysctl
 (needs sudo). Use `--check-only` to report without changing the system.
 
 ```bash

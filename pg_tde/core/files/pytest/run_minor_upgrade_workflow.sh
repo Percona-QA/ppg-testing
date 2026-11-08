@@ -11,7 +11,7 @@
 #                      (release → 18.4.1, testing → 18.4.2)
 #
 # Usage:
-#   cd postgresql/pytest
+#   cd pg_tde/core/files/pytest
 #   bash run_minor_upgrade_workflow.sh              # full workflow
 #   bash run_minor_upgrade_workflow.sh --help
 #

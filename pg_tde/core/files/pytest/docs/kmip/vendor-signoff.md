@@ -20,8 +20,6 @@ supported KMIP provider.
 | `akeyless` | Akeyless | [Akeyless](https://docs.percona.com/pg-tde/global-key-provider-configuration/akeyless.html) | Scheduled / manual sign-off |
 | `vault_kmip` | HashiCorp Vault KMIP engine | [Vault KMIP](https://developer.hashicorp.com/vault/docs/secrets/kmip) | On demand (not production path) |
 
-See **[ci-strategy.md](ci-strategy.md)** for CI vs vendor-matrix workflow.
-
 **HashiCorp Vault KMIP engine:** not a production target (use Vault KV v2 in
 [../vault.md](../vault.md)). Lab regression: [vault-kmip-engine.md](vault-kmip-engine.md) and profile
 `vault_kmip` (`KMIP_VAULT_*`).
@@ -73,12 +71,12 @@ Or CLI: `pytest --kmip-revalidate-profiles=fortanix tests/test_kmip_server_reval
 
 ## Commands
 
-**CI (Cosmian — automated):**
+**Cosmian (CI / remote server):**
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 source .env.sh
-# Jenkins injects KMIP_COSMIAN_* credentials
+# export KMIP_COSMIAN_* for a remote server, or install cosmian_kms locally
 source scripts/setup_cosmian_for_pytest.sh
 ./scripts/run_kmip_revalidation.sh
 ```

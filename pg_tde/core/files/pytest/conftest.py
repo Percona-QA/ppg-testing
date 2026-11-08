@@ -357,7 +357,7 @@ def _configure_io_method_for_install(config) -> None:
                     parts.append(
                         "io_uring needs system setup: " + "; ".join(issues)
                     )
-                    parts.append("see postgresql/pytest/docs/io_uring_system_setup.md")
+                    parts.append("see pg_tde/core/files/pytest/docs/io_uring_system_setup.md")
                 else:
                     parts.append(
                         "io_uring not in PostgreSQL build at " + str(install_dir)
@@ -369,7 +369,7 @@ def _configure_io_method_for_install(config) -> None:
 
     if method not in available:
         detail = (
-            " See postgresql/pytest/docs/io_uring_system_setup.md."
+            " See pg_tde/core/files/pytest/docs/io_uring_system_setup.md."
             if method == "io_uring"
             else ""
         )

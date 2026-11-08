@@ -36,14 +36,14 @@ loaded and `tde_heap` data exists, Percona explicitly warns to use
 
 | Area | Module | How to run |
 |------|--------|------------|
-| **pg_tde_upgrade** (17→18, encrypted data) | `tests/test_tde_pg_upgrade.py` (~45 tests) | `--old-install-dir` + `--install-dir` |
-| Plain **pg_upgrade** catalog objects | `tests/test_upgrade.py` (~47 tests) | same flags |
+| **pg_tde_upgrade** (17→18, encrypted data) | `tests/test_tde_pg_upgrade.py` | `--old-install-dir` + `--install-dir` |
+| Plain **pg_upgrade** catalog objects | `tests/test_upgrade.py` | same flags |
 | **Post-upgrade analyze** | `TestUpgradePostMaintenance` | `vacuumdb --analyze-in-stages` |
 | **`pg_upgrade --check`** | Several classes | |
 | **Debian apt / pg_upgradecluster** | Not automated in pytest | Use `run_major_upgrade_workflow.sh --method debian` |
 
 ```bash
-cd postgresql/pytest && source .env.sh
+cd pg_tde/core/files/pytest && source .env.sh
 
 # 17 → 18 (default matrix)
 pytest -m upgrade \
@@ -98,7 +98,7 @@ plain `pg_upgrade`.
 ### Full run
 
 ```bash
-cd postgresql/pytest
+cd pg_tde/core/files/pytest
 bash run_major_upgrade_workflow.sh
 ```
 
@@ -161,7 +161,7 @@ State is written to:
 |----------|--------------------------------|---------------------------|
 | Install PG 18 + pg_tde | `install_packages NEW_PG_MAJOR` | N/A (uses existing trees) |
 | Stop old cluster | `pg_ctlcluster … stop` | `old.stop()` |
-| `--check` | `pg_tde_upgrade --check` | `TestPspToPspUpgrade::test_check_mode_with_wal_enc_on` (PSP→PSP); `TestPpgToPspUpgrade::test_check_mode_with_tde_configured` (PPG→PSP) |
+| `--check` | `pg_tde_upgrade --check` | `TestUpgradeWalEncryptionPaths::test_check_mode_with_wal_enc_on`; `TestPpgToPspUpgrade::test_check_mode_with_tde_configured` (PPG→PSP) |
 | Upgrade | `pg_tde_upgrade` | `_upgrade()` helper |
 | Start + verify data | `psql` row count | `test_tde_heap_data_survives` |
 | `ALTER EXTENSION pg_tde UPDATE` | debian verify SQL | `_start_cluster_after_pg_upgrade()` |
@@ -179,8 +179,6 @@ State is written to:
 | `run_minor_upgrade_workflow.sh` | Same PG major, pg_tde package bump |
 | `tests/test_tde_pg_upgrade.py` | Deep pg_tde_upgrade regression |
 | `tests/test_upgrade.py` | Plain pg_upgrade + post-maintenance |
-| `postgresql/automation/tests/pg_tde_upgrade_test.sh` | Bash parity (ephemeral dirs) |
-| `postgresql/bugs/pg_tde_major_upgrade_plain_pg_upgrade_repro.sh` | Why plain `pg_upgrade` fails with TDE |
 
 ---
 
