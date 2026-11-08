@@ -249,6 +249,23 @@ docker exec "$SENTINEL_CONTAINER" \
      INSERT INTO ${SENTINEL_TABLE} VALUES ('${SENTINEL_VALUE}');"
 
 echo "  Sentinel inserted: ${SENTINEL_TABLE}.val = '${SENTINEL_VALUE}'"
+
+# credcheck: if the old image ships it, create the extension, so pg_upgrade has
+# to carry it (the upgrade image has credcheck for both majors), with a marker
+# table test_upgrade.py looks for afterwards (TestPostUpgradeCredcheck).
+CREDCHECK_AVAILABLE=$(docker exec "$SENTINEL_CONTAINER" \
+    /usr/pgsql-${OLD_MAJOR}/bin/psql -U postgres -tAc \
+    "SELECT count(*) FROM pg_available_extensions WHERE name = 'credcheck'" | tr -d '[:space:]')
+if [ "$CREDCHECK_AVAILABLE" = "1" ]; then
+    docker exec "$SENTINEL_CONTAINER" \
+        /usr/pgsql-${OLD_MAJOR}/bin/psql -U postgres -v ON_ERROR_STOP=1 \
+        -c "CREATE EXTENSION credcheck" \
+        -c "CREATE TABLE ppg_upgrade_credcheck_check (extversion text NOT NULL)" \
+        -c "INSERT INTO ppg_upgrade_credcheck_check SELECT extversion FROM pg_extension WHERE extname = 'credcheck'"
+    echo "  credcheck created in the old cluster"
+else
+    echo "  credcheck not available in the old image: not seeded"
+fi
 _stop_pg_cleanly "$SENTINEL_CONTAINER" "$OLD_VOL" "$OLD_IMAGE"
 
 # Pre-initialise the new cluster volume before running the mediator.

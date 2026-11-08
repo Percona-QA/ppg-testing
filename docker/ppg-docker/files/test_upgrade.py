@@ -290,6 +290,19 @@ def upgrade_pipeline():
             f" INSERT INTO {SENTINEL_TABLE} VALUES ('{SENTINEL_VALUE}');\""
         )
         print(f"  Sentinel inserted: {SENTINEL_TABLE}.val = '{SENTINEL_VALUE}'")
+        # credcheck, as run_upgrade.sh does (see TestPostUpgradeCredcheck)
+        available = old_host.run(
+            f"{PG_OLD_BIN_DIR}/psql -U postgres -tAc "
+            "\"SELECT count(*) FROM pg_available_extensions WHERE name = 'credcheck'\""
+        ).stdout.strip()
+        if available == "1":
+            old_host.run(
+                f"{PG_OLD_BIN_DIR}/psql -U postgres -v ON_ERROR_STOP=1 "
+                "-c 'CREATE EXTENSION credcheck' "
+                "-c 'CREATE TABLE ppg_upgrade_credcheck_check (extversion text NOT NULL)' "
+                "-c \"INSERT INTO ppg_upgrade_credcheck_check SELECT extversion FROM pg_extension WHERE extname = 'credcheck'\""
+            )
+            print("  credcheck created in the old cluster")
 
         # Stop old container (data stays in volume)
         subprocess.run(["docker", "stop", OLD_CONTAINER], check=True)
@@ -514,6 +527,43 @@ class TestPostUpgradeDataIntegrity:
 
 
 # ── Phase 3c: Binaries ────────────────────────────────────────────────────────
+
+
+class TestPostUpgradeCredcheck:
+    """
+    credcheck carried through pg_upgrade. run_upgrade.sh (or the standalone
+    fixture) creates the extension in the old cluster when the old image
+    ships credcheck, with the ppg_upgrade_credcheck_check marker table.
+    Skipped when nothing was seeded (old image without credcheck).
+    """
+
+    @staticmethod
+    def _require_seeded(new_host):
+        found = new_host.run(
+            f"{PG_NEW_BIN_DIR}/psql -U postgres -tAc "
+            "\"SELECT to_regclass('ppg_upgrade_credcheck_check')\""
+        ).stdout.strip()
+        if not found:
+            pytest.skip("credcheck was not seeded before the upgrade (old image without credcheck)")
+
+    def test_credcheck_extension_preserved(self, upgrade_pipeline):
+        new_host = upgrade_pipeline["new_host"]
+        self._require_seeded(new_host)
+        version = new_host.run(
+            f"{PG_NEW_BIN_DIR}/psql -U postgres -tAc "
+            "\"SELECT extversion FROM pg_extension WHERE extname = 'credcheck'\""
+        ).stdout.strip()
+        assert version, "the credcheck extension is missing after the upgrade"
+
+    def test_credcheck_library_loads(self, upgrade_pipeline):
+        # LOAD works without credcheck in shared_preload_libraries, and fails
+        # if the new image's credcheck library is missing or doesn't match.
+        new_host = upgrade_pipeline["new_host"]
+        self._require_seeded(new_host)
+        result = new_host.run(
+            f"{PG_NEW_BIN_DIR}/psql -U postgres -v ON_ERROR_STOP=1 -c \"LOAD 'credcheck'\""
+        )
+        assert result.rc == 0, result.stderr
 
 
 class TestPostUpgradeBinaries:
