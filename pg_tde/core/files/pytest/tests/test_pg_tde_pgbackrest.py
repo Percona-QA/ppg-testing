@@ -45,7 +45,7 @@ from lib.cluster import initdb_args_no_data_checksums, libpq_superuser
 from lib.tde import wrappers_available
 from lib.vault import VaultConfig
 
-pytestmark = [pytest.mark.backup, pytest.mark.pgbackrest, pytest.mark.slow]
+pytestmark = [pytest.mark.backup, pytest.mark.pgbackrest]
 
 # ── Core matrix / smoke / scenarios (ex-test_pgbackrest.py) ──
 
@@ -390,6 +390,7 @@ class TestPgBackRest:
 # ── 10-scenario matrix ────────────────────────────────────────────────────────
 
 
+@pytest.mark.slow
 class TestPgBackRestMatrix:
     """
     Ten-scenario pgBackRest matrix with pg_tde + WAL encryption.
@@ -774,6 +775,7 @@ class TestPgBackRestMatrix:
         # this assertion means the configuration is healthy.
         bm.check()
 
+@pytest.mark.slow
 class TestPgBackRestAdvancedAndNegative:
     """
     Complex, advanced, and negative scenarios for pgBackRest + pg_tde.
@@ -1016,6 +1018,7 @@ def _find_repo_wal_segments(repo_path: Path, stanza: str) -> list:
     ]
 
 
+@pytest.mark.slow
 class TestPgBackRestEncryptedWalWrappersContract:
     """
     Byte-level proof that pgBackRest + pg_tde wrappers actually transform
@@ -1575,6 +1578,7 @@ def _point_pgbackrest_at(
 # ── Extended pgBackRest PITR (wrapper / plaintext-in-repo path) ────────────────
 
 
+@pytest.mark.slow
 class TestPgBackRestPitrScenarios:
     """
     PITR scenarios beyond the matrix basics (time/LSN/XID alone).
@@ -2375,6 +2379,7 @@ def _assert_pitr_did_not_reach_target(cluster: PgCluster) -> None:
     )
 
 
+@pytest.mark.slow
 class TestPgBackRestPitrNegative:
     """Failure paths for pgBackRest PITR with WAL-encrypted TDE clusters."""
 
@@ -2716,6 +2721,7 @@ class TestPgBackRestPitrNegative:
 # ── Encrypted-in-repo scenarios ───────────────────────────────────────────────
 
 
+@pytest.mark.slow
 class TestEncryptedInRepoBackupRestorePitr:
     """Ciphertext WAL in the pgBackRest repo — PITR / chain / delta / keyring."""
 
@@ -3302,6 +3308,7 @@ class TestEncryptedInRepoBackupRestorePitr:
 # ── Wrapper-path options (compress / immediate / retention) ───────────────────
 
 
+@pytest.mark.slow
 class TestWrapperPathPgBackRestOptions:
     """Percona decrypt-wrapper path with options the matrix does not cover."""
 
@@ -3420,6 +3427,7 @@ class TestWrapperPathPgBackRestOptions:
 # ── Replication + rewind against pgBackRest archive ───────────────────────────
 
 
+@pytest.mark.slow
 class TestPgBackRestReplicationAndRewind:
     """Streaming + failback using a pgBackRest-backed restore_command."""
 
@@ -3896,6 +3904,7 @@ def _chk_seed(cluster: PgCluster, marker: str, n: int = 500) -> str:
     )
 
 
+@pytest.mark.slow
 class TestPgBackRestChecksumPageAndArchiveHeaderCheck:
     """
     Explicit coverage for pgBackRest ``checksum-page=n`` and
@@ -4129,6 +4138,7 @@ _OPT_COMBOS = [
 ]
 
 
+@pytest.mark.slow
 class TestPgBackRestOptionCombinations:
     """
     Matrix of ``checksum-page`` / ``archive-header-check`` / ``archive-async``
@@ -4495,6 +4505,7 @@ def _haw_start_restored_primary(
     return restored
 
 
+@pytest.mark.slow
 class TestPgBackRestHaWalEncryptRestore:
     """3-node streaming + wal_encrypt + pgBackRest full restore."""
 
@@ -4726,6 +4737,7 @@ def _hae_start_restored_primary(
     return cluster
 
 
+@pytest.mark.slow
 class TestPgBackRestHaEncryptedArchiveRestoreRewire:
     """
     Bash-script parity: wal_encrypt + archive-header-check=n + no decrypt
@@ -4900,6 +4912,7 @@ class TestPgBackRestHaEncryptedArchiveRestoreRewire:
             replica.stop(check=False)
 
 
+@pytest.mark.slow
 class TestPgBackRestPatroniEncryptedBackupRestore:
     """
     Pytest parity for automation script
@@ -5352,6 +5365,7 @@ def _asy_pg_tde_keyring_fingerprint(cluster: PgCluster) -> str:
     return h.hexdigest()
 
 
+@pytest.mark.slow
 class TestArchiveAsyncEncryptedWalPrimaryOnly:
     """
     Simple scenario (Ege / pgstef): archive-async + encrypted WAL works when
@@ -5394,6 +5408,7 @@ class TestArchiveAsyncEncryptedWalPrimaryOnly:
             restored.stop(check=False)
 
 
+@pytest.mark.slow
 class TestEncryptedArchiveMultiNodeConcerns:
     """
     multi-node concerns: different WAL keys per node, archive recovery
@@ -6028,6 +6043,7 @@ def _wse_start_restored_encrypted_in_repo(
 # ── corner cases ──────────────────────────────────────────────────────────────
 
 
+@pytest.mark.slow
 class TestWalEncryptArchiveDecryptCorners:
     def test_sighup_cannot_enable_wal_encrypt(self, pg_factory, tmp_path: Path):
         """Bash: prove SIGHUP / reload leaves ``wal_encrypt`` off until restart."""
@@ -6065,6 +6081,7 @@ class TestWalEncryptArchiveDecryptCorners:
 # ── file keyring repro (plain pg_wal) ─────────────────────────────────────────
 
 
+@pytest.mark.slow
 class TestWalEncryptDecryptWrapperFileKeyring:
     """Parity: ``PG-2609_repro_wal_encrypt_pgbackrest_file.sh``."""
 
@@ -6105,6 +6122,7 @@ class TestWalEncryptDecryptWrapperFileKeyring:
 # ── symlink / mid-stream repro ────────────────────────────────────────────────
 
 
+@pytest.mark.slow
 class TestWalEncryptPgWalSymlinkRepro:
     """
     Parity: ``PG-2609_repro_wal_encrypt_pgbackrest_ha{,_wal_symlink}.sh``.
@@ -6274,6 +6292,7 @@ class TestWalEncryptPgWalSymlinkRepro:
 # ── Workaround A (no decrypt wrapper) ─────────────────────────────────────────
 
 
+@pytest.mark.slow
 class TestWalEncryptNoDecryptWrapper:
     """Parity: ``PG-2609_workaround_A_no_decrypt_wrapper.sh``."""
 
@@ -6347,6 +6366,7 @@ class TestWalEncryptNoDecryptWrapper:
 # ── Workaround B (safe bootstrap order) ───────────────────────────────────────
 
 
+@pytest.mark.slow
 class TestWalEncryptSafeBootstrapOrder:
     """Parity: ``PG-2609_workaround_B_safe_bootstrap_order.sh``."""
 
@@ -6440,6 +6460,7 @@ class TestWalEncryptSafeBootstrapOrder:
 
 @pytest.mark.vault
 @pytest.mark.openbao
+@pytest.mark.slow
 class TestWalEncryptOpenBaoPgWalSymlink:
     """
     Sibling ``pg_wal`` + OpenBao/Vault provider + decrypt wrapper.

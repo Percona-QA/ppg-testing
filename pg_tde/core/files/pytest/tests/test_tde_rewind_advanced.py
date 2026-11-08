@@ -53,7 +53,7 @@ from lib.cluster import (
     postgres_major_version,
 )
 
-pytestmark = [pytest.mark.rewind, pytest.mark.slow]
+pytestmark = [pytest.mark.rewind]
 
 
 # ── module-level helpers ──────────────────────────────────────────────────────
@@ -1097,6 +1097,7 @@ def _promote_and_diverge(standby: PgCluster, sql: str) -> None:
     standby.execute("CHECKPOINT")
 
 
+@pytest.mark.slow
 class TestTdeRewindExtended:
     """
     Port of postgresql/automation/tests/pg_tde_rewind_extended.sh
@@ -2327,6 +2328,7 @@ class TestTdeRewindRandomized:
 # ── WAL encryption + rewind ───────────────────────────────────────────────────
 
 
+@pytest.mark.slow
 class TestTdeRewindWalEncryption:
     """
     Corner cases where WAL encryption is active on both nodes.
@@ -2641,6 +2643,7 @@ class TestTdeRewindWalEncryption:
 # ── full HA lifecycle ─────────────────────────────────────────────────────────
 
 
+@pytest.mark.slow
 class TestTdeRewindFullHaCycle:
     """
     End-to-end HA scenarios: rewind the old primary then reconnect it as a
@@ -2929,6 +2932,7 @@ class TestTdeRewindFullHaCycle:
 # ── encrypted WAL + archive chaos loop (manual 10× script) ─────────────────────
 
 
+@pytest.mark.slow
 class TestTdeRewindEncryptedWalChaosLoop:
     """
     Port of the manual multi-run loop script (encrypted WAL, archive wrappers,
@@ -3215,6 +3219,7 @@ def _encrypted_chaos_promote_and_diverge(
     return expect_min
 
 
+@pytest.mark.slow
 class TestTdeRewindAdvancedEncryptedHa:
     """
     Advanced / corner scenarios on top of ``TestTdeRewindEncryptedWalChaosLoop``.
@@ -3624,6 +3629,7 @@ class TestTdeRewindAdvancedEncryptedHa:
 # ── sysbench-driven sustained-workload rewind loop ────────────────────────────
 
 
+@pytest.mark.slow
 class TestTdeRewindSysbenchLoop:
     """
     Port of ``postgresql/automation/tests/pg_tde_rewind_loop_test.sh``.
@@ -3808,6 +3814,7 @@ class TestTdeRewindSysbenchLoop:
 # ── key provider edge cases ───────────────────────────────────────────────────
 
 
+@pytest.mark.slow
 class TestTdeRewindKeyProviderEdges:
     """
     Rewind behaviour when key providers are configured in non-standard ways:
@@ -4022,6 +4029,7 @@ class TestTdeRewindKeyProviderEdges:
 # ── data structure corner cases ───────────────────────────────────────────────
 
 
+@pytest.mark.slow
 class TestTdeRewindDataStructures:
     """
     Rewind correctness when the diverged server has unusual data structures:
@@ -4318,6 +4326,7 @@ class TestTdeRewindDataStructures:
 # ── negative tests ────────────────────────────────────────────────────────────
 
 
+@pytest.mark.slow
 class TestTdeRewindNegative:
     """
     Scenarios where pg_tde_rewind must fail cleanly rather than silently
@@ -4502,6 +4511,7 @@ class TestTdeRewindNegative:
 # ── stress / multi-round ──────────────────────────────────────────────────────
 
 
+@pytest.mark.slow
 class TestTdeRewindMultiRound:
     """
     High-volume, multi-round, and concurrent scenarios that stress the
@@ -4819,6 +4829,7 @@ class TestTdeRewindMultiRound:
 # ── replica_pair / tde_replica_pair pg_rewind (from test_replication.py)
 
 
+@pytest.mark.slow
 class TestPromoteAndRewind:
     def test_pg_rewind_after_promotion(self, replica_pair: Tuple[PgCluster, PgCluster], tmp_path):
         primary, standby = replica_pair
@@ -4894,6 +4905,7 @@ class TestPromoteAndRewind:
 
 
 @pytest.mark.parametrize("cipher", ["aes_128", "aes_256"])
+@pytest.mark.slow
 class TestTdeRewindEncTapPorts:
     """
     Ports of ``pg_tde/t/pg_rewind_enc_*.pl`` — block/tail copy, FSM/VM,
@@ -5119,6 +5131,7 @@ class TestTdeRewindEncTapPorts:
             _teardown(standby, primary)
 
 
+@pytest.mark.slow
 class TestTdeRewindEncMedium:
     """
     Medium-priority pg_tde rewind gaps: external tablespace, TAP archive mode
@@ -5393,6 +5406,7 @@ class TestTdeRewindEncMedium:
             _teardown(standby, primary)
 
 
+@pytest.mark.slow
 class TestTdeRewindUpstreamPorts:
     """
     Lower-priority ports of upstream ``pg_tde/t/pg_rewind_*.pl`` tests and CLI
@@ -5741,6 +5755,7 @@ class TestTdeRewindUpstreamPorts:
             _teardown(standby, primary)
 
 
+@pytest.mark.slow
 class TestTdeRewindExtremeCornerCases:
     """
     Highly advanced corner cases stressing pg_tde's interaction with pg_rewind,
@@ -6508,6 +6523,7 @@ def _grow_tde_heap_past_one_segment(
 _REWIND_KEEP_WAL = {"wal_keep_size": "'4GB'"}
 
 
+@pytest.mark.slow
 class TestTdeRewindMultiSegmentCorruption:
     """
     ``tde_heap`` > 1 GiB created *after* standby init must survive rewind across
@@ -6573,6 +6589,7 @@ class TestTdeRewindMultiSegmentCorruption:
             _teardown(standby, primary)
 
 
+@pytest.mark.slow
 class TestTdeRewindFsmVmKeyFlush:
     """FSM/VM forks of a post-basebackup ``tde_heap`` must remain valid after rewind."""
 
@@ -6636,6 +6653,7 @@ class TestTdeRewindFsmVmKeyFlush:
             _teardown(standby, primary)
 
 
+@pytest.mark.slow
 class TestTdeRewindDryRunMustNotModifyTarget:
     """``pg_tde_rewind --dry-run`` must leave target relation files byte-identical."""
 
@@ -6688,6 +6706,7 @@ class TestTdeRewindDryRunMustNotModifyTarget:
             _teardown(standby, primary)
 
 
+@pytest.mark.slow
 class TestTdeRewindRestoreTargetWalDiscardedKeys:
     """
     PG-2397: after ``pg_tde_rewind -c`` with archive wrappers, residual
