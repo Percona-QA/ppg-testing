@@ -183,7 +183,8 @@
 - debug: var=installcheck.stdout_lines
 
 - name: Show regression.diffs if installcheck failed
-  shell: cat /tmp/pg_repack/regression.diffs
+  # pg_repack's tests write it to regress/regression.diffs: find it wherever it is
+  shell: find /tmp/pg_repack -name regression.diffs -exec cat {} +
   register: diffs_output
   when:
     - installcheck is failed
