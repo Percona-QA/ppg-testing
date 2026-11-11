@@ -8,8 +8,11 @@ pgrepack = {
     "17.10": {"version": "1.5.3", "binary_version": "pg_repack 1.5.3"},
     "18.4": {"version": "1.5.3", "binary_version": "pg_repack 1.5.3"},
     "16.15": {"version": "1.5.3", "binary_version": "pg_repack 1.5.3"},
+    "16.16": {"version": "1.5.3", "binary_version": "pg_repack 1.5.3"},
     "17.11": {"version": "1.5.3", "binary_version": "pg_repack 1.5.3"},
+    "17.12": {"version": "1.5.3", "binary_version": "pg_repack 1.5.3"},
     "18.6": {"version": "1.5.3", "binary_version": "pg_repack 1.5.3"},
+    "18.7": {"version": "1.5.3", "binary_version": "pg_repack 1.5.3"},
 }
 
 pgaudit = {
@@ -20,8 +23,11 @@ pgaudit = {
     "17.10": {"version": "17.1"},
     "18.4": {"version": "18.0"},
     "16.15": {"version": "16.1"},
+    "16.16": {"version": "16.1"},
     "17.11": {"version": "17.1"},
+    "17.12": {"version": "17.1"},
     "18.6": {"version": "18.0"},
+    "18.7": {"version": "18.0"},
 }
 
 pg_stat_monitor = {
@@ -32,8 +38,11 @@ pg_stat_monitor = {
     "17.10": {"version": "2.3.2"},
     "18.4": {"version": "2.3.2"},
     "16.15": {"version": "2.4.1"},
+    "16.16": {"version": "2.4.1"},
     "17.11": {"version": "2.4.1"},
+    "17.12": {"version": "2.4.1"},
     "18.6": {"version": "2.4.1"},
+    "18.7": {"version": "2.4.1"},
 }
 
 set_user = {
@@ -44,8 +53,11 @@ set_user = {
     "17.10": {"version": "4.2.0"},
     "18.4": {"version": "4.2.0"},
     "16.15": {"version": "4.2.0"},
+    "16.16": {"version": "4.2.0"},
     "17.11": {"version": "4.2.0"},
+    "17.12": {"version": "4.2.0"},
     "18.6": {"version": "4.2.0"},
+    "18.7": {"version": "4.2.0"},
 }
 
 wal2json = {
@@ -56,8 +68,11 @@ wal2json = {
     "17.10": {"version": "2.6"},
     "18.4": {"version": "2.6"},
     "16.15": {"version": "2.6"},
+    "16.16": {"version": "2.6"},
     "17.11": {"version": "2.6"},
+    "17.12": {"version": "2.6"},
     "18.6": {"version": "2.6"},
+    "18.7": {"version": "2.6"},
 }
 
 patroni = {
@@ -68,8 +83,11 @@ patroni = {
     "17.10": {"version": "4.1.3", "binary_version": "patroni 4.1.3"},
     "18.4": {"version": "4.1.3", "binary_version": "patroni 4.1.3"},
     "16.15": {"version": "4.1.5", "binary_version": "patroni 4.1.5"},
+    "16.16": {"version": "4.1.5", "binary_version": "patroni 4.1.5"},
     "17.11": {"version": "4.1.5", "binary_version": "patroni 4.1.5"},
+    "17.12": {"version": "4.1.5", "binary_version": "patroni 4.1.5"},
     "18.6": {"version": "4.1.5", "binary_version": "patroni 4.1.5"},
+    "18.7": {"version": "4.1.5", "binary_version": "patroni 4.1.5"},
 }
 
 pgbackrest = {
@@ -80,8 +98,11 @@ pgbackrest = {
     "17.10": {"version": "2.58.0", "binary_version": "pgBackRest 2.58.0"},
     "18.4": {"version": "2.58.0", "binary_version": "pgBackRest 2.58.0"},
     "16.15": {"version": "2.59.2", "binary_version": "pgBackRest 2.59.2"},
+    "16.16": {"version": "2.59.2", "binary_version": "pgBackRest 2.59.2"},
     "17.11": {"version": "2.59.2", "binary_version": "pgBackRest 2.59.2"},
+    "17.12": {"version": "2.59.2", "binary_version": "pgBackRest 2.59.2"},
     "18.6": {"version": "2.59.2", "binary_version": "pgBackRest 2.59.2"},
+    "18.7": {"version": "2.59.2", "binary_version": "pgBackRest 2.59.2"},
 }
 
 pgvector = {
@@ -92,8 +113,11 @@ pgvector = {
     "17.10": {"version": "0.8.3", "extension_version": "0.8.3"},
     "18.4": {"version": "0.8.3", "extension_version": "0.8.3"},
     "16.15": {"version": "0.8.6", "extension_version": "0.8.6"},
+    "16.16": {"version": "0.8.6", "extension_version": "0.8.6"},
     "17.11": {"version": "0.8.6", "extension_version": "0.8.6"},
+    "17.12": {"version": "0.8.6", "extension_version": "0.8.6"},
     "18.6": {"version": "0.8.6", "extension_version": "0.8.6"},
+    "18.7": {"version": "0.8.6", "extension_version": "0.8.6"},
 }
 
 postgis = {
@@ -104,8 +128,11 @@ postgis = {
     "17.10": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
     "18.4": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
     "16.15": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
+    "16.16": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
     "17.11": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
+    "17.12": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
     "18.6": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
+    "18.7": {"version": "3.5.7", "major_version": "3.5", "extension_version": "3.5.7"},
 }
 
 
@@ -117,8 +144,11 @@ pg_telemetry = {
     "17.10": {"pg_telemetry_version": "1.2", "pg_telemetry_package_version": "1.2.0"},
     "18.4": {"pg_telemetry_version": "1.2", "pg_telemetry_package_version": "1.2.0"},
     "16.15": {"pg_telemetry_version": "1.2", "pg_telemetry_package_version": "1.2.0"},
+    "16.16": {"pg_telemetry_version": "1.2", "pg_telemetry_package_version": "1.2.0"},
     "17.11": {"pg_telemetry_version": "1.2", "pg_telemetry_package_version": "1.2.0"},
+    "17.12": {"pg_telemetry_version": "1.2", "pg_telemetry_package_version": "1.2.0"},
     "18.6": {"pg_telemetry_version": "1.2", "pg_telemetry_package_version": "1.2.0"},
+    "18.7": {"pg_telemetry_version": "1.2", "pg_telemetry_package_version": "1.2.0"},
 }
 
 python3_etcd = {
@@ -129,8 +159,11 @@ python3_etcd = {
     "17.10": {"version": "0.4.5"},
     "18.4": {"version": "0.4.5"},
     "16.15": {"version": "0.4.5"},
+    "16.16": {"version": "0.4.5"},
     "17.11": {"version": "0.4.5"},
+    "17.12": {"version": "0.4.5"},
     "18.6": {"version": "0.4.5"},
+    "18.7": {"version": "0.4.5"},
 }
 
 python3_ydiff = {
@@ -141,8 +174,11 @@ python3_ydiff = {
     "17.10": {"version": "1.4.2"},
     "18.4": {"version": "1.4.2"},
     "16.15": {"version": "1.4.2"},
+    "16.16": {"version": "1.4.2"},
     "17.11": {"version": "1.4.2"},
+    "17.12": {"version": "1.4.2"},
     "18.6": {"version": "1.4.2"},
+    "18.7": {"version": "1.4.2"},
 }
 
 timescaledb = {
@@ -153,8 +189,11 @@ timescaledb = {
     "17.10": {"version": "2.28.2"},
     "18.4": {"version": "2.28.2"},
     "16.15": {"version": "2.30.0"},
+    "16.16": {"version": "2.30.0"},
     "17.11": {"version": "2.30.0"},
+    "17.12": {"version": "2.30.0"},
     "18.6": {"version": "2.30.0"},
+    "18.7": {"version": "2.30.0"},
 }
 
 h3 = {
@@ -165,8 +204,11 @@ h3 = {
     "17.10": {"version": "4.5.0"},
     "18.4": {"version": "4.5.0"},
     "16.15": {"version": "4.5.0"},
+    "16.16": {"version": "4.5.0"},
     "17.11": {"version": "4.5.0"},
+    "17.12": {"version": "4.5.0"},
     "18.6": {"version": "4.5.0"},
+    "18.7": {"version": "4.5.0"},
 }
 
 pgrouting = {
@@ -177,14 +219,18 @@ pgrouting = {
     "17.10": {"version": "4.0.1"},
     "18.4": {"version": "4.0.1"},
     "16.15": {"version": "4.0.2"},
+    "16.16": {"version": "4.0.2"},
     "17.11": {"version": "4.0.2"},
+    "17.12": {"version": "4.0.2"},
     "18.6": {"version": "4.0.2"},
+    "18.7": {"version": "4.0.2"},
 }
 
 pg_oidc_validator = {
     "18.3": {"version": "1.0", "extension_version": "1.0"},
     "18.4": {"version": "1.0", "extension_version": "1.0"},
     "18.6": {"version": "1.1.0", "extension_version": "1.1.0"},
+    "18.7": {"version": "1.1.0", "extension_version": "1.1.0"},
 }
 
 hll = {
@@ -195,8 +241,11 @@ hll = {
     "17.10": {"version": "2.21"},
     "18.4": {"version": "2.21"},
     "16.15": {"version": "2.21"},
+    "16.16": {"version": "2.21"},
     "17.11": {"version": "2.21"},
+    "17.12": {"version": "2.21"},
     "18.6": {"version": "2.21"},
+    "18.7": {"version": "2.21"},
 }
 
 ip4r = {
@@ -207,8 +256,11 @@ ip4r = {
     "17.10": {"version": "2.4.3", "extension_version": "2.4"},
     "18.4": {"version": "2.4.3", "extension_version": "2.4"},
     "16.15": {"version": "2.4.3", "extension_version": "2.4"},
+    "16.16": {"version": "2.4.3", "extension_version": "2.4"},
     "17.11": {"version": "2.4.3", "extension_version": "2.4"},
+    "17.12": {"version": "2.4.3", "extension_version": "2.4"},
     "18.6": {"version": "2.4.3", "extension_version": "2.4"},
+    "18.7": {"version": "2.4.3", "extension_version": "2.4"},
 }
 
 pg_cron = {
@@ -219,8 +271,11 @@ pg_cron = {
     "17.10": {"version": "1.6.7", "extension_version": "1.6"},
     "18.4": {"version": "1.6.7", "extension_version": "1.6"},
     "16.15": {"version": "1.6.8", "extension_version": "1.6"},
+    "16.16": {"version": "1.6.8", "extension_version": "1.6"},
     "17.11": {"version": "1.6.8", "extension_version": "1.6"},
+    "17.12": {"version": "1.6.8", "extension_version": "1.6"},
     "18.6": {"version": "1.6.8", "extension_version": "1.6"},
+    "18.7": {"version": "1.6.8", "extension_version": "1.6"},
 }
 
 pg_partman = {
@@ -231,8 +286,11 @@ pg_partman = {
     "17.10": {"version": "5.4.3"},
     "18.4": {"version": "5.4.3"},
     "16.15": {"version": "5.5.0"},
+    "16.16": {"version": "5.5.0"},
     "17.11": {"version": "5.5.0"},
+    "17.12": {"version": "5.5.0"},
     "18.6": {"version": "5.5.0"},
+    "18.7": {"version": "5.5.0"},
 }
 
 pg_similarity = {
@@ -243,8 +301,11 @@ pg_similarity = {
     "17.10": {"version": "1.0"},
     "18.4": {"version": "1.0"},
     "16.15": {"version": "1.0"},
+    "16.16": {"version": "1.0"},
     "17.11": {"version": "1.0"},
+    "17.12": {"version": "1.0"},
     "18.6": {"version": "1.0"},
+    "18.7": {"version": "1.0"},
 }
 
 pgvectorscale = {
@@ -255,8 +316,11 @@ pgvectorscale = {
     "17.10": {"version": "0.9.0"},
     "18.4": {"version": "0.9.0"},
     "16.15": {"version": "0.9.1"},
+    "16.16": {"version": "0.9.1"},
     "17.11": {"version": "0.9.1"},
+    "17.12": {"version": "0.9.1"},
     "18.6": {"version": "0.9.1"},
+    "18.7": {"version": "0.9.1"},
 }
 
 rum = {
@@ -267,8 +331,11 @@ rum = {
     "17.10": {"version": "1.3.15", "extension_version": "1.3"},
     "18.4": {"version": "1.3.15", "extension_version": "1.3"},
     "16.15": {"version": "1.3.15", "extension_version": "1.3"},
+    "16.16": {"version": "1.3.15", "extension_version": "1.3"},
     "17.11": {"version": "1.3.15", "extension_version": "1.3"},
+    "17.12": {"version": "1.3.15", "extension_version": "1.3"},
     "18.6": {"version": "1.3.15", "extension_version": "1.3"},
+    "18.7": {"version": "1.3.15", "extension_version": "1.3"},
 }
 
 unit = {
@@ -279,8 +346,11 @@ unit = {
     "17.10": {"version": "7.10", "extension_version": "7"},
     "18.4": {"version": "7.10", "extension_version": "7"},
     "16.15": {"version": "7.10", "extension_version": "7"},
+    "16.16": {"version": "7.10", "extension_version": "7"},
     "17.11": {"version": "7.10", "extension_version": "7"},
+    "17.12": {"version": "7.10", "extension_version": "7"},
     "18.6": {"version": "7.10", "extension_version": "7"},
+    "18.7": {"version": "7.10", "extension_version": "7"},
 }
 
 anonymizer = {
@@ -291,8 +361,11 @@ anonymizer = {
     "17.10": {"version": "3.1.3"},
     "18.4": {"version": "3.1.3"},
     "16.15": {"version": "3.2.2"},
+    "16.16": {"version": "3.2.2"},
     "17.11": {"version": "3.2.2"},
+    "17.12": {"version": "3.2.2"},
     "18.6": {"version": "3.2.2"},
+    "18.7": {"version": "3.2.2"},
 }
 
 # Base extension list — common across all supported major versions.
@@ -859,6 +932,64 @@ ppg_versions = {
             "vacuumdb",
         ],
     },
+    "16.16": {
+        "version": "16.16",
+        "percona-postgresql-common": "293",
+        "percona-postgresql-client-common": "293",
+        "libpq_version": "160016",
+        "percona-pgaudit16": pgaudit["16.16"],
+        "percona-pg_repack16": pgrepack["16.16"],
+        "percona-wal2json16": wal2json["16.16"],
+        "percona-pgaudit16_set_user": set_user["16.16"],
+        "percona-pg_stat_monitor16": pg_stat_monitor["16.16"],
+        "percona-pg-telemetry": pg_telemetry["16.16"],
+        "libpq": "Version of libpq: 160016",
+        "percona-patroni": patroni["16.16"],
+        "percona-pgbackrest": pgbackrest["16.16"],
+        "percona-pgvector_16": pgvector["16.16"],
+        "percona-pgvector_16-llvmjit": pgvector["16.16"],
+        "python3-etcd": python3_etcd["16.16"],
+        "python3-ydiff": python3_ydiff["16.16"],
+        "percona-postgis35_16": postgis["16.16"],
+        "percona-postgis35_16-client": postgis["16.16"],
+        "percona-postgis35_16-gui": postgis["16.16"],
+        "percona-postgis35_16-llvmjit": postgis["16.16"],
+        "percona-postgis35_16-utils": postgis["16.16"],
+        "percona-timescaledb_16": timescaledb["16.16"],
+        "percona-h3-pg_16": h3["16.16"],
+        "percona-pgrouting_16": pgrouting["16.16"],
+        "percona-hll_16": hll["16.16"],
+        "percona-ip4r_16": ip4r["16.16"],
+        "percona-pg_cron_16": pg_cron["16.16"],
+        "percona-pg_partman_16": pg_partman["16.16"],
+        "percona-pg_similarity_16": pg_similarity["16.16"],
+        "percona-pgvectorscale_16": pgvectorscale["16.16"],
+        "percona-rum_16": rum["16.16"],
+        "percona-postgresql-unit_16": unit["16.16"],
+        "percona-postgresql_anonymizer_16": anonymizer["16.16"],
+        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "16"),
+        "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "16"),
+        "extensions": DOCKER_LIST_EXTENSIONS_PG16,
+        "binaries": [
+            "clusterdb",
+            "createdb",
+            "createuser",
+            "dropdb",
+            "dropuser",
+            "pg_basebackup",
+            "pg_config",
+            "pg_dump",
+            "pg_dumpall",
+            "pg_isready",
+            "pg_receivewal",
+            "pg_recvlogical",
+            "pg_restore",
+            "pg_verifybackup",
+            "psql",
+            "reindexdb",
+            "vacuumdb",
+        ],
+    },
     "17.11": {
         "version": "17.11",
         "percona-postgresql-common": "293",
@@ -894,6 +1025,64 @@ ppg_versions = {
         "percona-rum_17": rum["17.11"],
         "percona-postgresql-unit_17": unit["17.11"],
         "percona-postgresql_anonymizer_17": anonymizer["17.11"],
+        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "17"),
+        "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "17"),
+        "extensions": DOCKER_LIST_EXTENSIONS_PG17,
+        "binaries": [
+            "clusterdb",
+            "createdb",
+            "createuser",
+            "dropdb",
+            "dropuser",
+            "pg_basebackup",
+            "pg_config",
+            "pg_dump",
+            "pg_dumpall",
+            "pg_isready",
+            "pg_receivewal",
+            "pg_recvlogical",
+            "pg_restore",
+            "pg_verifybackup",
+            "psql",
+            "reindexdb",
+            "vacuumdb",
+        ],
+    },
+    "17.12": {
+        "version": "17.12",
+        "percona-postgresql-common": "293",
+        "percona-postgresql-client-common": "293",
+        "libpq_version": "170012",
+        "percona-pgaudit17": pgaudit["17.12"],
+        "percona-pg_repack17": pgrepack["17.12"],
+        "percona-wal2json17": wal2json["17.12"],
+        "percona-pgaudit17_set_user": set_user["17.12"],
+        "percona-pg_stat_monitor17": pg_stat_monitor["17.12"],
+        "percona-pg-telemetry": pg_telemetry["17.12"],
+        "libpq": "Version of libpq: 170012",
+        "percona-patroni": patroni["17.12"],
+        "percona-pgbackrest": pgbackrest["17.12"],
+        "percona-pgvector_17": pgvector["17.12"],
+        "percona-pgvector_17-llvmjit": pgvector["17.12"],
+        "python3-etcd": python3_etcd["17.12"],
+        "python3-ydiff": python3_ydiff["17.12"],
+        "percona-postgis35_17": postgis["17.12"],
+        "percona-postgis35_17-client": postgis["17.12"],
+        "percona-postgis35_17-gui": postgis["17.12"],
+        "percona-postgis35_17-llvmjit": postgis["17.12"],
+        "percona-postgis35_17-utils": postgis["17.12"],
+        "percona-timescaledb_17": timescaledb["17.12"],
+        "percona-h3-pg_17": h3["17.12"],
+        "percona-pgrouting_17": pgrouting["17.12"],
+        "percona-hll_17": hll["17.12"],
+        "percona-ip4r_17": ip4r["17.12"],
+        "percona-pg_cron_17": pg_cron["17.12"],
+        "percona-pg_partman_17": pg_partman["17.12"],
+        "percona-pg_similarity_17": pg_similarity["17.12"],
+        "percona-pgvectorscale_17": pgvectorscale["17.12"],
+        "percona-rum_17": rum["17.12"],
+        "percona-postgresql-unit_17": unit["17.12"],
+        "percona-postgresql_anonymizer_17": anonymizer["17.12"],
         "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE, "17"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "17"),
         "extensions": DOCKER_LIST_EXTENSIONS_PG17,
@@ -953,6 +1142,65 @@ ppg_versions = {
         "percona-rum_18": rum["18.6"],
         "percona-postgresql-unit_18": unit["18.6"],
         "percona-postgresql_anonymizer_18": anonymizer["18.6"],
+        "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE_PG18, "18"),
+        "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "18"),
+        "extensions": DOCKER_LIST_EXTENSIONS_PG18,
+        "binaries": [
+            "clusterdb",
+            "createdb",
+            "createuser",
+            "dropdb",
+            "dropuser",
+            "pg_basebackup",
+            "pg_config",
+            "pg_dump",
+            "pg_dumpall",
+            "pg_isready",
+            "pg_receivewal",
+            "pg_recvlogical",
+            "pg_restore",
+            "pg_verifybackup",
+            "psql",
+            "reindexdb",
+            "vacuumdb",
+        ],
+    },
+    "18.7": {
+        "version": "18.7",
+        "percona-postgresql-common": "293",
+        "percona-postgresql-client-common": "293",
+        "libpq_version": "180007",
+        "percona-pgaudit18": pgaudit["18.7"],
+        "percona-pg_repack18": pgrepack["18.7"],
+        "percona-wal2json18": wal2json["18.7"],
+        "percona-pgaudit18_set_user": set_user["18.7"],
+        "percona-pg_stat_monitor18": pg_stat_monitor["18.7"],
+        "percona-pg-telemetry": pg_telemetry["18.7"],
+        "libpq": "Version of libpq: 180007",
+        "percona-patroni": patroni["18.7"],
+        "percona-pgbackrest": pgbackrest["18.7"],
+        "percona-pgvector_18": pgvector["18.7"],
+        "percona-pgvector_18-llvmjit": pgvector["18.7"],
+        "python3-etcd": python3_etcd["18.7"],
+        "python3-ydiff": python3_ydiff["18.7"],
+        "percona-postgis35_18": postgis["18.7"],
+        "percona-postgis35_18-client": postgis["18.7"],
+        "percona-postgis35_18-gui": postgis["18.7"],
+        "percona-postgis35_18-llvmjit": postgis["18.7"],
+        "percona-postgis35_18-utils": postgis["18.7"],
+        "percona-timescaledb_18": timescaledb["18.7"],
+        "percona-h3-pg_18": h3["18.7"],
+        "percona-pgrouting_18": pgrouting["18.7"],
+        "percona-pg_oidc_validator18": pg_oidc_validator["18.7"],
+        "percona-hll_18": hll["18.7"],
+        "percona-ip4r_18": ip4r["18.7"],
+        "percona-pg_cron_18": pg_cron["18.7"],
+        "percona-pg_partman_18": pg_partman["18.7"],
+        "percona-pg_similarity_18": pg_similarity["18.7"],
+        "percona-pgvectorscale_18": pgvectorscale["18.7"],
+        "percona-rum_18": rum["18.7"],
+        "percona-postgresql-unit_18": unit["18.7"],
+        "percona-postgresql_anonymizer_18": anonymizer["18.7"],
         "rpm_packages": fill_template_form(DOCKER_RPM_PACKAGES_TEMPLATE_PG18, "18"),
         "rhel_files": fill_template_form(DOCKER_RHEL_FILES_TEMPLATE, "18"),
         "extensions": DOCKER_LIST_EXTENSIONS_PG18,

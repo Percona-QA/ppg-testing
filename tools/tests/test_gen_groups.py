@@ -107,7 +107,7 @@ def test_shared_tasks_render():
     assert "percona-credcheck18" in tools18
     assert "percona-postgresql-18-credcheck" in tools18
     assert "['credcheck']" in tools18
-    assert "version('18.6', '>='" in tools18
+    assert "version('18.7', '>='" in tools18
     # pg_oidc_validator install gate: <major>.2 by default, 19.0 for pg-19
     assert "version('18.2', '>='" in tools18
     assert "version('19.0', '>='" in files["tasks/install_ppg19_tools.yml"]

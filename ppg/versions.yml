@@ -19,7 +19,7 @@ instances:
   pg-14:
     major: 14
     flavor: ppg
-    default_version: ppg-14.24
+    default_version: ppg-14.25
     server:
       gates:
       - name: End play on Ubuntu 26 and versions older than 14.23
@@ -52,7 +52,7 @@ instances:
         version: '14.23'
         op: <
     minor-upgrade:
-      default_from_version: ppg-14.23  # older minor of this instance's default_version
+      default_from_version: ppg-14.24  # older minor of this instance's default_version
       gates:
       - name: End play on Ubuntu 26 and versions older than 14.23
         action: end_host
@@ -131,13 +131,13 @@ instances:
       gather_gate: '14.9'
       pgvector_gate: '14.15'
       cron_gate: '14.22'
-      credcheck_gate: '14.24'  # credcheck ships from this release on (Q4'26 minor releases)
+      credcheck_gate: '14.25'  # credcheck ships from this release on (November 2026 minor releases)
       base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'']'
       pgpool_start_gate: '14.7'
   pg-15:
     major: 15
     flavor: ppg
-    default_version: ppg-15.19
+    default_version: ppg-15.20
     server:
       gates:
       - name: End play on Ubuntu 26 and versions older than 15.18
@@ -170,7 +170,7 @@ instances:
         version: '15.18'
         op: <
     minor-upgrade:
-      default_from_version: ppg-15.18  # older minor of this instance's default_version
+      default_from_version: ppg-15.19  # older minor of this instance's default_version
       gates:
       - name: End play on Ubuntu 26 and versions older than 15.18
         action: end_host
@@ -205,7 +205,7 @@ instances:
       remove_conflicting_dev: '15.13'
       dev_switch_cutoff: '15.12'
     major-upgrade:
-      default_from_version: ppg-14.24  # = pg-14 default_version, bump both
+      default_from_version: ppg-14.25  # = pg-14 default_version, bump both
       gates:
       - name: End play on Ubuntu 26 and versions older than 14.23
         action: end_host
@@ -249,13 +249,13 @@ instances:
       gather_gate: '15.4'
       pgvector_gate: '15.10'
       cron_gate: '15.17'
-      credcheck_gate: '15.19'  # credcheck ships from this release on (Q4'26 minor releases)
+      credcheck_gate: '15.20'  # credcheck ships from this release on (November 2026 minor releases)
       base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'', ''percona_pg_telemetry'']'
       pgpool_start_gate: '15.2'
   pg-16:
     major: 16
     flavor: ppg
-    default_version: ppg-16.15
+    default_version: ppg-16.16
     server:
       gates:
       - name: End play on Ubuntu 26 and versions older than 16.14
@@ -288,7 +288,7 @@ instances:
         version: '16.14'
         op: <
     minor-upgrade:
-      default_from_version: ppg-16.14  # older minor of this instance's default_version
+      default_from_version: ppg-16.15  # older minor of this instance's default_version
       gates:
       - name: End play on Ubuntu 26 and versions older than 16.14
         action: end_host
@@ -311,7 +311,7 @@ instances:
       remove_conflicting_dev: '16.9'
       dev_switch_cutoff: '16.8'
     major-upgrade:
-      default_from_version: ppg-15.19  # = pg-15 default_version, bump both
+      default_from_version: ppg-15.20  # = pg-15 default_version, bump both
       gates:
       - name: End play on Ubuntu 26 and versions older than 15.18
         action: end_host
@@ -352,12 +352,12 @@ instances:
       pgpool_switch: '16.14'
       pgvector_gate: '16.6'
       cron_gate: '16.13'
-      credcheck_gate: '16.15'  # credcheck ships from this release on (Q4'26 minor releases)
+      credcheck_gate: '16.16'  # credcheck ships from this release on (November 2026 minor releases)
       base_extensions: '[''percona_pg_telemetry'', ''pg_stat_monitor'', ''pgaudit'', ''set_user'']'
   pg-17:
     major: 17
     flavor: ppg
-    default_version: ppg-17.11
+    default_version: ppg-17.12
     server:
       gates:
       - name: End play on Ubuntu 26 and versions older than 17.10
@@ -405,7 +405,7 @@ instances:
         version: '17.5'
         op: <=
     minor-upgrade:
-      default_from_version: ppg-17.10  # older minor of this instance's default_version
+      default_from_version: ppg-17.11  # older minor of this instance's default_version
       gates:
       - name: End play on Ubuntu 26 and versions older than 17.10
         action: end_host
@@ -422,7 +422,7 @@ instances:
       remove_conflicting_dev: '17.5'
       dev_switch_cutoff: '17.4'
     major-upgrade:
-      default_from_version: ppg-16.15  # = pg-16 default_version, bump both
+      default_from_version: ppg-16.16  # = pg-16 default_version, bump both
       gates:
       - name: End play on Ubuntu 26 and versions older than 16.14
         action: end_host
@@ -458,12 +458,12 @@ instances:
       pgvector_gate: '17.2'
       tde_gate: '17.7'
       cron_gate: '17.9'
-      credcheck_gate: '17.11'  # credcheck ships from this release on (Q4'26 minor releases)
+      credcheck_gate: '17.12'  # credcheck ships from this release on (November 2026 minor releases)
       base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'', ''pg_tde'']'
   pg-18:
     major: 18
     flavor: ppg
-    default_version: ppg-18.6
+    default_version: ppg-18.7
     server:
       gates:
       - name: End play on Ubuntu 26 and versions older than 18.4
@@ -490,7 +490,7 @@ instances:
         version: '18.4'
         op: <
     minor-upgrade:
-      default_from_version: ppg-18.4  # older minor of this instance's default_version
+      default_from_version: ppg-18.6  # older minor of this instance's default_version
       gates:
       - name: End play on Ubuntu 26 and versions older than 18.4
         action: end_host
@@ -501,7 +501,7 @@ instances:
       remove_conflicting_dev: '18.5'
       dev_switch_cutoff: '18.1'
     major-upgrade:
-      default_from_version: ppg-17.11  # = pg-17 default_version, bump both
+      default_from_version: ppg-17.12  # = pg-17 default_version, bump both
       gates:
       - name: End play on Ubuntu 26 and versions older than 17.10
         action: end_host
@@ -520,7 +520,7 @@ instances:
     install_tools:
       pgpool_switch: '18.4'
       cron_gate: '18.3'
-      credcheck_gate: '18.6'  # credcheck ships from this release on (Q4'26 minor releases)
+      credcheck_gate: '18.7'  # credcheck ships from this release on (November 2026 minor releases)
       base_extensions: '[''pg_stat_monitor'', ''pgaudit'', ''set_user'', ''pg_tde'']'
   pg-19:
     major: 19
@@ -537,7 +537,7 @@ instances:
       remove_conflicting_dev: '18.5'
       dev_switch_cutoff: '18.1'
     major-upgrade:
-      default_from_version: ppg-18.6  # = pg-18 default_version, bump both
+      default_from_version: ppg-18.7  # = pg-18 default_version, bump both
       remove_conflicting_dev: '18.5'
     install: {}
     install_tools:
@@ -600,7 +600,7 @@ instances:
       remove_conflicting_dev: '16.9'
       dev_switch_cutoff: '16.8'
     major-upgrade:
-      default_from_version: ppg-15.19  # = pg-15 default_version, bump both
+      default_from_version: ppg-15.20  # = pg-15 default_version, bump both
       gates:
       - name: End play on Ubuntu 26 and versions older than 15.18
         action: end_host
