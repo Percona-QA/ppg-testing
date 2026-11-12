@@ -8,6 +8,7 @@ The tests use those instead, so a component bump does not need a manual edit.
 """
 
 import importlib
+import importlib.util
 import pathlib
 import sys
 
@@ -130,3 +131,56 @@ def test_is_prerelease_is_true_for_any_marker(settings):
     assert settings.is_prerelease({"percona-version": "19.1.1~rc1"})   # the tests then fail, 19.1 has no pre-release
     assert not settings.is_prerelease({"percona-version": "19.0.1"})
     assert not settings.is_prerelease({})
+
+
+def test_postgresql_common_follows_obs(settings):
+    """postgresql-common 293 -> 294 in OBS: both packages its source package
+    builds must follow, or the package tests fail after every bump."""
+    entry = {"percona-postgresql-common": "293", "percona-postgresql-client-common": "293"}
+    out = settings.apply_expected_versions(entry, "percona-postgresql-common=294")
+    assert out == {"percona-postgresql-common": "294", "percona-postgresql-client-common": "294"}
+    assert entry["percona-postgresql-common"] == "293"  # the table itself is untouched
+
+
+@pytest.mark.parametrize("role", ["ppg-docker", "ppg-docker-custom"])
+def test_docker_postgresql_common_follows_obs(role, monkeypatch):
+    path = PPG_DIR.parent / "docker" / role / "files" / "settings.py"
+    monkeypatch.syspath_prepend(str(path.parent))
+    spec = importlib.util.spec_from_file_location(f"docker_settings_{role}", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    entry = {"percona-postgresql-common": "293", "percona-postgresql-client-common": "293",
+             "percona-pgbackrest": {"version": "2.59.1"}}
+    out = mod.apply_expected_versions(entry, "percona-postgresql-common=294\npercona-pgbackrest=2.60.0", "18")
+    assert out["percona-postgresql-common"] == "294" and out["percona-postgresql-client-common"] == "294"
+    assert out["percona-pgbackrest"]["version"] == "2.60.0"  # dict entries as before
+
+
+def test_postgresql_common_updates_the_deb_package_list(settings):
+    """The deb check takes postgresql-common's version from deb_pkg_ver, not
+    from the flat fields: EXPECTED_VERSIONS must update both."""
+    entry = {
+        "percona-postgresql-common": "293",
+        "percona-postgresql-client-common": "293",
+        "deb_pkg_ver": ["3:18.6-1.bookworm", "1:293-1.bookworm", "293-1.bookworm", "1:293-1.noble"],
+    }
+    out = settings.apply_expected_versions(entry, "percona-postgresql-common=294")
+    assert out["deb_pkg_ver"] == ["3:18.6-1.bookworm", "1:294-1.bookworm", "294-1.bookworm", "1:294-1.noble"]
+    assert settings.deb_version_matches("1:294-1+1.1.bookworm", out["deb_pkg_ver"])
+    assert entry["deb_pkg_ver"][1] == "1:293-1.bookworm"  # the table itself is untouched
+
+
+def test_metapackage_versions_carry_the_major(settings):
+    """obs-packaging 82a4e15a versions the metapackages (percona-postgresql,
+    -client, -contrib, -doc, -all, -server-dev-all) as 2:<major>+<common>,
+    e.g. 2:15+294-1, while the common packages stay 1:294-1."""
+    entry = {
+        "percona-postgresql-common": "293",
+        "deb_pkg_ver": ["2:15.20-1.bookworm", "1:293-1.bookworm", "293-1.bookworm", "2:15+293-1.bookworm"],
+    }
+    out = settings.apply_expected_versions(entry, "percona-postgresql-common=294")
+    assert out["deb_pkg_ver"] == ["2:15.20-1.bookworm", "1:294-1.bookworm", "294-1.bookworm", "2:15+294-1.bookworm"]
+    assert settings.deb_version_matches("2:15+294-1+1.1.bookworm", out["deb_pkg_ver"])  # metapackage
+    assert settings.deb_version_matches("1:294-1+1.1.bookworm", out["deb_pkg_ver"])  # common package
+    # an old major's metapackage left behind by an upgrade must not pass
+    assert not settings.deb_version_matches("2:14+294-1+1.1.bookworm", out["deb_pkg_ver"])

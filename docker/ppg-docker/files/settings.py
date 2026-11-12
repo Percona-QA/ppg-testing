@@ -222,15 +222,15 @@ pg_stat_monitor = {
     "17.10": {"version": "2.3.2"},
     "18.4": {"version": "2.3.2"},
     "14.24": {"version": "2.4.1"},
-    "14.25": {"version": "2.4.1"},
+    "14.25": {"version": "2.4.0"},
     "15.19": {"version": "2.4.1"},
-    "15.20": {"version": "2.4.1"},
+    "15.20": {"version": "2.4.0"},
     "16.15": {"version": "2.4.1"},
-    "16.16": {"version": "2.4.1"},
+    "16.16": {"version": "2.4.0"},
     "17.11": {"version": "2.4.1"},
-    "17.12": {"version": "2.4.1"},
+    "17.12": {"version": "2.4.0"},
     "18.6": {"version": "2.4.1"},
-    "18.7": {"version": "2.4.1"},
+    "18.7": {"version": "2.4.0"},
     "19.0": {"version": "2.4.1"},
 }
 
@@ -300,15 +300,15 @@ set_user = {
     "17.10": {"version": "4.2.0"},
     "18.4": {"version": "4.2.0"},
     "14.24": {"version": "4.2.0"},
-    "14.25": {"version": "4.2.0"},
+    "14.25": {"version": "4.3.0"},
     "15.19": {"version": "4.2.0"},
-    "15.20": {"version": "4.2.0"},
+    "15.20": {"version": "4.3.0"},
     "16.15": {"version": "4.2.0"},
-    "16.16": {"version": "4.2.0"},
+    "16.16": {"version": "4.3.0"},
     "17.11": {"version": "4.2.0"},
-    "17.12": {"version": "4.2.0"},
+    "17.12": {"version": "4.3.0"},
     "18.6": {"version": "4.2.0"},
-    "18.7": {"version": "4.2.0"},
+    "18.7": {"version": "4.3.0"},
     "19.0": {"version": "4.2.0"},
 }
 
@@ -378,15 +378,15 @@ wal2json = {
     "17.10": {"version": "2.6"},
     "18.4": {"version": "2.6"},
     "14.24": {"version": "2.6"},
-    "14.25": {"version": "2.6"},
+    "14.25": {"version": "2.7"},
     "15.19": {"version": "2.6"},
-    "15.20": {"version": "2.6"},
+    "15.20": {"version": "2.7"},
     "16.15": {"version": "2.6"},
-    "16.16": {"version": "2.6"},
+    "16.16": {"version": "2.7"},
     "17.11": {"version": "2.6"},
-    "17.12": {"version": "2.6"},
+    "17.12": {"version": "2.7"},
     "18.6": {"version": "2.6"},
-    "18.7": {"version": "2.6"},
+    "18.7": {"version": "2.7"},
     "19.0": {"version": "2.6"},
 }
 
@@ -500,15 +500,15 @@ pgbackrest = {
     "17.10": {"version": "2.58.0","binary_version": "pgBackRest 2.58.0"},
     "18.4": {"version": "2.58.0","binary_version": "pgBackRest 2.58.0"},
     "14.24": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
-    "14.25": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
+    "14.25": {"version": "2.60.0","binary_version": "pgBackRest 2.60.0"},
     "15.19": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
-    "15.20": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
+    "15.20": {"version": "2.60.0","binary_version": "pgBackRest 2.60.0"},
     "16.15": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
-    "16.16": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
+    "16.16": {"version": "2.60.0","binary_version": "pgBackRest 2.60.0"},
     "17.11": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
-    "17.12": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
+    "17.12": {"version": "2.60.0","binary_version": "pgBackRest 2.60.0"},
     "18.6": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
-    "18.7": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
+    "18.7": {"version": "2.60.0","binary_version": "pgBackRest 2.60.0"},
     "19.0": {"version": "2.59.2","binary_version": "pgBackRest 2.59.2"},
 }
 
@@ -544,15 +544,15 @@ pgvector = {
     "17.10": {"version": "0.8.3", "extension_version": "0.8.3"},
     "18.4": {"version": "0.8.3", "extension_version": "0.8.3"},
     "14.24": {"version": "0.8.6", "extension_version": "0.8.6"},
-    "14.25": {"version": "0.8.6", "extension_version": "0.8.6"},
+    "14.25": {"version": "0.8.7", "extension_version": "0.8.7"},
     "15.19": {"version": "0.8.6", "extension_version": "0.8.6"},
-    "15.20": {"version": "0.8.6", "extension_version": "0.8.6"},
+    "15.20": {"version": "0.8.7", "extension_version": "0.8.7"},
     "16.15": {"version": "0.8.6", "extension_version": "0.8.6"},
-    "16.16": {"version": "0.8.6", "extension_version": "0.8.6"},
+    "16.16": {"version": "0.8.7", "extension_version": "0.8.7"},
     "17.11": {"version": "0.8.6", "extension_version": "0.8.6"},
-    "17.12": {"version": "0.8.6", "extension_version": "0.8.6"},
+    "17.12": {"version": "0.8.7", "extension_version": "0.8.7"},
     "18.6": {"version": "0.8.6", "extension_version": "0.8.6"},
-    "18.7": {"version": "0.8.6", "extension_version": "0.8.6"},
+    "18.7": {"version": "0.8.7", "extension_version": "0.8.7"},
     "19.0": {"version": "0.8.6", "extension_version": "0.8.6"},
 }
 
@@ -1316,8 +1316,8 @@ ppg_versions = {
     },
     "14.25": {
         "version": "14.25",
-        "percona-postgresql-common": "293",
-        "percona-postgresql-client-common": "293",
+        "percona-postgresql-common": "294",
+        "percona-postgresql-client-common": "294",
         "libpq_version": "140025",
         "percona-pgaudit14": pgaudit["14.25"],
         "percona-pg_repack14": pgrepack["14.25"],
@@ -1384,8 +1384,8 @@ ppg_versions = {
     },
     "15.20": {
         "version": "15.20",
-        "percona-postgresql-common": "293",
-        "percona-postgresql-client-common": "293",
+        "percona-postgresql-common": "294",
+        "percona-postgresql-client-common": "294",
         "libpq_version": "150020",
         "percona-pgaudit15": pgaudit["15.20"],
         "percona-pg_repack15": pgrepack["15.20"],
@@ -1469,8 +1469,8 @@ ppg_versions = {
     },
     "16.16": {
         "version": "16.16",
-        "percona-postgresql-common": "293",
-        "percona-postgresql-client-common": "293",
+        "percona-postgresql-common": "294",
+        "percona-postgresql-client-common": "294",
         "libpq_version": "160016",
         "percona-pgaudit16": pgaudit["16.16"],
         "percona-pg_repack16": pgrepack["16.16"],
@@ -1570,8 +1570,8 @@ ppg_versions = {
     "17.12": {
         "version": "17.12",
         "percona-version": "17.12.1",
-        "percona-postgresql-common": "293",
-        "percona-postgresql-client-common": "293",
+        "percona-postgresql-common": "294",
+        "percona-postgresql-client-common": "294",
         "libpq_version": "170012",
         "percona-pgaudit17": pgaudit["17.12"],
         "percona-pg_repack17": pgrepack["17.12"],
@@ -1669,8 +1669,8 @@ ppg_versions = {
     "18.7": {
         "version": "18.7",
         "percona-version": "18.7.1",
-        "percona-postgresql-common": "293",
-        "percona-postgresql-client-common": "293",
+        "percona-postgresql-common": "294",
+        "percona-postgresql-client-common": "294",
         "libpq_version": "180007",
         "percona-pgaudit18": pgaudit["18.7"],
         "percona-pg_repack18": pgrepack["18.7"],
@@ -1828,7 +1828,7 @@ for _release, _entry in ppg_versions.items():
     if _first and _release_tuple(_release) >= _release_tuple(_first):
         _pkg = f"percona-credcheck{_major}"
         _entry["rpm_packages"] = list(_entry["rpm_packages"]) + [_pkg]
-        _entry[_pkg] = {"version": "5.0"}
+        _entry[_pkg] = {"version": "6.0"}
         _entry["extensions"] = list(_entry["extensions"]) + ["credcheck"]
 
 
@@ -1846,6 +1846,12 @@ def get_settings(ppg_version, is_psp=False):
 # the PG major ({m}); this maps one to the other. Without EXPECTED_VERSIONS the
 # tables are used as before. Packages not listed here are ignored.
 EXPECTED_VERSION_PACKAGES = {
+    # postgresql-common's source package builds both; their versions are plain
+    # strings in the release entries ("294")
+    "percona-postgresql-common": (
+        "percona-postgresql-common",
+        "percona-postgresql-client-common",
+    ),
     "percona-credcheck": ("percona-credcheck{m}",),
     "percona-pgbackrest": ("percona-pgbackrest",),
     "percona-patroni": ("percona-patroni",),
@@ -1897,6 +1903,9 @@ def apply_expected_versions(entry, spec, major):
             old = entry.get(key)
             if old is None and name == "percona-postgresql":
                 entry[key] = {"version": new}
+                continue
+            if isinstance(old, str):  # a plain version string, e.g. "294"
+                entry[key] = new
                 continue
             if not isinstance(old, dict) or "version" not in old:
                 continue

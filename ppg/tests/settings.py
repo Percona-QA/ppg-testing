@@ -71,6 +71,11 @@ EXPECTED_VERSION_FLAT = {
     # string (19rc1) are derived from it. Only entries that have the field
     # (17 and later) are changed.
     "percona-postgresql": ("percona-version",),
+    # postgresql-common's source package builds both (294, ...)
+    "percona-postgresql-common": (
+        "percona-postgresql-common",
+        "percona-postgresql-client-common",
+    ),
 }
 
 
@@ -95,6 +100,18 @@ def apply_expected_versions(entry, spec):
         if not sep or not name or not new:
             raise ValueError(f"EXPECTED_VERSIONS: {item!r} is not package=version")
         flat = EXPECTED_VERSION_FLAT.get(name)
+        if flat and name == "percona-postgresql-common" and entry.get("deb_pkg_ver"):
+            # The deb check expects postgresql-common's version from
+            # deb_pkg_ver ("1:293-1", "293-1"), not from the flat fields.
+            old_common = entry.get("percona-postgresql-common")
+            if old_common:
+                # the common packages (1:294-1) and the metapackages, which carry
+                # the major first (2:15+294-1, obs-packaging 82a4e15a)
+                pattern = re.compile(r"^(\d+:)?(\d+\+)?" + re.escape(old_common) + "-")
+                entry["deb_pkg_ver"] = [
+                    pattern.sub(lambda m: (m.group(1) or "") + (m.group(2) or "") + new + "-", v)
+                    for v in entry["deb_pkg_ver"]
+                ]
         if flat:
             for field in flat:
                 if field in entry:
@@ -1024,8 +1041,8 @@ def get_settings(distro_type):
             "version": "14.25",
             "deb_pkg_ver": ppg_versions["ppg-14.25"]["deb_pkg_ver"],
             "deb_packages": ppg_versions["ppg-14.25"]["deb_packages"],
-            "percona-postgresql-common": "293",
-            "percona-postgresql-client-common": "293",
+            "percona-postgresql-common": "294",
+            "percona-postgresql-client-common": "294",
             "libpq_version": "140025",
             "pgaudit": pgaudit["ppg-14.25"],
             "pgbackrest": pgbackrest["ppg-14.25"],
@@ -1722,8 +1739,8 @@ def get_settings(distro_type):
             "version": "15.20",
             "deb_pkg_ver": ppg_versions["ppg-15.20"]["deb_pkg_ver"],
             "deb_packages": ppg_versions["ppg-15.20"]["deb_packages"],
-            "percona-postgresql-common": "293",
-            "percona-postgresql-client-common": "293",
+            "percona-postgresql-common": "294",
+            "percona-postgresql-client-common": "294",
             "libpq_version": "150020",
             "pgaudit": pgaudit["ppg-15.20"],
             "pgbackrest": pgbackrest["ppg-15.20"],
@@ -2288,8 +2305,8 @@ def get_settings(distro_type):
             "version": "16.16",
             "deb_pkg_ver": ppg_versions["ppg-16.16"]["deb_pkg_ver"],
             "deb_packages": ppg_versions["ppg-16.16"]["deb_packages"],
-            "percona-postgresql-common": "293",
-            "percona-postgresql-client-common": "293",
+            "percona-postgresql-common": "294",
+            "percona-postgresql-client-common": "294",
             "libpq_version": "160016",
             "pgaudit": pgaudit["ppg-16.16"],
             "pgbackrest": pgbackrest["ppg-16.16"],
@@ -2730,8 +2747,8 @@ def get_settings(distro_type):
             "percona-version": "17.12.1",
             "deb_pkg_ver": ppg_versions["ppg-17.12"]["deb_pkg_ver"],
             "deb_packages": ppg_versions["ppg-17.12"]["deb_packages"],
-            "percona-postgresql-common": "293",
-            "percona-postgresql-client-common": "293",
+            "percona-postgresql-common": "294",
+            "percona-postgresql-client-common": "294",
             "libpq_version": "170012",
             "pgaudit": pgaudit["ppg-17.12"],
             "pgbackrest": pgbackrest["ppg-17.12"],
@@ -2980,8 +2997,8 @@ def get_settings(distro_type):
             "percona-version": "18.7.1",
             "deb_pkg_ver": ppg_versions["ppg-18.7"]["deb_pkg_ver"],
             "deb_packages": ppg_versions["ppg-18.7"]["deb_packages"],
-            "percona-postgresql-common": "293",
-            "percona-postgresql-client-common": "293",
+            "percona-postgresql-common": "294",
+            "percona-postgresql-client-common": "294",
             "libpq_version": "180007",
             "pgaudit": pgaudit["ppg-18.7"],
             "pgbackrest": pgbackrest["ppg-18.7"],
