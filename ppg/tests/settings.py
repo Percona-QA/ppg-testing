@@ -66,6 +66,10 @@ EXPECTED_VERSION_CREATE = {"credcheck"}
 EXPECTED_VERSION_FLAT = {
     "percona-pg_stat_monitor": ("PGSM_version", "PGSM_package_version"),
     "percona-postgis": ("postgis_version", "postgis_package_version"),
+    # pg_tde: the package version as built; PG_TDE_version ("pg_tde 2.3.0", what
+    # pg_tde_version() reports) and PG_TDE_sql_version (the extension's SQL
+    # version, its major.minor: 2.3) are derived from it below.
+    "percona-pg_tde": ("PG_TDE_package_version",),
     # The Percona Server version (17.11.1, 18.6.1, 19.0.1~rc1): the server
     # packages' version, and for a pre-release the server's own version
     # string (19rc1) are derived from it. Only entries that have the field
@@ -118,6 +122,11 @@ def apply_expected_versions(entry, spec):
                     entry[field] = new
             if name == "percona-postgis" and "postgis_major_version" in entry:
                 entry["postgis_major_version"] = ".".join(new.split(".")[:2])
+            if name == "percona-pg_tde":
+                if "PG_TDE_version" in entry:
+                    entry["PG_TDE_version"] = f"pg_tde {new}"
+                if "PG_TDE_sql_version" in entry:
+                    entry["PG_TDE_sql_version"] = ".".join(new.split(".")[:2])
             continue
         key = EXPECTED_VERSION_PACKAGES.get(name)
         if key is not None and key not in entry and key in EXPECTED_VERSION_CREATE:
@@ -3087,9 +3096,9 @@ def get_settings(distro_type):
             "postgis_package_version": "3.7.0rc2",
             "pg_telemetry_version": "1.2",
             "pg_telemetry_package_version": "1.2.0",
-            "PG_TDE_version": "pg_tde 2.2.2",
-            "PG_TDE_package_version": "2.3.0~dev",
-            "PG_TDE_sql_version": "2.2",
+            "PG_TDE_version": "pg_tde 2.3.0",
+            "PG_TDE_package_version": "2.3.0",
+            "PG_TDE_sql_version": "2.3",
             "PG_OIDC_VALIDATOR_version": "1.1.0",
             "PG_OIDC_VALIDATOR_package_version": "1.1.0",
             "PG_CRON_version": "1.6.8",

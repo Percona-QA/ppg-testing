@@ -200,3 +200,16 @@ def test_expected_versions_update_pgbackrest_binary_version(role):
         assert entry["percona-pgbackrest"]["version"] == "2.60.0"
         if "binary_version" in entry["percona-pgbackrest"]:
             assert entry["percona-pgbackrest"]["binary_version"] == "pgBackRest 2.60.0", rel
+
+
+@pytest.mark.parametrize("release, major, tde", [("17.12", "17", "2.2.2"), ("18.7", "18", "2.2.2"), ("19.0", "19", "2.3.0")])
+def test_pg_tde_follows_obs_for_each_major(release, major, tde, monkeypatch):
+    monkeypatch.delenv("EXPECTED_VERSIONS", raising=False)
+    s = _load(SETTINGS["ppg-docker"])
+    entry = dict(s.ppg_versions[release])
+    out = s.apply_expected_versions(entry, f"percona-pg_tde={tde}", major)
+    assert out[f"percona-pg_tde{major}"] == {
+        "version": tde,
+        "extension_version": f"pg_tde {tde}",
+        "ext_sql_version": ".".join(tde.split(".")[:2]),
+    }

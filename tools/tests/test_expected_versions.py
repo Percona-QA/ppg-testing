@@ -184,3 +184,21 @@ def test_metapackage_versions_carry_the_major(settings):
     assert settings.deb_version_matches("1:294-1+1.1.bookworm", out["deb_pkg_ver"])  # common package
     # an old major's metapackage left behind by an upgrade must not pass
     assert not settings.deb_version_matches("2:14+294-1+1.1.bookworm", out["deb_pkg_ver"])
+
+
+@pytest.mark.parametrize("release, tde", [("ppg-17.12", "2.2.2"), ("ppg-18.7", "2.2.2"), ("ppg-19.0", "2.3.0")])
+def test_pg_tde_follows_obs_for_each_major(settings, release, tde):
+    """Each major checks the pg_tde OBS built for it: package version, what
+    pg_tde_version() reports, and the extension's SQL version (major.minor)."""
+    entry = settings.get_settings("rocky-9")[release]
+    out = settings.apply_expected_versions(entry, f"percona-pg_tde={tde}")
+    assert out["PG_TDE_package_version"] == tde
+    assert out["PG_TDE_version"] == f"pg_tde {tde}"
+    assert out["PG_TDE_sql_version"] == ".".join(tde.split(".")[:2])
+
+
+def test_pg_tde_ignored_where_not_shipped(settings):
+    entry = settings.get_settings("rocky-9")["ppg-18.6"]
+    entry = {k: v for k, v in entry.items() if not k.startswith("PG_TDE_")}
+    out = settings.apply_expected_versions(entry, "percona-pg_tde=2.3.0")
+    assert not any(k.startswith("PG_TDE_") for k in out)

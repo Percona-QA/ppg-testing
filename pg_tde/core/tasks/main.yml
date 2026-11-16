@@ -360,6 +360,13 @@
       INSTALL_DIR: "{{ pg_install_dir }}"
       PG_MAJOR: "{{ major_version }}"
       PG_TDE_SKIP_EXTERNAL_KEY_PROVIDERS: "1"
+      # pg_tde version OBS built for this major (percona-pg_tde line of
+      # EXPECTED_VERSIONS); empty skips the exact-version test.
+      PG_TDE_EXPECTED_VERSION: >-
+        {{ (lookup('env', 'EXPECTED_VERSIONS') | default('', true)).splitlines()
+           | select('match', '^percona-pg_tde=')
+           | map('regex_replace', '^percona-pg_tde=', '')
+           | first | default('', true) }}
     ignore_errors: true
     register: regression
 

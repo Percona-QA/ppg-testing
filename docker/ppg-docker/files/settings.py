@@ -480,7 +480,7 @@ pg_tde = {
     "17.12": {"version": "2.2.2","extension_version": "pg_tde 2.2.2","ext_sql_version": "2.2"},
     "18.6": {"version": "2.2.2","extension_version": "pg_tde 2.2.2","ext_sql_version": "2.2"},
     "18.7": {"version": "2.2.2","extension_version": "pg_tde 2.2.2","ext_sql_version": "2.2"},
-    "19.0": {"version": "2.2.2","extension_version": "pg_tde 2.2.2","ext_sql_version": "2.2"},
+    "19.0": {"version": "2.3.0","extension_version": "pg_tde 2.3.0","ext_sql_version": "2.3"},
 }
 
 pgbackrest = {
@@ -1915,4 +1915,8 @@ def apply_expected_versions(entry, spec, major):
                 for field, value in old.items()
             }
             entry[key]["version"] = new
+            if name == "percona-pg_tde" and "ext_sql_version" in old:
+                # the extension's SQL version is the major.minor (2.3.0 -> 2.3),
+                # which replacing the old full version above does not change
+                entry[key]["ext_sql_version"] = ".".join(new.split(".")[:2])
     return entry

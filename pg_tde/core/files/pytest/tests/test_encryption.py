@@ -32,9 +32,10 @@ pytestmark = pytest.mark.encryption
 #
 # Override at test time without editing this file:
 #     PG_TDE_EXPECTED_VERSION=2.3.0 pytest tests/test_encryption.py -k Version
-EXPECTED_PG_TDE_VERSION = os.environ.get(
-    "PG_TDE_EXPECTED_VERSION", "2.2.2"
-)
+# Set by the tde-core job from the percona-pg_tde line of EXPECTED_VERSIONS
+# (the version OBS built for the major under test), so 17, 18, 19 and later
+# majors each check their own version. Empty: the exact-version test is skipped.
+EXPECTED_PG_TDE_VERSION = (os.environ.get("PG_TDE_EXPECTED_VERSION") or "").strip()
 
 
 # ── basic setup ───────────────────────────────────────────────────────────────
@@ -102,9 +103,8 @@ class TestPgTdeVersion:
     being wrong for the test plan. These tests catch that early, before a
     much harder-to-diagnose semantic-behaviour test fails downstream.
 
-    Expected version is taken from ``EXPECTED_PG_TDE_VERSION`` (default
-    pinned at the top of this module). Override with the
-    ``PG_TDE_EXPECTED_VERSION`` env var when CI moves to a new build.
+    Expected version is taken from the ``PG_TDE_EXPECTED_VERSION`` env var,
+    which OBS QA runs set from EXPECTED_VERSIONS (see the top of this module).
     """
 
     def test_pg_tde_version_function_callable(self, tde_primary: PgCluster):
@@ -118,10 +118,15 @@ class TestPgTdeVersion:
     def test_pg_tde_version_matches_expected(self, tde_primary: PgCluster):
         """
         ``SELECT pg_tde_version()`` must report exactly
-        ``EXPECTED_PG_TDE_VERSION`` (default 2.2.2). A mismatch means the
+        ``EXPECTED_PG_TDE_VERSION``. A mismatch means the
         installed pg_tde package does not match the version the test plan
         was written against — bump the constant or fix the build.
         """
+        if not EXPECTED_PG_TDE_VERSION:
+            pytest.skip(
+                "No expected pg_tde version: set PG_TDE_EXPECTED_VERSION "
+                "(OBS QA sets it from EXPECTED_VERSIONS)."
+            )
         raw = tde_primary.fetchone("SELECT pg_tde_version()")
         actual = _extract_pg_tde_version(raw or "")
         assert actual == EXPECTED_PG_TDE_VERSION, (
