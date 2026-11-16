@@ -1719,8 +1719,8 @@ ppg_versions = {
     "19.0": {
         "version": "19.0",
         "percona-version": "19.0.1",
-        "percona-postgresql-common": "293",
-        "percona-postgresql-client-common": "293",
+        "percona-postgresql-common": "295",
+        "percona-postgresql-client-common": "295",
         "libpq_version": "190000",
         "percona-pgaudit19": pgaudit["19.0"],
         "percona-pg_repack19": pgrepack["19.0"],
