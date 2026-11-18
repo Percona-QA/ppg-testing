@@ -108,6 +108,42 @@
     version: "{{ lookup('env', 'COMPONENT_REF') | default(lookup('env', 'COMPONENT_VERSION'), true) }}"
   become_user: postgres
 
+# TEMPORARY, until a pg_repack release includes upstream's fix: PostgreSQL's
+# November 2026 minor releases (14.25, 15.20, 16.16, 17.12, 18.7) add the
+# internal pg_attver option to pg_attribute.attoptions, which breaks the
+# repack-check test of pg_repack <= 1.5.3 (PG-2914). Upstream fixed the test
+# (reorg/pg_repack#490, commit e383704 on master). Apply that commit to
+# the checked-out test suite when it lacks the fix. Skipped by itself once
+# the ref under test has it. Remove these three tasks then.
+- name: Check whether the pg_repack test suite handles pg_attver (PG-2914)
+  command: grep -q pg_attver /tmp/pg_repack/regress/sql/repack-check.sql
+  register: repack_attver_fix
+  changed_when: false
+  failed_when: false
+  become_user: postgres
+
+- name: Apply upstream's pg_attver test fix (reorg/pg_repack e383704, PG-2914)
+  # if it doesn't apply, put the checkout back as it was (no conflict markers
+  # left in the test files) and let the tests run unchanged
+  shell: |
+    cd /tmp/pg_repack
+    git cherry-pick --no-commit e383704 && exit 0
+    git cherry-pick --abort 2>/dev/null; git reset -q --hard HEAD
+    exit 1
+  register: repack_attver_patch
+  when: repack_attver_fix.rc != 0
+  failed_when: false
+  become_user: postgres
+
+- name: Report the pg_attver test fix (PG-2914)
+  debug:
+    msg: >-
+      {{ 'The test suite already handles pg_attver: the PG-2914 tasks can be removed.'
+         if repack_attver_fix.rc == 0 else
+         ('Applied upstream e383704 to the test suite.' if repack_attver_patch.rc == 0 else
+          'WARNING: could not apply upstream e383704 (' ~ (repack_attver_patch.stderr | default('')) ~
+          '); repack-check may fail on pg_attver.') }}
+
 - name: Add postgres to sudoers
   become: true 
   lineinfile:
