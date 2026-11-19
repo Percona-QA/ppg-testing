@@ -266,6 +266,11 @@ if [ "$CREDCHECK_AVAILABLE" = "1" ]; then
 else
     echo "  credcheck not available in the old image: not seeded"
 fi
+# pg_upgrade needs both clusters to agree on data checksums: PG 18 turned them
+# on by default, so an old PG 18+ cluster has them (and a PG 17- one hasn't).
+OLD_CHECKSUMS=$(docker exec "$SENTINEL_CONTAINER" \
+    /usr/pgsql-${OLD_MAJOR}/bin/psql -U postgres -tAc "SHOW data_checksums" | tr -d '[:space:]')
+echo "  Old cluster data checksums: ${OLD_CHECKSUMS:-unknown}"
 _stop_pg_cleanly "$SENTINEL_CONTAINER" "$OLD_VOL" "$OLD_IMAGE"
 
 # Pre-initialise the new cluster volume before running the mediator.
@@ -289,12 +294,14 @@ echo "  Pre-initialising new cluster ..."
 PREINIT_CONTAINER="ppg_preinit_${OLD_MAJOR}_${NEW_MAJOR}"
 docker rm -f "$PREINIT_CONTAINER" > /dev/null 2>&1 || true
 
-# PG 18+ enables data checksums by default; the old cluster was initialized
-# without checksums, so pg_upgrade requires the new cluster to also have none.
-# Pass --no-data-checksums only for PG 18+ — earlier versions do not support
-# the flag (it was introduced in PG 18) and their default is already no checksums.
+# Create the new cluster with the old cluster's data checksums setting, as
+# pg_upgrade requires. PG 18+ enables them by default, so without them a PG 18+
+# target needs --no-data-checksums (a flag older initdb doesn't know; their
+# default is already none). --data-checksums works on every version.
 PREINIT_INITDB_ARGS=()
-if [ "${NEW_MAJOR}" -ge 18 ]; then
+if [ "${OLD_CHECKSUMS}" = "on" ]; then
+    PREINIT_INITDB_ARGS=(-e POSTGRES_INITDB_ARGS="--data-checksums")
+elif [ "${NEW_MAJOR}" -ge 18 ]; then
     PREINIT_INITDB_ARGS=(-e POSTGRES_INITDB_ARGS="--no-data-checksums")
 fi
 
@@ -316,6 +323,9 @@ echo "  New cluster pre-initialised in volume $NEW_VOL"
 echo "  Running pg_upgrade mediator ..."
 MEDIATOR_CONTAINER="ppg_upgrade_mediator_${OLD_MAJOR}_${NEW_MAJOR}"
 docker rm -f "$MEDIATOR_CONTAINER" > /dev/null 2>&1 || true
+# docker's own error messages (a failed pull, a full disk...) go to stderr,
+# which the job shows apart from this output: keep them to explain a failure.
+MEDIATOR_ERR="$(mktemp)"
 docker run --rm \
     --name "$MEDIATOR_CONTAINER" \
     -e OLD_VERSION="$OLD_MAJOR" \
@@ -324,9 +334,24 @@ docker run --rm \
     -e NEW_DATABASE_NAME=postgres \
     -v "$OLD_VOL:/pgolddata/postgres" \
     -v "$NEW_VOL:/pgnewdata/postgres" \
-    "$UPGRADE_IMAGE" || PHASE2_RC=$?
+    "$UPGRADE_IMAGE" 2>"$MEDIATOR_ERR" || PHASE2_RC=$?
+cat "$MEDIATOR_ERR" >&2
 
 echo "  Upgrade mediator exit code: $PHASE2_RC"
+
+# 125: docker couldn't start the container at all (the upgrade script never
+# ran), e.g. the image couldn't be pulled or the disk is full. Say so, with
+# docker's own message, here rather than only in the job's stderr.
+if [ $PHASE2_RC -eq 125 ]; then
+    echo "  Docker could not start the upgrade image:"
+    echo "    $UPGRADE_IMAGE"
+    if grep -qE "Error response from daemon|^docker:" "$MEDIATOR_ERR"; then
+        grep -E "Error response from daemon|^docker:" "$MEDIATOR_ERR" | sed 's/^/    /'
+    else
+        tail -n 5 "$MEDIATOR_ERR" | sed 's/^/    /'
+    fi
+fi
+rm -f "$MEDIATOR_ERR"
 
 # Print the loadable_libraries report when the mediator fails.
 if [ $PHASE2_RC -ne 0 ]; then
