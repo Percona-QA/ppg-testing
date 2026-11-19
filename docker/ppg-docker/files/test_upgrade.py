@@ -652,7 +652,10 @@ class TestPostUpgradePackages:
         missing = [
             pkg for pkg in NEW_RPM_PACKAGES
             if new_host.run(f"rpm -q {_installed_package_name(pkg, IMG_TAG_NEW)}").rc != 0
-            and (IS_WITH_POSTGIS or "postgis" not in pkg)
+            # PostGIS packages: from PostGIS 3.7 (PG 19) address_standardizer
+            # is its own package, without "postgis" in its name (as in
+            # test_docker.py)
+            and (IS_WITH_POSTGIS or not ("postgis" in pkg or "address-standardizer" in pkg))
         ]
         assert not missing, f"RPM packages not installed in new image: {missing}"
 
