@@ -1,9 +1,9 @@
 scenarios:
   amd:
-    os: ubuntu-jammy
+    os: rhel-9
   arm:
-    os: ubuntu-jammy-arm
-name_pattern: pgbadger-U22-{scenario}-{build}
+    os: rhel-9-arm
+name_pattern: pgbadger-rhel9-{scenario}-{build}
 aws:
   size: small
   subnet: aws2

@@ -151,12 +151,23 @@ params:
     svc_state: started
   when: ansible_os_family == "RedHat"
 {%- endmacro %}
-{% macro os_overrides() %}
+{# el_only: the Debian/Ubuntu scenarios do nothing (TEMPORARY, host QA against
+   an OBS project that has EL repositories only). #}
+{% macro os_overrides(el_only=false) %}
 overrides:
 {% for os in ['debian-12', 'debian-12-arm', 'debian-13', 'debian-13-arm'] %}
   {{ os }}:
     aws:
       size: small
+{% if el_only %}
+    sequences:
+      destroy:
+      - destroy
+      test:
+      - destroy
+      cleanup:
+      - cleanup
+{% endif %}
 {% endfor %}
 {% for os in ['rhel-10', 'rhel-10-arm', 'rhel-8', 'rhel-8-arm', 'rhel-9', 'rhel-9-arm'] %}
   {{ os }}:
@@ -166,5 +177,14 @@ overrides:
   {{ os }}:
     aws:
       size: small
+{% if el_only %}
+    sequences:
+      destroy:
+      - destroy
+      test:
+      - destroy
+      cleanup:
+      - cleanup
+{% endif %}
 {% endfor %}
 {%- endmacro %}

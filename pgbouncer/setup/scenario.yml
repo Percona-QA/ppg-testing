@@ -1,9 +1,9 @@
 scenarios:
   amd:
-    os: ubuntu-noble
+    os: rhel-9
   arm:
-    os: ubuntu-noble-arm
-name_pattern: pgbouncer-u24-{scenario}-{build}
+    os: rhel-9-arm
+name_pattern: pgbouncer-rhel9-{scenario}-{build}
 aws:
   size: xlarge
   subnet: aws2

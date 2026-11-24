@@ -16,3 +16,86 @@ sequences:
   - destroy
   cleanup:
   - cleanup
+# TEMPORARY: host QA runs against an OBS project that has EL repositories
+# only, so the Debian/Ubuntu scenarios do nothing.
+overrides:
+  debian-12:
+    sequences:
+      destroy:
+      - destroy
+      test:
+      - destroy
+      cleanup:
+      - cleanup
+  debian-12-arm:
+    sequences:
+      destroy:
+      - destroy
+      test:
+      - destroy
+      cleanup:
+      - cleanup
+  debian-13:
+    sequences:
+      destroy:
+      - destroy
+      test:
+      - destroy
+      cleanup:
+      - cleanup
+  debian-13-arm:
+    sequences:
+      destroy:
+      - destroy
+      test:
+      - destroy
+      cleanup:
+      - cleanup
+  ubuntu-jammy:
+    sequences:
+      destroy:
+      - destroy
+      test:
+      - destroy
+      cleanup:
+      - cleanup
+  ubuntu-jammy-arm:
+    sequences:
+      destroy:
+      - destroy
+      test:
+      - destroy
+      cleanup:
+      - cleanup
+  ubuntu-noble:
+    sequences:
+      destroy:
+      - destroy
+      test:
+      - destroy
+      cleanup:
+      - cleanup
+  ubuntu-noble-arm:
+    sequences:
+      destroy:
+      - destroy
+      test:
+      - destroy
+      cleanup:
+      - cleanup
+  ubuntu-resolute:
+    sequences:
+      destroy:
+      - destroy
+      test:
+      - destroy
+      cleanup:
+      - cleanup
+  ubuntu-resolute-arm:
+    sequences:
+      destroy:
+      - destroy
+      test:
+      - destroy
+      cleanup:
+      - cleanup

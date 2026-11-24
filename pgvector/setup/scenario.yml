@@ -1,9 +1,9 @@
 scenarios:
   amd:
-    os: ubuntu-noble
+    os: rhel-9
   arm:
-    os: ubuntu-noble-arm
-name_pattern: pgvector-unoble-{scenario}-{build}
+    os: rhel-9-arm
+name_pattern: pgvector-rhel9-{scenario}-{build}
 aws:
   size: xlarge
   subnet: aws2
