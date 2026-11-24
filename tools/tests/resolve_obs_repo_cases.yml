@@ -1,0 +1,84 @@
+---
+# Run: env -u OBS_HOST -u OBS_PROJECT ansible-playbook -i localhost, -c local tools/tests/resolve_obs_repo_cases.yml
+# One play per case so set_fact results never leak between cases.
+- name: "Case 1 EL9 Rocky labs"
+  hosts: localhost
+  gather_facts: false
+  vars:
+    ansible_os_family: RedHat
+    ansible_distribution: Rocky
+    ansible_distribution_major_version: '9'
+    obs_project_name: isv:percona:ppg:staging:18
+  tasks:
+    - ansible.builtin.include_tasks: ../../tasks/resolve_obs_repo.yml
+    - ansible.builtin.assert:
+        that: obs_base_url == 'https://download.obs.pg.labs.percona.com/isv:/percona:/ppg:/staging:/18/UBI_9'
+        fail_msg: "got {{ obs_base_url }}"
+- name: "Case 2 EL10 OracleLinux labs"
+  hosts: localhost
+  gather_facts: false
+  vars:
+    ansible_os_family: RedHat
+    ansible_distribution: OracleLinux
+    ansible_distribution_major_version: '10'
+    obs_project_name: isv:percona:ppg:staging:18
+  tasks:
+    - ansible.builtin.include_tasks: ../../tasks/resolve_obs_repo.yml
+    - ansible.builtin.assert:
+        that: obs_base_url == 'https://download.obs.pg.labs.percona.com/isv:/percona:/ppg:/staging:/18/UBI_10'
+        fail_msg: "got {{ obs_base_url }}"
+- name: "Case 3 EL8 host override opensuse"
+  hosts: localhost
+  gather_facts: false
+  vars:
+    ansible_os_family: RedHat
+    ansible_distribution: Rocky
+    ansible_distribution_major_version: '8'
+    obs_project_name: isv:percona:ppg:staging:18
+    obs_instance_host: download.opensuse.org
+  tasks:
+    - ansible.builtin.include_tasks: ../../tasks/resolve_obs_repo.yml
+    - ansible.builtin.assert:
+        that: obs_base_url == 'https://download.opensuse.org/repositories/isv:/percona:/ppg:/staging:/18/RockyLinux_8'
+        fail_msg: "got {{ obs_base_url }}"
+- name: "Case 4 Debian 13"
+  hosts: localhost
+  gather_facts: false
+  vars:
+    ansible_os_family: Debian
+    ansible_distribution: Debian
+    ansible_distribution_major_version: '13'
+    ansible_distribution_version: '13'
+    obs_project_name: isv:percona:ppg:staging:18
+  tasks:
+    - ansible.builtin.include_tasks: ../../tasks/resolve_obs_repo.yml
+    - ansible.builtin.assert:
+        that: obs_base_url == 'https://download.opensuse.org/repositories/isv:/percona:/ppg:/staging:/18/Debian_13'
+        fail_msg: "got {{ obs_base_url }}"
+- name: "Case 5 Ubuntu 24.04"
+  hosts: localhost
+  gather_facts: false
+  vars:
+    ansible_os_family: Debian
+    ansible_distribution: Ubuntu
+    ansible_distribution_major_version: '24'
+    ansible_distribution_version: '24.04'
+    obs_project_name: isv:percona:ppg:staging:18
+  tasks:
+    - ansible.builtin.include_tasks: ../../tasks/resolve_obs_repo.yml
+    - ansible.builtin.assert:
+        that: obs_base_url == 'https://download.opensuse.org/repositories/isv:/percona:/ppg:/staging:/18/Ubuntu_24.04'
+        fail_msg: "got {{ obs_base_url }}"
+- name: "Case 6 EL9 PR project"
+  hosts: localhost
+  gather_facts: false
+  vars:
+    ansible_os_family: RedHat
+    ansible_distribution: Rocky
+    ansible_distribution_major_version: '9'
+    obs_project_name: isv:percona:PR:pr-42:ppg:staging:18
+  tasks:
+    - ansible.builtin.include_tasks: ../../tasks/resolve_obs_repo.yml
+    - ansible.builtin.assert:
+        that: obs_base_url == 'https://download.obs.pg.labs.percona.com/isv:/percona:/PR:/pr-42:/ppg:/staging:/18/UBI_9'
+        fail_msg: "got {{ obs_base_url }}"

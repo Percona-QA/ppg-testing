@@ -72,6 +72,22 @@
       obs_project: "{{ obs_project_override }}"
     when: obs_project_override | length > 0
 
+  - name: Determine OBS instance hostname
+    # An explicit var wins, then OBS_HOST. Without either, EL packages come
+    # from the Percona labs instance (the UBI_<major> repositories, also used
+    # to build the container images); everything else from build.opensuse.org.
+    ansible.builtin.set_fact:
+      obs_labs_host: download.obs.pg.labs.percona.com
+
+  - name: Select OBS instance hostname
+    ansible.builtin.set_fact:
+      obs_host: >-
+        {{ obs_instance_host
+           | default(lookup('env', 'OBS_HOST'), true)
+           | default(obs_labs_host
+                     if ansible_os_family == 'RedHat'
+                     else 'download.opensuse.org', true) }}
+
   - name: Map distro to OBS repository directory
     ansible.builtin.set_fact:
       obs_repo_dir: >-
@@ -80,7 +96,7 @@
         {%- elif ansible_distribution == 'Ubuntu' -%}
         Ubuntu_{{ ansible_distribution_version }}
         {%- elif ansible_os_family == 'RedHat' -%}
-        RockyLinux_{{ ansible_distribution_major_version }}
+        {{ 'UBI_' if obs_host == obs_labs_host else 'RockyLinux_' }}{{ ansible_distribution_major_version }}
         {%- else -%}
         UNSUPPORTED
         {%- endif -%}
@@ -94,14 +110,9 @@
         RedHat (RHEL/Rocky/OracleLinux).
     when: obs_repo_dir == "UNSUPPORTED"
 
-  - name: Determine OBS instance hostname
-    # Lets a caller point at a different OBS instance than the public
-    # openSUSE one (e.g. a Percona-hosted instance), same as obs_version/
-    # obs_repo above: an explicit var wins, then OBS_HOST, then the default.
-    ansible.builtin.set_fact:
-      obs_host: "{{ obs_instance_host | default(lookup('env', 'OBS_HOST') | default('download.opensuse.org', true)) }}"
-
   - name: Compute OBS repo id and base URL
+    # The labs download host serves the published tree at its root;
+    # download.opensuse.org serves it under /repositories.
     ansible.builtin.set_fact:
       obs_safe_id: "{{ obs_project | replace(':', '_') }}"
-      obs_base_url: "https://{{ obs_host }}/repositories/{{ obs_project | regex_replace(':', ':/') }}/{{ obs_repo_dir }}"
+      obs_base_url: "https://{{ obs_host }}{{ '' if obs_host == obs_labs_host else '/repositories' }}/{{ obs_project | regex_replace(':', ':/') }}/{{ obs_repo_dir }}"
