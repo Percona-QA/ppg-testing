@@ -1,9 +1,9 @@
 scenarios:
   amd:
-    os: rhel-9
+    os: ubuntu-jammy
   arm:
-    os: rhel-9-arm
-name_pattern: pgrepack-rhel9-{scenario}-{build}
+    os: ubuntu-jammy-arm
+name_pattern: pgrepack-U22-{scenario}-{build}
 aws:
   size: medium
   subnet: aws2
