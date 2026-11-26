@@ -116,3 +116,9 @@
     ansible.builtin.set_fact:
       obs_safe_id: "{{ obs_project | replace(':', '_') }}"
       obs_base_url: "https://{{ obs_host }}{{ '' if obs_host == obs_labs_host else '/repositories' }}/{{ obs_project | regex_replace(':', ':/') }}/{{ obs_repo_dir }}"
+
+  - name: Show the OBS repository base URL
+    # Printed so a test run log records which OBS instance and repository
+    # the packages were installed from.
+    ansible.builtin.debug:
+      msg: "OBS repository base URL: {{ obs_base_url }}"
